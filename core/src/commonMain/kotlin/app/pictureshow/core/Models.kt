@@ -9,7 +9,7 @@ data class Server(val id: String, val name: String, val url: String, val version
 data class User(val id: String, val name: String)
 
 @Serializable
-data class Account(val server: Server, val user: User, val accessToken: String) {
+data class Account(val server: Server, val user: User, val accessToken: String, val expired: Boolean = false) {
     val key: String get() = "${server.id}:${user.id}"
 }
 

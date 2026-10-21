@@ -38,6 +38,20 @@ class AccountStore(private val persistence: TextPersistence) {
         snapshot.copy(currentKey = key)
     }
 
+    suspend fun expire(key: String, accessToken: String) = update { snapshot ->
+        snapshot.copy(
+            accounts = snapshot.accounts.map {
+                if (it.key == key &&
+                    it.accessToken == accessToken
+                ) {
+                    it.copy(accessToken = "", expired = true)
+                } else {
+                    it
+                }
+            }
+        )
+    }
+
     suspend fun signOut(key: String) = update { snapshot ->
         snapshot.copy(
             accounts = snapshot.accounts.filterNot { it.key == key },

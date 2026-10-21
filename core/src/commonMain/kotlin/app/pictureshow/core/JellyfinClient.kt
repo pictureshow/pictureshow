@@ -39,7 +39,9 @@ interface JellyfinService {
     suspend fun logout(account: Account): ClientResult<Unit>
 }
 
-class JellyfinClient(private val client: HttpClient, private val identity: ClientIdentity) : JellyfinService {
+class JellyfinClient(private val client: HttpClient, private val identity: ClientIdentity) :
+    JellyfinService,
+    CatalogService by CatalogClient(client, identity) {
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun probe(address: String): ClientResult<Server> {
