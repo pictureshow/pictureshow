@@ -95,8 +95,19 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
     }
     // Only account selection changes reset the graph. Ordinary route changes remain on Back's stack.
     LaunchedEffect(state.snapshot.currentKey) {
-        val destination = if (state.snapshot.currentAccount != null) "home" else if (state.snapshot.accounts.isEmpty()) "servers" else "accounts"
-        nav.navigate(destination) { popUpTo(nav.graph.id) { inclusive = true }; launchSingleTop = true }
+        val destination = if (state.snapshot.currentAccount !=
+            null
+        ) {
+            "home"
+        } else if (state.snapshot.accounts.isEmpty()) {
+            "servers"
+        } else {
+            "accounts"
+        }
+        nav.navigate(destination) {
+            popUpTo(nav.graph.id) { inclusive = true }
+            launchSingleTop = true
+        }
     }
     NavHost(navController = nav, startDestination = "waiting") {
         composable("waiting") { Page("Pictureshow") { Text("Loading…") } }
@@ -122,7 +133,15 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
                 screen.discovered.forEach { server ->
                     Action("${server.name} · ${server.address}", enabled = !screen.connecting) { vm.connect(server.address) }
                 }
-                Text(if (screen.scanning) "Looking for servers…" else if (screen.discovered.isEmpty()) "No servers found. You can enter an address above." else "Discovery complete.")
+                Text(
+                    if (screen.scanning) {
+                        "Looking for servers…"
+                    } else if (screen.discovered.isEmpty()) {
+                        "No servers found. You can enter an address above."
+                    } else {
+                        "Discovery complete."
+                    }
+                )
                 Action("Search again", enabled = !screen.scanning, onClick = vm::scan)
                 if (state.snapshot.accounts.isNotEmpty()) Action("Remembered accounts") { nav.navigate("accounts") }
             }
@@ -132,7 +151,9 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
             val screen by vm.state.collectAsStateWithLifecycle()
             Page("Who’s watching?") {
                 state.snapshot.accounts.forEachIndexed { index, account ->
-                    Action("${account.user.name} on ${account.server.name}", initial = index == 0, enabled = !screen.busy) { vm.select(account.key) }
+                    Action("${account.user.name} on ${account.server.name}", initial = index == 0, enabled = !screen.busy) {
+                        vm.select(account.key)
+                    }
                 }
                 Message(screen.error)
                 state.snapshot.accounts.map { it.server }.distinctBy { it.id }.forEach { server ->
@@ -167,14 +188,36 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
             LaunchedEffect(vm, lifecycle) {
                 lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     vm.start()
-                    try { awaitCancellation() } finally { vm.stop() }
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        vm.stop()
+                    }
                 }
             }
             DisposableEffect(vm) { onDispose { vm.stop() } }
             Page("Quick Connect · ${server.name}") {
-                Text("Open Jellyfin on your phone or computer → Settings → Quick Connect, and enter this code")
-                screen.code?.let { Text(it, style = MaterialTheme.typography.displayLarge, modifier = Modifier.semantics { contentDescription = "Quick Connect code ${it.toList().joinToString(" ")}" }) }
-                if (screen.busy) Text("Getting a code…") else if (!screen.disabled && screen.error == null) Text("Waiting for approval. Expired codes are renewed automatically.")
+                Text(
+                    "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
+                        "and enter this code"
+                )
+                screen.code?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.displayLarge,
+                        modifier = Modifier.semantics {
+                            contentDescription =
+                                "Quick Connect code ${it.toList().joinToString(" ")}"
+                        }
+                    )
+                }
+                if (screen.busy) {
+                    Text("Getting a code…")
+                } else if (!screen.disabled &&
+                    screen.error == null
+                ) {
+                    Text("Waiting for approval. Expired codes are renewed automatically.")
+                }
                 if (screen.disabled) Text("Quick Connect is disabled on this server. Use your username and password.")
                 Message(screen.error)
                 if (screen.error != null) Action("Try again", onClick = vm::start)
@@ -186,7 +229,10 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
                 val vm: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
                 val screen by vm.state.collectAsStateWithLifecycle()
                 Page("Pictureshow") {
-                    Text("Signed in as ${screen.account.user.name} on ${screen.account.server.name}", style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        "Signed in as ${screen.account.user.name} on ${screen.account.server.name}",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
                     Text("Your library will appear here in a future update.")
                     Message(screen.error)
                     Action("Switch user", initial = true, enabled = !screen.busy, onClick = vm::switchUser)
@@ -202,7 +248,7 @@ private fun Page(title: String, content: @Composable ColumnScope.() -> Unit) {
     Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(title, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
             content()
@@ -230,7 +276,7 @@ private fun RemoteField(
     initial: Boolean = false,
     password: Boolean = false,
     enabled: Boolean = true,
-    onDone: () -> Unit = {},
+    onDone: () -> Unit = {}
 ) {
     val focus = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
@@ -244,21 +290,31 @@ private fun RemoteField(
             singleLine = true,
             textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else KeyboardType.Text, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); onDone() }),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = if (password) KeyboardType.Password else KeyboardType.Text,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(onDone = {
+                keyboard?.hide()
+                onDone()
+            }),
             modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth()
                 .focusRequester(focus)
                 .onFocusChanged { focused = it.isFocused }
                 .onPreviewKeyEvent {
-                    if ((it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyUp) {
+                    if ((it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter) &&
+                        it.type == KeyEventType.KeyUp
+                    ) {
                         keyboard?.show()
                         true
-                    } else false
+                    } else {
+                        false
+                    }
                 }
                 .border(if (focused) 3.dp else 1.dp, if (focused) Color(0xFFB8C4FF) else Color(0xFF747A8E), RoundedCornerShape(8.dp))
                 .background(Color(0xFF202635), RoundedCornerShape(8.dp))
                 .padding(16.dp)
-                .semantics { contentDescription = label },
+                .semantics { contentDescription = label }
         )
     }
     LaunchedEffect(Unit) { if (initial) focus.requestFocus() }

@@ -5,8 +5,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.pictureshow.core.TextPersistence
-import kotlinx.coroutines.flow.first
 import java.util.UUID
+import kotlinx.coroutines.flow.first
 
 class AccountPersistence(private val preferences: DataStore<Preferences>) : TextPersistence {
     override suspend fun read(): String? = preferences.data.first()[ACCOUNTS]

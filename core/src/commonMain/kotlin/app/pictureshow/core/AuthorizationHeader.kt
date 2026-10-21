@@ -7,7 +7,7 @@ object AuthorizationHeader {
             "Client" to "Pictureshow",
             "Device" to identity.deviceName,
             "DeviceId" to identity.deviceId,
-            "Version" to identity.version,
+            "Version" to identity.version
         )
         if (token != null) values["Token"] = token
         return "MediaBrowser " + values.entries.joinToString(", ") { (key, value) -> "$key=\"${encode(value)}\"" }

@@ -41,7 +41,7 @@ class AccountStore(private val persistence: TextPersistence) {
     suspend fun signOut(key: String) = update { snapshot ->
         snapshot.copy(
             accounts = snapshot.accounts.filterNot { it.key == key },
-            currentKey = snapshot.currentKey.takeUnless { it == key },
+            currentKey = snapshot.currentKey.takeUnless { it == key }
         )
     }
 

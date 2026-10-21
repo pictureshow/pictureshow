@@ -1,6 +1,6 @@
 # Pictureshow
 
-Pictureshow is a free, open-source Jellyfin client for Android TV from Legitimate LLC, licensed under MPL-2.0.
+Pictureshow is a free, open-source Jellyfin client for Android TV from Legitimate LLC, licensed under MPL-2.0. Copyright © 2026 Legitimate LLC.
 
 Status: early development, not usable yet. The first slice covers server discovery, password sign-in, Quick Connect, and remembered accounts. The home screen is a placeholder; browsing and playback are not implemented.
 

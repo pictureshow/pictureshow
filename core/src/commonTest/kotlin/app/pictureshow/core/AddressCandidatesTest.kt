@@ -9,15 +9,20 @@ class AddressCandidatesTest {
     fun ipWithoutSchemeTriesHttpsAndHttpWithStandardAndJellyfinPorts() {
         assertEquals(
             listOf("https://10.0.0.5", "https://10.0.0.5:8920", "http://10.0.0.5", "http://10.0.0.5:8096"),
-            AddressCandidates.build("10.0.0.5"),
+            AddressCandidates.build("10.0.0.5")
         )
     }
 
     @Test
     fun hostnameWithoutSchemeTriesBothProtocols() {
         assertEquals(
-            listOf("https://jellyfin.example.com", "https://jellyfin.example.com:8920", "http://jellyfin.example.com", "http://jellyfin.example.com:8096"),
-            AddressCandidates.build("jellyfin.example.com"),
+            listOf(
+                "https://jellyfin.example.com",
+                "https://jellyfin.example.com:8920",
+                "http://jellyfin.example.com",
+                "http://jellyfin.example.com:8096"
+            ),
+            AddressCandidates.build("jellyfin.example.com")
         )
     }
 
@@ -31,7 +36,7 @@ class AddressCandidatesTest {
     fun basePathIsKeptInEveryCandidate() {
         assertEquals(
             listOf("https://host/jellyfin", "https://host:8920/jellyfin", "http://host/jellyfin", "http://host:8096/jellyfin"),
-            AddressCandidates.build("host/jellyfin"),
+            AddressCandidates.build("host/jellyfin")
         )
     }
 
@@ -52,7 +57,17 @@ class AddressCandidatesTest {
 
     @Test
     fun unsafeAndInvalidInputIsRejected() {
-        listOf("", "  ", "ftp://host", "http://name:password@host", "host/path?token=secret", "host/#fragment", "bad host", "http://host:invalid", "http://host:99999").forEach {
+        listOf(
+            "",
+            "  ",
+            "ftp://host",
+            "http://name:password@host",
+            "host/path?token=secret",
+            "host/#fragment",
+            "bad host",
+            "http://host:invalid",
+            "http://host:99999"
+        ).forEach {
             assertFailsWith<IllegalArgumentException>(it) { AddressCandidates.build(it) }
         }
     }

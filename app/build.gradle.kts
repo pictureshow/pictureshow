@@ -55,6 +55,7 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.turbine)
+    testImplementation(libs.ktor.client.mock)
 }
 
 tasks.named("check") { dependsOn("ktlintCheck", "lintDebug") }

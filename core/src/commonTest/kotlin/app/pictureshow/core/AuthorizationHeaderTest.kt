@@ -19,8 +19,14 @@ class AuthorizationHeaderTest {
         assertTrue(header.contains("%2C"))
         assertTrue(header.contains("%2B"))
         assertEquals(
-            mapOf("Client" to "Pictureshow", "Device" to name, "DeviceId" to identity.deviceId, "Version" to identity.version, "Token" to token),
-            serverParts(header.substringAfter(' ')),
+            mapOf(
+                "Client" to "Pictureshow",
+                "Device" to name,
+                "DeviceId" to identity.deviceId,
+                "Version" to identity.version,
+                "Token" to token
+            ),
+            serverParts(header.substringAfter(' '))
         )
     }
 

@@ -29,7 +29,13 @@ object AddressCandidates {
         val path = parsed.encodedPath.trimEnd('/')
         val schemes = if (explicitScheme) listOf(parsed.protocol.name) else listOf("https", "http")
         return schemes.flatMap { scheme ->
-            val ports = if (explicitPort) listOf(parsed.port) else if (scheme == "https") listOf(443, 8920) else listOf(80, 8096)
+            val ports = if (explicitPort) {
+                listOf(parsed.port)
+            } else if (scheme == "https") {
+                listOf(443, 8920)
+            } else {
+                listOf(80, 8096)
+            }
             ports.map { port ->
                 val suffix = if ((scheme == "https" && port == 443) || (scheme == "http" && port == 80)) "" else ":$port"
                 "$scheme://$host$suffix$path"

@@ -15,6 +15,13 @@ import app.pictureshow.core.Server
 import app.pictureshow.core.ServerDiscovery
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,13 +36,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScreenModelsTest {
@@ -66,11 +66,16 @@ class ScreenModelsTest {
     @Test
     fun startupRestoresSelectedAccountAndObservesSwitches() = runTest(dispatcher) {
         accounts.remember(account)
-        val vm = own(SessionViewModel(AccountStore(memory)))
+        val reopened = AccountStore(memory)
+        val vm = own(SessionViewModel(reopened))
         assertTrue(vm.state.value.loading)
         runCurrent()
         assertEquals(account, vm.state.value.snapshot.currentAccount)
         assertFalse(vm.state.value.loading)
+        reopened.select(null)
+        runCurrent()
+        assertNull(vm.state.value.snapshot.currentKey)
+        assertEquals(listOf(account), vm.state.value.snapshot.accounts)
     }
 
     @Test
@@ -89,7 +94,15 @@ class ScreenModelsTest {
     @Test
     fun discoveryAndTypedAddressReachConnectedServer() = runTest(dispatcher) {
         val found = DiscoveredServer(server.url, server.id, server.name)
-        val vm = own(ServerViewModel(service, discovery { delay(100); listOf(found) }))
+        val vm = own(
+            ServerViewModel(
+                service,
+                discovery {
+                    delay(100)
+                    listOf(found)
+                }
+            )
+        )
         vm.scan()
         runCurrent()
         assertTrue(vm.state.value.scanning)
@@ -120,7 +133,16 @@ class ScreenModelsTest {
     @Test
     fun leavingServerScreenCancelsOutstandingDiscovery() = runTest(dispatcher) {
         var completed = false
-        val vm = own(ServerViewModel(service, discovery { delay(5000); completed = true; emptyList() }))
+        val vm = own(
+            ServerViewModel(
+                service,
+                discovery {
+                    delay(5000)
+                    completed = true
+                    emptyList()
+                }
+            )
+        )
         vm.scan()
         runCurrent()
         vm.leave()
@@ -345,8 +367,14 @@ class ScreenModelsTest {
         var value: String? = null
         var failWrite = false
         var failRead = false
-        override suspend fun read(): String? { check(!failRead); return value }
-        override suspend fun write(value: String) { check(!failWrite); this.value = value }
+        override suspend fun read(): String? {
+            check(!failRead)
+            return value
+        }
+        override suspend fun write(value: String) {
+            check(!failWrite)
+            this.value = value
+        }
     }
 
     private class FakeService(private val account: Account) : JellyfinService {
@@ -361,12 +389,22 @@ class ScreenModelsTest {
         var logoutResult: ClientResult<Unit> = ClientResult.Success(Unit)
         var quick: Flow<QuickConnectState> = flowOf(QuickConnectState.Disabled)
         var meBlock: (suspend () -> ClientResult<User>)? = null
-        override suspend fun probe(address: String): ClientResult<Server> { probed = address; return probeResult }
+        override suspend fun probe(address: String): ClientResult<Server> {
+            probed = address
+            return probeResult
+        }
         override suspend fun publicUsers(server: Server) = users
-        override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> { credentials = username to password; return auth }
+        override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> {
+            credentials =
+                username to password
+            return auth
+        }
         override suspend fun quickConnectEnabled(server: Server) = enabled
         override fun quickConnect(server: Server) = quick
         override suspend fun me(account: Account) = meBlock?.invoke() ?: user
-        override suspend fun logout(account: Account): ClientResult<Unit> { loggedOut = account; return logoutResult }
+        override suspend fun logout(account: Account): ClientResult<Unit> {
+            loggedOut = account
+            return logoutResult
+        }
     }
 }

@@ -64,28 +64,34 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
             when (result) {
                 is ClientResult.Success -> return result
                 is ClientResult.Failure -> {
-                    if (result.error.kind != ErrorKind.NETWORK || error.kind == ErrorKind.NETWORK) error = result.error
+                    val candidateError = if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) {
+                        ClientError(
+                            ErrorKind.SERVER,
+                            "This address blocks public server information. Check the server or reverse proxy settings."
+                        )
+                    } else {
+                        result.error
+                    }
+                    if (probeErrorPriority(candidateError.kind) > probeErrorPriority(error.kind)) error = candidateError
                 }
             }
         }
         return ClientResult.Failure(error)
     }
 
-    override suspend fun publicUsers(server: Server): ClientResult<List<User>> =
-        request(server.url, "Users/Public") { text ->
-            (json.parseToJsonElement(text) as JsonArray).map { user(it.jsonObject) }
-        }
+    override suspend fun publicUsers(server: Server): ClientResult<List<User>> = request(server.url, "Users/Public") { text ->
+        (json.parseToJsonElement(text) as JsonArray).map { user(it.jsonObject) }
+    }
 
-    override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> =
-        request(
-            server.url,
-            "Users/AuthenticateByName",
-            HttpMethod.Post,
-            buildJsonObject {
-                put("Username", username)
-                put("Pw", password)
-            },
-        ) { account(server, it) }
+    override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> = request(
+        server.url,
+        "Users/AuthenticateByName",
+        HttpMethod.Post,
+        buildJsonObject {
+            put("Username", username)
+            put("Pw", password)
+        }
+    ) { account(server, it) }
 
     override suspend fun quickConnectEnabled(server: Server): ClientResult<Boolean> =
         request(server.url, "QuickConnect/Enabled") { json.parseToJsonElement(it).jsonPrimitive.boolean }
@@ -129,13 +135,13 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                         server.url,
                         "Users/AuthenticateWithQuickConnect",
                         HttpMethod.Post,
-                        buildJsonObject { put("Secret", secret) },
+                        buildJsonObject { put("Secret", secret) }
                     ) { account(server, it) }
                     emit(
                         when (exchanged) {
                             is ClientResult.Success -> QuickConnectState.Authorized(exchanged.value)
                             is ClientResult.Failure -> QuickConnectState.Failed(exchanged.error)
-                        },
+                        }
                     )
                     return@flow
                 }
@@ -143,10 +149,9 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         }
     }
 
-    override suspend fun me(account: Account): ClientResult<User> =
-        request(account.server.url, "Users/Me", token = account.accessToken) {
-            user(json.parseToJsonElement(it).jsonObject)
-        }
+    override suspend fun me(account: Account): ClientResult<User> = request(account.server.url, "Users/Me", token = account.accessToken) {
+        user(json.parseToJsonElement(it).jsonObject)
+    }
 
     override suspend fun logout(account: Account): ClientResult<Unit> =
         request(account.server.url, "Sessions/Logout", HttpMethod.Post, token = account.accessToken) { }
@@ -167,7 +172,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         token: String? = null,
         secret: String? = null,
         expiryStatus: Boolean = false,
-        decode: (String) -> T,
+        decode: (String) -> T
     ): ClientResult<T> = try {
         withTimeoutOrNull(4_000) {
             val response = client.request("${baseUrl.trimEnd('/')}/$path") {
@@ -224,4 +229,12 @@ private fun supportedVersion(version: String): Boolean {
         if (actual != required) return actual > required
     }
     return !version.contains('-')
+}
+
+private fun probeErrorPriority(kind: ErrorKind): Int = when (kind) {
+    ErrorKind.UNSUPPORTED_VERSION -> 4
+    ErrorKind.NOT_JELLYFIN -> 3
+    ErrorKind.INVALID_RESPONSE -> 2
+    ErrorKind.SERVER -> 1
+    else -> 0
 }

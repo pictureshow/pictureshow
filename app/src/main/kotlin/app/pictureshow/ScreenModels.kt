@@ -55,7 +55,7 @@ data class ServerState(
     val connecting: Boolean = false,
     val discovered: List<DiscoveredServer> = emptyList(),
     val connected: Server? = null,
-    val error: String? = null,
+    val error: String? = null
 )
 
 class ServerViewModel(private val service: JellyfinService, private val discovery: ServerDiscovery) : ViewModel() {
@@ -64,7 +64,9 @@ class ServerViewModel(private val service: JellyfinService, private val discover
     private var scanJob: Job? = null
     private var connectJob: Job? = null
 
-    fun address(value: String) { mutableState.update { it.copy(address = value, error = null) } }
+    fun address(value: String) {
+        mutableState.update { it.copy(address = value, error = null) }
+    }
 
     fun scan() {
         if (scanJob?.isActive == true) return
@@ -94,7 +96,9 @@ class ServerViewModel(private val service: JellyfinService, private val discover
         }
     }
 
-    fun consumeConnected() { mutableState.update { it.copy(connected = null) } }
+    fun consumeConnected() {
+        mutableState.update { it.copy(connected = null) }
+    }
 
     fun leave() {
         scanJob?.cancel()
@@ -112,7 +116,7 @@ data class LoginState(
     val busy: Boolean = false,
     val signedIn: Boolean = false,
     val error: String? = null,
-    val notice: String? = null,
+    val notice: String? = null
 )
 
 class LoginViewModel(val server: Server, private val service: JellyfinService, private val accounts: AccountStore) : ViewModel() {
@@ -131,14 +135,20 @@ class LoginViewModel(val server: Server, private val service: JellyfinService, p
                     quickConnect = (quick as? ClientResult.Success)?.value == true,
                     notice = if (users is ClientResult.Failure || quick is ClientResult.Failure) {
                         "Some sign-in options could not be loaded. You can still enter a username and password."
-                    } else null,
+                    } else {
+                        null
+                    }
                 )
             }
         }
     }
 
-    fun username(value: String) { mutableState.update { it.copy(username = value, error = null) } }
-    fun password(value: String) { mutableState.update { it.copy(password = value, error = null) } }
+    fun username(value: String) {
+        mutableState.update { it.copy(username = value, error = null) }
+    }
+    fun password(value: String) {
+        mutableState.update { it.copy(password = value, error = null) }
+    }
 
     fun signIn() {
         if (signInJob?.isActive == true || state.value.signedIn) return
@@ -169,7 +179,13 @@ class LoginViewModel(val server: Server, private val service: JellyfinService, p
     }
 }
 
-data class QuickState(val code: String? = null, val busy: Boolean = true, val signedIn: Boolean = false, val disabled: Boolean = false, val error: String? = null)
+data class QuickState(
+    val code: String? = null,
+    val busy: Boolean = true,
+    val signedIn: Boolean = false,
+    val disabled: Boolean = false,
+    val error: String? = null
+)
 
 class QuickConnectViewModel(val server: Server, private val service: JellyfinService, private val accounts: AccountStore) : ViewModel() {
     private val mutableState = MutableStateFlow(QuickState())
@@ -198,7 +214,10 @@ class QuickConnectViewModel(val server: Server, private val service: JellyfinSer
         }
     }
 
-    fun stop() { polling?.cancel(); polling = null }
+    fun stop() {
+        polling?.cancel()
+        polling = null
+    }
 }
 
 data class AccountsState(val busy: Boolean = false, val selected: Boolean = false, val error: String? = null)
@@ -238,12 +257,15 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
                 is ClientResult.Success -> {
                     val updated = account.copy(user = result.value)
                     mutableState.update { it.copy(account = updated) }
-
                 }
                 is ClientResult.Failure -> mutableState.update {
-                    it.copy(error = if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) {
-                        "This saved sign-in has expired. Sign out and sign in again."
-                    } else "Could not verify the server connection. Your saved sign-in is still available.")
+                    it.copy(
+                        error = if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) {
+                            "This saved sign-in has expired. Sign out and sign in again."
+                        } else {
+                            "Could not verify the server connection. Your saved sign-in is still available."
+                        }
+                    )
                 }
             }
         }

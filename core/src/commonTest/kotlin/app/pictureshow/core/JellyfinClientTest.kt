@@ -86,6 +86,29 @@ class JellyfinClientTest {
     }
 
     @Test
+    fun obsoleteServerMessageSurvivesFailuresFromOtherCandidatePorts() = runTest {
+        val result = client {
+            when (it.url.port) {
+                443 -> respond(info("10.9.11"))
+                8920 -> error("no listener")
+                80 -> respond("", HttpStatusCode.NotFound)
+                else -> respond(info(product = "Other service"))
+            }
+        }.probe("example.test")
+        val failure = assertIs<ClientResult.Failure>(result)
+        assertEquals(ErrorKind.UNSUPPORTED_VERSION, failure.error.kind)
+        assertTrue(failure.error.message.contains("10.9.11"))
+    }
+
+    @Test
+    fun proxyAuthenticationDuringProbeIsReportedAsServerConfiguration() = runTest {
+        val result = client { respond("", HttpStatusCode.Unauthorized) }.probe("example.test")
+        val failure = assertIs<ClientResult.Failure>(result)
+        assertEquals(ErrorKind.SERVER, failure.error.kind)
+        assertTrue(failure.error.message.contains("public server information"))
+    }
+
+    @Test
     fun minimumAndNewerVersionsAreAccepted() = runTest {
         listOf("10.10.0", "10.10.1", "10.11.0", "12.0.0").forEach { version ->
             val result = client { respond(info(version)) }.probe("http://example.test:8096")

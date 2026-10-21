@@ -10,6 +10,7 @@ indent_size = 4
 
 [*.{kt,kts}]
 ktlint_code_style = android_studio
+max_line_length = 140
 ktlint_function_naming_ignore_when_annotated_with = Composable
 
 [*.{yml,yaml,xml,toml}]

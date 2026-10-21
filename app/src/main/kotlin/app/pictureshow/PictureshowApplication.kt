@@ -6,15 +6,20 @@ import android.provider.Settings
 import androidx.datastore.preferences.preferencesDataStore
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
+import app.pictureshow.core.ClientError
 import app.pictureshow.core.ClientIdentity
+import app.pictureshow.core.ClientResult
+import app.pictureshow.core.ErrorKind
 import app.pictureshow.core.JellyfinClient
 import app.pictureshow.core.JellyfinService
 import app.pictureshow.core.JvmServerDiscovery
+import app.pictureshow.core.QuickConnectState
 import app.pictureshow.core.Server
 import app.pictureshow.core.ServerDiscovery
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.koin.androidContext
@@ -48,7 +53,11 @@ class PictureshowApplication : Application() {
                         }
                     }
                     single<JellyfinService> {
-                        val name = Settings.Global.getString(contentResolver, "device_name")?.takeIf { it.isNotBlank() } ?: Build.MODEL
+                        val name =
+                            runCatching {
+                                Settings.Global.getString(contentResolver, "device_name")
+                            }.getOrNull()?.takeIf { it.isNotBlank() }
+                                ?: Build.MODEL
                         PersistentIdentityService(get(), get(), name)
                     }
                     viewModel { SessionViewModel(get()) }
@@ -57,25 +66,49 @@ class PictureshowApplication : Application() {
                     viewModel { (server: Server) -> QuickConnectViewModel(server, get(), get()) }
                     viewModel { AccountsViewModel(get()) }
                     viewModel { (account: Account) -> HomeViewModel(account, get(), get()) }
-                },
+                }
             )
         }
     }
 }
 
 /** Avoid blocking Application.onCreate on a disk read just to construct the protocol client. */
-private class PersistentIdentityService(private val http: HttpClient, private val identity: DeviceIdentityStore, private val deviceName: String) : JellyfinService {
+internal class PersistentIdentityService(
+    private val http: HttpClient,
+    private val identity: DeviceIdentityStore,
+    private val deviceName: String
+) : JellyfinService {
     private suspend fun client(): JellyfinClient = withContext(Dispatchers.IO) {
         JellyfinClient(http, ClientIdentity(deviceName, identity.getOrCreate(), BuildConfig.VERSION_NAME))
     }
 
-    override suspend fun probe(address: String) = client().probe(address)
-    override suspend fun publicUsers(server: Server) = client().publicUsers(server)
-    override suspend fun authenticate(server: Server, username: String, password: String) = client().authenticate(server, username, password)
-    override suspend fun quickConnectEnabled(server: Server) = client().quickConnectEnabled(server)
-    override fun quickConnect(server: Server) = kotlinx.coroutines.flow.flow {
-        client().quickConnect(server).collect { emit(it) }
+    private suspend fun <T> call(block: suspend (JellyfinClient) -> ClientResult<T>): ClientResult<T> = try {
+        block(client())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        ClientResult.Failure(identityError())
     }
-    override suspend fun me(account: Account) = client().me(account)
-    override suspend fun logout(account: Account) = client().logout(account)
+
+    override suspend fun probe(address: String) = call { it.probe(address) }
+    override suspend fun publicUsers(server: Server) = call { it.publicUsers(server) }
+    override suspend fun authenticate(server: Server, username: String, password: String) =
+        call { it.authenticate(server, username, password) }
+    override suspend fun quickConnectEnabled(server: Server) = call { it.quickConnectEnabled(server) }
+    override fun quickConnect(server: Server) = kotlinx.coroutines.flow.flow {
+        val resolved = try {
+            client()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emit(QuickConnectState.Failed(identityError()))
+            return@flow
+        }
+        resolved.quickConnect(server).collect { emit(it) }
+    }
+    override suspend fun me(account: Account) = call { it.me(account) }
+    override suspend fun logout(account: Account) = call { it.logout(account) }
+
+    private fun identityError() =
+        ClientError(ErrorKind.LOCAL_STORAGE, "Could not read this device's identity. Restart Pictureshow and try again.")
 }

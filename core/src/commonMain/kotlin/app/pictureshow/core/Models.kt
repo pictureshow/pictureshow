@@ -24,6 +24,7 @@ enum class ErrorKind {
     SERVER,
     EXPIRED,
     INVALID_RESPONSE,
+    LOCAL_STORAGE
 }
 
 data class ClientError(val kind: ErrorKind, val message: String)

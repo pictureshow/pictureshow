@@ -14,7 +14,7 @@ data class DiscoveredServer(
     @SerialName("Address") val address: String,
     @SerialName("Id") val id: String,
     @SerialName("Name") val name: String,
-    @SerialName("EndpointAddress") val endpointAddress: String? = null,
+    @SerialName("EndpointAddress") val endpointAddress: String? = null
 )
 
 /** A reply is only a discovery hint; authenticate only after probing its advertised address. */
@@ -24,8 +24,12 @@ object DiscoveryReplies {
     fun parse(packet: String): DiscoveredServer? = try {
         json.decodeFromString<DiscoveredServer>(packet).takeIf {
             val url = Url(it.address)
-            it.id.isNotBlank() && it.name.isNotBlank() && url.host.isNotBlank() &&
-                url.protocol.name in listOf("http", "https") && url.user == null && url.password == null
+            it.id.isNotBlank() &&
+                it.name.isNotBlank() &&
+                url.host.isNotBlank() &&
+                url.protocol.name in listOf("http", "https") &&
+                url.user == null &&
+                url.password == null
         }
     } catch (_: Exception) {
         null

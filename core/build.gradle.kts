@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
@@ -7,7 +9,7 @@ plugins {
 kotlin {
     jvmToolchain(21)
     jvm {
-        compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
     }
     sourceSets {
         commonMain.dependencies {
@@ -25,3 +27,5 @@ kotlin {
 }
 
 tasks.named("check") { dependsOn("ktlintCheck") }
+
+tasks.withType<JavaCompile>().configureEach { options.release.set(17) }
