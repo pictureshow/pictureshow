@@ -62,10 +62,15 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.tv.material3.darkColorScheme
+import app.pictureshow.core.AccountSnapshot
+import app.pictureshow.core.AccountStore
+import app.pictureshow.core.CatalogService
+import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 class MainActivity : ComponentActivity() {
@@ -77,12 +82,28 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun itemRoute(item: MediaItem) = "item?item=${Uri.encode(Json.encodeToString(item))}"
+
 private fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
+
+internal fun accountDestination(snapshot: AccountSnapshot): String {
+    val account = snapshot.currentAccount
+    return when {
+        account?.expired == true -> serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}"
+        account != null -> "home"
+        snapshot.accounts.isEmpty() -> "servers"
+        else -> "accounts"
+    }
+}
 
 @Composable
 private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
     val state by session.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    val catalogService: CatalogService = koinInject()
+    val accounts: AccountStore = koinInject()
+    val catalog =
+        remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) { CatalogSession(catalogService, accounts) }
     if (state.loading) {
         Page("Pictureshow") { Text("Loading saved accounts…") }
         return
@@ -95,16 +116,8 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
         return
     }
     // Only account selection changes reset the graph. Ordinary route changes remain on Back's stack.
-    LaunchedEffect(state.snapshot.currentKey) {
-        val destination = if (state.snapshot.currentAccount !=
-            null
-        ) {
-            "home"
-        } else if (state.snapshot.accounts.isEmpty()) {
-            "servers"
-        } else {
-            "accounts"
-        }
+    LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired) {
+        val destination = accountDestination(state.snapshot)
         nav.navigate(destination) {
             popUpTo(nav.graph.id) { inclusive = true }
             launchSingleTop = true
@@ -163,10 +176,20 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
                 Action("Add a server", initial = state.snapshot.accounts.isEmpty()) { nav.navigate("servers") }
             }
         }
-        composable("login?server={server}", arguments = listOf(navArgument("server") { type = NavType.StringType })) { entry ->
+        composable(
+            "login?server={server}&username={username}",
+            arguments = listOf(
+                navArgument("server") { type = NavType.StringType },
+                navArgument("username") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { entry ->
             val server = remember(entry) { Json.decodeFromString<Server>(requireNotNull(entry.arguments?.getString("server"))) }
             val vm: LoginViewModel = koinViewModel(parameters = { parametersOf(server) })
             val screen by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(entry) { vm.prefillUsername(entry.arguments?.getString("username").orEmpty()) }
             DisposableEffect(Unit) { onDispose { vm.leave() } }
             Page("Sign in to ${server.name}") {
                 RemoteField("Username", screen.username, vm::username, initial = true, enabled = !screen.busy)
@@ -227,17 +250,37 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
         }
         composable("home") {
             state.snapshot.currentAccount?.let { account ->
-                val vm: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
+                val profile: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
+                val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                 val screen by vm.state.collectAsStateWithLifecycle()
-                Page("Pictureshow") {
-                    Text(
-                        "Signed in as ${screen.account.user.name} on ${screen.account.server.name}",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                    Text("Your library will appear here in a future update.")
-                    Message(screen.error)
-                    Action("Switch user", initial = true, enabled = !screen.busy, onClick = vm::switchUser)
-                    Action(if (screen.busy) "Please wait…" else "Sign out", enabled = !screen.busy, onClick = vm::signOut)
+                val profileState by profile.state.collectAsStateWithLifecycle()
+                CatalogHome(
+                    screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
+                    profileState.account,
+                    onOpen = { nav.navigate(itemRoute(it)) },
+                    onRetry = {
+                        profile.verify()
+                        vm.reload()
+                    },
+                    onSwitchUser = profile::switchUser,
+                    onSignOut = profile::signOut
+                )
+            }
+        }
+        composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
+            state.snapshot.currentAccount?.let { account ->
+                val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                if (item.isFolder &&
+                    item.type !in listOf("Series", "Season") ||
+                    item.type in listOf("CollectionFolder", "BoxSet", "Folder")
+                ) {
+                    val vm: CatalogGridViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
+                    val screen by vm.state.collectAsStateWithLifecycle()
+                    CatalogGrid(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::sort, vm::retry)
+                } else {
+                    val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
+                    val screen by vm.state.collectAsStateWithLifecycle()
+                    CatalogDetail(screen, { nav.navigate(itemRoute(it)) }, vm::season, vm::played, vm::favorite, vm::reload)
                 }
             }
         }

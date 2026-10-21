@@ -37,6 +37,12 @@ koin-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = 
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.2.1" }
 desugar = { module = "com.android.tools:desugar_jdk_libs", version = "2.1.5" }
 
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version = "3.6.3" }
+coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version = "3.6.3" }
+compose-ui-test = { module = "androidx.compose.ui:ui-test-junit4" }
+compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+robolectric = { module = "org.robolectric:robolectric", version = "4.17" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

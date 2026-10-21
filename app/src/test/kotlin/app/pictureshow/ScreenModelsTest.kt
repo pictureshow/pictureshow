@@ -354,7 +354,34 @@ class ScreenModelsTest {
             assertTrue(awaitItem().error!!.contains("expired"))
             cancelAndIgnoreRemainingEvents()
         }
-        assertEquals(account, accounts.snapshots.value.currentAccount)
+        assertTrue(accounts.snapshots.value.currentAccount!!.expired)
+        assertEquals("", accounts.snapshots.value.currentAccount!!.accessToken)
+    }
+
+    @Test
+    fun homeRetryCanClearTransientVerificationError() = runTest(dispatcher) {
+        accounts.remember(account)
+        service.user = failure(ErrorKind.NETWORK)
+        val vm = own(HomeViewModel(account, service, accounts))
+        advanceUntilIdle()
+        assertTrue(vm.state.value.error != null)
+        service.user = ClientResult.Success(account.user)
+        vm.verify()
+        advanceUntilIdle()
+        assertNull(vm.state.value.error)
+    }
+
+    @Test
+    fun expiredUsernamePrefillDoesNotOverwriteUserInputOnReturnFromQuickConnect() = runTest(dispatcher) {
+        val vm = own(LoginViewModel(server, service, accounts))
+        advanceUntilIdle()
+        vm.prefillUsername("Jamie")
+        assertEquals("Jamie", vm.state.value.username)
+        vm.username("Robin")
+        vm.prefillUsername("Jamie")
+        assertEquals("Robin", vm.state.value.username)
+        vm.prefillUsername("")
+        assertEquals("Robin", vm.state.value.username)
     }
 
     private fun discovery(block: suspend () -> List<DiscoveredServer>) = object : ServerDiscovery {

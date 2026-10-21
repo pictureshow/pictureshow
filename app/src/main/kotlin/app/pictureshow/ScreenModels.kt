@@ -146,6 +146,10 @@ class LoginViewModel(val server: Server, private val service: JellyfinService, p
     fun username(value: String) {
         mutableState.update { it.copy(username = value, error = null) }
     }
+    fun prefillUsername(value: String) {
+        if (state.value.username.isBlank() && value.isNotBlank()) username(value)
+    }
+
     fun password(value: String) {
         mutableState.update { it.copy(password = value, error = null) }
     }
@@ -249,23 +253,34 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
     private val mutableState = MutableStateFlow(HomeState(account))
     val state = mutableState.asStateFlow()
 
-    private val verifyJob: Job
+    private var verifyJob: Job? = null
 
     init {
+        verify()
+    }
+
+    fun verify() {
+        if (state.value.busy) return
+        verifyJob?.cancel()
+        val account = state.value.account
         verifyJob = viewModelScope.launch {
+            mutableState.update { it.copy(error = null) }
             when (val result = service.me(account)) {
                 is ClientResult.Success -> {
                     val updated = account.copy(user = result.value)
                     mutableState.update { it.copy(account = updated) }
                 }
-                is ClientResult.Failure -> mutableState.update {
-                    it.copy(
-                        error = if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) {
-                            "This saved sign-in has expired. Sign out and sign in again."
-                        } else {
-                            "Could not verify the server connection. Your saved sign-in is still available."
-                        }
-                    )
+                is ClientResult.Failure -> {
+                    if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) accounts.expire(account.key, account.accessToken)
+                    mutableState.update {
+                        it.copy(
+                            error = if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) {
+                                "This saved sign-in has expired. Sign in again."
+                            } else {
+                                "Could not verify the server connection. Your saved sign-in is still available."
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -276,7 +291,7 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
 
     private fun changeAccount(signOut: Boolean) {
         if (state.value.busy) return
-        verifyJob.cancel()
+        verifyJob?.cancel()
         mutableState.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             try {

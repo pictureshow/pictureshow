@@ -6,6 +6,8 @@ import android.provider.Settings
 import androidx.datastore.preferences.preferencesDataStore
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
+import app.pictureshow.core.BrowseQuery
+import app.pictureshow.core.CatalogService
 import app.pictureshow.core.ClientError
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.ClientResult
@@ -60,12 +62,20 @@ class PictureshowApplication : Application() {
                                 ?: Build.MODEL
                         PersistentIdentityService(get(), get(), name)
                     }
+                    single<CatalogService> { get<JellyfinService>() as CatalogService }
                     viewModel { SessionViewModel(get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
                     viewModel { (server: Server) -> QuickConnectViewModel(server, get(), get()) }
                     viewModel { AccountsViewModel(get()) }
                     viewModel { (account: Account) -> HomeViewModel(account, get(), get()) }
+                    viewModel { (account: Account, session: CatalogSession) -> CatalogHomeViewModel(account, session) }
+                    viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->
+                        CatalogGridViewModel(account, item, session)
+                    }
+                    viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->
+                        CatalogDetailViewModel(account, item, session)
+                    }
                 }
             )
         }
@@ -77,7 +87,8 @@ internal class PersistentIdentityService(
     private val http: HttpClient,
     private val identity: DeviceIdentityStore,
     private val deviceName: String
-) : JellyfinService {
+) : JellyfinService,
+    CatalogService {
     private suspend fun client(): JellyfinClient = withContext(Dispatchers.IO) {
         JellyfinClient(http, ClientIdentity(deviceName, identity.getOrCreate(), BuildConfig.VERSION_NAME))
     }
@@ -108,6 +119,17 @@ internal class PersistentIdentityService(
     }
     override suspend fun me(account: Account) = call { it.me(account) }
     override suspend fun logout(account: Account) = call { it.logout(account) }
+
+    override suspend fun views(account: Account) = call { it.views(account) }
+    override suspend fun resume(account: Account) = call { it.resume(account) }
+    override suspend fun nextUp(account: Account, seriesId: String?) = call { it.nextUp(account, seriesId) }
+    override suspend fun latest(account: Account, parentId: String) = call { it.latest(account, parentId) }
+    override suspend fun items(account: Account, query: BrowseQuery) = call { it.items(account, query) }
+    override suspend fun item(account: Account, id: String) = call { it.item(account, id) }
+    override suspend fun seasons(account: Account, seriesId: String) = call { it.seasons(account, seriesId) }
+    override suspend fun episodes(account: Account, seriesId: String, seasonId: String) = call { it.episodes(account, seriesId, seasonId) }
+    override suspend fun played(account: Account, id: String, value: Boolean) = call { it.played(account, id, value) }
+    override suspend fun favorite(account: Account, id: String, value: Boolean) = call { it.favorite(account, id, value) }
 
     private fun identityError() =
         ClientError(ErrorKind.LOCAL_STORAGE, "Could not read this device's identity. Restart Pictureshow and try again.")

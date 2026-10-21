@@ -25,6 +25,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     lint {
         warningsAsErrors = true
         checkDependencies = true
@@ -42,6 +43,8 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)
     implementation(libs.tv.material)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.activity.compose)
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.viewmodel)
@@ -54,6 +57,9 @@ dependencies {
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
     coreLibraryDesugaring(libs.desugar)
+    debugImplementation(libs.compose.ui.test.manifest)
+    testImplementation(libs.compose.ui.test)
+    testImplementation(libs.robolectric)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.turbine)
