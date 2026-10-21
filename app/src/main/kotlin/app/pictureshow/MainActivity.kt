@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -289,8 +290,10 @@ private fun RemoteField(
             enabled = enabled,
             singleLine = true,
             textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
+            cursorBrush = SolidColor(Color(0xFFB8C4FF)),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(
+                autoCorrectEnabled = false,
                 keyboardType = if (password) KeyboardType.Password else KeyboardType.Text,
                 imeAction = ImeAction.Done
             ),

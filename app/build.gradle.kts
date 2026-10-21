@@ -28,6 +28,8 @@ android {
     lint {
         warningsAsErrors = true
         checkDependencies = true
+        // The brief deliberately targets API 36 while compiling against 37.
+        disable += "OldTargetApi"
     }
 }
 kotlin {

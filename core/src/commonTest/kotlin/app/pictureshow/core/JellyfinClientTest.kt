@@ -20,6 +20,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.job
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -33,8 +36,16 @@ class JellyfinClientTest {
     private val server = Server("server-1", "Test Jellyfin", "https://example.test/jellyfin", "12.0.0")
     private val successfulAuth = """{"AccessToken":"token-1","ServerId":"server-1","User":{"Id":"user-1","Name":"Taylor"}}"""
 
-    private fun client(handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData): JellyfinClient =
-        JellyfinClient(HttpClient(MockEngine(handler)), identity)
+    private fun TestScope.client(handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData): JellyfinClient {
+        val http = HttpClient(MockEngine) {
+            engine {
+                dispatcher = StandardTestDispatcher(testScheduler)
+                addHandler(handler)
+            }
+        }
+        backgroundScope.coroutineContext.job.invokeOnCompletion { http.close() }
+        return JellyfinClient(http, identity)
+    }
 
     private fun info(version: String = "12.0.0", product: String = "Jellyfin Server"): String =
         """{"Id":"server-1","ServerName":"Test Jellyfin","Version":"$version","ProductName":"$product"}"""
