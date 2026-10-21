@@ -281,6 +281,9 @@ private fun RemoteField(
 ) {
     val focus = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
+    // Read-only until the remote's center button is pressed: a writable text field opens the keyboard as soon as it is
+    // focused, and on a TV the keyboard then takes the D-pad and the first press types its highlighted key.
+    var editing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label)
@@ -288,6 +291,7 @@ private fun RemoteField(
             value = value,
             onValueChange = onValue,
             enabled = enabled,
+            readOnly = !editing,
             singleLine = true,
             textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
             cursorBrush = SolidColor(Color(0xFFB8C4FF)),
@@ -299,16 +303,22 @@ private fun RemoteField(
             ),
             keyboardActions = KeyboardActions(onDone = {
                 keyboard?.hide()
+                editing = false
                 onDone()
             }),
             modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth()
                 .focusRequester(focus)
-                .onFocusChanged { focused = it.isFocused }
+                .onFocusChanged {
+                    focused = it.isFocused
+                    if (!it.isFocused) editing = false
+                }
                 .onPreviewKeyEvent {
-                    if ((it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter) &&
-                        it.type == KeyEventType.KeyUp
-                    ) {
-                        keyboard?.show()
+                    // Both halves of the press are consumed, so the keyboard opens only after the key is released
+                    // and the release can't reach it.
+                    if (it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter) {
+                        if (it.type == KeyEventType.KeyUp) {
+                            if (editing) keyboard?.show() else editing = true
+                        }
                         true
                     } else {
                         false
