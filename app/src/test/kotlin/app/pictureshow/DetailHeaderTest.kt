@@ -6,6 +6,10 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -19,6 +23,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import app.pictureshow.core.Account
 import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
@@ -32,6 +39,7 @@ import coil3.intercept.Interceptor
 import coil3.request.SuccessResult
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -182,6 +190,83 @@ class DetailHeaderTest {
         compose.onNodeWithTag("detail:episodes:watched").assertIsFocused()
         key(Key.DirectionUp)
         assertHeader(season.name)
+    }
+
+    @Test
+    fun episodeBackRestoresExactCardAfterReloadTemporarilyRemovesEpisodeShelf() {
+        val episodes = (1..3).map { episode.copy(id = "episode-$it", name = "Episode $it") }
+        var state by mutableStateOf(
+            CatalogDetailState(
+                account,
+                series,
+                loading = false,
+                nextUp = listOf(episode),
+                seasons = listOf(season),
+                selectedSeasonId = season.id,
+                episodes = episodes
+            )
+        )
+        var visits = 0
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        compose.setContent {
+            PictureshowTheme {
+                val nav = rememberNavController()
+                NavHost(nav, startDestination = "series") {
+                    composable("series") {
+                        LaunchedEffect(Unit) {
+                            if (visits++ > 0) {
+                                state = state.copy(loading = true, episodes = emptyList())
+                                delay(300)
+                                state = state.copy(loading = false, episodes = episodes)
+                            }
+                        }
+                        CatalogDetail(state, { nav.navigate("episode") }, {}, {}, {}, {})
+                    }
+                    composable("episode") {
+                        CatalogDetail(CatalogDetailState(account, episodes[1], loading = false), {}, {}, {}, {}, {})
+                    }
+                }
+            }
+        }
+        repeat(3) { key(Key.DirectionDown) }
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("detail:episodes:episode-2").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.runOnIdle {
+            compose.activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
+            compose.activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK))
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithTag("detail:episodes:episode-2").assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    fun reloadRestoresFocusedEpisodeAfterTemporarilyRemovingItsShelf() {
+        val episodes = (1..3).map { episode.copy(id = "episode-$it", name = "Episode $it") }
+        var state by mutableStateOf(
+            CatalogDetailState(
+                account,
+                series,
+                loading = false,
+                nextUp = listOf(episode),
+                seasons = listOf(season),
+                selectedSeasonId = season.id,
+                episodes = episodes
+            )
+        )
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        compose.setContent { PictureshowTheme { CatalogDetail(state, {}, {}, {}, {}, {}) } }
+        repeat(3) { key(Key.DirectionDown) }
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("detail:episodes:episode-2").assertIsFocused()
+        compose.runOnIdle { state = state.copy(loading = true, episodes = emptyList()) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
+        compose.runOnIdle { state = state.copy(loading = false, episodes = episodes) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("detail:episodes:episode-2").assertIsFocused().assertIsDisplayed()
     }
 
     @Test

@@ -526,15 +526,20 @@ fun CatalogDetail(
             if (index < 0) {
                 list.scrollToItem(0)
                 withFrameNanos { }
-                initial.requestFocus()
+                selectedSection = "header"
+                restored = initial.requestFocus()
             } else if (index in sections.indices) {
                 val (section, items) = sections[index]
                 val target = rowSelections[section] ?: state.selectedSeasonId.takeIf { section == "seasons" }
                 val itemIndex = items.indexOfFirst { it.id == target }.coerceAtLeast(0)
-                if (list.layoutInfo.visibleItemsInfo.none { it.index == index + 1 }) list.scrollToItem(index + 1)
+                // A visible shelf heading does not mean its lazy cards are attached.
+                list.scrollToItem(index + 1)
                 val horizontal = rowStates.getValue(section)
                 if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
-                requestAttached(requests, "$section:${items[itemIndex].id}")
+                selectedSection = section
+                selectedId = items[itemIndex].id
+                rowSelections = rowSelections + (section to selectedId)
+                restored = requestAttached(requests, "$section:$selectedId")
             }
         }
     }
@@ -601,12 +606,24 @@ fun CatalogDetail(
                         if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
                         val container = item.type in listOf("Series", "Season")
                         if (hasActions && container) {
-                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) { selectedSection = "header" }
+                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) {
+                                if (!state.loading &&
+                                    restored
+                                ) {
+                                    selectedSection = "header"
+                                }
+                            }
                         }
                         item.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
                         if (item.genres.isNotEmpty()) Text(item.genres.joinToString(" · "), color = CatalogMuted)
                         if (hasActions && !container) {
-                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) { selectedSection = "header" }
+                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) {
+                                if (!state.loading &&
+                                    restored
+                                ) {
+                                    selectedSection = "header"
+                                }
+                            }
                         }
                         if (state.loading) Text("Loading episodes…")
                     }
@@ -626,13 +643,19 @@ fun CatalogDetail(
                         onOpen = if (section == "seasons") onSeason else onOpen,
                         wide = section != "seasons",
                         selectedId = if (section == "seasons") state.selectedSeasonId else null,
-                        onFocusRested = if (section == "seasons") onSeason else null,
+                        onFocusRested = if (section == "seasons") {
+                            { season -> if (!state.loading && restored) onSeason(season) }
+                        } else {
+                            null
+                        },
                         rowState = rowStates.getValue(section),
                         requests = requests,
                         onFocus = { focused ->
-                            selectedSection = section
-                            selectedId = focused.id
-                            rowSelections = rowSelections + (section to focused.id)
+                            if (!state.loading && restored) {
+                                selectedSection = section
+                                selectedId = focused.id
+                                rowSelections = rowSelections + (section to focused.id)
+                            }
                         }
                     )
                 }
@@ -643,6 +666,7 @@ fun CatalogDetail(
         }
     }
     LaunchedEffect(state.loading, item?.id, state.error, sections.map { it.first to it.second.map(MediaItem::id) }) {
+        if (state.loading && selectedSection != "header") restored = false
         if (!state.loading && !restored) {
             withFrameNanos { }
             val savedSectionIndex = sections.indexOfFirst { it.first == selectedSection }
@@ -658,15 +682,22 @@ fun CatalogDetail(
                 val targetId = if (savedSectionIndex < 0 && section == "seasons") state.selectedSeasonId else selectedId
                 val itemIndex = items.indexOfFirst { it.id == targetId }.coerceAtLeast(0)
                 val horizontal = rowStates.getValue(section)
-                if (list.layoutInfo.visibleItemsInfo.none { it.index == sectionIndex + 1 }) list.scrollToItem(sectionIndex + 1)
+                list.scrollToItem(sectionIndex + 1)
                 if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
-                requestAttached(requests, "$section:${items[itemIndex].id}")
+                restored = requestAttached(requests, "$section:${items[itemIndex].id}")
+                if (restored) {
+                    selectedSection = section
+                    selectedId = items[itemIndex].id
+                    rowSelections = rowSelections + (section to selectedId)
+                }
             } else if (hasActions || state.error != null) {
                 list.scrollToItem(0)
                 withFrameNanos { }
-                if (state.error != null) retry.requestFocus() else initial.requestFocus()
+                restored = if (state.error != null) retry.requestFocus() else initial.requestFocus()
+                if (restored) selectedSection = "header"
+            } else {
+                restored = true
             }
-            restored = true
         }
     }
 }
