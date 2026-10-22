@@ -20,6 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -92,9 +93,12 @@ class PlaybackMediaSessionTest {
         try {
             assertFalse(PlaybackMediaSession.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER)))
             assertEquals(second, active.session.player)
-            assertTrue(PlaybackMediaSession.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY)))
+            val activity = Robolectric.buildActivity(MainActivity::class.java).get()
+            assertTrue(activity.onKeyDown(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY)))
+            assertTrue(activity.onKeyUp(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY)))
             val delivered = Shadow.extract<RecordingMediaController>(active.controller)
-            assertEquals(listOf(KeyEvent.KEYCODE_MEDIA_PLAY), delivered.keys)
+            assertEquals(listOf(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY), delivered.keys)
+            assertEquals(listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP), delivered.actions)
         } finally {
             active.close()
             first.release()
@@ -107,10 +111,12 @@ class PlaybackMediaSessionTest {
     @Implements(android.media.session.MediaController::class)
     class RecordingMediaController : org.robolectric.shadows.ShadowMediaController() {
         val keys = mutableListOf<Int>()
+        val actions = mutableListOf<Int>()
 
         @Implementation
         protected fun dispatchMediaButtonEvent(event: KeyEvent): Boolean {
             keys += event.keyCode
+            actions += event.action
             return true
         }
     }

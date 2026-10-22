@@ -120,8 +120,11 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
     }
 
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
-        PlaybackMediaSession.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        PlaybackMediaSession.dispatchKeyEvent(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        PlaybackMediaSession.dispatchKeyEvent(event) || super.onKeyUp(keyCode, event)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
