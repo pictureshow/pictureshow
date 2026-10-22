@@ -20,6 +20,7 @@ The debug APK is written to `app/build/outputs/apk/debug/`. `check` runs the sha
 
 - `core/`: platform-free Kotlin Multiplatform authentication, catalog protocol, presentation helpers, and account logic, with UDP sockets isolated in `jvmMain`.
 - `app/`: Compose for TV screens, Navigation Compose, Koin wiring, and app-private DataStore persistence.
+- `media3-ffmpeg/`: Media3's FFmpeg audio decoder extension with prebuilt LGPL FFmpeg libraries (`tools/ffmpeg/`, `third_party/ffmpeg/`).
 
 Use a TV remote's arrows to move focus, center to select or open the on-screen keyboard, and Back to leave a screen. Enter a server address or choose a discovered server. Hidden Jellyfin users can always type their username. Quick Connect is offered only when enabled by the server.
 

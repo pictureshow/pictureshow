@@ -39,6 +39,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":media3-ffmpeg"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)
