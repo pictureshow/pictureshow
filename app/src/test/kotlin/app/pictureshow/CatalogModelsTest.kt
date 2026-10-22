@@ -349,6 +349,31 @@ class CatalogModelsTest {
     private fun <T> ok(value: T) = ClientResult.Success(value)
     private fun failure(kind: ErrorKind = ErrorKind.NETWORK) = ClientResult.Failure(ClientError(kind, "Could not load. Retry."))
 
+    @Test
+    fun markingSeasonReloadsCascadedEpisodeStateAndChildChangesRefreshParent() = runTest(dispatcher) {
+        val season = MediaItem("season", "Season 1", "Season", seriesId = "series")
+        val episode = MediaItem("episode", "Episode 1", "Episode")
+        service.detail = ok(season)
+        service.episodeBlock = { _, _ -> ok(ItemPage(listOf(episode))) }
+        val vm = own(CatalogDetailViewModel(account, season, session))
+        advanceUntilIdle()
+        assertFalse(vm.state.value.episodes.single().userData.played)
+        val watched = ItemUserData(played = true)
+        service.detail = ok(season.copy(userData = watched))
+        service.episodeBlock = { _, _ -> ok(ItemPage(listOf(episode.copy(userData = watched)))) }
+        service.actionResult = ok(watched)
+        vm.played()
+        advanceUntilIdle()
+        assertEquals(Triple("played", season.id, true), service.actions.single())
+        assertTrue(vm.state.value.episodes.single().userData.played)
+        service.detail = ok(season)
+        service.episodeBlock = { _, _ -> ok(ItemPage(listOf(episode))) }
+        session.changed(episode)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.item!!.userData.played)
+        assertFalse(vm.state.value.episodes.single().userData.played)
+    }
+
     internal class FakeCatalog : CatalogService {
         var libraryViews: ClientResult<ItemPage> = ClientResult.Success(ItemPage())
         var resumeItems: ClientResult<ItemPage> = ClientResult.Success(ItemPage())

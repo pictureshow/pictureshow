@@ -212,7 +212,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                 mutableState.update { state ->
                     state.copy(episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item })
                 }
-                if (changes.revision > 0 && original.type == "Series") reload()
+                if (changes.revision > 0 && original.type in listOf("Series", "Season")) reload()
             }
         }
     }

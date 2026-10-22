@@ -157,7 +157,7 @@ class CatalogFocusTest {
     }
 
     @Test
-    fun seriesInitiallyFocusesNextUpBeforeTheSelectedSeason() {
+    fun seriesInitiallyFocusesHeaderBeforeNextUpAndSelectedSeason() {
         val seasons = listOf(MediaItem("season-1", "Season 1", "Season"))
         val next = MediaItem("next-episode", "An Invented Episode", "Episode")
         compose.setContent {
@@ -180,6 +180,8 @@ class CatalogFocusTest {
                 )
             }
         }
+        compose.onNodeWithTag("detail:play").assertIsFocused().assertIsDisplayed()
+        key(Key.DirectionDown)
         compose.onNodeWithTag("detail:next:next-episode").assertIsFocused().assertIsDisplayed()
         compose.onNodeWithTag("detail:refresh").assertDoesNotExist()
     }
@@ -218,6 +220,8 @@ class CatalogFocusTest {
                 }
             }
         }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        key(Key.DirectionDown)
         compose.onNodeWithTag("detail:seasons:season-2").assertIsFocused().assertIsSelected()
             .assertContentDescriptionEquals("Season 2, selected season")
         compose.onNodeWithText("Season 2 ✓").assertDoesNotExist()
@@ -240,7 +244,7 @@ class CatalogFocusTest {
     }
 
     @Test
-    fun seasonWithoutSeasonPickerInitiallyFocusesItsFirstEpisode() {
+    fun seasonWithoutSeasonPickerInitiallyFocusesHeaderThenFirstEpisode() {
         compose.setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 CatalogDetail(
@@ -258,6 +262,8 @@ class CatalogFocusTest {
                 )
             }
         }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        key(Key.DirectionDown)
         compose.onNodeWithTag("detail:episodes:episode").assertIsFocused().assertIsDisplayed()
         compose.onNodeWithTag("detail:refresh").assertDoesNotExist()
     }
