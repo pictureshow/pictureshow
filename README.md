@@ -2,7 +2,7 @@
 
 Pictureshow is a free, open-source Jellyfin client for Android TV from Legitimate LLC, licensed under MPL-2.0. Copyright © 2026 Legitimate LLC.
 
-Status: early development. Server discovery, password sign-in, Quick Connect, remembered accounts, home rows, paged library browsing, item details and Media3 playback are implemented. Playback still needs acceptance on a range of Android TV hardware.
+Status: early development. Server discovery, password sign-in, Quick Connect, remembered accounts, home rows, paged library browsing, item details, video-library search and Media3 playback are implemented. Playback still needs acceptance on a range of Android TV hardware.
 
 Pictureshow is developed with AI assistance and tested on real devices.
 
@@ -52,3 +52,19 @@ adb shell am start -a android.intent.action.VIEW -d 'pictureshow://play/01234567
 ```
 
 Omit the position to resume from the server's saved position; zero starts over. The item is checked against the current account before playback. Without an account, normal startup opens. An unavailable item shows a short message and returns home. Back from externally opened playback returns to the item's details.
+
+## Search
+
+Press Up from the first home row to reach Search, or use the remote’s search key anywhere in the catalog.
+Search opens the system keyboard; its microphone provides voice typing. On later visits to the field, press center
+to open the keyboard. Results update after a short pause once the trimmed query has at least two characters.
+Movies, shows, episodes, collections and people appear in separate rows. A person opens their movies and shows.
+Back from results focuses the field; Back from the field with the keyboard closed returns to the previous screen.
+Returning from a detail preserves the query, rows and selected result.
+
+Recent searches are stored per account when a result is opened or a query is submitted. The last eight appear when
+the field is empty. Clear removes them, and signing out removes that account’s history.
+
+The app accepts `android.intent.action.SEARCH` and `com.google.android.gms.actions.SEARCH_ACTION` with a `query`
+string extra for the current signed-in account. Those entries show results with the keyboard closed. Music,
+playlists and Android TV launcher search-provider integration are planned for later work.

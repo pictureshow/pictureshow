@@ -16,6 +16,8 @@ import app.pictureshow.core.JellyfinClient
 import app.pictureshow.core.JellyfinService
 import app.pictureshow.core.JvmServerDiscovery
 import app.pictureshow.core.QuickConnectState
+import app.pictureshow.core.SearchKind
+import app.pictureshow.core.SearchService
 import app.pictureshow.core.Server
 import app.pictureshow.core.ServerDiscovery
 import io.ktor.client.HttpClient
@@ -63,6 +65,10 @@ class PictureshowApplication : Application() {
                         PersistentIdentityService(get(), get(), name)
                     }
                     single<CatalogService> { get<JellyfinService>() as CatalogService }
+                    viewModel { (account: Account, session: CatalogSession) -> SearchViewModel(account, session, get()) }
+                    viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->
+                        PersonViewModel(account, item, session)
+                    }
                     viewModel { SessionViewModel(get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
@@ -88,7 +94,8 @@ internal class PersistentIdentityService(
     private val identity: DeviceIdentityStore,
     private val deviceName: String
 ) : JellyfinService,
-    CatalogService {
+    CatalogService,
+    SearchService {
     private suspend fun client(): JellyfinClient = withContext(Dispatchers.IO) {
         JellyfinClient(http, ClientIdentity(deviceName, identity.getOrCreate(), BuildConfig.VERSION_NAME))
     }
@@ -119,6 +126,10 @@ internal class PersistentIdentityService(
     }
     override suspend fun me(account: Account) = call { it.me(account) }
     override suspend fun logout(account: Account) = call { it.logout(account) }
+
+    override suspend fun search(account: Account, query: String, kind: SearchKind) = call { it.search(account, query, kind) }
+    override suspend fun personItems(account: Account, personId: String, startIndex: Int, limit: Int) =
+        call { it.personItems(account, personId, startIndex, limit) }
 
     override suspend fun views(account: Account) = call { it.views(account) }
     override suspend fun resume(account: Account) = call { it.resume(account) }

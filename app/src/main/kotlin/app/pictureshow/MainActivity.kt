@@ -60,6 +60,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.tv.material3.Button
@@ -79,6 +80,7 @@ import org.koin.core.parameter.parametersOf
 
 class MainActivity : ComponentActivity() {
     private var playbackEntry by mutableStateOf<ParsedPlaybackEntry?>(null)
+    private var searchEntry by mutableStateOf<String?>(null)
     private var entrySequence by mutableStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,6 +88,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             acceptPlaybackIntent(intent)
         } else {
+            searchEntry = savedInstanceState.getString("searchEntry")
             entrySequence = savedInstanceState.getLong("playbackEntrySequence")
             playbackEntry = when (savedInstanceState.getString("playbackEntryKind")) {
                 "invalid" -> ParsedPlaybackEntry.Invalid
@@ -101,12 +104,19 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                Pictureshow(playbackEntry = playbackEntry, entrySequence = entrySequence, consumePlaybackEntry = { playbackEntry = null })
+                Pictureshow(
+                    searchEntry = searchEntry,
+                    consumeSearchEntry = { searchEntry = null },
+                    playbackEntry = playbackEntry,
+                    entrySequence = entrySequence,
+                    consumePlaybackEntry = { playbackEntry = null }
+                )
             }
         }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("searchEntry", searchEntry)
         outState.putLong("playbackEntrySequence", entrySequence)
         when (val pending = playbackEntry) {
             ParsedPlaybackEntry.Invalid -> outState.putString("playbackEntryKind", "invalid")
@@ -133,6 +143,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun acceptPlaybackIntent(intent: Intent) {
+        searchEntry = parseSearchIntent(intent)
         playbackEntry = parsePlaybackEntry(intent).takeUnless { it == ParsedPlaybackEntry.Ignore }
         entrySequence++
     }
@@ -169,12 +180,16 @@ internal fun accountDestination(snapshot: AccountSnapshot): String {
 @Composable
 private fun Pictureshow(
     session: SessionViewModel = koinViewModel(),
+    searchEntry: String? = null,
+    consumeSearchEntry: () -> Unit = {},
     playbackEntry: ParsedPlaybackEntry? = null,
     entrySequence: Long = 0,
     consumePlaybackEntry: () -> Unit = {}
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    val backStackEntry by nav.currentBackStackEntryAsState()
+    var searchKeyboardRequest by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
@@ -224,7 +239,26 @@ private fun Pictureshow(
         }
         consumePlaybackEntry()
     }
-    NavHost(navController = nav, startDestination = "waiting") {
+    LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
+        val query = searchEntry ?: return@LaunchedEffect
+        val destination = searchIntentDestination(state.snapshot, query)
+        if (destination.startsWith("search?")) nav.navigate(destination)
+        consumeSearchEntry()
+    }
+    NavHost(
+        navController = nav,
+        startDestination = "waiting",
+        modifier = Modifier.fillMaxSize().catalogSearchKey(
+            enabled = state.snapshot.currentAccount?.expired == false && isCatalogSearchRoute(backStackEntry?.destination?.route),
+            onSearch = {
+                if (backStackEntry?.destination?.route?.startsWith("search?") == true) {
+                    searchKeyboardRequest++
+                } else {
+                    nav.navigate(searchRoute())
+                }
+            }
+        )
+    ) {
         composable("waiting") { Page("Pictureshow") { Text("Loading…") } }
         composable("servers") {
             val vm: ServerViewModel = koinViewModel()
@@ -299,7 +333,11 @@ private fun Pictureshow(
                 Message(screen.error)
                 Message(screen.notice)
                 if (screen.loading) Text("Loading sign-in options…")
-                if (screen.quickConnect) Action("Use Quick Connect", enabled = !screen.busy) { nav.navigate(serverRoute("quick", server)) }
+                if (screen.quickConnect) {
+                    Action("Use Quick Connect", enabled = !screen.busy) {
+                        nav.navigate(serverRoute("quick", server))
+                    }
+                }
                 if (screen.users.isNotEmpty()) Text("Or choose a public user:")
                 screen.users.forEach { user -> Action(user.name, enabled = !screen.busy) { vm.username(user.name) } }
                 Action("Back", enabled = !screen.busy) { nav.popBackStack() }
@@ -365,7 +403,39 @@ private fun Pictureshow(
                     },
                     onSwitchUser = profile::switchUser,
                     onSignOut = profile::signOut,
+                    onSearch = { nav.navigate(searchRoute()) },
                     onResume = vm::reload
+                )
+            }
+        }
+        composable(
+            "search?query={query}&keyboard={keyboard}",
+            arguments = listOf(
+                navArgument("query") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("keyboard") {
+                    type = NavType.BoolType
+                    defaultValue = true
+                }
+            )
+        ) { entry ->
+            state.snapshot.currentAccount?.takeUnless { it.expired }?.let { account ->
+                val vm: SearchViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
+                val screen by vm.state.collectAsStateWithLifecycle()
+                // Runs once per entry, never when returning from detail.
+                LaunchedEffect(entry) {
+                    if (screen.query.isEmpty()) vm.query(entry.arguments?.getString("query").orEmpty(), immediate = true)
+                }
+                SearchScreen(
+                    screen, account, entry.arguments?.getBoolean("keyboard") ?: true,
+                    vm::query, vm::submit, { vm.query(it, immediate = true) }, vm::clearRecent, vm::retry,
+                    onOpen = {
+                        vm.opened()
+                        nav.navigate(itemRoute(it))
+                    },
+                    keyboardRequest = searchKeyboardRequest
                 )
             }
         }
@@ -387,7 +457,11 @@ private fun Pictureshow(
         composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
             state.snapshot.currentAccount?.let { account ->
                 val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
-                if (item.isFolder &&
+                if (item.type == "Person") {
+                    val vm: PersonViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
+                    val screen by vm.state.collectAsStateWithLifecycle()
+                    PersonScreen(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::retry, { nav.popBackStack() })
+                } else if (item.isFolder &&
                     item.type !in listOf("Series", "Season") ||
                     item.type in listOf("CollectionFolder", "BoxSet", "Folder")
                 ) {

@@ -91,7 +91,8 @@ fun CatalogHome(
     onRetry: () -> Unit,
     onSwitchUser: () -> Unit,
     onSignOut: () -> Unit,
-    onResume: () -> Unit = {}
+    onResume: () -> Unit = {},
+    onSearch: () -> Unit = {}
 ) {
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
@@ -103,6 +104,7 @@ fun CatalogHome(
     var rowSelections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var rowPositions by rememberSaveable { mutableStateOf(mapOf<String, Int>()) }
     var restored by remember { mutableStateOf(false) }
+    val search = remember { FocusRequester() }
     val profile = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -145,10 +147,10 @@ fun CatalogHome(
                     withFrameNanos { }
                     profile.requestFocus()
                 }
-                state.error != null -> {
+                else -> {
                     list.scrollToItem(0)
                     withFrameNanos { }
-                    retry.requestFocus()
+                    search.requestFocus()
                 }
             }
         }
@@ -161,6 +163,19 @@ fun CatalogHome(
     ) {
         item(key = "header") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onSearch,
+                    modifier = Modifier.focusRequester(search).testTag("home:search")
+                        .onFocusChanged { if (it.isFocused) selectedRow = "search" }
+                        .onPreviewKeyEvent {
+                            if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                moveRow(0)
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                ) { Text("Search") }
                 CatalogHeading("Pictureshow")
                 Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
                 if (state.loading) Text("Loading your home…")
@@ -261,6 +276,11 @@ fun CatalogHome(
         if (!state.loading && !restored) {
             withFrameNanos { }
             when {
+                savedRow == "search" -> {
+                    list.scrollToItem(0)
+                    withFrameNanos { }
+                    search.requestFocus()
+                }
                 savedRow == "profile" -> {
                     list.scrollToItem(rows.size + 1)
                     withFrameNanos { }
@@ -278,7 +298,7 @@ fun CatalogHome(
             restored = true
         } else if (!state.loading &&
             restored &&
-            savedRow != "profile" &&
+            savedRow !in listOf("profile", "search") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
@@ -301,7 +321,8 @@ fun CatalogGrid(
     onOpen: (MediaItem) -> Unit,
     onNearEnd: (Int) -> Unit,
     onSort: (String, Boolean) -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    showSort: Boolean = true
 ) {
     val grid = rememberLazyGridState()
     var selectedId by rememberSaveable { mutableStateOf("") }
@@ -315,19 +336,24 @@ fun CatalogGrid(
     ) {
         CatalogHeading(state.parent.name)
         Text("${state.total} items", color = CatalogMuted, modifier = Modifier.testTag("grid:count"))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            val sorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
-            sorts.forEachIndexed { index, (sort, title) ->
-                Button(
-                    onClick = { onSort(sort, state.descending) },
-                    modifier = (if (index == 0) Modifier.focusRequester(firstSort) else Modifier).testTag("grid:sort:$sort")
-                ) { Text(if (state.sortBy == sort) "$title ✓" else title) }
-            }
-            Button(onClick = { onSort(state.sortBy, !state.descending) }, modifier = Modifier.testTag("grid:sort-order")) {
-                Text(if (state.descending) "Descending ↓" else "Ascending ↑")
+        if (showSort) {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                val sorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
+                sorts.forEachIndexed { index, (sort, title) ->
+                    Button(
+                        onClick = { onSort(sort, state.descending) },
+                        modifier = (if (index == 0) Modifier.focusRequester(firstSort) else Modifier).testTag("grid:sort:$sort")
+                    ) { Text(if (state.sortBy == sort) "$title ✓" else title) }
+                }
+                Button(onClick = { onSort(state.sortBy, !state.descending) }, modifier = Modifier.testTag("grid:sort-order")) {
+                    Text(if (state.descending) "Descending ↓" else "Ascending ↑")
+                }
             }
         }
-        CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
+        CatalogError(state.error, {
+            restored = false
+            onRetry()
+        }, Modifier.focusRequester(retry))
         if (state.loading) Text("Loading…")
         if (!state.loading && state.items.isEmpty() && state.error == null) Text("This library is empty.")
         LazyVerticalGrid(
@@ -371,7 +397,7 @@ fun CatalogGrid(
             } else if (state.error != null) {
                 retry.requestFocus()
             } else {
-                firstSort.requestFocus()
+                if (showSort) firstSort.requestFocus()
             }
             restored = true
         }
@@ -590,7 +616,7 @@ private suspend fun requestAttached(requests: Map<String, FocusRequester>, key: 
 }
 
 @Composable
-private fun CatalogCard(
+internal fun CatalogCard(
     item: MediaItem,
     account: Account,
     wide: Boolean,
@@ -666,7 +692,7 @@ private fun CatalogCard(
 }
 
 @Composable
-private fun CatalogArtwork(item: MediaItem, account: Account, wide: Boolean, modifier: Modifier = Modifier) {
+internal fun CatalogArtwork(item: MediaItem, account: Account, wide: Boolean, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier.background(Color(0xFF262D3D)), contentAlignment = Alignment.Center) {
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
         val url = imageUrl(account.server, item, pixels, wide = wide)
