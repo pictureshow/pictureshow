@@ -37,6 +37,24 @@ class AccountStore(private val persistence: TextPersistence) {
         snapshot.copy(accounts = snapshot.accounts.filterNot { it.key == account.key } + account, currentKey = account.key)
     }
 
+    /** Public metadata cannot replace identity, addresses or credentials, including after a delayed reply. */
+    suspend fun refreshServer(expected: Server, reported: Server) = mutex.withLock {
+        if (reported.id != expected.id) return@withLock
+        val before = loadLocked()
+        val after = before.copy(
+            accounts = before.accounts.map { account ->
+                if (account.server.id == expected.id && account.server.url == expected.url) {
+                    account.copy(server = account.server.copy(name = reported.name, version = reported.version))
+                } else {
+                    account
+                }
+            }
+        )
+        if (after == before) return@withLock
+        persistence.write(json.encodeToString(after))
+        mutableSnapshots.value = after
+    }
+
     suspend fun select(key: String?) = update { snapshot ->
         require(key == null || snapshot.accounts.any { it.key == key }) { "That account is not saved." }
         snapshot.copy(currentKey = key)

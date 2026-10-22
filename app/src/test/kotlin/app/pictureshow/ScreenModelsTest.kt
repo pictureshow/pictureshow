@@ -67,7 +67,7 @@ class ScreenModelsTest {
     fun startupRestoresSelectedAccountAndObservesSwitches() = runTest(dispatcher) {
         accounts.remember(account)
         val reopened = AccountStore(memory)
-        val vm = own(SessionViewModel(reopened))
+        val vm = own(SessionViewModel(reopened, service))
         assertTrue(vm.state.value.loading)
         runCurrent()
         assertEquals(account, vm.state.value.snapshot.currentAccount)
@@ -79,9 +79,147 @@ class ScreenModelsTest {
     }
 
     @Test
+    fun startupRefreshesEachStoredEndpointOnceAndPersistsMetadataOnly() = runTest(dispatcher) {
+        val second = account.copy(user = User("user-2", "Robin"), accessToken = "other-token", expired = true)
+        accounts.remember(second)
+        accounts.remember(account)
+        accounts.recordSearch(account.key, "saved search")
+        val before = accounts.load()
+        val renamed = server.copy(name = "Renamed Cinema", version = "12.1.0")
+        // A probe may normalize/fall back to an address; metadata refresh never adopts it.
+        service.probeResult = ClientResult.Success(renamed.copy(url = "https://different.example.test"))
+        val vm = own(SessionViewModel(AccountStore(memory), service))
+        runCurrent()
+        val expected = before.copy(accounts = before.accounts.map { it.copy(server = renamed) })
+        assertEquals(expected, vm.state.value.snapshot)
+        assertEquals(expected, AccountStore(memory).load())
+        assertEquals(listOf(server.url), service.probes)
+    }
+
+    @Test
+    fun unreachableInvalidAndDifferentIdResponsesLeaveSavedRecordsUntouched() = runTest(dispatcher) {
+        val responses = listOf<ClientResult<Server>>(
+            ClientResult.Success(server),
+            failure(ErrorKind.NETWORK),
+            failure(ErrorKind.INVALID_RESPONSE),
+            ClientResult.Success(server.copy(id = "replacement-server", name = "Another server", version = "12.1.0"))
+        )
+        for (response in responses) {
+            val saved = Memory()
+            val store = AccountStore(saved)
+            store.remember(account)
+            val before = saved.value
+            val writesBefore = saved.writes
+            val fake = FakeService(account).apply { probeResult = response }
+            val vm = own(SessionViewModel(store, fake))
+            runCurrent()
+            assertFalse(vm.state.value.loading)
+            assertNull(vm.state.value.error)
+            assertEquals(account, vm.state.value.snapshot.currentAccount)
+            assertEquals(before, saved.value)
+            assertEquals(writesBefore, saved.writes)
+        }
+    }
+
+    @Test
+    fun refreshExceptionsAndFailedMetadataWritesDoNotChangeSavedAccountsOrHomeAvailability() = runTest(dispatcher) {
+        accounts.remember(account)
+        val before = memory.value
+        service.probeBlock = { error("connection failed") }
+        val vm = own(SessionViewModel(accounts, service))
+        runCurrent()
+        assertEquals(account, vm.state.value.snapshot.currentAccount)
+        assertNull(vm.state.value.error)
+        service.probeBlock = null
+        service.probeResult = ClientResult.Success(server.copy(name = "Renamed Cinema", version = "12.1.0"))
+        memory.failWrite = true
+        val saving = own(SessionViewModel(accounts, service))
+        runCurrent()
+        assertFalse(saving.state.value.loading)
+        assertNull(saving.state.value.error)
+        assertEquals(account, vm.state.value.snapshot.currentAccount)
+        assertEquals(before, memory.value)
+    }
+
+    @Test
+    fun pendingRefreshCannotRestoreSignedOutAccountsTokensAddressesOrSelection() = runTest(dispatcher) {
+        val second = account.copy(user = User("user-2", "Robin"), accessToken = "old-token")
+        accounts.remember(second)
+        accounts.remember(account)
+        val ready = CompletableDeferred<ClientResult<Server>>()
+        service.probeBlock = { ready.await() }
+        val vm = own(SessionViewModel(accounts, service))
+        runCurrent()
+        assertFalse(vm.state.value.loading)
+        val rotated = second.copy(accessToken = "rotated-token", expired = true)
+        accounts.signOut(account.key)
+        accounts.remember(rotated)
+        accounts.select(null)
+        runCurrent()
+        val renamed = server.copy(name = "Renamed Cinema", version = "12.1.0")
+        ready.complete(ClientResult.Success(renamed))
+        runCurrent()
+        assertEquals(listOf(rotated.copy(server = renamed)), vm.state.value.snapshot.accounts)
+        assertNull(vm.state.value.snapshot.currentKey)
+        assertEquals(vm.state.value.snapshot, AccountStore(memory).load())
+    }
+
+    @Test
+    fun pendingRefreshDoesNotUpdateAnAccountThatMovedToAnotherAddress() = runTest(dispatcher) {
+        accounts.remember(account)
+        val ready = CompletableDeferred<ClientResult<Server>>()
+        service.probeBlock = { address -> if (address == server.url) ready.await() else failure(ErrorKind.NETWORK) }
+        val vm = own(SessionViewModel(accounts, service))
+        runCurrent()
+        val moved = account.copy(server = server.copy(url = "https://moved.example.test"))
+        accounts.remember(moved)
+        runCurrent()
+        assertEquals(listOf(server.url, moved.server.url), service.probes)
+        ready.complete(ClientResult.Success(server.copy(name = "Old endpoint response", version = "12.1.0")))
+        runCurrent()
+        assertEquals(moved, vm.state.value.snapshot.currentAccount)
+        assertEquals(moved, AccountStore(memory).load().currentAccount)
+    }
+
+    @Test
+    fun openingAnAccountRefreshesAgainWithoutARefreshLoopOnMetadataUpdates() = runTest(dispatcher) {
+        val second = account.copy(user = User("user-2", "Robin"))
+        accounts.remember(second)
+        accounts.remember(account)
+        val vm = own(SessionViewModel(accounts, service))
+        runCurrent()
+        assertEquals(1, service.probes.size)
+        val renamed = server.copy(name = "Renamed Cinema", version = "12.1.0")
+        service.probeResult = ClientResult.Success(renamed)
+        accounts.select(second.key)
+        runCurrent()
+        assertEquals(second.copy(server = renamed), vm.state.value.snapshot.currentAccount)
+        assertEquals(2, service.probes.size)
+    }
+
+    @Test
+    fun slowStoredServerDoesNotDelayAnotherServersRefreshOrStartup() = runTest(dispatcher) {
+        val second = account.copy(server = server.copy(id = "other-server", url = "https://other.example.test"))
+        accounts.remember(account)
+        accounts.remember(second)
+        val ready = CompletableDeferred<ClientResult<Server>>()
+        service.probeBlock = { address ->
+            if (address == server.url) ready.await() else ClientResult.Success(second.server.copy(name = "Renamed Other"))
+        }
+        val vm = own(SessionViewModel(accounts, service))
+        runCurrent()
+        assertFalse(vm.state.value.loading)
+        assertEquals("Renamed Other", vm.state.value.snapshot.currentAccount?.server?.name)
+        assertEquals(server, vm.state.value.snapshot.accounts.first().server)
+        ready.complete(failure(ErrorKind.NETWORK))
+        runCurrent()
+        assertEquals(server, vm.state.value.snapshot.accounts.first().server)
+    }
+
+    @Test
     fun startupReadFailureCanBeRetried() = runTest(dispatcher) {
         memory.failRead = true
-        val vm = own(SessionViewModel(accounts))
+        val vm = own(SessionViewModel(accounts, service))
         runCurrent()
         assertTrue(vm.state.value.error != null)
         memory.failRead = false
@@ -390,6 +528,7 @@ class ScreenModelsTest {
     private class Memory : TextPersistence {
         var value: String? = null
         var failWrite = false
+        var writes = 0
         var failRead = false
         override suspend fun read(): String? {
             check(!failRead)
@@ -397,11 +536,14 @@ class ScreenModelsTest {
         }
         override suspend fun write(value: String) {
             check(!failWrite)
+            writes++
             this.value = value
         }
     }
 
     private class FakeService(private val account: Account) : JellyfinService {
+        val probes = mutableListOf<String>()
+        var probeBlock: (suspend (String) -> ClientResult<Server>)? = null
         var probed: String? = null
         var credentials: Pair<String, String>? = null
         var loggedOut: Account? = null
@@ -415,7 +557,8 @@ class ScreenModelsTest {
         var meBlock: (suspend () -> ClientResult<User>)? = null
         override suspend fun probe(address: String): ClientResult<Server> {
             probed = address
-            return probeResult
+            probes += address
+            return probeBlock?.invoke(address) ?: probeResult
         }
         override suspend fun publicUsers(server: Server) = users
         override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> {

@@ -73,6 +73,8 @@ class SignInFocusTest {
     private val discovered = CompletableDeferred<List<DiscoveredServer>>()
     private val catalogUsers = mutableListOf<String>()
     private val serviceEvents = mutableListOf<String>()
+    private var probeResult: ClientResult<Server> = ClientResult.Success(server)
+    private var probeReady: CompletableDeferred<Unit>? = null
     private var signedIn: Pair<String, String>? = null
     private var gatedUser = account.user.id
     private var savedAccounts: String? = null
@@ -101,7 +103,10 @@ class SignInFocusTest {
             }
         }
         val service = object : JellyfinService {
-            override suspend fun probe(address: String) = ClientResult.Success(server)
+            override suspend fun probe(address: String): ClientResult<Server> {
+                probeReady?.await()
+                return probeResult
+            }
             override suspend fun publicUsers(server: Server) = ClientResult.Success(emptyList<User>())
             override suspend fun quickConnectEnabled(server: Server) = ClientResult.Success(true)
             override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> {
@@ -131,7 +136,7 @@ class SignInFocusTest {
                             override suspend fun discover() = discovered.await()
                         }
                     }
-                    viewModel { SessionViewModel(get()) }
+                    viewModel { SessionViewModel(get(), get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
                     viewModel { (server: Server) -> QuickConnectViewModel(server, get(), get()) }
@@ -193,6 +198,37 @@ class SignInFocusTest {
                 ?.config?.getOrNull(SemanticsProperties.Focused) == true
         }
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+    }
+
+    @Test
+    fun backgroundServerRenameReachesExistingHomeChooserAndPersistenceWithoutBlockingHome() {
+        val renamed = server.copy(name = "Renamed Cinema", version = "12.1.0")
+        probeResult = ClientResult.Success(renamed)
+        probeReady = CompletableDeferred()
+        runBlocking {
+            accounts.remember(other)
+            accounts.remember(account)
+        }
+        homeReady.complete(Unit)
+        launch()
+        waitForText("Sam · Screen room")
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        // The public-info request is still suspended, but the saved account and home are usable.
+        assertFalse(probeReady!!.isCompleted)
+        compose.runOnIdle { probeReady!!.complete(Unit) }
+        waitForText("Sam · Renamed Cinema")
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        val expected = listOf(other.copy(server = renamed), account.copy(server = renamed))
+        assertEquals(expected, accounts.snapshots.value.accounts)
+        assertEquals(account.key, accounts.snapshots.value.currentKey)
+        assertEquals(expected, runBlocking { AccountStore(persistence).load() }.accounts)
+        key(Key.DirectionDown)
+        key(Key.DirectionCenter)
+        waitForText("Sam on Renamed Cinema")
+        waitForText("Robin on Renamed Cinema")
+        compose.onNodeWithText("Add a server").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        key(Key.DirectionCenter)
+        waitForText("Renamed Cinema · remembered")
     }
 
     @Test

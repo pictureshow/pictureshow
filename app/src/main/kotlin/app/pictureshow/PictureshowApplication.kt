@@ -78,7 +78,7 @@ class PictureshowApplication : Application() {
                     viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->
                         PersonViewModel(account, item, session)
                     }
-                    viewModel { SessionViewModel(get()) }
+                    viewModel { SessionViewModel(get(), get()) }
                     viewModel { (account: Account) -> PlaybackSettingsViewModel(account, get(), get(), get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
