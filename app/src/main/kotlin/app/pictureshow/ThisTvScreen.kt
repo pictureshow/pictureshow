@@ -77,7 +77,11 @@ internal fun thisTvShareIntent(report: ThisTvReport): Intent = Intent(Intent.ACT
 }
 
 @Composable
-internal fun ThisTvScreen(preferences: PlaybackPreferencesStore, onBack: () -> Unit) {
+internal fun ThisTvScreen(
+    preferences: PlaybackPreferencesStore,
+    capture: suspend (Context, PlaybackPreferences) -> ThisTvReport = ::captureThisTv,
+    onBack: () -> Unit
+) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val first = remember { FocusRequester() }
@@ -88,7 +92,7 @@ internal fun ThisTvScreen(preferences: PlaybackPreferencesStore, onBack: () -> U
     LaunchedEffect(generation) {
         error = false
         try {
-            report = captureThisTv(context, preferences.read())
+            report = capture(context, preferences.read())
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -107,10 +111,11 @@ internal fun ThisTvScreen(preferences: PlaybackPreferencesStore, onBack: () -> U
                 Text("Share diagnostics and profile JSON")
             }
             Button(onClick = { showJson = !showJson }) { Text(if (showJson) "Hide device profile JSON" else "View device profile JSON") }
-            captured.summary.split("\n\n").forEach { Text(it, modifier = Modifier.focusable()) }
             if (showJson) {
                 Text("Full device profile JSON", style = MaterialTheme.typography.headlineSmall)
                 captured.profileJson.lines().chunked(12).forEach { Text(it.joinToString("\n"), modifier = Modifier.focusable()) }
+            } else {
+                captured.summary.split("\n\n").forEach { Text(it, modifier = Modifier.focusable()) }
             }
         } ?: Text(if (error) "Capabilities unavailable" else "Reading device capabilities…")
         if (error) Text("Could not read capabilities. Select Refresh to try again.")

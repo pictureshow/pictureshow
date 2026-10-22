@@ -79,15 +79,19 @@ The report and Android share sheet contain capability/version information only: 
 title or device identifier. Audio lists connected output types and the Media3 default-route capabilities; it does
 not claim an active AudioTrack route while no player exists. Reported limits are not measured playback performance.
 
-Only the `deviceTest` variant includes this automation entry:
+Only the `deviceTest` variant includes this read-only automation endpoint. With a non-rooted TV connected to adb
+(API 23–36), collect and validate the exact UTF-8 profile JSON on your computer:
 
 ```sh
-adb shell am start -n app.pictureshow/.DeviceProfileExportActivity
-adb pull /sdcard/Android/data/app.pictureshow/files/device-profile.json
+adb exec-out content read --uri content://app.pictureshow.deviceprofile/profile.json > device-profile.json
+python3 -m json.tool device-profile.json >/dev/null
 ```
 
-It writes the same profile JSON as This TV to a fixed app-specific external file. The entry is absent from debug
-and release. No storage permission is required.
+Add `-s SERIAL` after `adb` if multiple devices are attached. Validation catches the Android `content` command's
+text errors, which can appear on stdout. The endpoint streams the same profile JSON as This TV using the current
+playback preferences. It is absent from debug and release; no root, debuggable APK or storage permission is required.
+Opening **View device profile JSON** replaces the capability summary with the profile; use D-pad Down/Up to scroll
+its focusable blocks, and **Hide device profile JSON** to return to the summary.
 
 On API 26+ TVs with a TV provider, Pictureshow publishes Continue watching and Next up to the launcher's Play Next /
 Watch Next row. Refreshes follow app startup/return, backgrounding, account changes, catalog watch-state changes and

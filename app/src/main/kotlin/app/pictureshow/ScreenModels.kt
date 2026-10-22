@@ -286,10 +286,7 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
         }
     }
 
-    fun switchUser() = changeAccount(signOut = false)
-    fun signOut() = changeAccount(signOut = true)
-
-    private fun changeAccount(signOut: Boolean) {
+    fun signOut() {
         if (state.value.busy) return
         verifyJob?.cancel()
         mutableState.update { it.copy(busy = true, error = null) }
@@ -297,8 +294,8 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
             try {
                 val account = state.value.account
                 // Best effort remote revocation; a network failure must still allow local sign-out.
-                if (signOut) service.logout(account)
-                if (signOut) accounts.signOut(account.key) else accounts.select(null)
+                service.logout(account)
+                accounts.signOut(account.key)
                 mutableState.update { it.copy(busy = false, finished = true) }
             } catch (e: CancellationException) {
                 throw e

@@ -31,7 +31,7 @@ import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-private val Application.preferences by preferencesDataStore("pictureshow")
+internal val Application.preferences by preferencesDataStore("pictureshow")
 
 class PictureshowApplication : Application() {
     private var watchNext: WatchNextCoordinator? = null
