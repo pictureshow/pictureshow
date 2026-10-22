@@ -6,6 +6,7 @@ package app.pictureshow
 import android.app.SearchManager
 import android.content.Intent
 import android.net.Uri
+import androidx.navigation.NavHostController
 import app.pictureshow.core.AccountSnapshot
 import app.pictureshow.core.normalizeSearch
 
@@ -20,3 +21,13 @@ internal fun searchRoute(query: String = "", keyboard: Boolean = true): String =
 
 internal fun searchIntentDestination(snapshot: AccountSnapshot, query: String): String =
     if (snapshot.currentAccount?.expired == false) searchRoute(query, keyboard = false) else accountDestination(snapshot)
+
+/** Direct query entry keeps the caller underneath search. */
+internal fun navigateSearchEntry(nav: NavHostController, query: String) {
+    val current = nav.currentBackStackEntry
+    nav.navigate(searchRoute(query, keyboard = false)) {
+        if (current?.destination?.route?.substringBefore('?') == "search") {
+            popUpTo(current.destination.id) { inclusive = true }
+        }
+    }
+}

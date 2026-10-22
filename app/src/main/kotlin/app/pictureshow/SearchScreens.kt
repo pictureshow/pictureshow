@@ -179,8 +179,9 @@ fun SearchScreen(
                 modifier = Modifier.fillMaxWidth().focusRequester(field).testTag("search:field")
                     .semantics { contentDescription = "Search your video library" }
                     .onFocusChanged {
+                        // Attachment reports false before the first focus request. Preserve entry-time editing.
+                        if (fieldFocused && !it.isFocused) editing = false
                         fieldFocused = it.isFocused
-                        if (!it.isFocused) editing = false
                     }
                     .onPreviewKeyEvent {
                         when {

@@ -458,7 +458,7 @@ fun CatalogDetail(
                     val metadata = listOfNotNull(
                         item.productionYear?.toString(),
                         item.officialRating,
-                        item.communityRating?.let { "★ $it" },
+                        item.communityRating?.let(::communityRatingLabel),
                         item.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
                     )
                     if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)

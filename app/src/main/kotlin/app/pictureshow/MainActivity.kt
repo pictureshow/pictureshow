@@ -242,7 +242,7 @@ private fun Pictureshow(
     LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
         val query = searchEntry ?: return@LaunchedEffect
         val destination = searchIntentDestination(state.snapshot, query)
-        if (destination.startsWith("search?")) nav.navigate(destination)
+        if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
         consumeSearchEntry()
     }
     NavHost(
