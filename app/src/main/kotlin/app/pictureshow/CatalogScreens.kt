@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -483,6 +484,7 @@ fun CatalogGrid(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CatalogDetail(
     state: CatalogDetailState,
@@ -500,7 +502,17 @@ fun CatalogDetail(
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
+    val scope = rememberCoroutineScope()
+    var movement by remember { mutableStateOf<Job?>(null) }
+    var rowSelections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     val item = state.item
+    val playItem = when (item?.type) {
+        "Series" -> state.nextUp.firstOrNull() ?: state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
+        "Season" -> state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
+        "Movie", "Episode" -> item
+        else -> null
+    }
+    val hasActions = item?.type in listOf("Movie", "Episode", "Series", "Season")
     val sections = buildList {
         if (item?.type == "Series" && state.nextUp.isNotEmpty()) add("next" to state.nextUp)
         if (item?.type == "Series" && state.seasons.isNotEmpty()) add("seasons" to state.seasons)
@@ -508,102 +520,160 @@ fun CatalogDetail(
     }
     val rowStates = mutableMapOf<String, LazyListState>()
     sections.forEach { (section, _) -> key(section) { rowStates[section] = rememberLazyListState() } }
-    LazyColumn(
-        state = list,
-        modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail"),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        item(key = "body") {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (state.loading && item == null) Text("Loading item…")
-                CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
-                if (item != null) {
-                    val backdrop = if (item.backdropImageTags.isNotEmpty() || item.parentBackdropImageTags.isNotEmpty()) {
-                        item.copy(imageTags = emptyMap())
+    fun moveSection(index: Int) {
+        movement?.cancel()
+        movement = scope.launch {
+            if (index < 0) {
+                list.scrollToItem(0)
+                withFrameNanos { }
+                selectedSection = "header"
+                restored = initial.requestFocus()
+            } else if (index in sections.indices) {
+                val (section, items) = sections[index]
+                val target = rowSelections[section] ?: state.selectedSeasonId.takeIf { section == "seasons" }
+                val itemIndex = items.indexOfFirst { it.id == target }.coerceAtLeast(0)
+                // A visible shelf heading does not mean its lazy cards are attached.
+                list.scrollToItem(index + 1)
+                val horizontal = rowStates.getValue(section)
+                if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
+                selectedSection = section
+                selectedId = items[itemIndex].id
+                rowSelections = rowSelections + (section to selectedId)
+                restored = requestAttached(requests, "$section:$selectedId")
+            }
+        }
+    }
+    val platformBringIntoView = LocalBringIntoViewSpec.current
+    val headerFocused by rememberUpdatedState(selectedSection == "header")
+    val detailBringIntoView = remember(platformBringIntoView) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+                // An already-visible header action must not pivot the hero/title above the screen.
+                if (headerFocused && offset >= 0f && offset + size <= containerSize) {
+                    0f
+                } else {
+                    platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+                }
+        }
+    }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides detailBringIntoView) {
+        LazyColumn(
+            state = list,
+            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").onPreviewKeyEvent {
+                if (it.type == KeyEventType.KeyDown && it.key in listOf(Key.DirectionUp, Key.DirectionDown) && hasActions) {
+                    val index = sections.indexOfFirst { section -> section.first == selectedSection }
+                    val target = index + if (it.key == Key.DirectionUp) -1 else 1
+                    if (target < sections.size) {
+                        moveSection(target)
+                        true
                     } else {
-                        item
+                        false
                     }
-                    CatalogArtwork(backdrop, state.account, wide = true, modifier = Modifier.fillMaxWidth().height(220.dp))
-                    CatalogHeading(item.name)
-                    if (item.type == "Episode") {
-                        Text(listOfNotNull(item.seriesName, episodeLabel(item).takeIf { it.isNotBlank() }).joinToString(" · "))
-                    }
-                    val metadata = listOfNotNull(
-                        item.productionYear?.toString(),
-                        item.officialRating,
-                        item.communityRating?.let(::communityRatingLabel),
-                        item.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
-                    )
-                    if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
-                    item.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
-                    if (item.genres.isNotEmpty()) Text(item.genres.joinToString(" · "), color = CatalogMuted)
-                    if (item.type == "Movie" || item.type == "Episode") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Button(
-                                onClick = { onPlay(item, item.userData.playbackPositionTicks > 0) },
-                                modifier = Modifier.focusRequester(initial).testTag("detail:play")
-                                    .onFocusChanged { if (it.isFocused) selectedSection = "header" }
-                            ) {
-                                Text(
-                                    if (item.userData.playbackPositionTicks > 0) {
-                                        resumeLabel(item.userData.playbackPositionTicks)
-                                    } else {
-                                        "Play"
-                                    }
-                                )
-                            }
-                            if (item.userData.playbackPositionTicks > 0) {
-                                Button(onClick = { onPlay(item, false) }) { Text("Play from start") }
-                            }
-                            Button(onClick = onPlayed, enabled = !state.busy, modifier = Modifier.testTag("detail:played")) {
-                                Text(if (item.userData.played) "Mark unwatched" else "Mark watched")
-                            }
-                            Button(onClick = onFavorite, enabled = !state.busy, modifier = Modifier.testTag("detail:favorite")) {
-                                Text(if (item.userData.isFavorite) "Unfavorite" else "Favorite")
+                } else {
+                    false
+                }
+            },
+            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            item(key = "body") {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (state.loading && item == null) Text("Loading item…")
+                    CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
+                    if (item != null) {
+                        val backdrop = if (item.backdropImageTags.isNotEmpty() || item.parentBackdropImageTags.isNotEmpty()) {
+                            item.copy(imageTags = emptyMap())
+                        } else {
+                            item
+                        }
+                        CatalogArtwork(
+                            backdrop,
+                            state.account,
+                            wide = true,
+                            modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
+                            alignment = BiasAlignment(0f, -.5f)
+                        )
+                        CatalogHeading(item.name)
+                        if (item.type == "Episode") {
+                            Text(listOfNotNull(item.seriesName, episodeLabel(item).takeIf { it.isNotBlank() }).joinToString(" · "))
+                        }
+                        val metadata = listOfNotNull(
+                            item.productionYear?.toString(),
+                            item.officialRating,
+                            item.communityRating?.let(::communityRatingLabel),
+                            item.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
+                        )
+                        if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
+                        val container = item.type in listOf("Series", "Season")
+                        if (hasActions && container) {
+                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) {
+                                if (!state.loading &&
+                                    restored
+                                ) {
+                                    selectedSection = "header"
+                                }
                             }
                         }
+                        item.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
+                        if (item.genres.isNotEmpty()) Text(item.genres.joinToString(" · "), color = CatalogMuted)
+                        if (hasActions && !container) {
+                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) {
+                                if (!state.loading &&
+                                    restored
+                                ) {
+                                    selectedSection = "header"
+                                }
+                            }
+                        }
+                        if (state.loading) Text("Loading episodes…")
                     }
-                    if (state.loading) Text("Loading episodes…")
                 }
             }
-        }
-        sections.forEach { (section, items) ->
-            item(key = section) {
-                DetailRow(
-                    title = when (section) {
-                        "next" -> "Next up"
-                        "seasons" -> "Seasons"
-                        else -> "Episodes"
-                    },
-                    section = section,
-                    items = items,
-                    account = state.account,
-                    onOpen = if (section == "seasons") onSeason else onOpen,
-                    wide = section != "seasons",
-                    selectedId = if (section == "seasons") state.selectedSeasonId else null,
-                    onFocusRested = if (section == "seasons") onSeason else null,
-                    rowState = rowStates.getValue(section),
-                    requests = requests,
-                    onFocus = { focused ->
-                        selectedSection = section
-                        selectedId = focused.id
-                    }
-                )
+            sections.forEach { (section, items) ->
+                item(key = section) {
+                    DetailRow(
+                        title = when (section) {
+                            "next" -> "Next up"
+                            "seasons" -> "Seasons"
+                            else -> "Episodes"
+                        },
+                        section = section,
+                        items = items,
+                        account = state.account,
+                        onOpen = if (section == "seasons") onSeason else onOpen,
+                        wide = section != "seasons",
+                        selectedId = if (section == "seasons") state.selectedSeasonId else null,
+                        onFocusRested = if (section == "seasons") {
+                            { season -> if (!state.loading && restored) onSeason(season) }
+                        } else {
+                            null
+                        },
+                        rowState = rowStates.getValue(section),
+                        requests = requests,
+                        onFocus = { focused ->
+                            if (!state.loading && restored) {
+                                selectedSection = section
+                                selectedId = focused.id
+                                rowSelections = rowSelections + (section to focused.id)
+                            }
+                        }
+                    )
+                }
             }
-        }
-        if (item?.type in listOf("Series", "Season") && !state.loading && state.episodes.isEmpty() && state.seasons.isEmpty()) {
-            item(key = "empty") { Text("No episodes are available.") }
+            if (item?.type in listOf("Series", "Season") && !state.loading && state.episodes.isEmpty() && state.seasons.isEmpty()) {
+                item(key = "empty") { Text("No episodes are available.") }
+            }
         }
     }
     LaunchedEffect(state.loading, item?.id, state.error, sections.map { it.first to it.second.map(MediaItem::id) }) {
+        if (state.loading && selectedSection != "header") restored = false
         if (!state.loading && !restored) {
             withFrameNanos { }
             val savedSectionIndex = sections.indexOfFirst { it.first == selectedSection }
             val sectionIndex = if (savedSectionIndex >= 0) {
                 savedSectionIndex
             } else if (selectedSection == "header") {
-                if (item?.type in listOf("Movie", "Episode")) -1 else sections.indices.firstOrNull() ?: -1
+                -1
             } else {
                 sections.indices.firstOrNull() ?: -1
             }
@@ -612,15 +682,57 @@ fun CatalogDetail(
                 val targetId = if (savedSectionIndex < 0 && section == "seasons") state.selectedSeasonId else selectedId
                 val itemIndex = items.indexOfFirst { it.id == targetId }.coerceAtLeast(0)
                 val horizontal = rowStates.getValue(section)
-                if (list.layoutInfo.visibleItemsInfo.none { it.index == sectionIndex + 1 }) list.scrollToItem(sectionIndex + 1)
+                list.scrollToItem(sectionIndex + 1)
                 if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
-                requestAttached(requests, "$section:${items[itemIndex].id}")
-            } else if (item?.type in listOf("Movie", "Episode") || state.error != null) {
-                if (list.layoutInfo.visibleItemsInfo.none { it.index == 0 }) list.scrollToItem(0)
+                restored = requestAttached(requests, "$section:${items[itemIndex].id}")
+                if (restored) {
+                    selectedSection = section
+                    selectedId = items[itemIndex].id
+                    rowSelections = rowSelections + (section to selectedId)
+                }
+            } else if (hasActions || state.error != null) {
+                list.scrollToItem(0)
                 withFrameNanos { }
-                if (state.error != null) retry.requestFocus() else initial.requestFocus()
+                restored = if (state.error != null) retry.requestFocus() else initial.requestFocus()
+                if (restored) selectedSection = "header"
+            } else {
+                restored = true
             }
-            restored = true
+        }
+    }
+}
+
+@Composable
+private fun DetailActions(
+    item: MediaItem,
+    playItem: MediaItem?,
+    busy: Boolean,
+    initial: FocusRequester,
+    onPlayed: () -> Unit,
+    onFavorite: () -> Unit,
+    onPlay: (MediaItem, Boolean) -> Unit,
+    onFocus: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.onFocusChanged { if (it.hasFocus) onFocus() }
+    ) {
+        val position = playItem?.userData?.playbackPositionTicks ?: 0
+        Button(
+            onClick = { playItem?.let { onPlay(it, position > 0) } },
+            enabled = playItem != null,
+            modifier = (if (playItem != null) Modifier.focusRequester(initial) else Modifier).testTag("detail:play")
+        ) { Text(if (position > 0) resumeLabel(position) else "Play") }
+        if (position > 0) {
+            Button(onClick = { playItem?.let { onPlay(it, false) } }) { Text("Play from start") }
+        }
+        Button(
+            onClick = onPlayed,
+            enabled = !busy,
+            modifier = (if (playItem == null) Modifier.focusRequester(initial) else Modifier).testTag("detail:played")
+        ) { Text(if (item.userData.played) "Mark unwatched" else "Mark watched") }
+        Button(onClick = onFavorite, enabled = !busy, modifier = Modifier.testTag("detail:favorite")) {
+            Text(if (item.userData.isFavorite) "Unfavorite" else "Favorite")
         }
     }
 }
@@ -766,7 +878,13 @@ internal fun CatalogCard(
 }
 
 @Composable
-internal fun CatalogArtwork(item: MediaItem, account: Account, wide: Boolean, modifier: Modifier = Modifier) {
+internal fun CatalogArtwork(
+    item: MediaItem,
+    account: Account,
+    wide: Boolean,
+    modifier: Modifier = Modifier,
+    alignment: Alignment = Alignment.Center
+) {
     BoxWithConstraints(modifier.background(Color(0xFF262D3D)), contentAlignment = Alignment.Center) {
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
         val url = imageUrl(account.server, item, pixels, wide = wide)
@@ -777,6 +895,7 @@ internal fun CatalogArtwork(item: MediaItem, account: Account, wide: Boolean, mo
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = alignment,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { loaded = true },
                 onError = { loaded = false }
