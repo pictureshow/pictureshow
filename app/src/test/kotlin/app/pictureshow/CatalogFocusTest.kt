@@ -1,6 +1,7 @@
 package app.pictureshow
 
 import android.app.Application
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
@@ -13,8 +14,10 @@ import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -50,7 +53,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 @RunWith(RobolectricTestRunner::class)
@@ -281,6 +286,59 @@ class CatalogFocusTest {
         assertEquals(other, snapshot.accounts.first())
         assertEquals("home", accountDestination(snapshot.copy(accounts = listOf(account))))
         http.close()
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    // Native font metrics reproduce the TV header height; legacy graphics can hide this clipping.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun firstHomeRowKeepsWholeHeaderVisibleAfterStartupAndReturningFromLowerRows() {
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        compose.setContent { Harness() }
+        fun settle() {
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
+        }
+        fun assertHeaderVisible() {
+            val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+            assertEquals(1, focused.size)
+            assertTrue(focused.single().config[SemanticsProperties.TestTag].startsWith("home:resume:"))
+            val viewport = compose.onNodeWithTag("home").getUnclippedBoundsInRoot()
+            listOf(
+                compose.onNodeWithTag("home:search"),
+                compose.onNodeWithText("Pictureshow"),
+                compose.onNodeWithText("Jamie · Screen room")
+            ).forEach { node ->
+                // Unclipped layout bounds catch a sliver that assertIsDisplayed would accept.
+                val bounds = node.getUnclippedBoundsInRoot()
+                assertTrue(bounds.left >= viewport.left && bounds.right <= viewport.right, "Header clipped horizontally: $bounds")
+                assertTrue(bounds.top >= viewport.top, "Header clipped above viewport: $bounds")
+                assertTrue(bounds.bottom <= viewport.bottom, "Header below viewport: $bounds")
+            }
+        }
+        settle()
+        assertHeaderVisible()
+        key(Key.DirectionDown)
+        settle()
+        key(Key.DirectionDown)
+        settle()
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused().assertIsDisplayed()
+        // Lower rows must continue to scroll the header away.
+        assertTrue(compose.onAllNodesWithTag("home:search").fetchSemanticsNodes().all { it.boundsInRoot.height == 0f })
+        key(Key.DirectionUp)
+        settle()
+        key(Key.DirectionUp)
+        settle()
+        assertHeaderVisible()
+        key(Key.DirectionRight)
+        settle()
+        assertHeaderVisible()
+        key(Key.DirectionCenter)
+        settle()
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        key(Key.Back)
+        settle()
+        assertHeaderVisible()
     }
 
     @Test

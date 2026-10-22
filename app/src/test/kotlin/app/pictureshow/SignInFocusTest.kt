@@ -247,6 +247,40 @@ class SignInFocusTest {
     }
 
     @Test
+    fun switcherInitiallyFocusesCurrentAccountOnAnotherServerAndOkKeepsIt() {
+        homeReady.complete(Unit)
+        val first = other.copy(server = server.copy(id = "other-server", name = "Other room"))
+        runBlocking {
+            accounts.remember(first)
+            accounts.remember(account)
+        }
+        launch()
+        key(Key.DirectionDown)
+        key(Key.DirectionCenter)
+        waitForText("Who’s watching?")
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("Sam on Screen room").assertIsFocused()
+        key(Key.DirectionCenter)
+        waitFor("home after reflex OK on the current account") {
+            compose.onAllNodesWithTag("home").fetchSemanticsNodes().size == 1
+        }
+        assertEquals(account, accounts.snapshots.value.currentAccount)
+    }
+
+    @Test
+    fun chooserWithoutCurrentAccountInitiallyFocusesFirstEntry() {
+        runBlocking {
+            accounts.remember(other)
+            accounts.remember(account)
+            accounts.select(null)
+        }
+        launch()
+        waitForText("Who’s watching?")
+        compose.onNodeWithText("Robin on Screen room").assertIsFocused()
+    }
+
+    @Test
     fun backCancelsSwitcherPreservesAccountAndRestoresSwitchUserFocus() {
         homeReady.complete(Unit)
         runBlocking {
