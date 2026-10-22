@@ -51,13 +51,16 @@ class SubtitleSupportTest {
 
     @Test
     fun assPositionsAndBasicStylesSurviveButKaraokeTagsDoNotCreateTimedSyllables() {
+        // SSA sections use blank separators: Media3 checks for the next section after reading each header line.
         val text = """
             [Script Info]
             PlayResX: 640
             PlayResY: 480
+
             [V4+ Styles]
             Format: Name, Alignment, PrimaryColour, Fontsize, Bold, Italic, Underline, StrikeOut, BorderStyle, OutlineColour
             Style: Default,2,&H0000FF00,32,-1,0,-1,0,1,&H00000000
+
             [Events]
             Format: Layer, Start, End, Style, Text
             Dialogue: 0,0:00:01.00,0:00:03.00,Default,{\an7\pos(160,120)\k20}Test{\k20} cue

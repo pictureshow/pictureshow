@@ -267,6 +267,8 @@ class DeviceCapabilityProbeTest {
             assertFalse(codec.serverNames.first() in before)
             assertTrue(codec.serverNames.first() in after)
         }
+        // MediaCodecList caches the inventory on first query; reset it before describing another device.
+        ShadowMediaCodecList.reset()
         // A supported platform codec and FFmpeg alternative both remain visible; renderer ordering chooses platform first.
         audio("OMX.vendor.dts.decoder", "audio/vnd.dts", 6)
         val both = DeviceCapabilityProbe(context, ffmpegSupport = { it == "audio/vnd.dts" }).snapshot()
