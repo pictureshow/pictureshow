@@ -47,7 +47,8 @@ codec descriptor table names every codec) and no encoder is. It prints the sizes
 
 `make-test-clips.sh` writes the synthetic clips that `media3-ffmpeg`'s instrumented tests play
 (`media3-ffmpeg/src/androidTest/assets/clips/`): two seconds of sine tones at 48 kHz, a different frequency on
-each channel. It needs an `ffmpeg` CLI with libopus, libvorbis and libmp3lame, plus python3 and a C toolchain:
+each channel. The clips contain nothing but those generated tones and are covered by the repository's MPL-2.0
+license. It needs an `ffmpeg` CLI with libopus, libvorbis and libmp3lame, plus python3 and a C toolchain:
 
 ```sh
 WORK=<scratch dir> tools/ffmpeg/make-test-clips.sh
