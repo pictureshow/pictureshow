@@ -14,3 +14,5 @@ internal fun communityRatingLabel(rating: Double, locale: Locale = Locale.getDef
     }
     return "★ ${formatter.format(rating)}"
 }
+
+internal fun itemCountLabel(total: Int): String = if (total == 1) "1 item" else "$total items"

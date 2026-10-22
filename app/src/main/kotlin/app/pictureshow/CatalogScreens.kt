@@ -409,7 +409,7 @@ fun CatalogGrid(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CatalogHeading(state.parent.name)
-        Text("${state.total} items", color = CatalogMuted, modifier = Modifier.testTag("grid:count"))
+        Text(itemCountLabel(state.total), color = CatalogMuted, modifier = Modifier.testTag("grid:count"))
         if (showSort) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 val sorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
