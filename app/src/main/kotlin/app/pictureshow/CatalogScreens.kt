@@ -92,7 +92,8 @@ fun CatalogHome(
     onSwitchUser: () -> Unit,
     onSignOut: () -> Unit,
     onResume: () -> Unit = {},
-    onSearch: () -> Unit = {}
+    onSearch: () -> Unit = {},
+    onSettings: () -> Unit = {}
 ) {
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
@@ -105,7 +106,11 @@ fun CatalogHome(
     var rowPositions by rememberSaveable { mutableStateOf(mapOf<String, Int>()) }
     var restored by remember { mutableStateOf(false) }
     val search = remember { FocusRequester() }
+    var initialNavigation by remember { mutableStateOf(false) }
     val profile = remember { FocusRequester() }
+    val settingsFocus = remember { FocusRequester() }
+    var selectedProfile by rememberSaveable { mutableStateOf("switch") }
+    val profileTarget = if (selectedProfile == "settings") settingsFocus else profile
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
@@ -145,7 +150,7 @@ fun CatalogHome(
                 index >= rows.size -> {
                     list.scrollToItem(rows.size + 1)
                     withFrameNanos { }
-                    profile.requestFocus()
+                    profileTarget.requestFocus()
                 }
                 else -> {
                     list.scrollToItem(0)
@@ -157,7 +162,10 @@ fun CatalogHome(
     }
     LazyColumn(
         state = list,
-        modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home"),
+        modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown) initialNavigation = true
+            false
+        },
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
@@ -166,7 +174,10 @@ fun CatalogHome(
                 Button(
                     onClick = onSearch,
                     modifier = Modifier.focusRequester(search).testTag("home:search")
-                        .onFocusChanged { if (it.isFocused) selectedRow = "search" }
+                        .onFocusChanged {
+                            // The first attached target during the first load, like the profile actions below.
+                            if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
+                        }
                         .onPreviewKeyEvent {
                             if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                                 moveRow(0)
@@ -247,7 +258,14 @@ fun CatalogHome(
                     onClick = onSwitchUser,
                     enabled = !state.busy,
                     modifier = Modifier.focusRequester(profile).testTag("home:switch-user")
-                        .onFocusChanged { if (it.isFocused) selectedRow = "profile" }
+                        .onFocusChanged {
+                            // During the first load these are the only attached targets. Automatic focus is
+                            // not a saved user choice and must not outrank the first arriving catalog card.
+                            if (it.isFocused && (restored || initialNavigation)) {
+                                selectedRow = "profile"
+                                selectedProfile = "switch"
+                            }
+                        }
                         .onPreviewKeyEvent {
                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                                 moveRow(rows.lastIndex)
@@ -260,7 +278,12 @@ fun CatalogHome(
                 Button(
                     onClick = onSignOut,
                     enabled = !state.busy,
-                    modifier = Modifier.testTag("home:sign-out").onPreviewKeyEvent {
+                    modifier = Modifier.testTag("home:sign-out").onFocusChanged {
+                        if (it.isFocused && (restored || initialNavigation)) {
+                            selectedRow = "profile"
+                            selectedProfile = "switch"
+                        }
+                    }.onPreviewKeyEvent {
                         if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                             moveRow(rows.lastIndex)
                             true
@@ -269,11 +292,30 @@ fun CatalogHome(
                         }
                     }
                 ) { Text(if (state.busy) "Please wait…" else "Sign out") }
+                Button(
+                    onClick = onSettings,
+                    enabled = !state.busy,
+                    modifier = Modifier.focusRequester(settingsFocus).testTag("home:settings").onFocusChanged {
+                        if (it.isFocused && (restored || initialNavigation)) {
+                            selectedRow = "profile"
+                            selectedProfile = "settings"
+                        }
+                    }.onPreviewKeyEvent {
+                        if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                            moveRow(rows.lastIndex)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                ) { Text("Settings") }
             }
         }
     }
     LaunchedEffect(state.loading, rows.map { it.key to it.items.map(MediaItem::id) }) {
-        if (!state.loading && !restored) {
+        if (!state.loading && (!restored || rows.isNotEmpty() && savedRow.isEmpty() && savedItem.isEmpty())) {
+            // Empty startup content can temporarily leave only profile actions attached. Keep the first
+            // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             when {
                 savedRow == "search" -> {
@@ -284,7 +326,7 @@ fun CatalogHome(
                 savedRow == "profile" -> {
                     list.scrollToItem(rows.size + 1)
                     withFrameNanos { }
-                    profile.requestFocus()
+                    if (!initialNavigation) profileTarget.requestFocus()
                 }
                 rows.isNotEmpty() -> {
                     val rowIndex = rows.indexOfFirst { it.key == savedRow }.takeIf { it >= 0 }
@@ -293,7 +335,7 @@ fun CatalogHome(
                     focusRow(rowIndex, savedRowSelections, savedRowPositions)
                 }
                 state.error != null -> retry.requestFocus()
-                else -> profile.requestFocus()
+                else -> profileTarget.requestFocus()
             }
             restored = true
         } else if (!state.loading &&
@@ -309,7 +351,7 @@ fun CatalogHome(
             } else {
                 list.scrollToItem(rows.size + 1)
                 withFrameNanos { }
-                profile.requestFocus()
+                profileTarget.requestFocus()
             }
         }
     }

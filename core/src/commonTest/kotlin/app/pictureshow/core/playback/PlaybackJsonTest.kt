@@ -252,6 +252,7 @@ class PlaybackJsonTest {
                       "Index": 0,
                       "IsDefault": true,
                       "IsForced": false,
+                      "IsHearingImpaired": false,
                       "IsExternal": false,
                       "IsExternalUrl": false,
                       "IsTextSubtitleStream": false
@@ -264,6 +265,7 @@ class PlaybackJsonTest {
                       "Index": 1,
                       "IsDefault": true,
                       "IsForced": false,
+                      "IsHearingImpaired": false,
                       "IsExternal": false,
                       "IsExternalUrl": false,
                       "IsTextSubtitleStream": false
@@ -275,6 +277,7 @@ class PlaybackJsonTest {
                       "Index": 2,
                       "IsDefault": false,
                       "IsForced": false,
+                      "IsHearingImpaired": false,
                       "IsExternal": false,
                       "IsExternalUrl": false,
                       "IsTextSubtitleStream": true,

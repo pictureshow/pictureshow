@@ -126,7 +126,18 @@ class CatalogFocusTest {
             val nav = rememberNavController()
             NavHost(nav, startDestination = start) {
                 composable("home") {
-                    CatalogHome(state, account, { nav.navigate(if (it.id == "library") "grid" else "detail") }, {}, {}, {})
+                    CatalogHome(
+                        state,
+                        account,
+                        { nav.navigate(if (it.id == "library") "grid" else "detail") },
+                        {},
+                        {},
+                        {},
+                        onSettings = { nav.navigate("settings") }
+                    )
+                }
+                composable("settings") {
+                    PlaybackSettingsScreen(PlaybackSettingsState(), "PCM only", {}, { _, _ -> }, {}) { nav.popBackStack() }
                 }
                 composable("grid") {
                     CatalogGrid(CatalogGridState(account, MediaItem("library", "Cinema"), movies, 90), {
@@ -373,6 +384,21 @@ class CatalogFocusTest {
         compose.onNodeWithTag("home:resume:film-1").assertIsFocused()
         compose.runOnIdle { state = home.copy(rows = home.rows.map { if (it.key == "resume") it.copy(items = listOf(movies[0])) else it }) }
         compose.onNodeWithTag("home:resume:film-0").assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsIsReachedInAccountAreaAndBackRestoresItsButton() {
+        compose.setContent { Harness(state = home.copy(rows = home.rows.drop(2))) }
+        key(Key.DirectionDown)
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:switch-user").assertIsFocused()
+        key(Key.DirectionRight)
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:settings").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithTag("settings:bitrate").assertIsFocused()
+        key(Key.Back)
+        compose.onNodeWithTag("home:settings").assertIsFocused().assertIsDisplayed()
     }
 
     @Test

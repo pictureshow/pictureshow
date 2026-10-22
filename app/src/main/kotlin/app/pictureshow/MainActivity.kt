@@ -178,7 +178,7 @@ internal fun accountDestination(snapshot: AccountSnapshot): String {
 }
 
 @Composable
-private fun Pictureshow(
+internal fun Pictureshow(
     session: SessionViewModel = koinViewModel(),
     searchEntry: String? = null,
     consumeSearchEntry: () -> Unit = {},
@@ -271,7 +271,8 @@ private fun Pictureshow(
                     nav.navigate(serverRoute("login", it))
                 }
             }
-            Page("Find your Jellyfin server") {
+            val discoveryFocus = rememberDiscoveryFocus(screen.discovered.firstOrNull()?.id, screen.connecting)
+            Page("Find your Jellyfin server", modifier = discoveryFocus.container) {
                 Text("Choose a server on your network, or enter an address.")
                 RemoteField("Server address", screen.address, vm::address, initial = true, onDone = { vm.connect() })
                 Action(if (screen.connecting) "Connecting…" else "Connect", enabled = !screen.connecting) { vm.connect() }
@@ -279,8 +280,12 @@ private fun Pictureshow(
                 state.snapshot.accounts.map { it.server }.distinctBy { it.id }.forEach { server ->
                     Action("${server.name} · remembered") { nav.navigate(serverRoute("login", server)) }
                 }
-                screen.discovered.forEach { server ->
-                    Action("${server.name} · ${server.address}", enabled = !screen.connecting) { vm.connect(server.address) }
+                screen.discovered.forEachIndexed { index, server ->
+                    Action(
+                        "${server.name} · ${server.address}",
+                        enabled = !screen.connecting,
+                        modifier = if (index == 0) discoveryFocus.firstServer else Modifier
+                    ) { vm.connect(server.address) }
                 }
                 Text(
                     if (screen.scanning) {
@@ -404,8 +409,34 @@ private fun Pictureshow(
                     onSwitchUser = profile::switchUser,
                     onSignOut = profile::signOut,
                     onSearch = { nav.navigate(searchRoute()) },
-                    onResume = vm::reload
+                    onResume = vm::reload,
+                    onSettings = { nav.navigate("settings") }
                 )
+            }
+        }
+        composable("settings") {
+            state.snapshot.currentAccount?.let { account ->
+                val vm: PlaybackSettingsViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
+                val screen by vm.state.collectAsStateWithLifecycle()
+                val settingsContext = LocalContext.current
+                var accepted by remember { mutableStateOf("Checking…") }
+                DisposableEffect(Unit) {
+                    val probe = DeviceCapabilityProbe(settingsContext)
+                    fun update(capabilities: app.pictureshow.core.playback.DeviceCapabilities) {
+                        accepted = capabilities.audioOutput.passthrough.joinToString(", ") {
+                            when (it.codec) {
+                                app.pictureshow.core.playback.AudioCodec.AC3 -> "AC-3"
+                                app.pictureshow.core.playback.AudioCodec.EAC3 -> "E-AC-3"
+                                app.pictureshow.core.playback.AudioCodec.TRUEHD -> "TrueHD"
+                                else -> it.codec.name
+                            }
+                        }.ifEmpty { "PCM only" }
+                    }
+                    update(probe.snapshot())
+                    probe.start(::update)
+                    onDispose { probe.close() }
+                }
+                PlaybackSettingsScreen(screen, accepted, vm::local, vm::server, vm::reload) { nav.popBackStack() }
             }
         }
         composable(
@@ -493,8 +524,8 @@ private fun Pictureshow(
 }
 
 @Composable
-private fun Page(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
+private fun Page(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Box(modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -506,9 +537,9 @@ private fun Page(title: String, content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun Action(label: String, initial: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+private fun Action(label: String, modifier: Modifier = Modifier, initial: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val focus = remember { FocusRequester() }
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.focusRequester(focus)) { Text(label) }
+    Button(onClick = onClick, enabled = enabled, modifier = modifier.focusRequester(focus)) { Text(label) }
     LaunchedEffect(Unit) { if (initial && enabled) focus.requestFocus() }
 }
 

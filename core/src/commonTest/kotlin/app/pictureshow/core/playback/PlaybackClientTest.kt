@@ -139,6 +139,32 @@ class PlaybackClientTest {
     }
 
     @Test
+    fun rememberedTrackChoicesIncludingOffAreSentInProgressBeforeStopped() = runTest {
+        val playback = client { noContent() }
+        val decision = assertIs<PlayOutcome.Play>(
+            PlayDecisions.decide(
+                server,
+                "item-1",
+                PlaybackJson.decodeFromString<PlaybackInfoResponse>(transcodeResponse),
+                identity,
+                "secret-token"
+            )
+        ).decision
+        val reports = PlaybackReports(decision)
+        playback.reportStart(account, reports.progress(0.seconds, false, 2, 4))
+        playback.reportProgress(account, reports.progress(10.seconds, true, 1, -1))
+        playback.reportStopped(account, reports.stopped(10.seconds))
+        assertEquals(2, body(0).getValue("AudioStreamIndex").jsonPrimitive.int)
+        assertEquals(4, body(0).getValue("SubtitleStreamIndex").jsonPrimitive.int)
+        assertEquals(1, body(1).getValue("AudioStreamIndex").jsonPrimitive.int)
+        assertEquals(-1, body(1).getValue("SubtitleStreamIndex").jsonPrimitive.int)
+        assertEquals("https://example.test/jellyfin/Sessions/Playing/Progress", requests[1].first.url.toString())
+        assertEquals("https://example.test/jellyfin/Sessions/Playing/Stopped", requests[2].first.url.toString())
+        assertFalse("AudioStreamIndex" in body(2)) // The server's stop DTO has no stream selection fields.
+        assertFalse("SubtitleStreamIndex" in body(2))
+    }
+
+    @Test
     fun progressReportsCarryTicksMethodIndexesAndPausedState() = runTest {
         val playback = client { noContent() }
         val decision = PlayDecisions.decide(

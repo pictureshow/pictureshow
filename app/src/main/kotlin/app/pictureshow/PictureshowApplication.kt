@@ -43,6 +43,7 @@ class PictureshowApplication : Application() {
                     single { preferences }
                     single { AccountStore(AccountPersistence(get())) }
                     single { DeviceIdentityStore(get()) }
+                    single { PlaybackPreferencesStore(get()) }
                     single<ServerDiscovery> { JvmServerDiscovery() }
                     single {
                         HttpClient(OkHttp) {
@@ -65,11 +66,15 @@ class PictureshowApplication : Application() {
                         PersistentIdentityService(get(), get(), name)
                     }
                     single<CatalogService> { get<JellyfinService>() as CatalogService }
+                    single<app.pictureshow.core.UserConfigurationService> {
+                        get<JellyfinService>() as app.pictureshow.core.UserConfigurationService
+                    }
                     viewModel { (account: Account, session: CatalogSession) -> SearchViewModel(account, session, get()) }
                     viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->
                         PersonViewModel(account, item, session)
                     }
                     viewModel { SessionViewModel(get()) }
+                    viewModel { (account: Account) -> PlaybackSettingsViewModel(account, get(), get(), get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
                     viewModel { (server: Server) -> QuickConnectViewModel(server, get(), get()) }
@@ -95,7 +100,8 @@ internal class PersistentIdentityService(
     private val deviceName: String
 ) : JellyfinService,
     CatalogService,
-    SearchService {
+    SearchService,
+    app.pictureshow.core.UserConfigurationService {
     private suspend fun client(): JellyfinClient = withContext(Dispatchers.IO) {
         JellyfinClient(http, ClientIdentity(deviceName, identity.getOrCreate(), BuildConfig.VERSION_NAME))
     }
@@ -126,6 +132,9 @@ internal class PersistentIdentityService(
     }
     override suspend fun me(account: Account) = call { it.me(account) }
     override suspend fun logout(account: Account) = call { it.logout(account) }
+    override suspend fun configuration(account: Account) = call { it.configuration(account) }
+    override suspend fun saveConfiguration(account: Account, configuration: app.pictureshow.core.UserConfiguration) =
+        call { it.saveConfiguration(account, configuration) }
 
     override suspend fun search(account: Account, query: String, kind: SearchKind) = call { it.search(account, query, kind) }
     override suspend fun personItems(account: Account, personId: String, startIndex: Int, limit: Int) =

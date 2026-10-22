@@ -2,6 +2,7 @@ package app.pictureshow
 
 import android.content.Context
 import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -10,18 +11,51 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.text.TextOutput
 import kotlin.math.max
 
 /** Platform decoders first; optional audio extensions fill the gaps by reflection. */
 @UnstableApi
-class PictureshowRenderersFactory(context: Context) : DefaultRenderersFactory(context) {
+open class PictureshowRenderersFactory internal constructor(
+    context: Context,
+    private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
+    private val passthroughEnabled: Boolean = true
+) : DefaultRenderersFactory(context) {
     init {
         setExtensionRendererMode(EXTENSION_RENDERER_MODE_ON)
         setEnableDecoderFallback(true)
+    }
+
+    override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
+        if (passthroughEnabled) {
+            return requireNotNull(super.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams))
+        }
+        // The Context-based sink ignores deprecated setAudioCapabilities. Filter its modern provider
+        // instead, retaining route notifications and PCM output for both platform and extension decoders.
+        val provider = PcmAudioOutputProvider(AudioTrackAudioOutputProvider.Builder(context).build())
+        return DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+            .setAudioOutputProvider(provider)
+            .build()
+    }
+
+    override fun buildTextRenderers(
+        context: Context,
+        output: TextOutput,
+        outputLooper: Looper,
+        extensionRendererMode: Int,
+        out: ArrayList<Renderer>
+    ) {
+        val first = out.size
+        super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
+        for (index in first until out.size) out[index] = SubtitleDelayRenderer(out[index], subtitleDelay)
     }
 
     override fun buildAudioRenderers(

@@ -2,10 +2,13 @@ package app.pictureshow
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.ErrorKind
 import app.pictureshow.core.QuickConnectState
 import app.pictureshow.core.Server
+import app.pictureshow.core.User
+import app.pictureshow.core.UserConfiguration
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import java.io.IOException
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
 
 class IdentityServiceTest {
     private val brokenPreferences = object : DataStore<Preferences> {
@@ -30,6 +34,12 @@ class IdentityServiceTest {
             val service = PersistentIdentityService(http, DeviceIdentityStore(brokenPreferences), "Test TV")
             val result = assertIs<ClientResult.Failure>(service.probe("media.example.test"))
             assertEquals(ErrorKind.LOCAL_STORAGE, result.error.kind)
+            val account = Account(Server("s", "Test", "https://media.example.test", "12.0.0"), User("u", "Sam"), "fake")
+            assertEquals(ErrorKind.LOCAL_STORAGE, assertIs<ClientResult.Failure>(service.configuration(account)).error.kind)
+            assertEquals(
+                ErrorKind.LOCAL_STORAGE,
+                assertIs<ClientResult.Failure>(service.saveConfiguration(account, UserConfiguration(JsonObject(emptyMap())))).error.kind
+            )
         }
     }
 

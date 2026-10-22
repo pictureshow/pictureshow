@@ -1,0 +1,14 @@
+Pictureshow
+Copyright (c) 2026 Legitimate LLC
+Licensed under the Mozilla Public License 2.0 (LICENSE).
+
+This product includes third-party software:
+
+- Media3 FFmpeg decoder extension (androidx.media3.decoder.ffmpeg), from AndroidX Media
+  (https://github.com/androidx/media), Copyright The Android Open Source Project.
+  Licensed under the Apache License 2.0 (media3-ffmpeg/LICENSE).
+
+- FFmpeg 6.0.1 libavcodec, libavutil and libswresample (https://ffmpeg.org), Copyright the FFmpeg developers.
+  Licensed under the GNU Lesser General Public License 2.1 or later (third_party/ffmpeg/COPYING.LGPLv2.1).
+  Built from unmodified source as shared libraries; version, source, checksum and configure lines are in
+  third_party/ffmpeg/README.md, and tools/ffmpeg/build.sh rebuilds them.

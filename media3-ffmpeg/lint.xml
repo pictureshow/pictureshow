@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Media3's extension sources are kept unchanged from Media3 1.11.1. They use Media3's @UnstableApi
+     APIs the way Media3's own modules do, so the opt-in check does not apply to them. -->
+<lint>
+  <issue id="UnsafeOptInUsageError">
+    <ignore path="src/main/java/androidx/media3/decoder/ffmpeg/**" />
+  </issue>
+</lint>

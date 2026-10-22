@@ -99,6 +99,7 @@ data class MediaStream(
     @SerialName("IsExternalUrl") val isExternalUrl: Boolean = false,
     @SerialName("IsDefault") val isDefault: Boolean = false,
     @SerialName("IsForced") val isForced: Boolean = false,
+    @SerialName("IsHearingImpaired") val isHearingImpaired: Boolean = false,
     @SerialName("IsTextSubtitleStream") val isTextSubtitleStream: Boolean = false,
     @SerialName("DeliveryMethod") val deliveryMethod: SubtitleDeliveryMethod? = null,
     @SerialName("DeliveryUrl") val deliveryUrl: String? = null

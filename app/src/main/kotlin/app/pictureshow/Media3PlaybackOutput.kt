@@ -38,6 +38,20 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     private var subtitle = -1
     private var listener: Player.Listener? = null
     private var mediaSession: PlaybackMediaSession.Handle? = null
+    private val subtitleDelay = SubtitleDelay()
+    var passthroughEnabled: Boolean = true
+    val subtitleDelayMs: Int get() = subtitleDelay.milliseconds
+
+    fun setSubtitleDelayMs(milliseconds: Int) {
+        if (!subtitleDelay.set(milliseconds)) return
+        // TextRenderer discards old cue history. Re-read at the current point after offset changes.
+        // A one-millisecond nudge avoids ExoPlayer optimizing an exactly identical seek away.
+        mutablePlayer.value?.let { active ->
+            val position = active.currentPosition.coerceAtLeast(0)
+            val target = if (active.duration > 0 && position >= active.duration) (position - 1).coerceAtLeast(0) else position + 1
+            active.seekTo(target)
+        }
+    }
 
     override fun position(): PlaybackPosition = mutablePlayer.value?.let {
         PlaybackPosition(it.currentPosition.coerceAtLeast(0), !it.playWhenReady)
@@ -58,7 +72,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle < 0)
             .build()
         val sourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(PlaybackMedia.dataSourceFactory(server, decision))
-        val next = ExoPlayer.Builder(context, PictureshowRenderersFactory(context))
+        val next = ExoPlayer.Builder(context, PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled))
             .setTrackSelector(selector)
             .setMediaSourceFactory(sourceFactory)
             .setLoadControl(createPictureshowLoadControl())
