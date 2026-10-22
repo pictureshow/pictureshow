@@ -301,17 +301,14 @@ class ScreenModelsTest {
     }
 
     @Test
-    fun homeShowsVerifiedNameAndSwitchUserKeepsAllAccounts() = runTest(dispatcher) {
+    fun homeShowsVerifiedNameAndRetainsSelectedAccount() = runTest(dispatcher) {
         accounts.remember(account)
         service.user = ClientResult.Success(account.user.copy(name = "Updated name"))
         val vm = own(HomeViewModel(account, service, accounts))
         advanceUntilIdle()
         assertEquals("Updated name", vm.state.value.account.user.name)
-        vm.switchUser()
-        advanceUntilIdle()
         assertEquals(listOf(account), accounts.snapshots.value.accounts)
-        assertNull(accounts.snapshots.value.currentKey)
-        assertTrue(vm.state.value.finished)
+        assertEquals(account.key, accounts.snapshots.value.currentKey)
     }
 
     @Test
@@ -330,13 +327,13 @@ class ScreenModelsTest {
     }
 
     @Test
-    fun switchingWhileVerificationIsPendingCannotReselectAccount() = runTest(dispatcher) {
+    fun signingOutWhileVerificationIsPendingCannotReselectAccount() = runTest(dispatcher) {
         val pending = CompletableDeferred<ClientResult<User>>()
         service.meBlock = { pending.await() }
         accounts.remember(account)
         val vm = own(HomeViewModel(account, service, accounts))
         runCurrent()
-        vm.switchUser()
+        vm.signOut()
         runCurrent()
         pending.complete(ClientResult.Success(account.user))
         advanceUntilIdle()

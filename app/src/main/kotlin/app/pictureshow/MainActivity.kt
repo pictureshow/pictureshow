@@ -306,6 +306,16 @@ internal fun Pictureshow(
         composable("accounts") {
             val vm: AccountsViewModel = koinViewModel()
             val screen by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(screen.selected) {
+                // Selecting the current account does not change the bootstrap key. Close this
+                // transient switcher ourselves; a different account still resets the graph above.
+                if (screen.selected &&
+                    nav.currentBackStackEntry?.destination?.route == "accounts" &&
+                    nav.previousBackStackEntry?.destination?.route == "home"
+                ) {
+                    nav.popBackStack()
+                }
+            }
             Page("Who’s watching?") {
                 state.snapshot.accounts.forEachIndexed { index, account ->
                     Action("${account.user.name} on ${account.server.name}", initial = index == 0, enabled = !screen.busy) {
@@ -409,7 +419,7 @@ internal fun Pictureshow(
                         profile.verify()
                         vm.reload()
                     },
-                    onSwitchUser = profile::switchUser,
+                    onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
                     onSignOut = profile::signOut,
                     onSearch = { nav.navigate(searchRoute()) },
                     onResume = vm::reload,

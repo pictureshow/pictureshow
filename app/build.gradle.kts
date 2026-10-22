@@ -38,7 +38,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    // Exercise the actual deviceTest provider through ContentResolver in host tests.
+    sourceSets.getByName("test").kotlin.srcDir("src/deviceTest/kotlin")
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        // Robolectric API 36 initializes ApplicationSharedMemory through the JDK file-descriptor bridge.
+        unitTests.all { it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED") }
+    }
     lint {
         warningsAsErrors = true
         checkDependencies = true

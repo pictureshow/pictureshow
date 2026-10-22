@@ -40,6 +40,7 @@ import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
@@ -74,13 +75,14 @@ class SignInFocusTest {
     private val serviceEvents = mutableListOf<String>()
     private var signedIn: Pair<String, String>? = null
     private var gatedUser = account.user.id
-    private val accounts = AccountStore(object : TextPersistence {
-        private var value: String? = null
-        override suspend fun read() = value
+    private var savedAccounts: String? = null
+    private val persistence = object : TextPersistence {
+        override suspend fun read() = savedAccounts
         override suspend fun write(value: String) {
-            this.value = value
+            savedAccounts = value
         }
-    })
+    }
+    private val accounts = AccountStore(persistence)
     private var koinStarted = false
 
     @After
@@ -242,6 +244,49 @@ class SignInFocusTest {
         compose.onNodeWithText("Robin on Screen room").assertIsFocused()
         key(Key.DirectionCenter)
         assertFirstHomeCardAfterDelayedLoad(other.user.id)
+    }
+
+    @Test
+    fun backCancelsSwitcherPreservesAccountAndRestoresSwitchUserFocus() {
+        homeReady.complete(Unit)
+        runBlocking {
+            accounts.remember(other)
+            accounts.remember(account)
+        }
+        launch()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:switch-user").assertIsFocused()
+        key(Key.DirectionCenter)
+        waitForText("Who’s watching?")
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitFor("return to home on the same account") {
+            compose.onAllNodesWithTag("home").fetchSemanticsNodes().size == 1
+        }
+        compose.onNodeWithTag("home:switch-user").assertIsFocused()
+        compose.runOnIdle { assertFalse(compose.activity.isFinishing) }
+        runBlocking {
+            assertEquals(account, accounts.snapshots.value.currentAccount)
+            assertEquals(account, AccountStore(persistence).load().currentAccount)
+        }
+        // Cold bootstrap uses persisted selection, rather than this composition's navigation state.
+        runBlocking { assertEquals("home", accountDestination(AccountStore(persistence).load())) }
+    }
+
+    @Test
+    fun choosingTheCurrentAccountClosesSwitcherWithoutChangingSelection() {
+        homeReady.complete(Unit)
+        runBlocking { accounts.remember(account) }
+        launch()
+        key(Key.DirectionDown)
+        key(Key.DirectionCenter)
+        waitForText("Who’s watching?")
+        assertEquals(account.key, accounts.snapshots.value.currentKey)
+        compose.onNodeWithText("Sam on Screen room").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        key(Key.DirectionCenter)
+        waitFor("home after choosing the already-selected account") {
+            compose.onAllNodesWithTag("home").fetchSemanticsNodes().size == 1
+        }
+        assertTrue(accounts.snapshots.value.currentAccount == account)
     }
 
     @Test
