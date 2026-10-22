@@ -32,6 +32,8 @@ def nativeLicense = rootProject.file('third_party/ffmpeg/COPYING.LGPLv2.1')
 def extensionLicense = rootProject.file('media3-ffmpeg/LICENSE')
 def kotlinNotice = rootProject.file('third_party/kotlin/NOTICE')
 def desugarNotices = rootProject.file('third_party/desugar')
+// Billing's published POM identifies ASDKL, but AboutLibraries has no full text.
+def androidSdkLicense = rootProject.file('third_party/android-sdk/LICENSE')
 
 def embedded
 embedded = { byte[] bytes, String prefix = '' ->
@@ -59,6 +61,7 @@ def generateLicenseCatalog = tasks.register('generateLicenseCatalog', GenerateLi
     inputs.files(runtimeArtifacts.map { it.artifactFiles }, desugarArtifacts.map { it.artifactFiles })
     inputs.files(nativeLicense, extensionLicense, kotlinNotice)
     inputs.dir(desugarNotices)
+    inputs.file(androidSdkLicense)
     doLast {
         def data = new JsonSlurper().parse(metadata.get().asFile)
         def artifacts = (runtimeArtifacts.get().artifacts + desugarArtifacts.get().artifacts).findAll {
@@ -91,7 +94,9 @@ def generateLicenseCatalog = tasks.register('generateLicenseCatalog', GenerateLi
             }
             notices = notices.unique().sort()
             def identifiers = licenseDefinitions.collect { it.spdxId ?: it.name }
-            def texts = licenseDefinitions.collect { it.content ?: '' }
+            def texts = licenseDefinitions.collect {
+                it.spdxId == 'ASDKL' ? androidSdkLicense.getText('UTF-8') : (it.content ?: '')
+            }
             if (!isDesugar && (!identifiers || !texts.every { it.length() > 500 })) {
                 throw new GradleException("Missing full license for $id: $identifiers. Add a verified upstream override; do not ship an unknown license.")
             }
