@@ -364,7 +364,8 @@ private fun Pictureshow(
                         vm.reload()
                     },
                     onSwitchUser = profile::switchUser,
-                    onSignOut = profile::signOut
+                    onSignOut = profile::signOut,
+                    onResume = vm::reload
                 )
             }
         }

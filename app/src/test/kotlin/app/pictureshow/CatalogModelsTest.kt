@@ -349,7 +349,7 @@ class CatalogModelsTest {
     private fun <T> ok(value: T) = ClientResult.Success(value)
     private fun failure(kind: ErrorKind = ErrorKind.NETWORK) = ClientResult.Failure(ClientError(kind, "Could not load. Retry."))
 
-    private class FakeCatalog : CatalogService {
+    internal class FakeCatalog : CatalogService {
         var libraryViews: ClientResult<ItemPage> = ClientResult.Success(ItemPage())
         var resumeItems: ClientResult<ItemPage> = ClientResult.Success(ItemPage())
         var nextItems: ClientResult<ItemPage> = ClientResult.Success(ItemPage())

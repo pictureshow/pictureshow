@@ -8,16 +8,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -26,7 +30,9 @@ import androidx.tv.material3.darkColorScheme
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.ClientIdentity
+import app.pictureshow.core.ClientResult
 import app.pictureshow.core.HomeRow
+import app.pictureshow.core.ItemPage
 import app.pictureshow.core.JellyfinClient
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
@@ -39,6 +45,7 @@ import io.ktor.http.HttpStatusCode
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,6 +69,39 @@ class CatalogFocusTest {
         ),
         loading = false
     )
+
+    private val stores = mutableListOf<ViewModelStore>()
+
+    @After
+    fun clearViewModels() {
+        compose.runOnIdle { stores.forEach { it.clear() } }
+    }
+
+    private fun refreshingHome(service: CatalogModelsTest.FakeCatalog) {
+        val accounts = AccountStore(object : TextPersistence {
+            override suspend fun read(): String? = null
+            override suspend fun write(value: String) = Unit
+        })
+        lateinit var vm: CatalogHomeViewModel
+        compose.runOnIdle {
+            vm = CatalogHomeViewModel(account, CatalogSession(service, accounts))
+            stores += ViewModelStore().also { it.put("home", vm) }
+        }
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                val nav = rememberNavController()
+                NavHost(nav, startDestination = "home") {
+                    composable("home") {
+                        val screen by vm.state.collectAsStateWithLifecycle()
+                        CatalogHome(screen, account, { nav.navigate("detail") }, {}, {}, {}, onResume = vm::reload)
+                    }
+                    composable("detail") {
+                        CatalogDetail(CatalogDetailState(account, movies.first(), loading = false), {}, {}, {}, {}, {})
+                    }
+                }
+            }
+        }
+    }
 
     private fun key(key: Key) {
         if (key == Key.Back) {
@@ -255,6 +295,58 @@ class CatalogFocusTest {
         compose.onNodeWithTag("home:resume:film-5").assertIsFocused().assertIsDisplayed()
         key(Key.DirectionLeft)
         compose.onNodeWithTag("home:resume:film-4").assertIsFocused()
+    }
+
+    @Test
+    fun returningHomeRefreshesServerRowsAndKeepsTheCardWhenItsPositionChanges() {
+        val service = CatalogModelsTest.FakeCatalog().apply {
+            resumeItems = ClientResult.Success(ItemPage(movies.take(9)))
+            nextItems = ClientResult.Success(ItemPage(listOf(movies[10])))
+        }
+        refreshingHome(service)
+        repeat(5) { key(Key.DirectionRight) }
+        compose.onNodeWithTag("home:resume:film-5").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        var before = 0
+        compose.runOnIdle {
+            before = service.resumeCalls
+            service.resumeItems = ClientResult.Success(ItemPage(listOf(movies[0], movies[5], movies[1], movies[2])))
+            service.nextItems = ClientResult.Success(ItemPage(listOf(movies[20])))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(before, service.resumeCalls) }
+        key(Key.Back)
+        compose.runOnIdle { assertTrue(service.resumeCalls > before) }
+        compose.onNodeWithTag("home:resume:film-5").assertIsFocused().assertIsDisplayed()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:nextup:film-20").assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    fun returningHomeAfterServerRemovesFocusedCardKeepsItsPositionInTheRow() {
+        val service = CatalogModelsTest.FakeCatalog().apply {
+            resumeItems = ClientResult.Success(ItemPage(movies.take(9)))
+            nextItems = ClientResult.Success(ItemPage(listOf(movies[10])))
+        }
+        refreshingHome(service)
+        repeat(5) { key(Key.DirectionRight) }
+        compose.onNodeWithTag("home:resume:film-5").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.runOnIdle {
+            service.resumeItems = ClientResult.Success(ItemPage(movies.take(9).filterNot { it.id == "film-5" }))
+            service.nextItems = ClientResult.Success(ItemPage(listOf(movies[21])))
+        }
+        key(Key.Back)
+        compose.onNodeWithTag("home:resume:film-5").assertDoesNotExist()
+        assertEquals(
+            listOf("home:resume:film-6"),
+            compose.onAllNodes(isFocused()).fetchSemanticsNodes().map { it.config[SemanticsProperties.TestTag] }
+        )
+        compose.onNodeWithTag("home:resume:film-6").assertIsFocused().assertIsDisplayed()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:nextup:film-21").assertIsFocused().assertIsDisplayed()
     }
 
     @Test

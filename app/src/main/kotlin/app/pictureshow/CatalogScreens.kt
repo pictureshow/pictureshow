@@ -61,6 +61,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.MaterialTheme
@@ -88,14 +90,18 @@ fun CatalogHome(
     onOpen: (MediaItem) -> Unit,
     onRetry: () -> Unit,
     onSwitchUser: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onResume: () -> Unit = {}
 ) {
+    // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     val rows = state.rows.filter { it.items.isNotEmpty() }
     val list = rememberLazyListState()
     var selectedRow by rememberSaveable { mutableStateOf("") }
     var selectedItem by rememberSaveable { mutableStateOf("") }
     var selectedRowIndex by rememberSaveable { mutableStateOf(0) }
     var rowSelections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
+    var rowPositions by rememberSaveable { mutableStateOf(mapOf<String, Int>()) }
     var restored by remember { mutableStateOf(false) }
     val profile = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
@@ -111,10 +117,18 @@ fun CatalogHome(
             }
         }
     }
-    suspend fun focusRow(rowIndex: Int) {
+    // Capture the intended selection before applying row changes. Automatic focus fallback can update the
+    // saveable state while a removed card detaches, before the restoration coroutine reaches its next frame.
+    val savedRowSelections = rowSelections
+    val savedRowPositions = rowPositions
+    val savedRow = selectedRow
+    val savedItem = selectedItem
+    val savedRowIndex = selectedRowIndex
+    suspend fun focusRow(rowIndex: Int, selections: Map<String, String> = rowSelections, positions: Map<String, Int> = rowPositions) {
         if (rowIndex !in rows.indices) return
         val row = rows[rowIndex]
-        val itemIndex = row.items.indexOfFirst { it.id == rowSelections[row.key] }.coerceAtLeast(0)
+        val itemIndex = row.items.indexOfFirst { it.id == selections[row.key] }.takeIf { it >= 0 }
+            ?: (positions[row.key] ?: 0).coerceIn(0, row.items.lastIndex)
         val horizontal = rowStates.getValue(row.key)
         if (list.layoutInfo.visibleItemsInfo.none { it.index == rowIndex + 1 }) list.scrollToItem(rowIndex + 1)
         if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
@@ -177,7 +191,7 @@ fun CatalogHome(
                         contentPadding = PaddingValues(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
-                        itemsIndexed(row.items, key = { _, item -> item.id }) { _, item ->
+                        itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
                             CatalogCard(
                                 item = item,
                                 account = account,
@@ -191,6 +205,7 @@ fun CatalogHome(
                                             selectedRowIndex = rowIndex
                                             selectedItem = item.id
                                             rowSelections = rowSelections + (row.key to item.id)
+                                            rowPositions = rowPositions + (row.key to itemIndex)
                                         }
                                     }.onPreviewKeyEvent {
                                         if (it.type != KeyEventType.KeyDown) {
@@ -246,15 +261,16 @@ fun CatalogHome(
         if (!state.loading && !restored) {
             withFrameNanos { }
             when {
-                selectedRow == "profile" -> {
+                savedRow == "profile" -> {
                     list.scrollToItem(rows.size + 1)
                     withFrameNanos { }
                     profile.requestFocus()
                 }
                 rows.isNotEmpty() -> {
-                    val rowIndex = rows.indexOfFirst { it.key == selectedRow }.coerceAtLeast(0)
-                    if (selectedItem.isNotEmpty()) rowSelections = rowSelections + (selectedRow to selectedItem)
-                    focusRow(rowIndex)
+                    val rowIndex = rows.indexOfFirst { it.key == savedRow }.takeIf { it >= 0 }
+                        ?: savedRowIndex.coerceIn(0, rows.lastIndex)
+                    if (savedItem.isNotEmpty()) rowSelections = rowSelections + (savedRow to savedItem)
+                    focusRow(rowIndex, savedRowSelections, savedRowPositions)
                 }
                 state.error != null -> retry.requestFocus()
                 else -> profile.requestFocus()
@@ -262,14 +278,14 @@ fun CatalogHome(
             restored = true
         } else if (!state.loading &&
             restored &&
-            selectedRow != "profile" &&
-            selectedItem.isNotEmpty() &&
-            rows.none { row -> row.key == selectedRow && row.items.any { it.id == selectedItem } }
+            savedRow != "profile" &&
+            savedItem.isNotEmpty() &&
+            rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
             // A watched item can leave Continue watching while this entry is being restored.
             // Focus an existing visible card; never request the removed card's detached target.
             if (rows.isNotEmpty()) {
-                focusRow(selectedRowIndex.coerceAtMost(rows.lastIndex))
+                focusRow(savedRowIndex.coerceAtMost(rows.lastIndex), savedRowSelections, savedRowPositions)
             } else {
                 list.scrollToItem(rows.size + 1)
                 withFrameNanos { }
