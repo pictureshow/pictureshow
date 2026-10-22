@@ -52,6 +52,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation("androidx.tvprovider:tvprovider:1.1.0")
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui.compose)

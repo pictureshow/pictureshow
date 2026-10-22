@@ -34,9 +34,14 @@ import org.koin.dsl.module
 private val Application.preferences by preferencesDataStore("pictureshow")
 
 class PictureshowApplication : Application() {
+    private var watchNext: WatchNextCoordinator? = null
+
+    internal fun refreshWatchNext() {
+        watchNext?.refresh()
+    }
     override fun onCreate() {
         super.onCreate()
-        startKoin {
+        val dependencyGraph = startKoin {
             androidContext(this@PictureshowApplication)
             modules(
                 module {
@@ -90,6 +95,7 @@ class PictureshowApplication : Application() {
                 }
             )
         }
+        watchNext = WatchNextCoordinator(this, dependencyGraph.koin.get(), dependencyGraph.koin.get()).also { it.start() }
     }
 }
 

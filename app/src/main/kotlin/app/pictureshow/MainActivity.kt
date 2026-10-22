@@ -194,7 +194,11 @@ internal fun Pictureshow(
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
     val catalog =
-        remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) { CatalogSession(catalogService, accounts) }
+        remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
+            CatalogSession(catalogService, accounts) {
+                (context.applicationContext as? PictureshowApplication)?.refreshWatchNext()
+            }
+        }
     if (state.loading) {
         Page("Pictureshow") { Text("Loading saved accounts…") }
         return
@@ -414,6 +418,9 @@ internal fun Pictureshow(
                 )
             }
         }
+        composable("this-tv") {
+            ThisTvScreen(koinInject()) { nav.popBackStack() }
+        }
         composable("settings") {
             state.snapshot.currentAccount?.let { account ->
                 val vm: PlaybackSettingsViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
@@ -436,7 +443,15 @@ internal fun Pictureshow(
                     probe.start(::update)
                     onDispose { probe.close() }
                 }
-                PlaybackSettingsScreen(screen, accepted, vm::local, vm::server, vm::reload) { nav.popBackStack() }
+                PlaybackSettingsScreen(
+                    screen,
+                    accepted,
+                    vm::local,
+                    vm::server,
+                    vm::reload,
+                    onBack = { nav.popBackStack() },
+                    onThisTv = { nav.navigate("this-tv") }
+                )
             }
         }
         composable(

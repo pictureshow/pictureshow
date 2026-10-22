@@ -21,16 +21,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Shared across an account's back stack so detail changes immediately reach existing screens. */
-class CatalogSession(val service: CatalogService, private val accounts: AccountStore) {
+class CatalogSession(val service: CatalogService, private val accounts: AccountStore, private val onRefresh: () -> Unit = {}) {
     data class Changes(val revision: Long = 0, val users: Map<String, ItemUserData> = emptyMap())
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
 
     fun refresh() {
+        onRefresh()
         mutableChanges.update { it.copy(revision = it.revision + 1) }
     }
 
     fun changed(item: MediaItem) {
+        onRefresh()
         mutableChanges.update { it.copy(revision = it.revision + 1, users = it.users + (item.id to item.userData)) }
     }
 
