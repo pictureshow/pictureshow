@@ -418,7 +418,7 @@ internal fun Pictureshow(
                 val profileState by profile.state.collectAsStateWithLifecycle()
                 CatalogHome(
                     screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
-                    profileState.account,
+                    profileState.account.copy(server = account.server),
                     onOpen = { nav.navigate(itemRoute(it)) },
                     onRetry = {
                         profile.verify()

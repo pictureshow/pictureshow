@@ -22,12 +22,13 @@ import kotlinx.coroutines.launch
 
 private const val SAVE_ERROR = "Could not save accounts on this device. Please try again."
 
-class SessionViewModel(private val accounts: AccountStore) : ViewModel() {
+class SessionViewModel(private val accounts: AccountStore, private val service: JellyfinService) : ViewModel() {
     data class State(val loading: Boolean = true, val snapshot: AccountSnapshot = AccountSnapshot(), val error: String? = null)
 
     private val mutableState = MutableStateFlow(State())
     val state = mutableState.asStateFlow()
     private var loading: Job? = null
+    private val refreshing = mutableSetOf<Pair<String, String>>()
 
     init {
         load()
@@ -39,11 +40,43 @@ class SessionViewModel(private val accounts: AccountStore) : ViewModel() {
             mutableState.update { it.copy(loading = true, error = null) }
             try {
                 accounts.load()
-                accounts.snapshots.collect { snapshot -> mutableState.value = State(false, snapshot) }
+                var restored = false
+                var selection: Triple<String, String, String>? = null
+                accounts.snapshots.collect { snapshot ->
+                    // Home uses the saved account immediately; public-info requests never gate navigation.
+                    mutableState.value = State(false, snapshot)
+                    val opened = snapshot.currentAccount?.let { Triple(it.key, it.accessToken, it.server.url) }
+                    if (!restored) {
+                        snapshot.accounts.map { it.server }.distinctBy { it.id to it.url }.forEach(::refreshServer)
+                    } else if (opened != selection) {
+                        snapshot.currentAccount?.server?.let(::refreshServer)
+                    }
+                    selection = opened
+                    restored = true
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 mutableState.value = State(false, error = "Could not read saved accounts. Please retry.")
+            }
+        }
+    }
+
+    private fun refreshServer(server: Server) {
+        val endpoint = server.id to server.url
+        if (!refreshing.add(endpoint)) return
+        viewModelScope.launch {
+            try {
+                when (val result = service.probe(server.url)) {
+                    is ClientResult.Success -> accounts.refreshServer(server, result.value)
+                    is ClientResult.Failure -> Unit
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Metadata is best effort. Keep the last persisted record on network or storage failure.
+            } finally {
+                refreshing.remove(endpoint)
             }
         }
     }
