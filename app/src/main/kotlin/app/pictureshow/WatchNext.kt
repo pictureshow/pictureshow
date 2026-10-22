@@ -6,6 +6,7 @@ package app.pictureshow
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.tvprovider.media.tv.TvContractCompat
 import androidx.tvprovider.media.tv.WatchNextProgram
 import app.pictureshow.core.Account
@@ -59,7 +60,7 @@ internal fun watchProgram(account: Account, item: MediaItem, next: Boolean, time
         .apply {
             item.parentIndexNumber?.let { setSeasonNumber(it.toString(), it) }
             item.indexNumber?.let { setEpisodeNumber(it.toString(), it) }
-            imageUrl(account.server, item, 640, 360, wide = true)?.let { setPosterArtUri(Uri.parse(it)) }
+            imageUrl(account.server, item, 640, 360, wide = true)?.let { setPosterArtUri(it.toUri()) }
         }
         .setPosterArtAspectRatio(TvContractCompat.WatchNextPrograms.ASPECT_RATIO_16_9)
         .setDurationMillis(duration)

@@ -76,7 +76,10 @@ internal class StoredWatchDismissals(context: Context) : WatchDismissals {
     override fun contains(key: String) = preferences.getBoolean(key, false)
     override fun add(key: String) {
         // Commit before deleting the provider row: a process death must not forget the user's dismissal.
-        check(preferences.edit().putBoolean(key, true).commit())
+        // KTX edit returns Unit; retain the editor so a failed disk commit is detected.
+        val editor = preferences.edit()
+        editor.putBoolean(key, true)
+        check(editor.commit())
     }
 }
 
