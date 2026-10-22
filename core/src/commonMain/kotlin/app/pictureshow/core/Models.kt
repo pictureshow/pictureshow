@@ -11,6 +11,8 @@ data class User(val id: String, val name: String)
 @Serializable
 data class Account(val server: Server, val user: User, val accessToken: String, val expired: Boolean = false) {
     val key: String get() = "${server.id}:${user.id}"
+
+    override fun toString(): String = "Account(server=$server, user=$user, accessToken=[redacted], expired=$expired)"
 }
 
 data class ClientIdentity(val deviceName: String, val deviceId: String, val version: String = "0.1.0")

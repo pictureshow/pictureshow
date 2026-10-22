@@ -8,10 +8,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -95,6 +98,112 @@ class CatalogFocusTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun seriesInitiallyFocusesNextUpBeforeTheSelectedSeason() {
+        val seasons = listOf(MediaItem("season-1", "Season 1", "Season"))
+        val next = MediaItem("next-episode", "An Invented Episode", "Episode")
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                CatalogDetail(
+                    CatalogDetailState(
+                        account,
+                        MediaItem("series", "An Invented Series", "Series"),
+                        loading = false,
+                        nextUp = listOf(next),
+                        seasons = seasons,
+                        selectedSeasonId = "season-1",
+                        episodes = listOf(next)
+                    ),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:next:next-episode").assertIsFocused().assertIsDisplayed()
+        compose.onNodeWithTag("detail:refresh").assertDoesNotExist()
+    }
+
+    @Test
+    fun seriesFocusRestSelectsSeasonAfterDelayAndEpisodeBackRestoresFocus() {
+        val seasons = (1..3).map { MediaItem("season-$it", "Season $it", "Season") }
+        fun episode(season: String) = MediaItem("episode-$season", "An Invented Episode", "Episode")
+        var state by mutableStateOf(
+            CatalogDetailState(
+                account,
+                MediaItem("series", "An Invented Series", "Series"),
+                loading = false,
+                seasons = seasons,
+                selectedSeasonId = "season-2",
+                episodes = listOf(episode("season-2"))
+            )
+        )
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                val nav = rememberNavController()
+                NavHost(nav, startDestination = "series") {
+                    composable("series") {
+                        CatalogDetail(
+                            state,
+                            { nav.navigate("episode") },
+                            { season -> state = state.copy(selectedSeasonId = season.id, episodes = listOf(episode(season.id))) },
+                            {},
+                            {},
+                            {}
+                        )
+                    }
+                    composable("episode") {
+                        CatalogDetail(CatalogDetailState(account, episode("season-3"), loading = false), {}, {}, {}, {}, {})
+                    }
+                }
+            }
+        }
+        compose.onNodeWithTag("detail:seasons:season-2").assertIsFocused().assertIsSelected()
+            .assertContentDescriptionEquals("Season 2, selected season")
+        compose.onNodeWithText("Season 2 ✓").assertDoesNotExist()
+        compose.mainClock.autoAdvance = false
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("detail:seasons:season-3").assertIsFocused()
+        compose.mainClock.advanceTimeBy(300)
+        compose.runOnIdle { assertEquals("season-2", state.selectedSeasonId) }
+        compose.mainClock.advanceTimeBy(100)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("season-3", state.selectedSeasonId) }
+        compose.onNodeWithTag("detail:seasons:season-3").assertIsFocused().assertIsSelected()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("detail:episodes:episode-season-3").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        key(Key.Back)
+        compose.onNodeWithTag("detail:episodes:episode-season-3").assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    fun seasonWithoutSeasonPickerInitiallyFocusesItsFirstEpisode() {
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                CatalogDetail(
+                    CatalogDetailState(
+                        account,
+                        MediaItem("season", "Season 1", "Season"),
+                        loading = false,
+                        episodes = listOf(MediaItem("episode", "An Invented Episode", "Episode"))
+                    ),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:episodes:episode").assertIsFocused().assertIsDisplayed()
+        compose.onNodeWithTag("detail:refresh").assertDoesNotExist()
     }
 
     @Test

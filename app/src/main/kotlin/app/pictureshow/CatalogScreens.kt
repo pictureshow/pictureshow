@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -33,6 +34,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -54,6 +56,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -71,6 +74,7 @@ import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val CatalogBackground = Color(0xFF10131C)
@@ -374,6 +378,7 @@ fun CatalogDetail(
 ) {
     val list = rememberLazyListState()
     val initial = remember { FocusRequester() }
+    val retry = remember { FocusRequester() }
     var playMessage by rememberSaveable { mutableStateOf(false) }
     var selectedSection by rememberSaveable { mutableStateOf("header") }
     var selectedId by rememberSaveable { mutableStateOf("") }
@@ -396,7 +401,7 @@ fun CatalogDetail(
         item(key = "body") {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (state.loading && item == null) Text("Loading item…")
-                CatalogError(state.error, onRetry, if (item == null) Modifier.focusRequester(initial) else Modifier)
+                CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
                 if (item != null) {
                     val backdrop = if (item.backdropImageTags.isNotEmpty() || item.parentBackdropImageTags.isNotEmpty()) {
                         item.copy(imageTags = emptyMap())
@@ -405,13 +410,6 @@ fun CatalogDetail(
                     }
                     CatalogArtwork(backdrop, state.account, wide = true, modifier = Modifier.fillMaxWidth().height(220.dp))
                     CatalogHeading(item.name)
-                    if (item.type !in listOf("Movie", "Episode")) {
-                        Button(
-                            onClick = onRetry,
-                            modifier = Modifier.focusRequester(initial).testTag("detail:refresh")
-                                .onFocusChanged { if (it.isFocused) selectedSection = "header" }
-                        ) { Text("Refresh") }
-                    }
                     if (item.type == "Episode") {
                         Text(listOfNotNull(item.seriesName, episodeLabel(item).takeIf { it.isNotBlank() }).joinToString(" · "))
                     }
@@ -466,6 +464,7 @@ fun CatalogDetail(
                     onOpen = if (section == "seasons") onSeason else onOpen,
                     wide = section != "seasons",
                     selectedId = if (section == "seasons") state.selectedSeasonId else null,
+                    onFocusRested = if (section == "seasons") onSeason else null,
                     rowState = rowStates.getValue(section),
                     requests = requests,
                     onFocus = { focused ->
@@ -482,18 +481,26 @@ fun CatalogDetail(
     LaunchedEffect(state.loading, item?.id, state.error, sections.map { it.first to it.second.map(MediaItem::id) }) {
         if (!state.loading && !restored) {
             withFrameNanos { }
-            val sectionIndex = sections.indexOfFirst { it.first == selectedSection }
+            val savedSectionIndex = sections.indexOfFirst { it.first == selectedSection }
+            val sectionIndex = if (savedSectionIndex >= 0) {
+                savedSectionIndex
+            } else if (selectedSection == "header") {
+                if (item?.type in listOf("Movie", "Episode")) -1 else sections.indices.firstOrNull() ?: -1
+            } else {
+                sections.indices.firstOrNull() ?: -1
+            }
             if (sectionIndex >= 0) {
                 val (section, items) = sections[sectionIndex]
-                val itemIndex = items.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
+                val targetId = if (savedSectionIndex < 0 && section == "seasons") state.selectedSeasonId else selectedId
+                val itemIndex = items.indexOfFirst { it.id == targetId }.coerceAtLeast(0)
                 val horizontal = rowStates.getValue(section)
                 if (list.layoutInfo.visibleItemsInfo.none { it.index == sectionIndex + 1 }) list.scrollToItem(sectionIndex + 1)
                 if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
                 requestAttached(requests, "$section:${items[itemIndex].id}")
-            } else if (item != null || state.error != null) {
+            } else if (item?.type in listOf("Movie", "Episode") || state.error != null) {
                 if (list.layoutInfo.visibleItemsInfo.none { it.index == 0 }) list.scrollToItem(0)
                 withFrameNanos { }
-                initial.requestFocus()
+                if (state.error != null) retry.requestFocus() else initial.requestFocus()
             }
             restored = true
         }
@@ -511,7 +518,8 @@ private fun DetailRow(
     rowState: LazyListState,
     requests: MutableMap<String, FocusRequester>,
     onFocus: (MediaItem) -> Unit,
-    selectedId: String? = null
+    selectedId: String? = null,
+    onFocusRested: ((MediaItem) -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         CatalogHeading(title, large = false)
@@ -524,6 +532,14 @@ private fun DetailRow(
             itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
                 val requester = remember(item.id) { FocusRequester() }
                 val focusKey = "$section:${item.id}"
+                var focused by remember(item.id) { mutableStateOf(false) }
+                val selectOnRest by rememberUpdatedState(onFocusRested)
+                LaunchedEffect(focused, selectedId) {
+                    if (focused && item.id != selectedId && selectOnRest != null) {
+                        delay(350)
+                        selectOnRest?.invoke(item)
+                    }
+                }
                 DisposableEffect(focusKey) {
                     requests[focusKey] = requester
                     onDispose { requests.remove(focusKey) }
@@ -535,7 +551,10 @@ private fun DetailRow(
                     onClick = { onOpen(item) },
                     selected = item.id == selectedId,
                     modifier = Modifier.focusRequester(requester).testTag("detail:$focusKey")
-                        .onFocusChanged { if (it.isFocused) onFocus(item) }
+                        .onFocusChanged {
+                            focused = it.isFocused
+                            if (it.isFocused) onFocus(item)
+                        }
                 )
             }
         }
@@ -562,7 +581,26 @@ private fun CatalogCard(
     width: Dp? = if (wide) 240.dp else 144.dp,
     selected: Boolean = false
 ) {
-    Card(onClick = onClick, modifier = modifier.then(if (width == null) Modifier.fillMaxWidth() else Modifier.width(width))) {
+    val selection = if (selected) {
+        Modifier.border(2.dp, Color(0xFFB8C4FF)).semantics {
+            this.selected = true
+            contentDescription = "${item.name}, selected season"
+        }
+    } else {
+        Modifier
+    }
+    Card(
+        onClick = onClick,
+        modifier = modifier.then(selection).then(
+            if (width ==
+                null
+            ) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier.width(width)
+            }
+        )
+    ) {
         Column {
             Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
                 CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
@@ -590,7 +628,7 @@ private fun CatalogCard(
             }
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    if (selected) "${item.name} ✓" else item.name,
+                    item.name,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleSmall

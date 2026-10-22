@@ -4,13 +4,26 @@ import app.cash.turbine.test
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 class AccountStoreTest {
     private val first = Account(Server("server-1", "Family", "https://one.test/jellyfin", "12.0.0"), User("user-1", "Taylor"), "token-1")
     private val second = first.copy(user = User("user-2", "Jamie"), accessToken = "token-2")
     private val third = first.copy(server = first.server.copy(id = "server-2", url = "https://two.test"), accessToken = "token-3")
+
+    @Test
+    fun accountAndContainingStateNeverPrintTheAccessToken() {
+        val account = first.copy(accessToken = "secret-access-token")
+        listOf(account.toString(), AccountSnapshot(accounts = listOf(account)).toString(), QuickConnectState.Authorized(account).toString())
+            .forEach { text ->
+                assertFalse(text.contains(account.accessToken))
+                assertTrue(text.contains("accessToken=[redacted]"))
+            }
+        assertEquals("secret-access-token", account.accessToken)
+    }
 
     @Test
     fun severalServersAndUsersAndCurrentSelectionRoundTrip() = runTest {
