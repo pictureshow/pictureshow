@@ -399,6 +399,96 @@ class DeviceProfileBuilderTest {
         )
     }
 
+    @Test
+    fun missingDecoderProfilesUseConservativePerCodecDefaults() {
+        val expected = mapOf(
+            VideoCodec.H264 to "baseline|constrained baseline",
+            VideoCodec.HEVC to "main",
+            VideoCodec.VP8 to "0",
+            VideoCodec.VP9 to "profile 0",
+            VideoCodec.AV1 to "main",
+            VideoCodec.MPEG2 to "simple",
+            VideoCodec.MPEG4 to "simple profile",
+            VideoCodec.VC1 to "simple"
+        )
+        for ((codec, profiles) in expected) {
+            val decoder = VideoDecoder(
+                codec,
+                emptySet(),
+                maxWidth = 1920,
+                maxHeight = 1080,
+                maxFrameRate = 30.0,
+                maxBitDepth = 12,
+                hdrFormats = HdrFormat.entries.toSet(),
+                dolbyVisionProfiles = setOf(5, 7, 8)
+            )
+            val profile = DeviceProfileBuilder.build(CapabilityFixtures.dolbyVisionStreamer.copy(videoDecoders = listOf(decoder)))
+            val constraints = profile.video(codec.serverName)
+            assertEquals(profiles, constraints.value(ProfileConditionValue.VideoProfile), codec.name)
+            assertEquals("8", constraints.value(ProfileConditionValue.VideoBitDepth), codec.name)
+            // Compatible SDR DV base layers are still allowed, but no native DV or HDR claim survives unknown profiles.
+            assertFalse("DOVI" in constraints.rangeTypes(), codec.name)
+            assertFalse("HDR10" in constraints.rangeTypes(), codec.name)
+            val source = combo(video = codec.serverName, profile = "Unsupported profile")
+            assertTrue("VideoProfileNotSupported" in ProfileEvaluator.directPlayFailures(profile, source), codec.name)
+        }
+    }
+
+    @Test
+    fun unknownProfileLevelsCannotRaiseTheFallbackProfilesMinimumCeiling() {
+        val minimumLevels = mapOf(VideoCodec.H264 to 10, VideoCodec.HEVC to 30, VideoCodec.AV1 to 0)
+        for ((codec, expected) in minimumLevels) {
+            for (reported in listOf(CodecLevel(6, 2), null)) {
+                val decoder = VideoDecoder(codec, emptySet(), reported, 3840, 2160, 60.0)
+                val profile = DeviceProfileBuilder.build(CapabilityFixtures.dolbyVisionStreamer.copy(videoDecoders = listOf(decoder)))
+                assertEquals(expected.toString(), profile.video(codec.serverName).value(ProfileConditionValue.VideoLevel), codec.name)
+                val name = if (codec == VideoCodec.H264) "Baseline" else "Main"
+                val source = combo(video = codec.serverName, profile = name, width = 176, height = 144, frameRate = 15.0)
+                assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, source.copy(level = expected)), codec.name)
+                assertEquals(
+                    setOf("VideoLevelNotSupported"),
+                    ProfileEvaluator.directPlayFailures(profile, source.copy(level = expected + 1)),
+                    codec.name
+                )
+                if (codec == VideoCodec.HEVC) {
+                    assertEquals(setOf("VideoLevelNotSupported"), ProfileEvaluator.directPlayFailures(profile, source.copy(level = 186)))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun missingProfilesCannotLoosenAnExplicitAlternativeOrSuppressItsRealClaims() {
+        val unknown = VideoDecoder(
+            VideoCodec.HEVC,
+            emptySet(),
+            maxWidth = 3840,
+            maxHeight = 2160,
+            maxFrameRate = 60.0,
+            maxBitDepth = 12,
+            hdrFormats = HdrFormat.entries.toSet()
+        )
+        val explicit = VideoDecoder(
+            VideoCodec.HEVC,
+            setOf("Main 10"),
+            maxWidth = 1920,
+            maxHeight = 1080,
+            maxFrameRate = 30.0,
+            maxBitDepth = 10,
+            hdrFormats = setOf(HdrFormat.HDR10)
+        )
+        val profile = DeviceProfileBuilder.build(
+            CapabilityFixtures.dolbyVisionStreamer.copy(videoDecoders = listOf(unknown, explicit))
+        )
+        val main10 = combo(profile = "Main 10", bitDepth = 10, range = "HDR10", width = 1920, height = 1080, frameRate = 24.0)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, main10))
+        assertTrue("VideoResolutionNotSupported" in ProfileEvaluator.directPlayFailures(profile, main10.copy(width = 3840, height = 2160)))
+        assertTrue("VideoProfileNotSupported" in ProfileEvaluator.directPlayFailures(profile, main10.copy(videoProfile = "Rext")))
+        val main = main10.copy(videoProfile = "Main", bitDepth = 8, rangeType = "SDR", width = 3840, height = 2160)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, main))
+        assertTrue("VideoBitDepthNotSupported" in ProfileEvaluator.directPlayFailures(profile, main.copy(bitDepth = 10)))
+    }
+
     // Audio channels with and without passthrough.
 
     @Test

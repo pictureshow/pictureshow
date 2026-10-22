@@ -109,9 +109,101 @@ class PlayDecisionTest {
     }
 
     @Test
-    fun absoluteTranscodingUrlIsKept() {
-        val decision = decide(source(transcodingUrl = "https://cdn.example.test/live/master.m3u8?a=1")).decision()
-        assertEquals("https://cdn.example.test/live/master.m3u8?a=1", decision.url)
+    fun absoluteSameOriginTranscodingUrlIsKept() {
+        val decision = decide(source(transcodingUrl = "https://example.test/live/master.m3u8?a=1")).decision()
+        assertEquals("https://example.test/live/master.m3u8?a=1", decision.url)
+    }
+
+    @Test
+    fun transcodeOutsideTheServerOriginIsClearlyUnplayable() {
+        for (url in listOf(
+            "https://cdn.example.test/live/master.m3u8",
+            "https://example.test:444/live/master.m3u8",
+            "http://example.test/live/master.m3u8",
+            "//cdn.example.test/live/master.m3u8",
+            "file:///live/master.m3u8"
+        )) {
+            val outcome = assertIs<PlayOutcome.Unplayable>(decide(source(transcodingUrl = url)))
+            assertEquals(UnplayableReason.UNSAFE_STREAM_URL, outcome.reason, url)
+            assertTrue(outcome.message.contains("origin"), outcome.message)
+            assertFalse(outcome.toString().contains(token))
+            assertFalse(outcome.toString().contains(url))
+        }
+    }
+
+    @Test
+    fun protocolRelativeTranscodePreservesItsAuthorityAndUsesTheServerScheme() {
+        val decision = decide(source(transcodingUrl = "//example.test/live/master.m3u8?ApiKey=secret-token")).decision()
+        assertEquals("https://example.test/live/master.m3u8", decision.url)
+        assertTrue(decision.headers.getValue("Authorization").contains(token))
+        assertFalse(decision.url.contains(token))
+    }
+
+    @Test
+    fun authenticationOriginMatchesSchemeHostAndEffectivePortOnly() {
+        for (url in listOf(
+            "https://example.test/manifest.m3u8",
+            "https://EXAMPLE.test:443/elsewhere/segment.ts",
+            "HTTPS://example.test/segment.ts",
+            PlayDecisions.resolve(server, "captions/stream.srt"),
+            PlayDecisions.resolve(server, "/captions/stream.srt"),
+            PlayDecisions.resolve(server, "//example.test:443/captions/stream.srt")
+        )) {
+            assertTrue(PlayDecisions.isSameOrigin(server, url), url)
+        }
+        val explicitDefault = server.copy(url = "https://example.test:443/jellyfin")
+        assertTrue(PlayDecisions.isSameOrigin(explicitDefault, "https://example.test/x"))
+        val httpServer = server.copy(url = "http://example.test:80/jellyfin")
+        assertTrue(PlayDecisions.isSameOrigin(httpServer, "http://example.test/x"))
+        assertTrue(PlayDecisions.isSameOrigin(rootServer, "http://192.0.2.5:8096/segment.ts"))
+    }
+
+    @Test
+    fun authenticationOriginRejectsOtherOriginsAndAmbiguousReferences() {
+        for (url in listOf(
+            "https://cdn.example.test/stream.srt",
+            "https://example.test.evil.test/stream.srt",
+            "https://example.test:444/stream.srt",
+            "https://example.test:0/stream.srt",
+            "https://example.test:/stream.srt",
+            "https://example.test:65536/stream.srt",
+            "http://example.test/stream.srt",
+            "https://example.test:80/stream.srt",
+            "//example.test/stream.srt",
+            "/stream.srt",
+            "stream.srt",
+            "https:///example.test/stream.srt",
+            "https://example.test@cdn.example.test/stream.srt",
+            "https://name@example.test/stream.srt",
+            "https://example.test\\@cdn.example.test/stream.srt",
+            "https://%65xample.test/stream.srt",
+            " https://example.test/stream.srt",
+            "https://example.test/str\neam.srt",
+            "file:///stream.srt"
+        )) {
+            assertFalse(PlayDecisions.isSameOrigin(server, url), url)
+        }
+        assertFalse(PlayDecisions.isSameOrigin(rootServer, "http://192.0.2.5/segment.ts"))
+        val ipv6 = server.copy(url = "https://[2001:db8::1]/base")
+        assertTrue(PlayDecisions.isSameOrigin(ipv6, "https://[2001:db8::1]:443/x"))
+        assertFalse(PlayDecisions.isSameOrigin(ipv6, "https://[2001:db8::1]:444/x"))
+        assertFalse(PlayDecisions.isSameOrigin(ipv6, "https://[2001:db8::2]/x"))
+        assertFalse(PlayDecisions.isSameOrigin(ipv6, "https://[2001:db8::1]:/x"))
+        assertFalse(PlayDecisions.isSameOrigin(ipv6, "https://[2001:db8::1]:0/x"))
+    }
+
+    @Test
+    fun relativeResolutionPreservesTheBasePathWithoutTreatingAuthoritiesAsPaths() {
+        assertEquals("https://example.test/jellyfin/captions/a.srt", PlayDecisions.resolve(server, "captions/a.srt"))
+        assertEquals("https://example.test/jellyfin/captions/a.srt", PlayDecisions.resolve(server, "/captions/a.srt"))
+        assertEquals("https://other.test/captions/a.srt", PlayDecisions.resolve(server, "//other.test/captions/a.srt"))
+        assertFalse(PlayDecisions.isSameOrigin(server, PlayDecisions.resolve(server, "//other.test/captions/a.srt")))
+    }
+
+    @Test
+    fun invalidServerOriginCannotProduceAnAuthenticatedStaticDecision() {
+        val outcome = decide(source(directPlay = true), server = server.copy(url = "file:///media"))
+        assertEquals(UnplayableReason.UNSAFE_STREAM_URL, assertIs<PlayOutcome.Unplayable>(outcome).reason)
     }
 
     @Test

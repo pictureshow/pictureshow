@@ -1,7 +1,9 @@
 package app.pictureshow.core.playback
 
+import app.pictureshow.core.Server
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -134,6 +136,21 @@ class PlaybackJsonTest {
     }
 
     @Test
+    fun externalSubtitleUrlFlagRoundTripsAndDoesNotAuthorizeAnotherOrigin() {
+        val json = """{"Type":"Subtitle","Index":4,"IsExternalUrl":true,"IsExternal":false,
+            "DeliveryUrl":"//captions.example.test/text.srt"}"""
+        val stream = PlaybackJson.decodeFromString(MediaStream.serializer(), json)
+        assertTrue(stream.isExternalUrl)
+        assertFalse(stream.isExternal)
+        val encoded = PlaybackJson.encodeToJsonElement(MediaStream.serializer(), stream).jsonObject
+        assertEquals(JsonPrimitive(true), encoded["IsExternalUrl"])
+        assertEquals(stream, PlaybackJson.decodeFromJsonElement(MediaStream.serializer(), encoded))
+        assertFalse(PlaybackJson.decodeFromString(MediaStream.serializer(), """{"Type":"Subtitle"}""").isExternalUrl)
+        val server = Server("s", "Demo server", "https://media.example.test/jellyfin", "12.0.0")
+        assertFalse(PlayDecisions.isSameOrigin(server, PlayDecisions.resolve(server, stream.deliveryUrl!!)))
+    }
+
+    @Test
     fun unknownEnumValuesAndFieldsDoNotFailDecoding() {
         val future =
             """
@@ -236,6 +253,7 @@ class PlaybackJsonTest {
                       "IsDefault": true,
                       "IsForced": false,
                       "IsExternal": false,
+                      "IsExternalUrl": false,
                       "IsTextSubtitleStream": false
                     },
                     {
@@ -247,6 +265,7 @@ class PlaybackJsonTest {
                       "IsDefault": true,
                       "IsForced": false,
                       "IsExternal": false,
+                      "IsExternalUrl": false,
                       "IsTextSubtitleStream": false
                     },
                     {
@@ -257,6 +276,7 @@ class PlaybackJsonTest {
                       "IsDefault": false,
                       "IsForced": false,
                       "IsExternal": false,
+                      "IsExternalUrl": false,
                       "IsTextSubtitleStream": true,
                       "DeliveryMethod": "External",
                       "DeliveryUrl": "/Videos/item-1/a1b2c3/Subtitles/2/0/Stream.subrip?ApiKey=secret-token"

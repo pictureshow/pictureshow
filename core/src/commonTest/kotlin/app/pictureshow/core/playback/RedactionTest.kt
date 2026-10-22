@@ -30,6 +30,20 @@ class RedactionTest {
     }
 
     @Test
+    fun encodedTokenParameterNamesAreRemovedAndMaskedWithoutChangingOtherRawParts() {
+        val encoded = "https://captions.example.test/text.srt?x=%2f%2F&&%61pi_key=secret-a&API%4bEY=secret-b" +
+            "&X-%45mby-Token=secret-c&x%2DMediaBrowser%2DToken=secret-d&language=en%2DUS#part"
+        assertEquals("https://captions.example.test/text.srt?x=%2f%2F&&language=en%2DUS#part", Redaction.stripApiKey(encoded))
+        assertEquals(
+            "https://captions.example.test/text.srt?x=%2f%2F&&%61pi_key=REDACTED&API%4bEY=REDACTED" +
+                "&X-%45mby-Token=REDACTED&x%2DMediaBrowser%2DToken=REDACTED&language=en%2DUS#part",
+            Redaction.url(encoded)
+        )
+        assertEquals("/text.srt", Redaction.stripApiKey("/text.srt?%61pI%5fKeY=secret"))
+        assertEquals("/text.srt?not%zzkey=value", Redaction.stripApiKey("/text.srt?not%zzkey=value"))
+    }
+
+    @Test
     fun authorizationHeaderTokenIsRedacted() {
         val header = "MediaBrowser Client=\"Pictureshow\", Device=\"TV\", DeviceId=\"d\", Version=\"1\", Token=\"secret-token\""
         val redacted = Redaction.header("Authorization", header)
@@ -37,6 +51,29 @@ class RedactionTest {
         assertTrue(redacted.endsWith("Token=\"REDACTED\""))
         assertEquals("REDACTED", Redaction.header("X-Emby-Token", token))
         assertEquals("x", Redaction.header("User-Agent", "x"))
+    }
+
+    @Test
+    fun everyRequiredHeaderValueIsMaskedWithoutChangingPlaybackHeaders() {
+        val secrets = mapOf(
+            "Cookie" to "access_token=cookie-credential",
+            "X-Session-Credential" to "arbitrary-credential",
+            "X-Authorization" to "Bearer another-credential",
+            "User-Agent" to "private-player-name"
+        )
+        val source = MediaSourceInfo(id = "src-1", supportsDirectPlay = true, requiredHttpHeaders = secrets)
+        val decision = assertIs<PlayOutcome.Play>(
+            PlayDecisions.decide(server, "item-1", PlaybackInfoResponse(listOf(source)), identity, token)
+        ).decision
+        val diagnostic = decision.toString()
+        for ((name, secret) in secrets) {
+            assertEquals(secret, decision.headers[name])
+            assertFalse(diagnostic.contains(secret), diagnostic)
+            assertTrue(diagnostic.contains("$name=REDACTED"), diagnostic)
+        }
+        assertFalse(diagnostic.contains(token), diagnostic)
+        assertTrue(decision.headers.getValue("Authorization").contains(token))
+        assertEquals(decision.headers.keys.associateWith { "REDACTED" }, Redaction.headers(decision.headers))
     }
 
     @Test

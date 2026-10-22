@@ -17,7 +17,8 @@ object DeviceProfileBuilder {
     private const val FULL_HD_WIDTH = 1920
 
     fun build(capabilities: DeviceCapabilities): DeviceProfile {
-        val video = selectVideoDecoders(capabilities.videoDecoders)
+        val reportedVideo = capabilities.videoDecoders.map(::withConservativeProfile)
+        val video = selectVideoDecoders(reportedVideo)
         val audio = audioChannelLimits(capabilities)
         val bitrate = capabilities.settings.maxStreamingBitrate
         return DeviceProfile(
@@ -26,9 +27,40 @@ object DeviceProfileBuilder {
             maxStaticBitrate = bitrate,
             directPlayProfiles = directPlayProfiles(video.keys, audio.keys),
             transcodingProfiles = transcodingProfiles(capabilities, video.keys, audio.keys),
-            codecProfiles = guardedVideoCodecProfiles(capabilities.videoDecoders, video, capabilities.display) + audioCodecProfiles(audio),
+            codecProfiles = guardedVideoCodecProfiles(reportedVideo, video, capabilities.display) + audioCodecProfiles(audio),
             subtitleProfiles = subtitleProfiles()
         )
+    }
+
+    /** An empty platform profile list is missing information, never permission to accept every profile. */
+    private fun withConservativeProfile(decoder: VideoDecoder): VideoDecoder = when {
+        decoder.profiles.isNotEmpty() -> decoder
+        decoder.profileCapabilities.isNotEmpty() -> decoder.copy(profiles = decoder.profileCapabilities.map { it.profile }.toSet())
+        else -> decoder.copy(
+            profiles = when (decoder.codec) {
+                VideoCodec.H264 -> setOf("Baseline", "Constrained Baseline")
+                VideoCodec.HEVC, VideoCodec.AV1 -> setOf("Main")
+                VideoCodec.VP8 -> setOf("0")
+                VideoCodec.VP9 -> setOf("Profile 0")
+                VideoCodec.MPEG2, VideoCodec.VC1 -> setOf("Simple")
+                VideoCodec.MPEG4 -> setOf("Simple Profile")
+            },
+            maxLevel = conservativeLevel(decoder.codec, decoder.maxLevel),
+            maxBitDepth = minOf(decoder.maxBitDepth, 8),
+            hdrFormats = emptySet(),
+            dolbyVisionProfiles = emptySet()
+        )
+    }
+
+    /** Unknown profile reports cannot lend their high level to the fallback profile. Use the minimum spec level. */
+    private fun conservativeLevel(codec: VideoCodec, reported: CodecLevel?): CodecLevel? {
+        val cap = when (codec) {
+            VideoCodec.H264, VideoCodec.HEVC -> CodecLevel(1)
+            VideoCodec.AV1 -> CodecLevel(2)
+            // These codecs have no level conversion in this profile model; do not retain a misleading summary.
+            else -> return null
+        }
+        return listOfNotNull(cap, reported).minWith(compareBy({ it.major }, { it.minor }))
     }
 
     /** Hardware decoders win; a software decoder is used for a codec only when no hardware decoder exists for it. */
@@ -257,7 +289,7 @@ object DeviceProfileBuilder {
     private fun videoCodecProfiles(decoders: Collection<VideoDecoder>, display: DisplayCapabilities): List<CodecProfile> =
         decoders.flatMap { decoder ->
             val conditions = buildList {
-                if (decoder.codec in PROFILED_CODECS && decoder.profiles.isNotEmpty()) {
+                if (decoder.profiles.isNotEmpty()) {
                     add(equalsAny(ProfileConditionValue.VideoProfile, decoder.profiles.map { it.lowercase() }))
                 }
                 val level = decoder.maxLevel?.let { serverLevel(decoder.codec, it) }
@@ -436,7 +468,6 @@ object DeviceProfileBuilder {
 
     private fun number(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
 
-    private val PROFILED_CODECS = setOf(VideoCodec.H264, VideoCodec.HEVC, VideoCodec.VP9, VideoCodec.AV1)
     private const val TS_EAC3_CHANNELS = 6
     private const val PCM_CHANNELS = 8
 }

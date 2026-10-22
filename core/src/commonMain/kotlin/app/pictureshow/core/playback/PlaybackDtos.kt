@@ -92,6 +92,7 @@ data class MediaStream(
     @SerialName("DvProfile") val dvProfile: Int? = null,
     @SerialName("DvBlSignalCompatibilityId") val dvBlSignalCompatibilityId: Int? = null,
     @SerialName("IsExternal") val isExternal: Boolean = false,
+    @SerialName("IsExternalUrl") val isExternalUrl: Boolean = false,
     @SerialName("IsDefault") val isDefault: Boolean = false,
     @SerialName("IsForced") val isForced: Boolean = false,
     @SerialName("IsTextSubtitleStream") val isTextSubtitleStream: Boolean = false,

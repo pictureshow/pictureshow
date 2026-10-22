@@ -3,11 +3,12 @@ package app.pictureshow.core.playback
 import app.pictureshow.core.AuthorizationHeader
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.Server
+import io.ktor.http.Url
 
 /**
  * What the player opens: the chosen media source, how it plays, the URL and the headers every request must carry
  * (manifests, segments and the stream itself). The token travels only in the Authorization header; [toString]
- * redacts it and any `ApiKey` in a URL so a decision can be logged.
+ * masks every header value and any `ApiKey` in a URL so a decision can be logged.
  */
 class PlayDecision(
     val itemId: String,
@@ -40,7 +41,10 @@ enum class UnplayableReason {
     NO_COMPATIBLE_SOURCE,
 
     /** The requested media source is not in the response. */
-    SOURCE_NOT_FOUND
+    SOURCE_NOT_FOUND,
+
+    /** The stream URL cannot safely receive this server's authentication. */
+    UNSAFE_STREAM_URL
 }
 
 object PlayDecisions {
@@ -92,16 +96,24 @@ object PlayDecisions {
             )
             else -> {
                 val transcodingUrl = source.transcodingUrl.orEmpty()
+                val resolved = resolve(server, Redaction.stripApiKey(transcodingUrl))
                 PlayDecision(
                     itemId = itemId,
                     mediaSource = source,
                     method = PlayMethod.Transcode,
-                    url = resolve(server, Redaction.stripApiKey(transcodingUrl)),
+                    url = resolved,
                     headers = headers,
                     playSessionId = playSessionId,
                     transcodeReasons = transcodeReasons(transcodingUrl)
                 )
             }
+        }
+        if (!isSameOrigin(server, decision.url)) {
+            return PlayOutcome.Unplayable(
+                UnplayableReason.UNSAFE_STREAM_URL,
+                "The server returned a stream URL outside its origin or an invalid URL. " +
+                    "Playback was blocked to protect your sign-in."
+            )
         }
         return PlayOutcome.Play(decision)
     }
@@ -120,12 +132,64 @@ object PlayDecisions {
         return base(server) + "/Videos/" + encode(itemId) + "/stream?" + query.joinToString("&") { (key, value) -> "$key=${encode(value)}" }
     }
 
-    /** The server returns TranscodingUrl relative to its root without the base path, e.g. `/videos/{id}/master.m3u8?...`. */
+    /**
+     * Jellyfin root-relative paths omit the configured base path, so `/videos/...` stays below that base path.
+     * Absolute and protocol-relative references retain their own authority; callers must check [isSameOrigin]
+     * before attaching authentication, including for subtitle URLs and every manifest/segment/redirect request.
+     */
     fun resolve(server: Server, relative: String): String = when {
-        relative.startsWith("http://", ignoreCase = true) || relative.startsWith("https://", ignoreCase = true) -> relative
+        relative.startsWith("//") -> server.url.substringBefore(':') + ":" + relative
+        SCHEME.containsMatchIn(relative) -> relative
         relative.startsWith("/") -> base(server) + relative
         else -> base(server) + "/" + relative
     }
+
+    /**
+     * Whether an absolute request URL may receive this server's authentication. Path does not affect origin;
+     * scheme, case-insensitive host and effective port must all match. Relative references must be resolved first.
+     * Invalid or ambiguous URLs, embedded credentials and non-HTTP(S) schemes are rejected conservatively.
+     */
+    fun isSameOrigin(server: Server, url: String): Boolean {
+        val origin = absoluteHttpUrl(server.url) ?: return false
+        val target = absoluteHttpUrl(url) ?: return false
+        return origin.protocol.name.equals(target.protocol.name, ignoreCase = true) &&
+            origin.host.equals(target.host, ignoreCase = true) &&
+            origin.port == target.port
+    }
+
+    private fun absoluteHttpUrl(value: String): Url? {
+        if (!HTTP_AUTHORITY.containsMatchIn(value) ||
+            value.any { it.isWhitespace() || it.code < 32 || it.code == 127 || it == '\\' }
+        ) {
+            return null
+        }
+        val authority = value.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
+        if (authority.isEmpty() || '@' in authority || '%' in authority) return null
+        val portSuffix = if (authority.startsWith("[")) {
+            val close = authority.indexOf(']')
+            if (close < 0) return null
+            val suffix = authority.substring(close + 1)
+            if (suffix.isNotEmpty() && !suffix.startsWith(':')) return null
+            suffix.removePrefix(":").takeIf { suffix.isNotEmpty() }
+        } else {
+            if (authority.count { it == ':' } > 1) return null
+            authority.substringAfter(':').takeIf { ':' in authority }
+        }
+        // Ktor uses zero as its unspecified-port sentinel; an explicit :0 must not equal the default port.
+        if (portSuffix != null) {
+            val explicitPort = portSuffix.toIntOrNull()
+            if (portSuffix.isEmpty() || portSuffix.any { !it.isDigit() } || explicitPort == null || explicitPort !in 1..65535) return null
+        }
+        return runCatching { Url(value) }.getOrNull()?.takeIf {
+            it.host.isNotEmpty() &&
+                it.user == null &&
+                it.password == null &&
+                (it.protocol.name.equals("http", true) || it.protocol.name.equals("https", true))
+        }
+    }
+
+    private val SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")
+    private val HTTP_AUTHORITY = Regex("^https?://", RegexOption.IGNORE_CASE)
 
     internal fun transcodeReasons(url: String): List<String> {
         val value = query(url).firstOrNull { it.first.equals("TranscodeReasons", ignoreCase = true) }?.second ?: return emptyList()
@@ -153,7 +217,7 @@ object PlayDecisions {
         }
     }
 
-    private fun decode(value: String): String {
+    internal fun decode(value: String): String {
         val bytes = ArrayList<Byte>(value.length)
         var i = 0
         while (i < value.length) {
@@ -178,7 +242,6 @@ object PlayDecisions {
 /** Keeps access tokens out of anything that may be logged. */
 object Redaction {
     private const val MASK = "REDACTED"
-    private val apiKeyParameter = Regex("([?&](?:api_?key|ApiKey|X-Emby-Token|X-MediaBrowser-Token)=)[^&#]*", RegexOption.IGNORE_CASE)
     private val tokenField = Regex("(Token=\")[^\"]*(\")")
 
     /** Removes `ApiKey`/`api_key` from a URL; the Authorization header carries the token instead. */
@@ -186,16 +249,26 @@ object Redaction {
         val queryStart = url.indexOf('?')
         if (queryStart < 0) return url
         val fragmentStart = url.indexOf('#', queryStart).let { if (it < 0) url.length else it }
-        val kept = url.substring(queryStart + 1, fragmentStart).split('&').filter { part ->
-            val name = part.substringBefore('=')
-            part.isNotEmpty() && !TOKEN_PARAMETERS.any { it.equals(name, ignoreCase = true) }
-        }
+        val kept = url.substring(queryStart + 1, fragmentStart).split('&').filterNot(::tokenParameter)
         val prefix = url.substring(0, queryStart)
         val fragment = url.substring(fragmentStart)
         return if (kept.isEmpty()) prefix + fragment else prefix + "?" + kept.joinToString("&") + fragment
     }
 
-    fun url(url: String): String = apiKeyParameter.replace(url) { it.groupValues[1] + MASK }
+    fun url(url: String): String {
+        val queryStart = url.indexOf('?')
+        if (queryStart < 0) return url
+        val fragmentStart = url.indexOf('#', queryStart).let { if (it < 0) url.length else it }
+        val masked = url.substring(queryStart + 1, fragmentStart).split('&').map { part ->
+            if (tokenParameter(part)) part.substringBefore('=') + "=" + MASK else part
+        }
+        return url.substring(0, queryStart + 1) + masked.joinToString("&") + url.substring(fragmentStart)
+    }
+
+    private fun tokenParameter(part: String): Boolean {
+        val name = PlayDecisions.decode(part.substringBefore('='))
+        return TOKEN_PARAMETERS.any { it.equals(name, ignoreCase = true) }
+    }
 
     fun header(name: String, value: String): String = when {
         name.equals("Authorization", ignoreCase = true) || name.equals("X-Emby-Authorization", ignoreCase = true) ->
@@ -204,7 +277,8 @@ object Redaction {
         else -> value
     }
 
-    fun headers(headers: Map<String, String>): Map<String, String> = headers.mapValues { (name, value) -> header(name, value) }
+    /** Required headers are arbitrary credentials: diagnostics retain names but never print any value. */
+    fun headers(headers: Map<String, String>): Map<String, String> = headers.mapValues { MASK }
 
     private val TOKEN_PARAMETERS = listOf("ApiKey", "api_key", "X-Emby-Token", "X-MediaBrowser-Token")
 }
