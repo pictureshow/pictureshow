@@ -167,7 +167,7 @@ internal fun accountDestination(snapshot: AccountSnapshot): String {
 }
 
 @Composable
-private fun Pictureshow(
+internal fun Pictureshow(
     session: SessionViewModel = koinViewModel(),
     playbackEntry: ParsedPlaybackEntry? = null,
     entrySequence: Long = 0,
@@ -237,7 +237,8 @@ private fun Pictureshow(
                     nav.navigate(serverRoute("login", it))
                 }
             }
-            Page("Find your Jellyfin server") {
+            val discoveryFocus = rememberDiscoveryFocus(screen.discovered.firstOrNull()?.id, screen.connecting)
+            Page("Find your Jellyfin server", modifier = discoveryFocus.container) {
                 Text("Choose a server on your network, or enter an address.")
                 RemoteField("Server address", screen.address, vm::address, initial = true, onDone = { vm.connect() })
                 Action(if (screen.connecting) "Connecting…" else "Connect", enabled = !screen.connecting) { vm.connect() }
@@ -245,8 +246,12 @@ private fun Pictureshow(
                 state.snapshot.accounts.map { it.server }.distinctBy { it.id }.forEach { server ->
                     Action("${server.name} · remembered") { nav.navigate(serverRoute("login", server)) }
                 }
-                screen.discovered.forEach { server ->
-                    Action("${server.name} · ${server.address}", enabled = !screen.connecting) { vm.connect(server.address) }
+                screen.discovered.forEachIndexed { index, server ->
+                    Action(
+                        "${server.name} · ${server.address}",
+                        enabled = !screen.connecting,
+                        modifier = if (index == 0) discoveryFocus.firstServer else Modifier
+                    ) { vm.connect(server.address) }
                 }
                 Text(
                     if (screen.scanning) {
@@ -419,8 +424,8 @@ private fun Pictureshow(
 }
 
 @Composable
-private fun Page(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
+private fun Page(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Box(modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -432,9 +437,9 @@ private fun Page(title: String, content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun Action(label: String, initial: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+private fun Action(label: String, initial: Boolean = false, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val focus = remember { FocusRequester() }
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.focusRequester(focus)) { Text(label) }
+    Button(onClick = onClick, enabled = enabled, modifier = modifier.focusRequester(focus)) { Text(label) }
     LaunchedEffect(Unit) { if (initial && enabled) focus.requestFocus() }
 }
 

@@ -103,6 +103,7 @@ fun CatalogHome(
     var rowSelections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var rowPositions by rememberSaveable { mutableStateOf(mapOf<String, Int>()) }
     var restored by remember { mutableStateOf(false) }
+    var initialNavigation by remember { mutableStateOf(false) }
     val profile = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -155,7 +156,10 @@ fun CatalogHome(
     }
     LazyColumn(
         state = list,
-        modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home"),
+        modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown) initialNavigation = true
+            false
+        },
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
@@ -232,7 +236,11 @@ fun CatalogHome(
                     onClick = onSwitchUser,
                     enabled = !state.busy,
                     modifier = Modifier.focusRequester(profile).testTag("home:switch-user")
-                        .onFocusChanged { if (it.isFocused) selectedRow = "profile" }
+                        .onFocusChanged {
+                            // During the first load these are the only attached targets. Automatic focus is
+                            // not a saved user choice and must not outrank the first arriving catalog card.
+                            if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
+                        }
                         .onPreviewKeyEvent {
                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                                 moveRow(rows.lastIndex)
@@ -245,7 +253,9 @@ fun CatalogHome(
                 Button(
                     onClick = onSignOut,
                     enabled = !state.busy,
-                    modifier = Modifier.testTag("home:sign-out").onPreviewKeyEvent {
+                    modifier = Modifier.testTag("home:sign-out").onFocusChanged {
+                        if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
+                    }.onPreviewKeyEvent {
                         if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                             moveRow(rows.lastIndex)
                             true
@@ -258,13 +268,15 @@ fun CatalogHome(
         }
     }
     LaunchedEffect(state.loading, rows.map { it.key to it.items.map(MediaItem::id) }) {
-        if (!state.loading && !restored) {
+        if (!state.loading && (!restored || rows.isNotEmpty() && savedRow.isEmpty() && savedItem.isEmpty())) {
+            // Empty startup content can temporarily leave only profile actions attached. Keep the first
+            // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             when {
                 savedRow == "profile" -> {
                     list.scrollToItem(rows.size + 1)
                     withFrameNanos { }
-                    profile.requestFocus()
+                    if (!initialNavigation) profile.requestFocus()
                 }
                 rows.isNotEmpty() -> {
                     val rowIndex = rows.indexOfFirst { it.key == savedRow }.takeIf { it >= 0 }
