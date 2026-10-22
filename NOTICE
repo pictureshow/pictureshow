@@ -12,3 +12,6 @@ This product includes third-party software:
   Licensed under the GNU Lesser General Public License 2.1 or later (third_party/ffmpeg/COPYING.LGPLv2.1).
   Built from unmodified source as shared libraries; version, source, checksum and configure lines are in
   third_party/ffmpeg/README.md, and tools/ffmpeg/build.sh rebuilds them.
+
+- AndroidX TV Provider (androidx.tvprovider:tvprovider:1.1.0), Copyright The Android Open Source Project.
+  Licensed under the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).

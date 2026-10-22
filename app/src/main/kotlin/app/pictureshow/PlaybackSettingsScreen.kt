@@ -13,7 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -122,10 +126,13 @@ internal fun PlaybackSettingsScreen(
     onLocal: ((PlaybackPreferences) -> PlaybackPreferences) -> Unit,
     onServer: (String, String) -> Unit,
     onRetry: () -> Unit,
+    onThisTv: () -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
     val first = remember { FocusRequester() }
+    val thisTvFocus = remember { FocusRequester() }
+    var restoreThisTv by rememberSaveable { mutableStateOf(false) }
     val local = state.local
     val configuration = state.configuration
     Column(
@@ -133,6 +140,13 @@ internal fun PlaybackSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Playback settings", style = MaterialTheme.typography.headlineLarge)
+        Button(
+            onClick = {
+                restoreThisTv = true
+                onThisTv()
+            },
+            modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
+        ) { Text("This TV") }
         Text("Press center to change a value. Changes are saved immediately.")
         Button(
             onClick = { onLocal { it.copy(bitrateMbps = nextSetting(PlaybackPreferences.BITRATES, it.bitrateMbps)) } },
@@ -180,7 +194,7 @@ internal fun PlaybackSettingsScreen(
         }
         Button(onClick = onBack, modifier = Modifier.testTag("settings:back")) { Text("Back") }
     }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    LaunchedEffect(Unit) { if (restoreThisTv) thisTvFocus.requestFocus() else first.requestFocus() }
 }
 
 private fun settingLabel(value: String): String = when (value) {

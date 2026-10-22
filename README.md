@@ -69,3 +69,29 @@ the field is empty. Clear removes them, and signing out removes that account’s
 The app accepts `android.intent.action.SEARCH` and `com.google.android.gms.actions.SEARCH_ACTION` with a `query`
 string extra for the current signed-in account. Those entries show results with the keyboard closed. Music,
 playlists and Android TV launcher search-provider integration are planned for later work.
+
+
+### TV diagnostics and launcher integration
+
+Settings → **This TV** shows the runtime decoder/display/audio reports, the effective bitrate ceiling and the exact
+`DeviceProfileBuilder` profile JSON used for playback negotiation. Refresh after changing the audio connection.
+The report and Android share sheet contain capability/version information only: no account, server, token, media
+title or device identifier. Audio lists connected output types and the Media3 default-route capabilities; it does
+not claim an active AudioTrack route while no player exists. Reported limits are not measured playback performance.
+
+Only the `deviceTest` variant includes this automation entry:
+
+```sh
+adb shell am start -n app.pictureshow/.DeviceProfileExportActivity
+adb pull /sdcard/Android/data/app.pictureshow/files/device-profile.json
+```
+
+It writes the same profile JSON as This TV to a fixed app-specific external file. The entry is absent from debug
+and release. No storage permission is required.
+
+On API 26+ TVs with a TV provider, Pictureshow publishes Continue watching and Next up to the launcher's Play Next /
+Watch Next row. Refreshes follow app startup/return, backgrounding, account changes, catalog watch-state changes and
+final playback reports. No recurring job or periodic wakeup is scheduled. A failed catalog fetch preserves the
+current account's rows; switching accounts clears old rows before fetching the new ones. Launcher dismissals are
+remembered per account/item until app data is cleared, including across sign-out and sign-in. Artwork URLs contain
+no access token. Launcher presentation and availability vary; Google TV need not display the Android TV row.
