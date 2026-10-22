@@ -70,7 +70,14 @@ object PlayDecisions {
         val source = candidates.firstOrNull(::playable)
             ?: return PlayOutcome.Unplayable(UnplayableReason.NO_COMPATIBLE_SOURCE, "This video cannot be played on this device.")
         val headers = buildMap {
-            source.requiredHttpHeaders.forEach { (name, value) -> if (value != null) put(name, value) }
+            source.requiredHttpHeaders.forEach { (name, value) ->
+                if (value != null &&
+                    !name.equals("Authorization", ignoreCase = true) &&
+                    name.lowercase() !in setOf("apikey", "api_key", "x-emby-token", "x-mediabrowser-token")
+                ) {
+                    put(name, value)
+                }
+            }
             put("Authorization", AuthorizationHeader.build(identity, token))
         }
         val playSessionId = response.playSessionId
@@ -114,7 +121,7 @@ object PlayDecisions {
     }
 
     /** The server returns TranscodingUrl relative to its root without the base path, e.g. `/videos/{id}/master.m3u8?...`. */
-    internal fun resolve(server: Server, relative: String): String = when {
+    fun resolve(server: Server, relative: String): String = when {
         relative.startsWith("http://", ignoreCase = true) || relative.startsWith("https://", ignoreCase = true) -> relative
         relative.startsWith("/") -> base(server) + relative
         else -> base(server) + "/" + relative

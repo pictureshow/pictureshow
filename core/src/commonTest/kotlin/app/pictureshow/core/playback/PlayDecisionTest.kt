@@ -48,6 +48,23 @@ class PlayDecisionTest {
     private fun PlayOutcome.decision(): PlayDecision = assertIs<PlayOutcome.Play>(this).decision
 
     @Test
+    fun onlyAuthorizationCarriesTheAccountTokenEvenWithLegacyRequiredHeaders() {
+        val source = source(directPlay = true).copy(
+            requiredHttpHeaders = mapOf(
+                "Authorization" to "legacy",
+                "authorization" to "duplicate",
+                "ApiKey" to token,
+                "X-Emby-Token" to token,
+                "X-Test" to "required"
+            )
+        )
+        val decision = assertIs<PlayOutcome.Play>(decide(source)).decision
+        assertEquals(setOf("Authorization", "X-Test"), decision.headers.keys)
+        assertTrue(decision.headers.getValue("Authorization").contains(token))
+        assertEquals("required", decision.headers["X-Test"])
+    }
+
+    @Test
     fun directPlayUsesTheStaticStreamUnderTheBasePath() {
         val decision = decide(source(directPlay = true)).decision()
         assertEquals(PlayMethod.DirectPlay, decision.method)

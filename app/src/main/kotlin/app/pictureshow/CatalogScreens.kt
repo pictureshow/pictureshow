@@ -374,12 +374,12 @@ fun CatalogDetail(
     onSeason: (MediaItem) -> Unit,
     onPlayed: () -> Unit,
     onFavorite: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onPlay: (MediaItem, Boolean) -> Unit = { _, _ -> }
 ) {
     val list = rememberLazyListState()
     val initial = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
-    var playMessage by rememberSaveable { mutableStateOf(false) }
     var selectedSection by rememberSaveable { mutableStateOf("header") }
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
@@ -425,7 +425,7 @@ fun CatalogDetail(
                     if (item.type == "Movie" || item.type == "Episode") {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Button(
-                                onClick = { playMessage = true },
+                                onClick = { onPlay(item, item.userData.playbackPositionTicks > 0) },
                                 modifier = Modifier.focusRequester(initial).testTag("detail:play")
                                     .onFocusChanged { if (it.isFocused) selectedSection = "header" }
                             ) {
@@ -437,6 +437,9 @@ fun CatalogDetail(
                                     }
                                 )
                             }
+                            if (item.userData.playbackPositionTicks > 0) {
+                                Button(onClick = { onPlay(item, false) }) { Text("Play from start") }
+                            }
                             Button(onClick = onPlayed, enabled = !state.busy, modifier = Modifier.testTag("detail:played")) {
                                 Text(if (item.userData.played) "Mark unwatched" else "Mark watched")
                             }
@@ -444,7 +447,6 @@ fun CatalogDetail(
                                 Text(if (item.userData.isFavorite) "Unfavorite" else "Favorite")
                             }
                         }
-                        if (playMessage) Text("Playback arrives in a later version.", modifier = Modifier.testTag("detail:play-message"))
                     }
                     if (state.loading) Text("Loading episodes…")
                 }

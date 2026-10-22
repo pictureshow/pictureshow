@@ -24,6 +24,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -168,7 +169,43 @@ class PlaybackClientTest {
     }
 
     @Test
+    fun fallbackDisablesDirectMethodsAndStreamCopy() = runTest {
+        val playback = client { json(transcodeResponse) }
+        playback.prepare(
+            account,
+            "item-1",
+            CapabilityFixtures.projector,
+            PlaybackRequest(
+                startPosition = 45.seconds,
+                enableDirectPlay = false,
+                enableDirectStream = false,
+                allowVideoStreamCopy = false
+            )
+        )
+        assertEquals("false", body().getValue("EnableDirectPlay").jsonPrimitive.content)
+        assertEquals("false", body().getValue("EnableDirectStream").jsonPrimitive.content)
+        assertEquals("false", body().getValue("AllowVideoStreamCopy").jsonPrimitive.content)
+        assertEquals(450_000_000L, body().getValue("StartTimeTicks").jsonPrimitive.long)
+    }
+
+    @Test
+    fun activeEncodingDeleteIsScopedAndAuthenticatedWithoutBodyOrTokenInUrl() = runTest {
+        val playback = client { noContent() }
+        assertIs<ClientResult.Success<Unit>>(playback.stopEncoding(account, "session/with space"))
+        val (request, text) = requests.single()
+        assertEquals(HttpMethod.Delete, request.method)
+        assertEquals("/jellyfin/Videos/ActiveEncodings", request.url.encodedPath)
+        assertEquals("device-123", request.url.parameters["deviceId"])
+        assertEquals("session/with space", request.url.parameters["playSessionId"])
+        assertTrue(request.headers[HttpHeaders.Authorization]!!.contains("secret-token"))
+        assertFalse(request.url.toString().contains("secret-token"))
+        assertEquals("", text)
+    }
+
+    @Test
     fun ticksAreHundredsOfNanoseconds() {
+        assertEquals(1L, Ticks.of(100.nanoseconds))
+        assertEquals(19L, Ticks.of(1_999.nanoseconds))
         assertEquals(10_000L, Ticks.of(1.milliseconds))
         assertEquals(10_000_000L, Ticks.of(1.seconds))
         assertEquals(10_000L, Ticks.fromMillis(1))

@@ -84,6 +84,9 @@ class MainActivity : ComponentActivity() {
 
 private fun itemRoute(item: MediaItem) = "item?item=${Uri.encode(Json.encodeToString(item))}"
 
+private fun playerRoute(item: MediaItem, resume: Boolean) =
+    "player?item=${Uri.encode(Json.encodeToString(item))}&start=${if (resume) item.userData.playbackPositionTicks / 10_000 else 0}"
+
 private fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
 
 internal fun accountDestination(snapshot: AccountSnapshot): String {
@@ -267,6 +270,21 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
                 )
             }
         }
+        composable(
+            "player?item={item}&start={start}",
+            arguments = listOf(
+                navArgument("item") { type = NavType.StringType },
+                navArgument("start") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                }
+            )
+        ) { entry ->
+            state.snapshot.currentAccount?.let { account ->
+                val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog) { nav.popBackStack() }
+            }
+        }
         composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
             state.snapshot.currentAccount?.let { account ->
                 val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
@@ -280,7 +298,21 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
                 } else {
                     val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()
-                    CatalogDetail(screen, { nav.navigate(itemRoute(it)) }, vm::season, vm::played, vm::favorite, vm::reload)
+                    LaunchedEffect(entry) {
+                        entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                            vm.reload()
+                            awaitCancellation()
+                        }
+                    }
+                    CatalogDetail(
+                        screen,
+                        { nav.navigate(itemRoute(it)) },
+                        vm::season,
+                        vm::played,
+                        vm::favorite,
+                        vm::reload,
+                        onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) }
+                    )
                 }
             }
         }

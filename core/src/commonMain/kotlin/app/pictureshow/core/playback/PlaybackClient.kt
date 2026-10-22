@@ -15,6 +15,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
@@ -24,14 +25,23 @@ data class PlaybackRequest(
     val startPosition: Duration = Duration.ZERO,
     val mediaSourceId: String? = null,
     val audioStreamIndex: Int? = null,
-    val subtitleStreamIndex: Int? = null
+    val subtitleStreamIndex: Int? = null,
+    val enableDirectPlay: Boolean = true,
+    val enableDirectStream: Boolean = true,
+    val allowVideoStreamCopy: Boolean = true
 )
 
 /** Jellyfin ticks are 100 ns. */
 object Ticks {
     const val PER_MILLISECOND: Long = 10_000
 
-    fun of(duration: Duration): Long = duration.inWholeMicroseconds * 10
+    fun of(duration: Duration): Long {
+        val seconds = duration.inWholeSeconds
+        if (seconds >= Long.MAX_VALUE / 10_000_000) return Long.MAX_VALUE
+        if (seconds <= Long.MIN_VALUE / 10_000_000) return Long.MIN_VALUE
+        val remainder = duration - seconds.seconds
+        return seconds * 10_000_000 + remainder.inWholeNanoseconds / 100
+    }
 
     fun fromMillis(milliseconds: Long): Long = milliseconds * PER_MILLISECOND
 }
@@ -69,13 +79,29 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
     suspend fun reportStopped(account: Account, info: PlaybackStopInfo): ClientResult<Unit> =
         request(account, "Sessions/Playing/Stopped", PlaybackJson.encodeToString(PlaybackStopInfo.serializer(), info)) { }
 
-    private suspend fun <T> request(account: Account, path: String, body: String, decode: (String) -> T): ClientResult<T> = try {
+    /** End only this device's encode for this play session; never stop another viewer's stream. */
+    suspend fun stopEncoding(account: Account, playSessionId: String): ClientResult<Unit> = request(
+        account,
+        "Videos/ActiveEncodings?deviceId=${PlayDecisions.encode(identity.deviceId)}&playSessionId=${PlayDecisions.encode(playSessionId)}",
+        null,
+        HttpMethod.Delete
+    ) { }
+
+    private suspend fun <T> request(
+        account: Account,
+        path: String,
+        body: String?,
+        method: HttpMethod = HttpMethod.Post,
+        decode: (String) -> T
+    ): ClientResult<T> = try {
         withTimeoutOrNull(TIMEOUT_MILLIS) {
             val response = client.request("${account.server.url.trimEnd('/')}/$path") {
-                method = HttpMethod.Post
+                this.method = method
                 headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))
-                contentType(ContentType.Application.Json)
-                setBody(body)
+                if (body != null) {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             }
             when (response.status.value) {
                 in 200..299 -> ClientResult.Success(decode(response.bodyAsText()))
@@ -107,7 +133,10 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                 audioStreamIndex = playback.audioStreamIndex,
                 subtitleStreamIndex = playback.subtitleStreamIndex,
                 mediaSourceId = playback.mediaSourceId,
-                deviceProfile = DeviceProfileBuilder.build(capabilities)
+                deviceProfile = DeviceProfileBuilder.build(capabilities),
+                enableDirectPlay = playback.enableDirectPlay,
+                enableDirectStream = playback.enableDirectStream,
+                allowVideoStreamCopy = playback.allowVideoStreamCopy
             )
     }
 }

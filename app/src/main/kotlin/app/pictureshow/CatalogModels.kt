@@ -26,6 +26,10 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
 
+    fun refresh() {
+        mutableChanges.update { it.copy(revision = it.revision + 1) }
+    }
+
     fun changed(item: MediaItem) {
         mutableChanges.update { it.copy(revision = it.revision + 1, users = it.users + (item.id to item.userData)) }
     }

@@ -81,6 +81,7 @@ data class MediaStream(
     @SerialName("CodecTag") val codecTag: String? = null,
     @SerialName("Language") val language: String? = null,
     @SerialName("DisplayTitle") val displayTitle: String? = null,
+    @SerialName("Title") val title: String? = null,
     @SerialName("Profile") val profile: String? = null,
     @SerialName("Level") val level: Double? = null,
     @SerialName("BitDepth") val bitDepth: Int? = null,

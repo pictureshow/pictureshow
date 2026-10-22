@@ -1,0 +1,316 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
+package app.pictureshow
+
+import app.pictureshow.core.ClientError
+import app.pictureshow.core.ClientResult
+import app.pictureshow.core.ErrorKind
+import app.pictureshow.core.playback.MediaSourceInfo
+import app.pictureshow.core.playback.MediaStream
+import app.pictureshow.core.playback.MediaStreamType
+import app.pictureshow.core.playback.PlayDecision
+import app.pictureshow.core.playback.PlayMethod
+import app.pictureshow.core.playback.PlayOutcome
+import app.pictureshow.core.playback.PlaybackProgressInfo
+import app.pictureshow.core.playback.PlaybackRequest
+import app.pictureshow.core.playback.PlaybackStopInfo
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+
+class PlaybackSessionTest {
+    private class Gateway : PlaybackGateway {
+        val requests = mutableListOf<PlaybackRequest>()
+        val events = mutableListOf<String>()
+        val starts = mutableListOf<PlaybackProgressInfo>()
+        val progresses = mutableListOf<PlaybackProgressInfo>()
+        val stops = mutableListOf<PlaybackStopInfo>()
+        val encodes = mutableListOf<String>()
+        val outcomes = ArrayDeque<ClientResult<PlayOutcome>>()
+        var gate: CompletableDeferred<Unit>? = null
+        override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
+            requests += request
+            gate?.await()
+            return outcomes.removeFirst()
+        }
+        override suspend fun start(info: PlaybackProgressInfo): ClientResult<Unit> {
+            events += "start"
+            starts += info
+            return ClientResult.Success(Unit)
+        }
+        override suspend fun progress(info: PlaybackProgressInfo): ClientResult<Unit> {
+            events += "progress"
+            progresses += info
+            return ClientResult.Success(Unit)
+        }
+        override suspend fun stopped(info: PlaybackStopInfo): ClientResult<Unit> {
+            events += "stop"
+            stops += info
+            return ClientResult.Success(Unit)
+        }
+        override suspend fun stopEncoding(sessionId: String): ClientResult<Unit> {
+            events += "delete"
+            encodes += sessionId
+            return ClientResult.Success(Unit)
+        }
+    }
+    private class Output : PlaybackOutput {
+        var snapshot = PlaybackPosition(0, false)
+        var opens = 0
+        var locallySwitchable = true
+        var released = false
+        var openThrows = false
+        override fun position() = snapshot
+        override fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean) {
+            snapshot = PlaybackPosition(positionMs, paused)
+            opens++
+            if (openThrows) error("decoder initialization failed")
+        }
+        override fun select(type: MediaStreamType, index: Int) = locallySwitchable
+        override fun pause() {
+            snapshot = snapshot.copy(paused = true)
+        }
+        override fun release() {
+            released = true
+        }
+    }
+    private fun decision(method: PlayMethod = PlayMethod.DirectPlay, sessionId: String = "session-one") = PlayDecision(
+        "item-one",
+        MediaSourceInfo(
+            id = "source-one",
+            defaultAudioStreamIndex = 2,
+            defaultSubtitleStreamIndex = -1,
+            mediaStreams = listOf(
+                MediaStream(type = MediaStreamType.Audio, index = 1, language = "en"),
+                MediaStream(type = MediaStreamType.Audio, index = 2, language = "fr"),
+                MediaStream(type = MediaStreamType.Subtitle, index = 3, language = "en")
+            )
+        ),
+        method,
+        "https://example.test/video",
+        mapOf("Authorization" to "test-header"),
+        sessionId
+    )
+
+    @Test
+    fun startPeriodicPauseSeekTrackAndStopReportsUseHundredNanosecondTicks() = runTest {
+        val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(decision())) }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(90_000)
+        runCurrent()
+        assertEquals(90.seconds, gateway.requests.single().startPosition)
+        assertEquals(2, session.state.value.audioIndex) // server preference beats device locale
+        assertEquals(-1, session.state.value.subtitleIndex)
+        session.ready()
+        session.ready()
+        runCurrent()
+        assertEquals(1, gateway.starts.size)
+        assertEquals(900_000_000L, gateway.starts.single().positionTicks)
+        advanceTimeBy(9_999)
+        runCurrent()
+        assertTrue(gateway.progresses.isEmpty())
+        output.snapshot = PlaybackPosition(100_000, false)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(1_000_000_000L, gateway.progresses.single().positionTicks)
+        output.snapshot = PlaybackPosition(100_250, true)
+        session.progress()
+        runCurrent()
+        assertTrue(gateway.progresses.last().isPaused)
+        assertEquals(1_002_500_000L, gateway.progresses.last().positionTicks)
+        output.snapshot = PlaybackPosition(145_000, true)
+        session.progress()
+        runCurrent()
+        assertEquals(1_450_000_000L, gateway.progresses.last().positionTicks)
+        session.select(MediaStreamType.Subtitle, 3)
+        runCurrent()
+        assertEquals(3, gateway.progresses.last().subtitleStreamIndex)
+        assertEquals(1, gateway.requests.size) // direct track switch remains local
+        output.snapshot = PlaybackPosition(146_000, true)
+        session.close()
+        session.close()
+        runCurrent()
+        assertEquals(1, gateway.stops.size)
+        assertEquals(1_460_000_000L, gateway.stops.single().positionTicks)
+        assertTrue(gateway.encodes.isEmpty())
+        assertTrue(output.released)
+        val count = gateway.progresses.size
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(count, gateway.progresses.size)
+    }
+
+    @Test
+    fun transcodeTrackChangeStopsOnlyOldEncodeAndPreservesPositionAndPause() = runTest {
+        val gateway = Gateway().apply {
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision(PlayMethod.Transcode)))
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision(PlayMethod.Transcode, "session-two")))
+        }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        output.snapshot = PlaybackPosition(42_125, true)
+        session.select(MediaStreamType.Audio, 1)
+        runCurrent()
+        assertEquals(42_125L, gateway.requests.last().startPosition.inWholeMilliseconds)
+        assertEquals(1, gateway.requests.last().audioStreamIndex)
+        assertEquals(-1, gateway.requests.last().subtitleStreamIndex)
+        assertEquals(listOf("session-one"), gateway.encodes)
+        assertEquals(listOf("start", "progress", "stop", "delete"), gateway.events)
+        assertEquals(PlaybackPosition(42_125, true), output.snapshot)
+        session.ready()
+        runCurrent()
+        session.close()
+        runCurrent()
+        assertEquals(listOf("session-one", "session-two"), gateway.encodes)
+        assertEquals(2, gateway.starts.size)
+        assertEquals(2, gateway.stops.size)
+    }
+
+    @Test
+    fun directFailureRetriesOnceWithCopyDisabledAtRequestedResumePosition() = runTest {
+        val gateway = Gateway().apply {
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision()))
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision(PlayMethod.Transcode, "fallback")))
+        }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(120_000)
+        runCurrent()
+        output.snapshot = PlaybackPosition(0, false) // decoder never started
+        session.failed(true)
+        runCurrent()
+        val retry = gateway.requests.last()
+        assertFalse(retry.enableDirectPlay)
+        assertFalse(retry.enableDirectStream)
+        assertFalse(retry.allowVideoStreamCopy)
+        assertEquals(120.seconds, retry.startPosition)
+        assertEquals(2, output.opens)
+        session.failed(true)
+        runCurrent()
+        assertEquals(2, gateway.requests.size)
+        assertNotNull(session.state.value.error)
+        assertEquals(listOf("fallback"), gateway.encodes)
+        session.close()
+        runCurrent()
+        assertEquals(2, gateway.stops.size)
+    }
+
+    @Test
+    fun queuedOldPlayerCallbacksCannotStartOrFailTheReplacementDecision() = runTest {
+        val old = decision()
+        val replacement = decision(PlayMethod.Transcode, "replacement")
+        val gateway = Gateway().apply {
+            outcomes += ClientResult.Success(PlayOutcome.Play(old))
+            outcomes += ClientResult.Success(PlayOutcome.Play(replacement))
+        }
+        val output = Output().apply { locallySwitchable = false }
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        val gate = CompletableDeferred<Unit>()
+        gateway.gate = gate
+        session.select(MediaStreamType.Subtitle, 3)
+        runCurrent() // replacement PlaybackInfo is suspended
+        session.ready(old)
+        session.failed(true, old)
+        session.progress(old)
+        gate.complete(Unit)
+        runCurrent()
+        assertTrue(gateway.starts.isEmpty())
+        assertTrue(gateway.encodes.isEmpty())
+        assertEquals(2, gateway.requests.size)
+        assertEquals(null, session.state.value.error)
+        assertTrue(session.state.value.preparing)
+        session.ready(replacement)
+        runCurrent()
+        assertEquals("replacement", gateway.starts.single().playSessionId)
+        session.close()
+        runCurrent()
+    }
+
+    @Test
+    fun synchronousPlayerInitializationFailureGetsOneFallbackThenClearError() = runTest {
+        val gateway = Gateway().apply {
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision()))
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision(PlayMethod.Transcode, "fallback")))
+        }
+        val output = Output().apply { openThrows = true }
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(15_000)
+        runCurrent()
+        assertEquals(2, gateway.requests.size)
+        assertNotNull(session.state.value.error)
+        assertFalse(session.state.value.preparing)
+        assertEquals(listOf("fallback"), gateway.encodes)
+        session.close()
+        runCurrent()
+    }
+
+    @Test
+    fun negotiationFailureIsClearAndDoesNotReportAnInventedSession() = runTest {
+        val gateway = Gateway().apply {
+            outcomes += ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Server unreachable"))
+        }
+        val session = PlaybackSession(gateway, Output(), backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        assertEquals("Server unreachable", session.state.value.error)
+        session.close()
+        runCurrent()
+        assertTrue(gateway.stops.isEmpty())
+    }
+
+    @Test
+    fun exitWhilePlaybackInfoIsPendingCleansUpEncodeWithoutOpeningPlayer() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val gateway = Gateway().apply {
+            this.gate = gate
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision(PlayMethod.Transcode)))
+        }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.close()
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(0, output.opens)
+        assertEquals(listOf("session-one"), gateway.encodes)
+        assertEquals(1, gateway.stops.size)
+    }
+
+    @Test
+    fun routeChangeRepreparesWithCurrentStreamChoices() = runTest {
+        val gateway = Gateway().apply {
+            repeat(2) { outcomes += ClientResult.Success(PlayOutcome.Play(decision())) }
+        }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        output.snapshot = PlaybackPosition(73_000, false)
+        session.routeChanged()
+        runCurrent()
+        assertEquals(73.seconds, gateway.requests.last().startPosition)
+        assertEquals(2, gateway.requests.last().audioStreamIndex)
+        session.close()
+        runCurrent()
+    }
+}
