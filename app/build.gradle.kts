@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.okhttp)
+    implementation(project(":media3-ffmpeg"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)

@@ -1,0 +1,97 @@
+Test-clip tool only; never built into the app. FFmpeg's E-AC-3 encoder stops at 5.1, so this
+lets it write dependent-substream frames with a channel map (ATSC A/52 Annex E), which
+make-test-clips.sh pairs with a 5.1 independent substream to make a 7.1 clip. With
+EAC3_DEPENDENT_CHANMAP unset the encoder behaves as released.
+This patch modifies FFmpeg 6.0.1 and is licensed like FFmpeg, LGPL 2.1 or later.
+
+--- a/libavcodec/ac3enc.c
++++ b/libavcodec/ac3enc.c
+@@ -804,8 +804,10 @@
+             frame_bits += s->num_blocks * 2 * s->fbw_channels;
+         if (s->lfe_on)
+             frame_bits += s->num_blocks;
+-        /* converter exponent strategy */
+-        if (s->num_blks_code != 0x3)
++        /* converter exponent strategy, or the dependent channel map */
++        if (ff_eac3_dependent_chanmap())
++            frame_bits += 17;
++        else if (s->num_blks_code != 0x3)
+             frame_bits++;
+         else
+             frame_bits += s->fbw_channels * 5;
+@@ -853,7 +855,8 @@
+         }
+ 
+         /* snroffste for AC-3, convsnroffste for E-AC-3 */
+-        frame_bits++;
++        if (!s->eac3 || !ff_eac3_dependent_chanmap())
++            frame_bits++;
+ 
+         if (!s->eac3) {
+             /* delta bit allocation */
+@@ -1642,7 +1645,7 @@
+                 put_bits(&s->pb, 3, s->fast_gain_code[ch]);
+             }
+         }
+-    } else {
++    } else if (!ff_eac3_dependent_chanmap()) {
+         put_bits(&s->pb, 1, 0); /* no converter snr offset */
+     }
+ 
+--- a/libavcodec/ac3enc.h
++++ b/libavcodec/ac3enc.h
+@@ -29,6 +29,7 @@
+ #define AVCODEC_AC3ENC_H
+ 
+ #include <stdint.h>
++#include <stdlib.h>
+ 
+ #include "libavutil/opt.h"
+ #include "libavutil/tx.h"
+@@ -297,4 +298,14 @@
+ int ff_ac3_float_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
+                               const AVFrame *frame, int *got_packet_ptr);
+ 
++/**
++ * Test-clip helper: when EAC3_DEPENDENT_CHANMAP is set to a chanmap value, the E-AC-3 encoder
++ * writes dependent substream frames carrying that channel map instead of independent frames.
++ */
++static inline int ff_eac3_dependent_chanmap(void)
++{
++    const char *e = getenv("EAC3_DEPENDENT_CHANMAP");
++    return e ? (int)strtol(e, NULL, 0) : 0;
++}
++
+ #endif /* AVCODEC_AC3ENC_H */
+--- a/libavcodec/eac3enc.c
++++ b/libavcodec/eac3enc.c
+@@ -131,7 +131,7 @@
+     put_bits(&s->pb, 16, 0x0b77);                   /* sync word */
+ 
+     /* BSI header */
+-    put_bits(&s->pb,  2, 0);                        /* stream type = independent */
++    put_bits(&s->pb,  2, ff_eac3_dependent_chanmap() ? 1 : 0); /* stream type */
+     put_bits(&s->pb,  3, 0);                        /* substream id = 0 */
+     put_bits(&s->pb, 11, (s->frame_size / 2) - 1);  /* frame size */
+     if (s->bit_alloc.sr_shift) {
+@@ -146,6 +146,10 @@
+     put_bits(&s->pb, 5, s->bitstream_id);           /* bitstream id (EAC3=16) */
+     put_bits(&s->pb, 5, -opt->dialogue_level);      /* dialogue normalization level */
+     put_bits(&s->pb, 1, 0);                         /* no compression gain */
++    if (ff_eac3_dependent_chanmap()) {
++        put_bits(&s->pb, 1, 1);                     /* channel map exists */
++        put_bits(&s->pb, 16, ff_eac3_dependent_chanmap());
++    }
+     /* mixing metadata*/
+     put_bits(&s->pb, 1, opt->eac3_mixing_metadata);
+     if (opt->eac3_mixing_metadata) {
+@@ -230,7 +234,8 @@
+             put_bits(&s->pb, 1, s->exp_strategy[s->lfe_channel][blk]);
+     }
+     /* E-AC-3 to AC-3 converter exponent strategy (not optional when num blocks == 6) */
+-    if (s->num_blocks != 6) {
++    if (ff_eac3_dependent_chanmap()) {
++    } else if (s->num_blocks != 6) {
+         put_bits(&s->pb, 1, 0);
+     } else {
+         for (ch = 1; ch <= s->fbw_channels; ch++) {
