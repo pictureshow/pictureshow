@@ -64,6 +64,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.MediaSegment
 import app.pictureshow.core.PlaybackExtrasClient
 import app.pictureshow.core.chooseTrickplay
+import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlaybackClient
@@ -375,7 +376,8 @@ private fun PlayerItemScreen(
                     NextEpisodeControl(
                         account, next, trigger != null && position >= trigger, ended, paused || !actionsVisible,
                         onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, onPlay = { finish(next) },
-                        onCancel = { nextCancelled = true }, visible = actionsVisible, compact = controls
+                        onCancel = { nextCancelled = true }, visible = actionsVisible, compact = controls,
+                        remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null
                     )
                 }
             }

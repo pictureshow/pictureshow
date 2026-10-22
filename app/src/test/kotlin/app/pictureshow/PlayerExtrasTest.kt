@@ -228,6 +228,38 @@ class PlayerExtrasTest {
     }
 
     @Test
+    fun withoutCreditsTheCardShowsTimeLeftAndPlaysOnlyWhenTheEpisodeEnds() {
+        var ended by mutableStateOf(false)
+        var left by mutableStateOf(9_200L)
+        var plays = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                NextEpisodeControl(
+                    account, MediaItem("next", "Next story"), true, ended, false, {}, { plays++ }, countdownSeconds = 2,
+                    remainingMs = left
+                )
+            }
+        }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Next episode · 10").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(20_000)
+        compose.runOnIdle {
+            assertEquals(0, plays)
+            left = 2_500
+        }
+        compose.waitForIdle() // delivers the state change; the next frame recomposes
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("Next episode · 3").assertIsDisplayed()
+        compose.runOnIdle { ended = true }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(500)
+        compose.runOnIdle { assertEquals(1, plays) }
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.runOnIdle { assertEquals(1, plays) }
+    }
+
+    @Test
     fun chapterListFocusesCurrentChapterAndSelectionSeeksToItsStart() {
         val chapters = listOf(Chapter(0, "Intro"), Chapter(300_000_000, "Story"), Chapter(900_000_000, "Credits"))
         var sought = -1L

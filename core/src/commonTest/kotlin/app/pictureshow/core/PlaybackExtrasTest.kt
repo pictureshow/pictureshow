@@ -23,12 +23,20 @@ class PlaybackExtrasTest {
     }
 
     @Test
-    fun nextEpisodeUsesOutroStartOtherwiseLastThirtySecondsAndRequiresKnownDuration() {
+    fun nextEpisodeUsesOutroStartOtherwiseLastTenSecondsAndRequiresKnownDuration() {
         assertEquals(90_000, nextEpisodeTriggerMs(100_000, listOf(outro)))
-        assertEquals(70_000, nextEpisodeTriggerMs(100_000, listOf(intro)))
-        assertEquals(0, nextEpisodeTriggerMs(20_000, emptyList()))
+        assertEquals(90_000, nextEpisodeTriggerMs(100_000, listOf(intro)))
+        assertEquals(0, nextEpisodeTriggerMs(8_000, emptyList()))
         assertNull(nextEpisodeTriggerMs(0, listOf(outro)))
-        assertEquals(70_000, nextEpisodeTriggerMs(100_000, listOf(outro.copy(startTicks = 2_000_000_000))))
+        assertEquals(90_000, nextEpisodeTriggerMs(100_000, listOf(outro.copy(startTicks = 2_000_000_000))))
+    }
+
+    @Test
+    fun creditsStartComesOnlyFromAnOutroInsideTheItem() {
+        assertEquals(90_000, creditsStartMs(100_000, listOf(intro, outro)))
+        assertNull(creditsStartMs(100_000, listOf(intro)))
+        assertNull(creditsStartMs(100_000, listOf(outro.copy(startTicks = 2_000_000_000))))
+        assertNull(creditsStartMs(100_000, listOf(outro.copy(endTicks = 0))))
     }
 
     @Test
