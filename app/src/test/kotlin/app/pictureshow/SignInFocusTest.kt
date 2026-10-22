@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -22,6 +23,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.printToString
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import app.pictureshow.core.Account
@@ -38,6 +40,7 @@ import app.pictureshow.core.ServerDiscovery
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
@@ -69,6 +72,7 @@ class SignInFocusTest {
     private val quickAuthorized = CompletableDeferred<Account>()
     private val discovered = CompletableDeferred<List<DiscoveredServer>>()
     private val catalogUsers = mutableListOf<String>()
+    private val serviceEvents = mutableListOf<String>()
     private var signedIn: Pair<String, String>? = null
     private var gatedUser = account.user.id
     private val accounts = AccountStore(object : TextPersistence {
@@ -104,8 +108,12 @@ class SignInFocusTest {
                 return ClientResult.Success(account)
             }
             override fun quickConnect(server: Server): Flow<QuickConnectState> = flow {
+                serviceEvents += "quick:start"
                 emit(QuickConnectState.Code("123456"))
-                emit(QuickConnectState.Authorized(quickAuthorized.await()))
+                serviceEvents += "quick:code-emitted"
+                val authorized = quickAuthorized.await()
+                serviceEvents += "quick:authorization-released"
+                emit(QuickConnectState.Authorized(authorized))
                 awaitCancellation()
             }
             override suspend fun me(account: Account) = ClientResult.Success(account.user)
@@ -142,23 +150,44 @@ class SignInFocusTest {
         compose.waitForIdle()
     }
 
+    private fun waitFor(description: String, condition: () -> Boolean) {
+        try {
+            compose.waitUntil(timeoutMillis = 5_000, condition = condition)
+        } catch (failure: Throwable) {
+            val tree = runCatching { compose.onRoot(useUnmergedTree = true).printToString() }
+                .getOrElse { "Could not collect tree: ${it.message}" }
+            throw AssertionError(
+                "Waiting for $description failed.\n" +
+                    "accounts=${accounts.snapshots.value}\n" +
+                    "catalogUsers=$catalogUsers; serviceEvents=$serviceEvents; " +
+                    "homeReleased=${homeReady.isCompleted}; quickReleased=${quickAuthorized.isCompleted}; " +
+                    "activityLifecycle=${compose.activity.lifecycle.currentState}; clockMs=${compose.mainClock.currentTime}\n$tree",
+                failure
+            )
+        }
+    }
+
     private fun waitForText(text: String) {
-        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().size == 1 }
+        waitFor("exactly one text node '$text'") { compose.onAllNodesWithText(text).fetchSemanticsNodes().size == 1 }
     }
 
     private fun assertFirstHomeCardAfterDelayedLoad(expectedUser: String = account.user.id) {
-        waitForText("Loading your home…")
-        compose.runOnIdle { assertEquals(true, expectedUser in catalogUsers) }
+        // The focused profile row can scroll the lazy header out of composition. Identify this destination
+        // by its root and the real gated request, rather than requiring offscreen loading-label semantics.
+        waitFor("home and suspended catalog for $expectedUser") {
+            expectedUser in catalogUsers && compose.onAllNodesWithTag("home").fetchSemanticsNodes().size == 1
+        }
+        compose.runOnIdle { assertFalse(homeReady.isCompleted) }
         // Finish the navigation transition while the external catalog request remains suspended.
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
-        compose.onNodeWithText("Loading your home…").assertExists()
+        compose.onNodeWithTag("home").assertExists()
         // Android can automatically focus the only attached target as navigation replaces the sign-in screen.
         // This is not a D-pad choice. Reproduce it deterministically while the real catalog request is suspended.
         compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithTag("home:switch-user").assertIsFocused()
         compose.runOnIdle { homeReady.complete(Unit) }
-        compose.waitUntil(timeoutMillis = 5_000) {
+        waitFor("first home library card focus for $expectedUser") {
             compose.onAllNodesWithTag("home:libraries:library").fetchSemanticsNodes().singleOrNull()
                 ?.config?.getOrNull(SemanticsProperties.Focused) == true
         }
