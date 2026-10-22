@@ -8,6 +8,10 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <queries>
         <provider android:authorities="android.media.tv" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" android:host="play.google.com" />
+        </intent>
     </queries>
     <application
         android:name=".PictureshowApplication"

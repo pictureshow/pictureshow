@@ -1,3 +1,22 @@
 <resources>
     <string name="app_name">Pictureshow</string>
+    <string name="supporter_title">Support Pictureshow</string>
+    <string name="supporter_description">Pictureshow is free and open source. Supporters pay monthly to have their feature requests read and considered first.</string>
+    <string name="supporter_no_guarantee">Requests are not guaranteed to be built or delivered by a particular date.</string>
+    <string name="supporter_price_month">%1$s / month</string>
+    <string name="supporter_renewal">Renews monthly until cancelled. Cancel anytime in Google Play.</string>
+    <string name="supporter_subscribe">Become a supporter</string>
+    <string name="supporter_pending">Waiting for Google Play to confirm your payment.</string>
+    <string name="supporter_thanks">Thank you for supporting Pictureshow!</string>
+    <string name="supporter_code_label">Your supporter code</string>
+    <string name="supporter_code_unavailable">Google Play has not returned your code. Reopen this screen later.</string>
+    <string name="supporter_request">Email info@legitimateapps.com with your request and supporter code.</string>
+    <string name="supporter_manage">Manage or cancel in Google Play</string>
+    <string name="supporter_manage_fallback">To manage or cancel, open Google Play Store → Payments and subscriptions → Subscriptions.</string>
+    <string name="supporter_loading">Checking Google Play…</string>
+    <string name="supporter_billing_unavailable">Google Play billing is unavailable on this device or account.</string>
+    <string name="supporter_network_unavailable">Could not reach Google Play. Check your connection and try again later.</string>
+    <string name="supporter_product_unavailable">The Supporter subscription is not available in Google Play.</string>
+    <string name="supporter_error">Could not complete the Google Play request. Try again later.</string>
+    <string name="supporter_back">Back</string>
 </resources>

@@ -24,7 +24,9 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
@@ -34,6 +36,15 @@ import org.koin.dsl.module
 internal val Application.preferences by preferencesDataStore("pictureshow")
 
 class PictureshowApplication : Application() {
+    internal val supporter by lazy {
+        SupporterController(
+            PlaySupporterBilling(this),
+            SupporterStore(preferences),
+            CoroutineScope(
+                SupervisorJob() + Dispatchers.Main.immediate
+            )
+        )
+    }
     private var watchNext: WatchNextCoordinator? = null
 
     internal fun refreshWatchNext() {

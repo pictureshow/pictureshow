@@ -5,8 +5,8 @@ It was last changed on 22 October 2026.
 
 ## What the app sends, and where
 
-Pictureshow talks only to Jellyfin servers you sign in to. It has no ads, no analytics, no crash reporting and no
-account with us, and it sends nothing to Legitimate LLC or to anyone else.
+Pictureshow talks to Jellyfin servers you sign in to and to Google Play for optional purchases. It has no ads, no
+analytics, no crash reporting and no account with us, and it sends nothing to Legitimate LLC.
 
 When you use it, the app sends your Jellyfin server:
 
@@ -32,6 +32,11 @@ how far you got and a link to its artwork on your server. The access token is ne
 your server's Continue Watching and Next Up lists, and signing out or switching users clears it. The home screen
 belongs to your TV's maker, and what it does with the row is covered by their privacy policy.
 
+## Supporter subscriptions
+
+Purchases are processed by Google Play. The app keeps your subscription status and order ID on your device.
+If you email a feature request with your supporter code, we use it to check your subscription in Google Play.
+
 ## Your server
 
 Your Jellyfin server keeps its own records, such as your watch history and its activity log. Whoever runs the server
@@ -39,8 +44,8 @@ controls them, and this policy doesn't cover them.
 
 ## Children
 
-The app is not aimed at children and doesn't knowingly collect anything from them. It sends nothing to us, so we hold
-nothing to delete.
+The app is not aimed at children and doesn't knowingly collect anything from them. It sends nothing to us
+automatically. If you email us a request, you can ask us to delete that email.
 
 ## Changes and contact
 

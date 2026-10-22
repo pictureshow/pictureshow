@@ -59,6 +59,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.play.billing)
     implementation(libs.tvprovider)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)

@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -77,6 +78,7 @@ import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -117,6 +119,11 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch { (application as PictureshowApplication).supporter.refresh() }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -446,6 +453,7 @@ internal fun Pictureshow(
             }
         }
         aboutScreens(nav)
+        supporterScreen(nav)
         composable("this-tv") {
             ThisTvScreen(koinInject()) { nav.popBackStack() }
         }
@@ -479,7 +487,8 @@ internal fun Pictureshow(
                     vm::reload,
                     onBack = { nav.popBackStack() },
                     onThisTv = { nav.navigate("this-tv") },
-                    onAbout = { nav.navigate("about") }
+                    onAbout = { nav.navigate("about") },
+                    onSupport = { nav.navigate("supporter") }
                 )
             }
         }

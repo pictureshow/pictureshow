@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -130,12 +131,14 @@ internal fun PlaybackSettingsScreen(
     onRetry: () -> Unit,
     onThisTv: () -> Unit = {},
     onAbout: () -> Unit = {},
+    onSupport: () -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
     val first = remember { FocusRequester() }
     val thisTvFocus = remember { FocusRequester() }
     val aboutFocus = remember { FocusRequester() }
+    val supportFocus = remember { FocusRequester() }
     var restoreEntry by rememberSaveable { mutableStateOf("") }
     val local = state.local
     val configuration = state.configuration
@@ -151,6 +154,13 @@ internal fun PlaybackSettingsScreen(
             },
             modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
         ) { Text("This TV") }
+        Button(
+            onClick = {
+                restoreEntry = "supporter"
+                onSupport()
+            },
+            modifier = Modifier.focusRequester(supportFocus).testTag("settings:supporter")
+        ) { Text(stringResource(R.string.supporter_title)) }
         Button(
             onClick = {
                 restoreEntry = "about"
@@ -226,6 +236,7 @@ internal fun PlaybackSettingsScreen(
         when (restoreEntry) {
             "this-tv" -> thisTvFocus.requestFocus()
             "about" -> aboutFocus.requestFocus()
+            "supporter" -> supportFocus.requestFocus()
             else -> first.requestFocus()
         }
     }

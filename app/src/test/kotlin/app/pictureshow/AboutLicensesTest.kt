@@ -127,6 +127,7 @@ class AboutLicensesTest {
         val rows = catalog()
         listOf(
             "androidx.media3:media3-exoplayer",
+            "com.android.billingclient:billing",
             "com.squareup.okhttp3:okhttp-android",
             "org.jetbrains.kotlin:kotlin-stdlib",
             "com.squareup.okio:okio-jvm"
