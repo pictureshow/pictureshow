@@ -130,7 +130,9 @@ internal fun NextEpisodeControl(
     countdownSeconds: Int = 10,
     onCancel: () -> Unit = {},
     visible: Boolean = true,
-    compact: Boolean = false
+    compact: Boolean = false,
+    // Time left in this episode when there are no credits to skip: the card shows it and waits for the end.
+    remainingMs: Long? = null
 ) {
     var cancelled by remember(next.id) { mutableStateOf(false) }
     var played by remember(next.id) { mutableStateOf(false) }
@@ -138,10 +140,11 @@ internal fun NextEpisodeControl(
     var focused by remember { mutableStateOf(false) }
     val play by rememberUpdatedState(onPlay)
     val restore by rememberUpdatedState(onFocusRemoved)
+    val untilEnd = remainingMs != null
     LaunchedEffect(eligible) { if (!eligible) remaining = countdownSeconds }
-    LaunchedEffect(eligible, ended, paused, cancelled) {
+    LaunchedEffect(eligible, ended, paused, cancelled, untilEnd) {
         if ((!eligible && !ended) || cancelled || played) return@LaunchedEffect
-        if (!ended && paused) return@LaunchedEffect
+        if (!ended && (paused || untilEnd)) return@LaunchedEffect
         while (!ended && remaining > 0) {
             delay(1_000)
             remaining--
@@ -157,7 +160,8 @@ internal fun NextEpisodeControl(
                 .onFocusChanged { focused = it.hasFocus }.focusGroup(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Next episode · $remaining", color = Color.White, style = MaterialTheme.typography.titleMedium)
+            val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
+            Text("Next episode · $seconds", color = Color.White, style = MaterialTheme.typography.titleMedium)
             imageUrl(account.server, next, 320, wide = true)?.takeUnless { compact }?.let { url ->
                 AsyncImage(url, contentDescription = null, modifier = Modifier.width(240.dp).height(100.dp))
             }

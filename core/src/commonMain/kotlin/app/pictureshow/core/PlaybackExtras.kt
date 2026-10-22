@@ -50,11 +50,14 @@ fun activeSegment(segments: List<MediaSegment>, positionMs: Long, modes: Map<Seg
             positionMs < it.endMs &&
             modes[it.type] != SegmentMode.Off
     }.minByOrNull { it.startTicks }
+fun creditsStartMs(durationMs: Long, segments: List<MediaSegment>): Long? = segments.filter {
+    it.type == SegmentType.Outro && it.startTicks >= 0 && it.endMs > it.startMs && it.startMs < durationMs
+}.minOfOrNull { it.startMs }
+
+/** From the credits, or for the last 10 seconds when there is no credits segment, so no story is cut. */
 fun nextEpisodeTriggerMs(durationMs: Long, segments: List<MediaSegment>): Long? {
     if (durationMs <= 0) return null
-    return segments.filter {
-        it.type == SegmentType.Outro && it.startTicks >= 0 && it.endMs > it.startMs && it.startMs < durationMs
-    }.minOfOrNull { it.startMs } ?: (durationMs - 30_000).coerceAtLeast(0)
+    return creditsStartMs(durationMs, segments) ?: (durationMs - 10_000).coerceAtLeast(0)
 }
 
 data class TrickplayTile(val info: TrickplayInfo, val sheet: Int, val column: Int, val row: Int)
