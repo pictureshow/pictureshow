@@ -121,6 +121,15 @@ data class AudioOutput(val pcmChannels: Int, val passthrough: Set<PassthroughEnc
 /**
  * User settings that bear on the profile.
  *
- * @property maxStreamingBitrate Bits per second, or null to leave the limit to the server.
+ * @property maxStreamingBitrate Positive ceiling in bits per second. Always explicit: omission invokes the server's
+ *   8 Mbps default. The 200 Mbps default accommodates LAN UHD remuxes; server remote limits still apply.
  */
-data class PlaybackSettings(val maxStreamingBitrate: Int? = null, val passthroughEnabled: Boolean = false)
+data class PlaybackSettings(val maxStreamingBitrate: Int = DEFAULT_MAX_STREAMING_BITRATE, val passthroughEnabled: Boolean = false) {
+    init {
+        require(maxStreamingBitrate > 0) { "The streaming bitrate ceiling must be positive." }
+    }
+
+    companion object {
+        const val DEFAULT_MAX_STREAMING_BITRATE: Int = 200_000_000
+    }
+}

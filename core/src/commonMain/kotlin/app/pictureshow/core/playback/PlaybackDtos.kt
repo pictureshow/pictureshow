@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class PlaybackInfoRequest(
     @SerialName("UserId") val userId: String? = null,
-    @SerialName("MaxStreamingBitrate") val maxStreamingBitrate: Int? = null,
+    @SerialName("MaxStreamingBitrate") val maxStreamingBitrate: Int = PlaybackSettings.DEFAULT_MAX_STREAMING_BITRATE,
     @SerialName("StartTimeTicks") val startTimeTicks: Long? = null,
     @SerialName("AudioStreamIndex") val audioStreamIndex: Int? = null,
     @SerialName("SubtitleStreamIndex") val subtitleStreamIndex: Int? = null,
@@ -22,7 +22,11 @@ data class PlaybackInfoRequest(
     @SerialName("AllowAudioStreamCopy") val allowAudioStreamCopy: Boolean = true,
     @SerialName("AutoOpenLiveStream") val autoOpenLiveStream: Boolean = false,
     @SerialName("AlwaysBurnInSubtitleWhenTranscoding") val alwaysBurnInSubtitleWhenTranscoding: Boolean = false
-)
+) {
+    init {
+        require(maxStreamingBitrate > 0) { "The streaming bitrate ceiling must be positive." }
+    }
+}
 
 @Serializable
 data class PlaybackInfoResponse(

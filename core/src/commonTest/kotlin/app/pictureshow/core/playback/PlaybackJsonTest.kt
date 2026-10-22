@@ -96,8 +96,8 @@ class PlaybackJsonTest {
         assertEquals("VideoProfile", condition.getValue("Property").jsonPrimitive.content)
         val subtitle = json.getValue("SubtitleProfiles").jsonArray.first().jsonObject
         assertEquals("Embed", subtitle.getValue("Method").jsonPrimitive.content)
-        // An unset bitrate is left out, not sent as null.
-        assertTrue("MaxStreamingBitrate" !in json)
+        assertEquals(JsonPrimitive(200_000_000), json.getValue("MaxStreamingBitrate"))
+        assertEquals(JsonPrimitive(200_000_000), json.getValue("MaxStaticBitrate"))
     }
 
     @Test

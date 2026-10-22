@@ -34,7 +34,7 @@ Navigation and focus use the TV remote throughout. Home and library grids retain
 
 ## Playback
 
-Pictureshow builds a server device profile from platform decoders, display capabilities and the current audio route. Media3 1.11.1 plays the server decision, with optional FFmpeg audio renderers discovered at runtime when installed. The initial defaults leave streaming bitrate uncapped and enable passthrough for encodings supported by the current route. Software AV1 is advertised only when the device reports a real-time performance envelope.
+Pictureshow builds a server device profile from platform decoders, display capabilities and the current audio route. Media3 1.11.1 plays the server decision, with optional FFmpeg audio renderers discovered at runtime when installed. The initial defaults explicitly allow up to 200 Mbps for LAN playback and enable passthrough for encodings supported by the current route. The request and both profile bitrate limits always carry a positive ceiling; the server still enforces its remote-client limits. Software AV1 is advertised only when the device reports a real-time performance envelope.
 
 During playback, center toggles play/pause and shows controls. Left/right seek 10 seconds; a held direction increases the step to 30 seconds. Down shows controls; Up/Down moves between the playback, audio and subtitle actions. Back closes a track chooser, then hides controls, then returns to the item. Audio and subtitles include an Off choice. Tracks that need a different server stream are negotiated again at the current position.
 

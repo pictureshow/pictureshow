@@ -125,7 +125,7 @@ class DeviceCapabilityProbeTest {
         assertEquals(8, actual.audioDecoders.single { it.codec == AudioCodec.OPUS }.maxChannels)
         assertFalse(actual.audioDecoders.single { it.codec == AudioCodec.FLAC }.hardware)
         assertEquals(8, actual.audioDecoders.single { it.codec == AudioCodec.EAC3 }.maxChannels)
-        assertNull(actual.settings.maxStreamingBitrate)
+        assertEquals(200_000_000, actual.settings.maxStreamingBitrate)
         assertFalse(actual.settings.passthroughEnabled)
     }
 

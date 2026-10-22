@@ -551,8 +551,8 @@ class DeviceProfileBuilderTest {
     fun bitrateCapComesFromSettings() {
         assertEquals(120_000_000, streamer.maxStreamingBitrate)
         assertEquals(120_000_000, streamer.maxStaticBitrate)
-        assertNull(projector.maxStreamingBitrate)
-        assertNull(projector.maxStaticBitrate)
+        assertEquals(200_000_000, projector.maxStreamingBitrate)
+        assertEquals(200_000_000, projector.maxStaticBitrate)
     }
 
     // Subtitles.

@@ -19,6 +19,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -94,17 +95,33 @@ class PlaybackClientTest {
         assertEquals(2, sent.getValue("AudioStreamIndex").jsonPrimitive.int)
         assertEquals(4, sent.getValue("SubtitleStreamIndex").jsonPrimitive.int)
         assertEquals(120_000_000, sent.getValue("MaxStreamingBitrate").jsonPrimitive.int)
+        val profile = sent.getValue("DeviceProfile").jsonObject
+        assertEquals(120_000_000, profile.getValue("MaxStreamingBitrate").jsonPrimitive.int)
+        assertEquals(120_000_000, profile.getValue("MaxStaticBitrate").jsonPrimitive.int)
         assertEquals("4K Dolby Vision streamer", sent.getValue("DeviceProfile").jsonObject.getValue("Name").jsonPrimitive.content)
         assertEquals("true", sent.getValue("EnableDirectPlay").jsonPrimitive.content)
     }
 
     @Test
-    fun noBitrateCapIsOmitted() = runTest {
+    fun defaultBitrateCapIsSentInRequestAndBothProfileLimits() = runTest {
         val playback = client { json(transcodeResponse) }
         playback.prepare(account, "item-1", CapabilityFixtures.projector)
-        assertFalse("MaxStreamingBitrate" in body())
+        assertEquals(200_000_000, body().getValue("MaxStreamingBitrate").jsonPrimitive.int)
+        val profile = body().getValue("DeviceProfile").jsonObject
+        assertEquals(200_000_000, profile.getValue("MaxStreamingBitrate").jsonPrimitive.int)
+        assertEquals(200_000_000, profile.getValue("MaxStaticBitrate").jsonPrimitive.int)
         assertEquals(0L, body().getValue("StartTimeTicks").jsonPrimitive.long)
         assertFalse("AudioStreamIndex" in body())
+    }
+
+    @Test
+    fun rawRequestDefaultSerializesTheCapAndNonPositiveCeilingsAreRejected() {
+        val sent = PlaybackJson.encodeToJsonElement(PlaybackInfoRequest.serializer(), PlaybackInfoRequest()).jsonObject
+        assertEquals(200_000_000, sent.getValue("MaxStreamingBitrate").jsonPrimitive.int)
+        for (invalid in listOf(0, -1)) {
+            assertFailsWith<IllegalArgumentException> { PlaybackSettings(maxStreamingBitrate = invalid) }
+            assertFailsWith<IllegalArgumentException> { PlaybackInfoRequest(maxStreamingBitrate = invalid) }
+        }
     }
 
     @Test

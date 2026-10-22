@@ -79,7 +79,7 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
     val output = remember { Media3PlaybackOutput(context, account.server, item.name) }
     // Final Stopped/DELETE requests must outlive navigation disposal, then this finite scope cancels itself.
     val reportScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
-    val probe = remember { DeviceCapabilityProbe(context, PlaybackSettings(maxStreamingBitrate = null, passthroughEnabled = true)) }
+    val probe = remember { DeviceCapabilityProbe(context, PlaybackSettings(passthroughEnabled = true)) }
     var controller by remember { mutableStateOf<PlaybackSession?>(null) }
     val emptyState = remember { MutableStateFlow(PlaybackState()) }
     val state by (controller?.state ?: emptyState).collectAsState()
