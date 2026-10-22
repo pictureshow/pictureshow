@@ -39,6 +39,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     private var listener: Player.Listener? = null
     private var mediaSession: PlaybackMediaSession.Handle? = null
     private val subtitleDelay = SubtitleDelay()
+    var passthroughEnabled: Boolean = true
     val subtitleDelayMs: Int get() = subtitleDelay.milliseconds
 
     fun setSubtitleDelayMs(milliseconds: Int) {
@@ -71,7 +72,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle < 0)
             .build()
         val sourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(PlaybackMedia.dataSourceFactory(server, decision))
-        val next = ExoPlayer.Builder(context, PictureshowRenderersFactory(context, subtitleDelay))
+        val next = ExoPlayer.Builder(context, PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled))
             .setTrackSelector(selector)
             .setMediaSourceFactory(sourceFactory)
             .setLoadControl(createPictureshowLoadControl())
