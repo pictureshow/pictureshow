@@ -66,7 +66,6 @@ import androidx.navigation.navArgument
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import androidx.tv.material3.darkColorScheme
 import app.pictureshow.core.AccountSnapshot
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
@@ -103,7 +102,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            PictureshowTheme {
                 Pictureshow(
                     searchEntry = searchEntry,
                     consumeSearchEntry = { searchEntry = null },
