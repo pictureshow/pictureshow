@@ -40,8 +40,8 @@ internal object Media3Formats {
                 AudioCodec.AAC, AudioCodec.AC3, AudioCodec.EAC3, AudioCodec.TRUEHD, AudioCodec.DTS, AudioCodec.FLAC, AudioCodec.ALAC,
                 AudioCodec.OPUS, AudioCodec.MP3
             ) + allPcm,
-            // tx3g
-            setOf("mov_text")
+            // tx3g, wvtt, stpp/TTML and mp4s DVD subpictures with palette initialization data.
+            setOf("mov_text", "webvtt", "ttml", "dvdsub")
         ),
         Container(
             "ts,mpegts",
@@ -69,9 +69,13 @@ internal object Media3Formats {
     /** Video codecs the server will put in an HLS stream (StreamBuilder._supportedHlsVideoCodecs). */
     val hlsVideo: Set<VideoCodec> = setOf(VideoCodec.H264, VideoCodec.HEVC, VideoCodec.VP9, VideoCodec.AV1)
 
-    /** Audio codecs the server allows in HLS fMP4 (StreamBuilder._supportedHlsAudioCodecsMp4). */
+    /**
+     * HLS fMP4 audio accepted by both server and extractor. Opus stays available for direct play, but is excluded
+     * here: remuxed Opus can have a negative first decode timestamp encoded into unsigned tfdt, which Media3 rejects.
+     * Codec order alone cannot prevent copying: the server prefers any matching source codec in this list.
+     */
     val hlsMp4Audio: Set<AudioCodec> = setOf(
-        AudioCodec.AAC, AudioCodec.AC3, AudioCodec.EAC3, AudioCodec.MP3, AudioCodec.ALAC, AudioCodec.FLAC, AudioCodec.OPUS,
+        AudioCodec.AAC, AudioCodec.AC3, AudioCodec.EAC3, AudioCodec.MP3, AudioCodec.ALAC, AudioCodec.FLAC,
         AudioCodec.DTS, AudioCodec.TRUEHD
     )
 

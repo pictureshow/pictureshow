@@ -535,7 +535,42 @@ class DeviceProfileBuilderTest {
         assertEquals("eac3,ac3,aac,mp3", ts.audioCodec)
         val mp4 = streamer.transcodingProfiles.single { it.container == "mp4" }
         assertEquals("h264,hevc,av1,vp9", mp4.videoCodec)
-        assertEquals("eac3,ac3,aac,mp3,opus,flac,dts,truehd", mp4.audioCodec)
+        assertEquals("eac3,ac3,aac,mp3,flac,dts,truehd", mp4.audioCodec)
+    }
+
+    @Test
+    fun opusDirectPlayRemainsAvailableButNoHlsProfileCanCopyIt() {
+        for (profile in listOf(projector, streamer)) {
+            for (container in listOf("mkv", "webm", "mp4,m4v,mov")) {
+                assertTrue("opus" in profile.directPlay(container)!!.audioCodec!!.split(','), container)
+            }
+            for (transcode in profile.transcodingProfiles) {
+                assertFalse("opus" in transcode.audioCodec.split(','), transcode.container)
+                assertTrue("aac" in transcode.audioCodec.split(','), transcode.container)
+            }
+        }
+        // Ordering AAC first was already the stereo default; removal is what stops source Opus stream copy.
+        assertTrue(projector.transcodingProfiles.first().audioCodec.startsWith("aac,"))
+    }
+
+    @Test
+    fun supportedEmbeddedSubtitlesPrecedeBurnInFallbackAndExternalTextRemainsAvailable() {
+        for (format in listOf("subrip", "srt", "ass", "ssa", "pgssub", "dvdsub")) {
+            val profiles = projector.subtitleProfiles.withIndex().filter { it.value.format == format }
+            val embedded = profiles.first { it.value.method == SubtitleDeliveryMethod.Embed && it.value.container == "mkv" }
+            val burnIn = profiles.firstOrNull { it.value.method == SubtitleDeliveryMethod.Encode }
+            if (burnIn != null) assertTrue(embedded.index < burnIn.index, format)
+        }
+        for (format in listOf("mov_text", "webvtt", "ttml", "dvdsub")) {
+            assertTrue(projector.subtitleProfiles.any {
+                it.format == format && it.method == SubtitleDeliveryMethod.Embed && it.container == "mp4,m4v,mov"
+            }, format)
+        }
+        for (format in listOf("srt", "ass", "ssa", "vtt")) {
+            assertTrue(projector.subtitleProfiles.any { it.format == format && it.method == SubtitleDeliveryMethod.External }, format)
+        }
+        assertFalse(projector.subtitleProfiles.any { it.format in setOf("pgssub", "dvdsub") &&
+            it.method == SubtitleDeliveryMethod.External })
     }
 
     @Test

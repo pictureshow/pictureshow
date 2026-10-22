@@ -19,6 +19,7 @@ import app.pictureshow.core.playback.CodecLevel
 import app.pictureshow.core.playback.DeviceProfileBuilder
 import app.pictureshow.core.playback.HdrFormat
 import app.pictureshow.core.playback.PassthroughEncoding
+import app.pictureshow.core.playback.PlaybackSettings
 import app.pictureshow.core.playback.VideoCodec
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -247,6 +248,66 @@ class DeviceCapabilityProbeTest {
         val actual = DeviceCapabilityProbe(context, ffmpegSupport = { it == "audio/true-hd" || it == "audio/mpeg-L2" }).snapshot()
         assertEquals(setOf(AudioCodec.TRUEHD, AudioCodec.MP2), actual.audioDecoders.map { it.codec }.toSet())
         assertTrue(actual.audioDecoders.all { !it.hardware && it.maxChannels == 8 })
+    }
+
+    @Test
+    fun ffmpegOnlyDtsAndTrueHdEnableDirectPlayWithoutInventingPlatformDecoders() {
+        video("OMX.vendor.avc.decoder", "video/avc", 1920, 1080, 489600,
+            CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42)
+        audio("OMX.vendor.aac.decoder", "audio/mp4a-latm", 6)
+        val without = DeviceCapabilityProbe(context, ffmpegSupport = { false }).snapshot()
+        val with = DeviceCapabilityProbe(context, ffmpegSupport = { it in setOf("audio/vnd.dts", "audio/true-hd") }).snapshot()
+        assertFalse(without.audioDecoders.any { it.codec in setOf(AudioCodec.DTS, AudioCodec.TRUEHD) })
+        for (codec in listOf(AudioCodec.DTS, AudioCodec.TRUEHD)) {
+            val decoder = with.audioDecoders.single { it.codec == codec }
+            assertFalse(decoder.hardware)
+            assertEquals(8, decoder.maxChannels)
+            val before = DeviceProfileBuilder.build(without).directPlayProfiles.single { it.container == "mkv" }.audioCodec!!.split(',')
+            val after = DeviceProfileBuilder.build(with).directPlayProfiles.single { it.container == "mkv" }.audioCodec!!.split(',')
+            assertFalse(codec.serverNames.first() in before)
+            assertTrue(codec.serverNames.first() in after)
+        }
+        // A supported platform codec and FFmpeg alternative both remain visible; renderer ordering chooses platform first.
+        audio("OMX.vendor.dts.decoder", "audio/vnd.dts", 6)
+        val both = DeviceCapabilityProbe(context, ffmpegSupport = { it == "audio/vnd.dts" }).snapshot()
+        assertEquals(setOf(true, false), both.audioDecoders.filter { it.codec == AudioCodec.DTS }.map { it.hardware }.toSet())
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun passthroughStillOffersDtsAndTrueHdWhenNeitherPlatformNorFfmpegCanDecodeThem() {
+        video("OMX.vendor.avc.decoder", "video/avc", 1920, 1080, 489600,
+            CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42)
+        audio("OMX.vendor.aac.decoder", "audio/mp4a-latm", 2)
+        val probe = DeviceCapabilityProbe(context, settings = PlaybackSettings(passthroughEnabled = true), ffmpegSupport = { false })
+        try {
+            probe.start {}
+            context.sendBroadcast(Intent(AudioManager.ACTION_HDMI_AUDIO_PLUG)
+                .putExtra(AudioManager.EXTRA_AUDIO_PLUG_STATE, 1)
+                .putExtra(AudioManager.EXTRA_ENCODINGS, intArrayOf(C.ENCODING_PCM_16BIT, C.ENCODING_DTS_HD, C.ENCODING_DOLBY_TRUEHD))
+                .putExtra(AudioManager.EXTRA_MAX_CHANNEL_COUNT, 8))
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            val actual = probe.snapshot()
+            assertFalse(actual.audioDecoders.any { it.codec in setOf(AudioCodec.DTS, AudioCodec.TRUEHD) })
+            assertEquals(setOf(PassthroughEncoding.DTS_HD, PassthroughEncoding.TRUEHD), actual.audioOutput.passthrough)
+            val on = DeviceProfileBuilder.build(actual).directPlayProfiles.single { it.container == "mkv" }.audioCodec!!.split(',')
+            val off = DeviceProfileBuilder.build(actual.copy(settings = PlaybackSettings(passthroughEnabled = false)))
+                .directPlayProfiles.single { it.container == "mkv" }.audioCodec!!.split(',')
+            assertTrue("dts" in on && "truehd" in on)
+            assertFalse("dts" in off || "truehd" in off)
+        } finally {
+            probe.close()
+        }
+    }
+
+    @Test
+    fun installedFfmpegReflectionMatchesLibraryAvailabilityAndCodecSupport() {
+        val library = Class.forName("androidx.media3.decoder.ffmpeg.FfmpegLibrary")
+        val available = library.getMethod("isAvailable").invoke(null) as Boolean
+        for (mime in listOf("audio/vnd.dts", "audio/true-hd", "audio/not-a-real-codec")) {
+            val supported = available && library.getMethod("supportsFormat", String::class.java).invoke(null, mime) as Boolean
+            assertEquals(supported, DeviceCapabilityProbe.ffmpegSupports(mime), mime)
+        }
     }
 
     @Test
