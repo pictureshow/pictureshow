@@ -12,11 +12,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,7 +47,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.InterceptPlatformTextInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -112,15 +109,6 @@ fun SearchScreen(
             row.items.forEach { item -> key(item.id) { requests["${row.key}:${item.id}"] = remember { FocusRequester() } } }
         }
     }
-    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    var sawKeyboard by remember { mutableStateOf(false) }
-    LaunchedEffect(imeVisible) {
-        if (imeVisible) sawKeyboard = true
-        if (!imeVisible && sawKeyboard) {
-            editing = false
-            sawKeyboard = false
-        }
-    }
     fun focusField() {
         editing = false
         keyboard?.hide()
@@ -143,7 +131,9 @@ fun SearchScreen(
             state.allFailed -> retry.requestFocus()
         }
     }
-    BackHandler(enabled = !fieldFocused || editing) { focusField() }
+    // The IME consumes Back before the app. A floating TV IME can report zero insets,
+    // so editing is not evidence that a keyboard is still visible when Back reaches us.
+    BackHandler(enabled = !fieldFocused) { focusField() }
     Column(
         Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 24.dp).testTag("search"),
         verticalArrangement = Arrangement.spacedBy(16.dp)

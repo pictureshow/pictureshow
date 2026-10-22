@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -55,6 +58,7 @@ import org.robolectric.annotation.LooperMode
 class SearchFollowupTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var nav: NavHostController
+    private var imeBottom = -1
     private var inputActive = false
     private var inputSessions = 0
     private val account = Account(Server("server", "Test", "https://media.example.test", "12"), User("user", "Viewer"), "token")
@@ -93,6 +97,7 @@ class SearchFollowupTest {
     @Composable
     private fun Harness() {
         MaterialTheme {
+            imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
             nav = rememberNavController()
             val entry by nav.currentBackStackEntryAsState()
             var keyboardRequest by remember { mutableStateOf(0) }
@@ -154,6 +159,21 @@ class SearchFollowupTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun focusedEditableFieldLetsAppBackLeaveWithZeroImeInset() {
+        compose.setContent { Harness() }
+        key(Key.DirectionUp)
+        key(Key.DirectionCenter)
+        compose.onNodeWithTag("search:field").assertIsFocused()
+        assertKeyboard(true)
+        assertInputActive(true)
+        compose.runOnIdle { assertEquals(0, imeBottom, "Floating TV keyboards can have no IME inset") }
+        // Robolectric has no real IME window. This is the next Back delivered to the app after
+        // the IME consumed the first Back; the field can still have an editable input session.
+        key(Key.Back)
+        compose.onNodeWithTag("home:search").assertIsFocused()
     }
 
     @Test
