@@ -32,11 +32,7 @@ open class PictureshowRenderersFactory internal constructor(
         setEnableDecoderFallback(true)
     }
 
-    override fun buildAudioSink(
-        context: Context,
-        enableFloatOutput: Boolean,
-        enableAudioOutputPlaybackParams: Boolean
-    ): AudioSink {
+    override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
         if (passthroughEnabled) {
             return requireNotNull(super.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams))
         }

@@ -32,36 +32,40 @@ import org.robolectric.annotation.Config
 class SubtitleDelayTest {
     @Test
     fun parsedAndLegacyCaptionsAppearAndDisappearAtDelayedTimes() {
-        for (legacy in listOf(false, true)) for (offset in listOf(1000, -500)) {
-            Fixture(legacy, offset).use { fixture ->
-                fixture.renderAt(0)
-                fixture.assertText("")
-                fixture.renderAt(1000 + offset - 1)
-                fixture.assertText("")
-                fixture.renderAt(1000 + offset)
-                fixture.assertText("A made-up caption")
-                fixture.renderAt(2000 + offset - 1)
-                fixture.assertText("A made-up caption")
-                fixture.renderAt(2000 + offset)
-                fixture.assertText("")
+        for (legacy in listOf(false, true)) {
+            for (offset in listOf(1000, -500)) {
+                Fixture(legacy, offset).use { fixture ->
+                    fixture.renderAt(0)
+                    fixture.assertText("")
+                    fixture.renderAt(1000 + offset - 1)
+                    fixture.assertText("")
+                    fixture.renderAt(1000 + offset)
+                    fixture.assertText("A made-up caption")
+                    fixture.renderAt(2000 + offset - 1)
+                    fixture.assertText("A made-up caption")
+                    fixture.renderAt(2000 + offset)
+                    fixture.assertText("")
+                }
             }
         }
     }
 
     @Test
     fun changingDelayAndReseekingRestoresPreviouslyDiscardedCuesForBothParsePaths() {
-        for (legacy in listOf(false, true)) Fixture(legacy, -500).use { fixture ->
-            fixture.renderAt(500)
-            fixture.assertText("A made-up caption")
-            fixture.renderAt(1500)
-            fixture.assertText("")
-            fixture.delay.set(1000)
-            fixture.seekTo(1500)
-            fixture.assertText("")
-            fixture.renderAt(2000)
-            fixture.assertText("A made-up caption")
-            fixture.seekTo(4000)
-            fixture.assertText("")
+        for (legacy in listOf(false, true)) {
+            Fixture(legacy, -500).use { fixture ->
+                fixture.renderAt(500)
+                fixture.assertText("A made-up caption")
+                fixture.renderAt(1500)
+                fixture.assertText("")
+                fixture.delay.set(1000)
+                fixture.seekTo(1500)
+                fixture.assertText("")
+                fixture.renderAt(2000)
+                fixture.assertText("A made-up caption")
+                fixture.seekTo(4000)
+                fixture.assertText("")
+            }
         }
     }
 
@@ -90,8 +94,11 @@ class SubtitleDelayTest {
         private val stream = CueStream(
             format,
             if (legacy) 0 else 1_000_000,
-            if (legacy) "1\n00:00:01,000 --> 00:00:02,000\nA made-up caption\n\n".toByteArray()
-            else CueEncoder().encode(listOf(Cue.Builder().setText("A made-up caption").build()), 1_000_000)
+            if (legacy) {
+                "1\n00:00:01,000 --> 00:00:02,000\nA made-up caption\n\n".toByteArray()
+            } else {
+                CueEncoder().encode(listOf(Cue.Builder().setText("A made-up caption").build()), 1_000_000)
+            }
         )
         private val textRenderer = TextRenderer({ group -> outputs += group.cues.joinToString { it.text.toString() } }, null).apply {
             @Suppress("DEPRECATION")
@@ -148,7 +155,10 @@ class SubtitleDelayTest {
         private var formatSent = false
         private var sampleSent = false
         val consumed: Boolean get() = sampleSent
-        fun rewind() { formatSent = false; sampleSent = false }
+        fun rewind() {
+            formatSent = false
+            sampleSent = false
+        }
         override fun isReady() = true
         override fun maybeThrowError() = Unit
         override fun skipData(positionUs: Long) = 0

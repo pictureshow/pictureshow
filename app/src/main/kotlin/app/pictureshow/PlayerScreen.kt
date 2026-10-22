@@ -11,11 +11,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +42,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -58,7 +62,6 @@ import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlaybackClient
-import app.pictureshow.core.playback.PlaybackSettings
 import io.ktor.client.HttpClient
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
@@ -76,10 +79,13 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val http: HttpClient = koinInject()
     val identity: DeviceIdentityStore = koinInject()
+    val preferences: PlaybackPreferencesStore = koinInject()
+    var localPreferences by remember { mutableStateOf(PlaybackPreferences()) }
+    var subtitleDelayMs by remember { mutableIntStateOf(0) }
     val output = remember { Media3PlaybackOutput(context, account.server, item.name) }
     // Final Stopped/DELETE requests must outlive navigation disposal, then this finite scope cancels itself.
     val reportScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
-    val probe = remember { DeviceCapabilityProbe(context, PlaybackSettings(passthroughEnabled = true)) }
+    var probe by remember { mutableStateOf<DeviceCapabilityProbe?>(null) }
     var controller by remember { mutableStateOf<PlaybackSession?>(null) }
     val emptyState = remember { MutableStateFlow(PlaybackState()) }
     val state by (controller?.state ?: emptyState).collectAsState()
@@ -120,9 +126,13 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
     LaunchedEffect(Unit) {
         rootFocus.requestFocus()
         try {
+            localPreferences = preferences.read()
+            output.passthroughEnabled = localPreferences.passthrough
+            val activeProbe = DeviceCapabilityProbe(context, localPreferences.deviceSettings())
+            probe = activeProbe
             val client = PlaybackClient(http, ClientIdentity(Build.MODEL, identity.getOrCreate(), BuildConfig.VERSION_NAME))
             val session = PlaybackSession(
-                ServerPlaybackGateway(client, account, item.id, probe::snapshot),
+                ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot),
                 output,
                 reportScope,
                 Locale.getDefault().language
@@ -138,7 +148,7 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
                 session.close()
                 onExit()
             }
-            probe.start { session.routeChanged() }
+            activeProbe.start { session.routeChanged() }
             session.start(startMs)
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
@@ -172,7 +182,7 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
     DisposableEffect(Unit) {
         onDispose {
             view.keepScreenOn = false
-            probe.close()
+            probe?.close()
             if (controller != null) {
                 controller?.close()
             } else {
@@ -213,7 +223,7 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
             .focusable()
     ) {
         ContentFrame(player, Modifier.fillMaxSize())
-        PlayerSubtitles(player)
+        PlayerSubtitles(player, localPreferences.appearance)
         if (state.preparing && setupError == null) {
             Text("Preparing playback…", modifier = Modifier.align(Alignment.Center))
         }
@@ -263,7 +273,7 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
                 Text(if (type == MediaStreamType.Audio) "Audio" else "Subtitles", style = MaterialTheme.typography.headlineSmall)
                 (
                     listOf(-1 to "Off") + streams.map {
-                        it.index to (it.displayTitle ?: it.language ?: "Track ${it.index}")
+                        it.index to trackLabel(it)
                     }
                     ).forEach { (index, label) ->
                     Button(
@@ -280,6 +290,17 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
                         }
                     ) { Text(if (index == selected) "$label · selected" else label) }
                 }
+                if (type == MediaStreamType.Subtitle) {
+                    val burnedIn = streams.firstOrNull { it.index == selected }?.deliveryMethod ==
+                        app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode
+                    if (burnedIn) {
+                        Text("These subtitles are burned into the video. Timing and appearance cannot be changed during playback.")
+                    }
+                    SubtitleDelayControls(subtitleDelayMs, !burnedIn) {
+                        subtitleDelayMs = it
+                        output.setSubtitleDelayMs(it)
+                    }
+                }
             }
             LaunchedEffect(type) { choiceFocus.requestFocus() }
         }
@@ -289,7 +310,7 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
 private fun streamLabel(state: PlaybackState, type: MediaStreamType): String {
     val index = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
     return state.decision?.mediaSource?.mediaStreams?.firstOrNull { it.type == type && it.index == index }
-        ?.let { it.displayTitle ?: it.language ?: "Track $index" } ?: "Off"
+        ?.let(::trackLabel) ?: "Off"
 }
 
 internal fun playerTime(milliseconds: Long): String {
@@ -303,13 +324,40 @@ internal fun playerTime(milliseconds: Long): String {
 }
 
 @Composable
-private fun PlayerSubtitles(player: Player?) {
+private fun PlayerSubtitles(player: Player?, appearance: SubtitleAppearance) {
     val context = LocalContext.current
     val subtitles = remember { SubtitleView(context).apply { isFocusable = false } }
-    AndroidView(factory = { subtitles }, modifier = Modifier.fillMaxSize())
+    var videoSize by remember { mutableStateOf(player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN) }
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val bounds = with(density) { subtitleVideoFrame(maxWidth.roundToPx(), maxHeight.roundToPx(), videoSize) }
+        val width = with(density) { bounds.width().toDp() }
+        val height = with(density) { bounds.height().toDp() }
+        AndroidView(factory = { subtitles }, modifier = Modifier.size(width, height), update = { appearance.applyTo(it, context) })
+    }
+    DisposableEffect(appearance) {
+        val manager = context.getSystemService(android.content.Context.CAPTIONING_SERVICE) as? android.view.accessibility.CaptioningManager
+        val listener = object : android.view.accessibility.CaptioningManager.CaptioningChangeListener() {
+            override fun onEnabledChanged(enabled: Boolean) {
+                appearance.applyTo(subtitles, context)
+            }
+            override fun onFontScaleChanged(fontScale: Float) {
+                appearance.applyTo(subtitles, context)
+            }
+            override fun onUserStyleChanged(userStyle: android.view.accessibility.CaptioningManager.CaptionStyle) {
+                appearance.applyTo(subtitles, context)
+            }
+        }
+        manager?.addCaptioningChangeListener(listener)
+        onDispose { manager?.removeCaptioningChangeListener(listener) }
+    }
     DisposableEffect(player) {
+        videoSize = player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
         subtitles.setCues(player?.currentCues?.cues.orEmpty())
         val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
+                videoSize = size
+            }
             override fun onCues(cueGroup: CueGroup) {
                 subtitles.setCues(cueGroup.cues)
             }

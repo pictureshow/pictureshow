@@ -27,6 +27,28 @@ class PlaybackTracksTest {
     )
 
     @Test
+    fun reorderedSubtitleFormatsWithSameLanguageMatchTheirServerCodecAliases() {
+        val types = listOf(
+            "hdmv_pgs_subtitle" to "application/pgs",
+            "dvd_subtitle" to "application/vobsub",
+            "mov_text" to "application/x-quicktime-tx3g",
+            "ssa" to "text/x-ssa",
+            "srt" to "application/x-subrip"
+        )
+        val streams = types.mapIndexed { index, (codec, _) ->
+            MediaStream(type = MediaStreamType.Subtitle, index = index + 4, codec = codec, language = "eng")
+        }
+        val tracks = group(
+            *types.reversed().map { (_, mime) ->
+                Format.Builder().setSampleMimeType(mime).setLanguage("en").build()
+            }.toTypedArray()
+        )
+        streams.forEachIndexed { index, stream ->
+            assertEquals(types.lastIndex - index, PlaybackTracks.find(streams, stream, listOf(tracks))?.second)
+        }
+    }
+
+    @Test
     fun metadataFindsReorderedTracksDespiteDifferentContainerIds() {
         val english = MediaStream(type = MediaStreamType.Audio, index = 1, codec = "aac", channels = 2, language = "eng")
         val french = english.copy(index = 4, language = "fra")

@@ -252,8 +252,14 @@ class DeviceCapabilityProbeTest {
 
     @Test
     fun ffmpegOnlyDtsAndTrueHdEnableDirectPlayWithoutInventingPlatformDecoders() {
-        video("OMX.vendor.avc.decoder", "video/avc", 1920, 1080, 489600,
-            CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42)
+        video(
+            "OMX.vendor.avc.decoder",
+            "video/avc",
+            1920,
+            1080,
+            489600,
+            CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42
+        )
         audio("OMX.vendor.aac.decoder", "audio/mp4a-latm", 6)
         val without = DeviceCapabilityProbe(context, ffmpegSupport = { false }).snapshot()
         val with = DeviceCapabilityProbe(context, ffmpegSupport = { it in setOf("audio/vnd.dts", "audio/true-hd") }).snapshot()
@@ -278,16 +284,24 @@ class DeviceCapabilityProbeTest {
     @Test
     @Config(sdk = [28])
     fun passthroughStillOffersDtsAndTrueHdWhenNeitherPlatformNorFfmpegCanDecodeThem() {
-        video("OMX.vendor.avc.decoder", "video/avc", 1920, 1080, 489600,
-            CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42)
+        video(
+            "OMX.vendor.avc.decoder",
+            "video/avc",
+            1920,
+            1080,
+            489600,
+            CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42
+        )
         audio("OMX.vendor.aac.decoder", "audio/mp4a-latm", 2)
         val probe = DeviceCapabilityProbe(context, settings = PlaybackSettings(passthroughEnabled = true), ffmpegSupport = { false })
         try {
             probe.start {}
-            context.sendBroadcast(Intent(AudioManager.ACTION_HDMI_AUDIO_PLUG)
-                .putExtra(AudioManager.EXTRA_AUDIO_PLUG_STATE, 1)
-                .putExtra(AudioManager.EXTRA_ENCODINGS, intArrayOf(C.ENCODING_PCM_16BIT, C.ENCODING_DTS_HD, C.ENCODING_DOLBY_TRUEHD))
-                .putExtra(AudioManager.EXTRA_MAX_CHANNEL_COUNT, 8))
+            context.sendBroadcast(
+                Intent(AudioManager.ACTION_HDMI_AUDIO_PLUG)
+                    .putExtra(AudioManager.EXTRA_AUDIO_PLUG_STATE, 1)
+                    .putExtra(AudioManager.EXTRA_ENCODINGS, intArrayOf(C.ENCODING_PCM_16BIT, C.ENCODING_DTS_HD, C.ENCODING_DOLBY_TRUEHD))
+                    .putExtra(AudioManager.EXTRA_MAX_CHANNEL_COUNT, 8)
+            )
             shadowOf(android.os.Looper.getMainLooper()).idle()
             val actual = probe.snapshot()
             assertFalse(actual.audioDecoders.any { it.codec in setOf(AudioCodec.DTS, AudioCodec.TRUEHD) })

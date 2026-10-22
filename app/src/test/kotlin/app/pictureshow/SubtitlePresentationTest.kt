@@ -52,7 +52,13 @@ class SubtitlePresentationTest {
             assertEquals(Color.YELLOW, style.foregroundColor)
             assertEquals(Color.TRANSPARENT, style.windowColor)
             assertEquals(if (background == SubtitleBackground.Box) Color.argb(204, 0, 0, 0) else Color.TRANSPARENT, style.backgroundColor)
-            val edge = if (background == SubtitleBackground.Shadow) CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW else CaptionStyleCompat.EDGE_TYPE_NONE
+            val edge = if (background ==
+                SubtitleBackground.Shadow
+            ) {
+                CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+            } else {
+                CaptionStyleCompat.EDGE_TYPE_NONE
+            }
             assertEquals(edge, style.edgeType)
         }
     }
@@ -69,11 +75,13 @@ class SubtitlePresentationTest {
             .setSize(0.3f).setBitmapHeight(0.1f).build()
         view.setCues(listOf(cue))
         val canvas = Canvas(Bitmap.createBitmap(1920, 800, Bitmap.Config.ARGB_8888))
-        for (size in SubtitleSize.entries) for (background in SubtitleBackground.entries) {
-            SubtitleAppearance(size, background).applyTo(view, context)
-            view.draw(canvas)
-            val painters = field(view.getChildAt(0), "painters") as List<*>
-            assertEquals(Rect(672, 600, 1248, 680), field(painters.first()!!, "bitmapRect"))
+        for (size in SubtitleSize.entries) {
+            for (background in SubtitleBackground.entries) {
+                SubtitleAppearance(size, background).applyTo(view, context)
+                view.draw(canvas)
+                val painters = field(view.getChildAt(0), "painters") as List<*>
+                assertEquals(Rect(672, 600, 1248, 680), field(painters.first()!!, "bitmapRect"))
+            }
         }
     }
 

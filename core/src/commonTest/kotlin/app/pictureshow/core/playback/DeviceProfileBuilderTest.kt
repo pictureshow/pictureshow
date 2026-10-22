@@ -562,15 +562,22 @@ class DeviceProfileBuilderTest {
             if (burnIn != null) assertTrue(embedded.index < burnIn.index, format)
         }
         for (format in listOf("mov_text", "webvtt", "ttml", "dvdsub")) {
-            assertTrue(projector.subtitleProfiles.any {
-                it.format == format && it.method == SubtitleDeliveryMethod.Embed && it.container == "mp4,m4v,mov"
-            }, format)
+            assertTrue(
+                projector.subtitleProfiles.any {
+                    it.format == format && it.method == SubtitleDeliveryMethod.Embed && it.container == "mp4,m4v,mov"
+                },
+                format
+            )
         }
         for (format in listOf("srt", "ass", "ssa", "vtt")) {
             assertTrue(projector.subtitleProfiles.any { it.format == format && it.method == SubtitleDeliveryMethod.External }, format)
         }
-        assertFalse(projector.subtitleProfiles.any { it.format in setOf("pgssub", "dvdsub") &&
-            it.method == SubtitleDeliveryMethod.External })
+        assertFalse(
+            projector.subtitleProfiles.any {
+                it.format in setOf("pgssub", "dvdsub") &&
+                    it.method == SubtitleDeliveryMethod.External
+            }
+        )
     }
 
     @Test

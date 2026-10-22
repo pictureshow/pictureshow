@@ -42,7 +42,9 @@ class SubtitleSupportTest {
         for ((mime, expected) in formats) {
             val init = if (mime == MimeTypes.APPLICATION_VOBSUB) {
                 listOf(("size: 720x480\npalette: " + List(16) { "000000" }.joinToString(",")).encodeToByteArray())
-            } else emptyList()
+            } else {
+                emptyList()
+            }
             val format = Format.Builder().setSampleMimeType(mime).setInitializationData(init).build()
             assertTrue(factory.supportsFormat(format), mime)
             assertEquals(expected, factory.create(format).javaClass, mime)

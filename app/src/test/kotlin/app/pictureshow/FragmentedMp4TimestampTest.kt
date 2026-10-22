@@ -47,8 +47,10 @@ class FragmentedMp4TimestampTest {
     private fun extract(decodeTime: Long): FakeExtractorOutput {
         // Supply the initialized audio track directly so the only changed field is the fragment's decode time.
         val track = Track.Builder().setId(1).setType(C.TRACK_TYPE_AUDIO).setTimescale(48_000)
-            .setMovieTimescale(1_000).setFormat(Format.Builder().setSampleMimeType(MimeTypes.AUDIO_OPUS)
-                .setSampleRate(48_000).setChannelCount(2).build()).build()
+            .setMovieTimescale(1_000).setFormat(
+                Format.Builder().setSampleMimeType(MimeTypes.AUDIO_OPUS)
+                    .setSampleRate(48_000).setChannelCount(2).build()
+            ).build()
         val extractor = FragmentedMp4Extractor(DefaultSubtitleParserFactory(), 0, null, track, emptyList(), null)
         val output = FakeExtractorOutput()
         val input = FakeExtractorInput.Builder().setData(fragment(decodeTime)).build()
@@ -69,14 +71,16 @@ class FragmentedMp4TimestampTest {
     private fun fragment(decodeTime: Long): ByteArray {
         val header = box("tfhd", ints(0x020018, 1, 960, 4))
         val timestamp = box("tfdt", ints(0x01000000) + ByteBuffer.allocate(8).putLong(decodeTime).array())
-        fun moof(dataOffset: Int) = box("moof", box("mfhd", ints(0, 1)) +
-            box("traf", header + timestamp + box("trun", ints(1, 1, dataOffset))))
+        fun moof(dataOffset: Int) = box(
+            "moof",
+            box("mfhd", ints(0, 1)) +
+                box("traf", header + timestamp + box("trun", ints(1, 1, dataOffset)))
+        )
         val offset = moof(0).size + 8
         return moof(offset) + box("mdat", byteArrayOf(1, 2, 3, 4))
     }
 
-    private fun box(type: String, payload: ByteArray): ByteArray =
-        ints(payload.size + 8) + type.toByteArray(Charsets.US_ASCII) + payload
+    private fun box(type: String, payload: ByteArray): ByteArray = ints(payload.size + 8) + type.toByteArray(Charsets.US_ASCII) + payload
 
     private fun ints(vararg values: Int): ByteArray = ByteBuffer.allocate(values.size * 4).apply {
         values.forEach { putInt(it) }

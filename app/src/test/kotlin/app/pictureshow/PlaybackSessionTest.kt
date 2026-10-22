@@ -84,23 +84,49 @@ class PlaybackSessionTest {
             released = true
         }
     }
-    private fun decision(method: PlayMethod = PlayMethod.DirectPlay, sessionId: String = "session-one") = PlayDecision(
-        "item-one",
-        MediaSourceInfo(
-            id = "source-one",
-            defaultAudioStreamIndex = 2,
-            defaultSubtitleStreamIndex = -1,
-            mediaStreams = listOf(
-                MediaStream(type = MediaStreamType.Audio, index = 1, language = "en"),
-                MediaStream(type = MediaStreamType.Audio, index = 2, language = "fr"),
-                MediaStream(type = MediaStreamType.Subtitle, index = 3, language = "en")
-            )
-        ),
-        method,
-        "https://example.test/video",
-        mapOf("Authorization" to "test-header"),
-        sessionId
-    )
+    private fun decision(method: PlayMethod = PlayMethod.DirectPlay, sessionId: String = "session-one", subtitleIndex: Int = -1) =
+        PlayDecision(
+            "item-one",
+            MediaSourceInfo(
+                id = "source-one",
+                defaultAudioStreamIndex = 2,
+                defaultSubtitleStreamIndex = subtitleIndex,
+                mediaStreams = listOf(
+                    MediaStream(type = MediaStreamType.Audio, index = 1, language = "en"),
+                    MediaStream(type = MediaStreamType.Audio, index = 2, language = "fr"),
+                    MediaStream(type = MediaStreamType.Subtitle, index = 3, language = "en")
+                )
+            ),
+            method,
+            "https://example.test/video",
+            mapOf("Authorization" to "test-header"),
+            sessionId
+        )
+
+    @Test
+    fun serverSubtitleDefaultIsUsedAndOffIsRememberedInFinalProgressBeforeStop() = runTest {
+        val chosen = decision(subtitleIndex = 3)
+        val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(chosen)) }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "fr")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        assertEquals(2, gateway.starts.single().audioStreamIndex)
+        assertEquals(3, gateway.starts.single().subtitleStreamIndex)
+        session.select(MediaStreamType.Audio, 1)
+        session.select(MediaStreamType.Subtitle, -1)
+        runCurrent()
+        assertEquals(1, gateway.progresses.last().audioStreamIndex)
+        assertEquals(-1, gateway.progresses.last().subtitleStreamIndex)
+        session.close()
+        runCurrent()
+        assertEquals(1, gateway.requests.size)
+        assertEquals(1, gateway.progresses.last().audioStreamIndex)
+        assertEquals(-1, gateway.progresses.last().subtitleStreamIndex)
+        assertEquals(listOf("progress", "stop"), gateway.events.takeLast(2))
+    }
 
     @Test
     fun startPeriodicPauseSeekTrackAndStopReportsUseHundredNanosecondTicks() = runTest {
@@ -143,6 +169,9 @@ class PlaybackSessionTest {
         runCurrent()
         assertEquals(1, gateway.stops.size)
         assertEquals(1_460_000_000L, gateway.stops.single().positionTicks)
+        assertEquals(2, gateway.progresses.last().audioStreamIndex)
+        assertEquals(3, gateway.progresses.last().subtitleStreamIndex)
+        assertEquals(listOf("progress", "stop"), gateway.events.takeLast(2))
         assertTrue(gateway.encodes.isEmpty())
         assertTrue(output.released)
         val count = gateway.progresses.size

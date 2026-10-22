@@ -75,8 +75,14 @@ internal object Media3Formats {
      * Codec order alone cannot prevent copying: the server prefers any matching source codec in this list.
      */
     val hlsMp4Audio: Set<AudioCodec> = setOf(
-        AudioCodec.AAC, AudioCodec.AC3, AudioCodec.EAC3, AudioCodec.MP3, AudioCodec.ALAC, AudioCodec.FLAC,
-        AudioCodec.DTS, AudioCodec.TRUEHD
+        AudioCodec.AAC,
+        AudioCodec.AC3,
+        AudioCodec.EAC3,
+        AudioCodec.MP3,
+        AudioCodec.ALAC,
+        AudioCodec.FLAC,
+        AudioCodec.DTS,
+        AudioCodec.TRUEHD
     )
 
     /** Audio codecs the server allows in HLS MPEG-TS (StreamBuilder._supportedHlsAudioCodecsTs). */

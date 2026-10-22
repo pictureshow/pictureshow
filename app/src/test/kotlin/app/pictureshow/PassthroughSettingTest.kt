@@ -96,7 +96,11 @@ class PassthroughSettingTest {
         MediaCodecUtil.clearDecoderInfoCache()
         val factory = PictureshowRenderersFactory(context, passthroughEnabled = false)
         val renderers = factory.createRenderers(
-            Handler(Looper.getMainLooper()), object : VideoRendererEventListener {}, object : AudioRendererEventListener {}, {}, {}
+            Handler(Looper.getMainLooper()),
+            object : VideoRendererEventListener {},
+            object : AudioRendererEventListener {},
+            {},
+            {}
         ).filter { it.trackType == C.TRACK_TYPE_AUDIO }
         val platform = renderers.indexOfFirst { it is FlacBufferAudioRenderer }
         val ffmpeg = renderers.indexOfFirst { it.javaClass.name == "androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer" }
@@ -113,6 +117,8 @@ class PassthroughSettingTest {
                 setString("sample-rate-ranges", "32000,44100,48000")
             }
         ).build()
+        // The previous empty lookup cached MediaCodecList's inventory, independently of Media3's cache.
+        ShadowMediaCodecList.reset()
         ShadowMediaCodecList.addCodec(
             MediaCodecInfoBuilder.newBuilder().setName("test.platform.ac3.decoder").setCapabilities(caps).build()
         )
@@ -123,7 +129,8 @@ class PassthroughSettingTest {
         // Android JNI is unavailable on the host. Simulate only FFmpeg's HANDLED capability;
         // the platform capability above and selector arbitration below are the real implementations.
         val availableFfmpeg = Proxy.newProxyInstance(
-            RendererCapabilities::class.java.classLoader, arrayOf(RendererCapabilities::class.java)
+            RendererCapabilities::class.java.classLoader,
+            arrayOf(RendererCapabilities::class.java)
         ) { _, method, _ ->
             when (method.name) {
                 "getName" -> "Available software audio"
@@ -136,7 +143,10 @@ class PassthroughSettingTest {
         val selector = DefaultTrackSelector(context)
         selector.init({}, DefaultBandwidthMeter.Builder(context).build())
         val result = selector.selectTracks(
-            arrayOf(platformCapabilities, availableFfmpeg), TrackGroupArray(TrackGroup(ac3)), MediaPeriodId("test"), Timeline.EMPTY
+            arrayOf(platformCapabilities, availableFfmpeg),
+            TrackGroupArray(TrackGroup(ac3)),
+            MediaPeriodId("test"),
+            Timeline.EMPTY
         )
         assertNotNull(result.selections[0])
         assertEquals(null, result.selections[1])

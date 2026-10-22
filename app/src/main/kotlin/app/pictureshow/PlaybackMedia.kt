@@ -109,6 +109,8 @@ internal object PlaybackMedia {
     }
 
     fun defaultStream(streams: List<MediaStream>, type: MediaStreamType, serverIndex: Int?, preferredLanguage: String): Int {
+        // A null server subtitle index means its user mode selected no subtitles (for example None).
+        if (type == MediaStreamType.Subtitle) return serverIndex ?: -1
         val preferred = PlaybackTracks.language(preferredLanguage)
         return serverIndex ?: streams.firstOrNull { it.type == type && it.isDefault }?.index
             ?: streams.firstOrNull { it.type == type && preferred != null && PlaybackTracks.language(it.language) == preferred }?.index

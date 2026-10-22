@@ -58,7 +58,11 @@ class ExtensionRendererTest {
             override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean) = sink
         }.setMediaCodecSelector(MediaCodecSelector { _, _, _ -> emptyList() })
         val audio = factory.createRenderers(
-            Handler(Looper.getMainLooper()), object : VideoRendererEventListener {}, object : AudioRendererEventListener {}, {}, {}
+            Handler(Looper.getMainLooper()),
+            object : VideoRendererEventListener {},
+            object : AudioRendererEventListener {},
+            {},
+            {}
         ).filter { it.trackType == C.TRACK_TYPE_AUDIO }
         val platform = audio.indexOfFirst { it is FlacBufferAudioRenderer }
         val ffmpeg = audio.indexOfFirst { it.javaClass.name == "androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer" }
@@ -70,7 +74,10 @@ class ExtensionRendererTest {
         val selector = DefaultTrackSelector(context)
         selector.init({}, DefaultBandwidthMeter.Builder(context).build())
         val result = selector.selectTracks(
-            audio.map { it.capabilities }.toTypedArray(), TrackGroupArray(TrackGroup(format)), MediaPeriodId("test"), Timeline.EMPTY
+            audio.map { it.capabilities }.toTypedArray(),
+            TrackGroupArray(TrackGroup(format)),
+            MediaPeriodId("test"),
+            Timeline.EMPTY
         )
         assertNotNull(result.selections[platform])
         assertEquals(null, result.selections[ffmpeg])

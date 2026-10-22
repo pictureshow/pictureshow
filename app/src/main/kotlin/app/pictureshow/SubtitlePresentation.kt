@@ -50,7 +50,12 @@ data class SubtitleAppearance(
     }
 
     private fun overrideStyle(base: CaptionStyleCompat, backgroundColor: Int, edge: Int) = CaptionStyleCompat(
-        base.foregroundColor, backgroundColor, Color.TRANSPARENT, edge, Color.BLACK, base.typeface
+        base.foregroundColor,
+        backgroundColor,
+        Color.TRANSPARENT,
+        edge,
+        Color.BLACK,
+        base.typeface
     )
 }
 

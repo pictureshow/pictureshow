@@ -168,8 +168,15 @@ class PlaybackMediaTest {
         val iso3 = audio.map { it.copy(isDefault = false, language = if (it.index == 1) "eng" else "fra") }
         assertEquals(2, PlaybackMedia.defaultStream(iso3, MediaStreamType.Audio, null, "fr-CA"))
         assertEquals(
-            2,
-            PlaybackMedia.defaultStream(iso3.map { it.copy(type = MediaStreamType.Subtitle) }, MediaStreamType.Subtitle, null, "fr")
+            -1,
+            PlaybackMedia.defaultStream(
+                iso3.map {
+                    it.copy(type = MediaStreamType.Subtitle, isDefault = true)
+                },
+                MediaStreamType.Subtitle,
+                null,
+                "fr"
+            )
         )
         assertEquals(-1, PlaybackMedia.defaultStream(audio, MediaStreamType.Subtitle, -1, "en"))
         assertEquals(-1, PlaybackMedia.defaultStream(emptyList(), MediaStreamType.Subtitle, null, "en"))

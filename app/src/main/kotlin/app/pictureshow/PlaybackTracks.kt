@@ -46,10 +46,20 @@ internal object PlaybackTracks {
         (if (!stream.title.isNullOrBlank() && stream.title == format.label) 16 else 0) +
             (if (language(stream.language) != null && language(stream.language) == language(format.language)) 8 else 0) +
             (if (stream.channels != null && stream.channels == format.channelCount) 2 else 0) +
-            (if (stream.codec != null && codec(format.sampleMimeType) == stream.codec?.lowercase()) 1 else 0)
+            (if (stream.codec != null && codec(format.sampleMimeType) == normalizeCodec(stream.codec)) 1 else 0)
 
     fun language(value: String?): String? = value?.takeIf { it.isNotBlank() && it != "und" }?.let {
         runCatching { Locale.forLanguageTag(it.replace('_', '-')).isO3Language }.getOrDefault(it.lowercase())
+    }
+
+    private fun normalizeCodec(codec: String?): String? = when (val name = codec?.lowercase(Locale.ROOT)) {
+        "srt", "subrip" -> "subrip"
+        "ssa", "ass" -> "ass"
+        "pgs", "pgssub", "hdmv_pgs_subtitle" -> "pgs"
+        "dvdsub", "dvd_subtitle", "vobsub" -> "vobsub"
+        "mov_text", "tx3g" -> "tx3g"
+        "vtt", "webvtt" -> "webvtt"
+        else -> name
     }
 
     private fun codec(mime: String?): String? = when (mime) {
@@ -61,6 +71,9 @@ internal object PlaybackTracks {
         "application/x-subrip" -> "subrip"
         "text/x-ssa" -> "ass"
         "text/vtt" -> "webvtt"
+        "application/pgs" -> "pgs"
+        "application/vobsub" -> "vobsub"
+        "application/x-quicktime-tx3g" -> "tx3g"
         else -> mime?.substringAfterLast('/')
     }
 }

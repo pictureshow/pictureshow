@@ -370,8 +370,34 @@ internal fun Pictureshow(
                     },
                     onSwitchUser = profile::switchUser,
                     onSignOut = profile::signOut,
-                    onResume = vm::reload
+                    onResume = vm::reload,
+                    onSettings = { nav.navigate("settings") }
                 )
+            }
+        }
+        composable("settings") {
+            state.snapshot.currentAccount?.let { account ->
+                val vm: PlaybackSettingsViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
+                val screen by vm.state.collectAsStateWithLifecycle()
+                val settingsContext = LocalContext.current
+                var accepted by remember { mutableStateOf("Checking…") }
+                DisposableEffect(Unit) {
+                    val probe = DeviceCapabilityProbe(settingsContext)
+                    fun update(capabilities: app.pictureshow.core.playback.DeviceCapabilities) {
+                        accepted = capabilities.audioOutput.passthrough.joinToString(", ") {
+                            when (it.codec) {
+                                app.pictureshow.core.playback.AudioCodec.AC3 -> "AC-3"
+                                app.pictureshow.core.playback.AudioCodec.EAC3 -> "E-AC-3"
+                                app.pictureshow.core.playback.AudioCodec.TRUEHD -> "TrueHD"
+                                else -> it.codec.name
+                            }
+                        }.ifEmpty { "PCM only" }
+                    }
+                    update(probe.snapshot())
+                    probe.start(::update)
+                    onDispose { probe.close() }
+                }
+                PlaybackSettingsScreen(screen, accepted, vm::local, vm::server, vm::reload) { nav.popBackStack() }
             }
         }
         composable(
