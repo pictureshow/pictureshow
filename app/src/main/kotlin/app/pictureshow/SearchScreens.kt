@@ -246,7 +246,7 @@ fun SearchScreen(
                         Text(row.title, style = MaterialTheme.typography.headlineSmall)
                         LazyRow(
                             state = rowStates.getValue(row.key),
-                            contentPadding = PaddingValues(8.dp),
+                            contentPadding = PaddingValues(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(18.dp)
                         ) {
                             itemsIndexed(row.items, key = { _, item -> item.id }) { _, item ->

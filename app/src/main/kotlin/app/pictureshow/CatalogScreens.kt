@@ -239,8 +239,11 @@ fun CatalogHome(
                         CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
                             LazyRow(
                                 state = rowStates.getValue(row.key),
-                                modifier = Modifier.fillMaxWidth().focusRestorer(),
-                                contentPadding = PaddingValues(8.dp),
+                                // Explicit stable-ID restoration in focusRow owns shelf entry. A focusRestorer
+                                // here can intercept its request after lazy disposal and select another child.
+                                modifier = Modifier.fillMaxWidth(),
+                                // Reserve the 1.1x focus scale and centered border inside the shelf clip.
+                                contentPadding = PaddingValues(16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(18.dp)
                             ) {
                                 itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
@@ -430,7 +433,8 @@ fun CatalogGrid(
             columns = GridCells.Adaptive(144.dp),
             state = grid,
             modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
-            contentPadding = PaddingValues(8.dp),
+            // Poster height grows more than width; the grid clips along its vertical axis.
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
@@ -641,7 +645,7 @@ private fun DetailRow(
             state = rowState,
             modifier = Modifier.fillMaxWidth().focusRestorer(),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
-            contentPadding = PaddingValues(8.dp)
+            contentPadding = PaddingValues(16.dp)
         ) {
             itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
                 val requester = remember(item.id) { FocusRequester() }
