@@ -17,7 +17,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -215,7 +214,9 @@ class SignInFocusTest {
     fun quickConnectSignInFocusesFirstHomeCardAfterItsAsynchronousLoad() {
         runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
         launch()
-        compose.onNodeWithText("Use Quick Connect").performClick()
+        compose.onNodeWithText("Use Quick Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithText("Use Quick Connect").assertIsFocused()
+        key(Key.DirectionCenter)
         waitForText("123456")
         compose.runOnIdle { quickAuthorized.complete(account) }
         compose.waitForIdle()
@@ -237,7 +238,9 @@ class SignInFocusTest {
         waitForText("Robin on Screen room")
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
-        compose.onNodeWithText("Robin on Screen room").performClick()
+        compose.onNodeWithText("Robin on Screen room").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithText("Robin on Screen room").assertIsFocused()
+        key(Key.DirectionCenter)
         assertFirstHomeCardAfterDelayedLoad(other.user.id)
     }
 
