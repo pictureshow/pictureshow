@@ -1,7 +1,9 @@
 package app.pictureshow
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -38,6 +40,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -53,6 +56,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -74,18 +78,78 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 class MainActivity : ComponentActivity() {
+    private var playbackEntry by mutableStateOf<ParsedPlaybackEntry?>(null)
+    private var entrySequence by mutableStateOf(0L)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) { Pictureshow() }
+        if (savedInstanceState == null) {
+            acceptPlaybackIntent(intent)
+        } else {
+            entrySequence = savedInstanceState.getLong("playbackEntrySequence")
+            playbackEntry = when (savedInstanceState.getString("playbackEntryKind")) {
+                "invalid" -> ParsedPlaybackEntry.Invalid
+                "play" -> parsePlaybackEntry(
+                    Intent(PLAY_ACTION).putExtra("itemId", savedInstanceState.getString("playbackEntryId")).apply {
+                        if (savedInstanceState.containsKey("playbackEntryPosition")) {
+                            putExtra("positionMs", savedInstanceState.getLong("playbackEntryPosition"))
+                        }
+                    }
+                )
+                else -> null
+            }
         }
+        setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Pictureshow(playbackEntry = playbackEntry, entrySequence = entrySequence, consumePlaybackEntry = { playbackEntry = null })
+            }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLong("playbackEntrySequence", entrySequence)
+        when (val pending = playbackEntry) {
+            ParsedPlaybackEntry.Invalid -> outState.putString("playbackEntryKind", "invalid")
+            is ParsedPlaybackEntry.Play -> {
+                outState.putString("playbackEntryKind", "play")
+                outState.putString("playbackEntryId", pending.entry.itemId)
+                pending.entry.positionMs?.let { outState.putLong("playbackEntryPosition", it) }
+            }
+            else -> Unit
+        }
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        PlaybackMediaSession.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptPlaybackIntent(intent)
+    }
+
+    private fun acceptPlaybackIntent(intent: Intent) {
+        playbackEntry = parsePlaybackEntry(intent).takeUnless { it == ParsedPlaybackEntry.Ignore }
+        entrySequence++
     }
 }
 
-private fun itemRoute(item: MediaItem) = "item?item=${Uri.encode(Json.encodeToString(item))}"
+internal fun itemRoute(item: MediaItem) = "item?item=${Uri.encode(Json.encodeToString(item))}"
 
 private fun playerRoute(item: MediaItem, resume: Boolean) =
-    "player?item=${Uri.encode(Json.encodeToString(item))}&start=${if (resume) item.userData.playbackPositionTicks / 10_000 else 0}"
+    playerRoute(item, if (resume) item.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000 else 0)
+
+internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
+
+internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlaybackEntry.Open) {
+    nav.navigate("home") {
+        popUpTo(nav.graph.id) { inclusive = true }
+        launchSingleTop = true
+    }
+    nav.navigate(itemRoute(entry.item))
+    nav.navigate(playerRoute(entry.item, entry.positionMs))
+}
 
 private fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
 
@@ -100,9 +164,15 @@ internal fun accountDestination(snapshot: AccountSnapshot): String {
 }
 
 @Composable
-private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
+private fun Pictureshow(
+    session: SessionViewModel = koinViewModel(),
+    playbackEntry: ParsedPlaybackEntry? = null,
+    entrySequence: Long = 0,
+    consumePlaybackEntry: () -> Unit = {}
+) {
     val state by session.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
     val catalog =
@@ -125,6 +195,31 @@ private fun Pictureshow(session: SessionViewModel = koinViewModel()) {
             popUpTo(nav.graph.id) { inclusive = true }
             launchSingleTop = true
         }
+    }
+    // Account bootstrap above installs the normal graph first. An entry never waits for a future login.
+    LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
+        val entry = playbackEntry ?: return@LaunchedEffect
+        val account = state.snapshot.currentAccount?.takeUnless { it.expired }
+        if (account == null) {
+            consumePlaybackEntry()
+            return@LaunchedEffect
+        }
+        when (entry) {
+            ParsedPlaybackEntry.Ignore -> Unit
+            ParsedPlaybackEntry.Invalid -> Toast.makeText(context, ENTRY_INVALID, Toast.LENGTH_SHORT).show()
+            is ParsedPlaybackEntry.Play -> when (val resolved = resolvePlaybackEntry(entry.entry, account, catalog)) {
+                ResolvedPlaybackEntry.NormalStartup -> Unit
+                ResolvedPlaybackEntry.Unavailable -> {
+                    Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
+                    nav.navigate("home") {
+                        popUpTo(nav.graph.id) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+                is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
+            }
+        }
+        consumePlaybackEntry()
     }
     NavHost(navController = nav, startDestination = "waiting") {
         composable("waiting") { Page("Pictureshow") { Text("Loading…") } }

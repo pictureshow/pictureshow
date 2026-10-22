@@ -90,12 +90,6 @@ class PlaybackMediaTest {
         assertTrue(media.subtitleConfigurations.none { it.uri.toString().contains("private-token") })
         assertEquals("extra", decision.headers["X-Test"])
         assertTrue(decision.headers.getValue("Authorization").contains("Token=\"private-token\""))
-        // The factory's per-instance properties must retain the same headers for every source it creates.
-        val factory = PlaybackMedia.httpFactory(decision)
-        val data = factory.createDataSource()
-        val field = data.javaClass.getDeclaredField("defaultRequestProperties").apply { isAccessible = true }
-        val properties = field.get(data) as androidx.media3.datasource.HttpDataSource.RequestProperties
-        assertEquals(decision.headers, properties.snapshot)
     }
 
     @Test
@@ -143,7 +137,7 @@ class PlaybackMediaTest {
                 mapOf("Authorization" to "MediaBrowser Token=\"private-token\""),
                 "session"
             )
-            val factory = PlaybackMedia.dataSourceFactory(decision)
+            val factory = PlaybackMedia.dataSourceFactory(Server("server", "Demo", base, "12.0.0"), decision)
             listOf("master.m3u8", "main.m3u8", "init.mp4", "segment00001.m4s", "subtitle.srt").forEach { path ->
                 val data = factory.createDataSource()
                 try {

@@ -38,4 +38,17 @@ Pictureshow builds a server device profile from platform decoders, display capab
 
 During playback, center toggles play/pause and shows controls. Left/right seek 10 seconds; a held direction increases the step to 30 seconds. Down shows controls; Up/Down moves between the playback, audio and subtitle actions. Back closes a track chooser, then hides controls, then returns to the item. Audio and subtitles include an Off choice. Tracks that need a different server stream are negotiated again at the current position.
 
-Playback reports save progress every ten seconds and on pause, seek, track change and exit. A failed direct source gets one server-transcode attempt at the same position. Access tokens travel in the Authorization header for manifests, segments, streams and external subtitles; legacy key query parameters are removed at the media-request boundary.
+Playback reports save progress every ten seconds and on pause, seek, track change and exit. A failed direct source gets one server-transcode attempt at the same position. Access tokens travel only in the Authorization header to the configured server's HTTP(S) origin (same scheme, host and port). This applies to manifests, segments, streams, subtitles and every redirect hop. External origins receive no server credentials; off-origin transcoding URLs are rejected. Legacy token query parameters are removed at the media-request boundary.
+
+
+A Media3 MediaSession publishes the active player's title, position and playback state to Android. System play/pause, rewind and fast-forward commands control that player; the session is released when playback closes.
+
+External playback entry accepts a 32-character hexadecimal item ID for the signed-in account:
+
+```sh
+adb shell am start -a app.pictureshow.action.PLAY --es itemId 0123456789abcdef0123456789abcdef
+adb shell am start -a app.pictureshow.action.PLAY --es itemId 0123456789abcdef0123456789abcdef --el positionMs 0
+adb shell am start -a android.intent.action.VIEW -d 'pictureshow://play/0123456789abcdef0123456789abcdef?positionMs=120000'
+```
+
+Omit the position to resume from the server's saved position; zero starts over. The item is checked against the current account before playback. Without an account, normal startup opens. An unavailable item shows a short message and returns home. Back from externally opened playback returns to the item's details.

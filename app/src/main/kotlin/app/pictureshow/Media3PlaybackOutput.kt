@@ -24,7 +24,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** The only layer that owns a decoder. Replacing a source releases the old player and its callbacks first. */
-internal class Media3PlaybackOutput(private val context: Context, private val server: Server) : PlaybackOutput {
+internal class Media3PlaybackOutput(private val context: Context, private val server: Server, private val title: String? = null) :
+    PlaybackOutput {
     private val mutablePlayer = MutableStateFlow<ExoPlayer?>(null)
     val player = mutablePlayer.asStateFlow()
     var onReady: (PlayDecision) -> Unit = {}
@@ -36,6 +37,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     private var audio = -1
     private var subtitle = -1
     private var listener: Player.Listener? = null
+    private var mediaSession: PlaybackMediaSession.Handle? = null
 
     override fun position(): PlaybackPosition = mutablePlayer.value?.let {
         PlaybackPosition(it.currentPosition.coerceAtLeast(0), !it.playWhenReady)
@@ -55,11 +57,13 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, audio < 0)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle < 0)
             .build()
-        val sourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(PlaybackMedia.dataSourceFactory(decision))
+        val sourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(PlaybackMedia.dataSourceFactory(server, decision))
         val next = ExoPlayer.Builder(context, PictureshowRenderersFactory(context))
             .setTrackSelector(selector)
             .setMediaSourceFactory(sourceFactory)
             .setLoadControl(createPictureshowLoadControl())
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(10_000)
             .build()
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
@@ -97,8 +101,9 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             }
         }.also(next::addListener)
         mutablePlayer.value = next
-        next.setMediaItem(PlaybackMedia.item(server, decision), positionMs)
+        next.setMediaItem(PlaybackMedia.item(server, decision, title), positionMs)
         next.playWhenReady = !paused
+        mediaSession = PlaybackMediaSession.open(context, next)
         next.prepare()
     }
 
@@ -134,6 +139,8 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         saved = position()
         mutablePlayer.value = null
         listener?.let(active::removeListener)
+        mediaSession?.close()
+        mediaSession = null
         active.release()
         listener = null
     }
