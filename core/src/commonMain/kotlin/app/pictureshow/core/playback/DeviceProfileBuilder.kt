@@ -258,20 +258,14 @@ object DeviceProfileBuilder {
             conditions = size
         )
 
-        // fMP4 segments first: they carry every codec the server allows in HLS, including E-AC-3 7.1. MPEG-TS stays as
-        // the fallback the server switches to for sources marked UseMostCompatibleTranscodingProfile.
-        return listOf(
-            hls(
-                "mp4",
-                videoOrder.filter { it in Media3Formats.hlsVideo },
-                audioOrder.filter { it in Media3Formats.hlsMp4Audio }
-            ),
-            hls(
-                "ts",
-                videoOrder.filter { it in Media3Formats.hlsTsVideo },
-                audioOrder.filter { it in Media3Formats.hlsTsAudio }
-            )
-        )
+        // The server preserves encoder delay in fMP4's unsigned tfdt (including AAC re-encodes), which Media3
+        // rejects before decoding. TS carries wrapped 33-bit timestamps that its shared adjuster handles.
+        // Offer no fMP4 fallback: the server ranks all profiles by copy compatibility, so a fallback can beat TS
+        // even when it is later in this list. H.264 is the encode target; HEVC remains eligible for video copy.
+        val tsVideo = videoOrder.filter { it in Media3Formats.hlsTsVideo }
+        val tsAudio = audioOrder.filter { it in Media3Formats.hlsTsAudio }
+        // Empty codec strings mean unrestricted support to the server, not an unsupported target.
+        return if (tsVideo.isEmpty() || tsAudio.isEmpty()) emptyList() else listOf(hls("ts", tsVideo, tsAudio))
     }
 
     /** The first codec is what the server encodes to; the rest are kept so matching sources are copied, not encoded. */
