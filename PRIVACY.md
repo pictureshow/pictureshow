@@ -45,4 +45,4 @@ nothing to delete.
 ## Changes and contact
 
 If the app ever starts sending anything new, this policy will change first, and the change will be listed in the
-release notes. Questions: {{CONTACT}}.
+release notes. Questions: info@legitimateapps.com.
