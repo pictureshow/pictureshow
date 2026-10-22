@@ -463,7 +463,7 @@ private fun Page(title: String, modifier: Modifier = Modifier, content: @Composa
 }
 
 @Composable
-private fun Action(label: String, initial: Boolean = false, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun Action(label: String, modifier: Modifier = Modifier, initial: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val focus = remember { FocusRequester() }
     Button(onClick = onClick, enabled = enabled, modifier = modifier.focusRequester(focus)) { Text(label) }
     LaunchedEffect(Unit) { if (initial && enabled) focus.requestFocus() }
