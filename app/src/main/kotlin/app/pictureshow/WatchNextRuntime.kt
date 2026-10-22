@@ -74,6 +74,9 @@ internal class AndroidWatchProvider(private val context: Context) : WatchProvide
 internal class StoredWatchDismissals(context: Context) : WatchDismissals {
     private val preferences = context.getSharedPreferences("watch_next_dismissed", Context.MODE_PRIVATE)
     override fun contains(key: String) = preferences.getBoolean(key, false)
+
+    // KTX edit returns Unit; this write must detect commit failure before deleting the provider row.
+    @SuppressLint("UseKtx")
     override fun add(key: String) {
         // Commit before deleting the provider row: a process death must not forget the user's dismissal.
         // KTX edit returns Unit; retain the editor so a failed disk commit is detected.
