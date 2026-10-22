@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ktlint)
+    id("com.mikepenz.aboutlibraries.plugin") version "15.3.0"
 }
 
 android {
@@ -99,3 +100,20 @@ dependencies {
 }
 
 tasks.named("check") { dependsOn("ktlintCheck", "lintDebug") }
+
+// Export only release metadata. The asset task also checks the actual runtime artifacts,
+// retains their embedded licenses/notices, and adds code outside Gradle's module graph.
+aboutLibraries {
+    collect {
+        filterVariants.add("release")
+        includePlatform = false
+        fetchRemoteLicense = false
+        fetchRemoteFunding = false
+    }
+    library { duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.KEEP }
+    export {
+        variant = "release"
+        outputFile = layout.buildDirectory.file("licenses/aboutlibraries.json").get().asFile
+    }
+}
+apply(from = "licenses.gradle")

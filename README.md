@@ -99,3 +99,21 @@ final playback reports. No recurring job or periodic wakeup is scheduled. A fail
 current account's rows; switching accounts clears old rows before fetching the new ones. Launcher dismissals are
 remembered per account/item until app data is cleared, including across sign-out and sign-in. Artwork URLs contain
 no access token. Launcher presentation and availability vary; Google TV need not display the Android TV row.
+
+## About and open-source licenses
+
+Settings → **About Pictureshow** shows the installed version, source and privacy addresses. **Open-source licenses**
+lists the release runtime libraries, including transitive dependencies, with full license texts and notices.
+Use D-pad Down/Up to browse and scroll, center to open a license, and Back to return one level. Focus returns to the
+library or settings entry you left.
+
+The build uses the Apache-2.0 [AboutLibraries Gradle plugin](https://github.com/mikepenz/AboutLibraries) for release
+metadata and checks it against resolved runtime artifacts. `app/licenses.gradle` retains embedded license and
+NOTICE files, adds the native FFmpeg/Media3 extension and core-library desugaring notices, and fails for missing
+license metadata or text. No phone UI or runtime AboutLibraries library is included. All variants display this
+release catalog; test/debug-only libraries are excluded. After changing dependencies, build normally and review the
+generated `app/build/generated/licenseAssets/licenses/catalog.json`.
+
+FFmpeg 6.0.1 is LGPL-2.1-or-later. Its full LGPL text is readable in the app; source, configuration and replacement
+instructions are in [third_party/ffmpeg/README.md](third_party/ffmpeg/README.md), and
+[tools/ffmpeg/build.sh](tools/ffmpeg/build.sh) reproduces the shared libraries.

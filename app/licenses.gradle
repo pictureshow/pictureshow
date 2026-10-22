@@ -1,0 +1,134 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.OutputDirectory
+import java.util.zip.ZipInputStream
+
+// A typed output lets AGP carry the asset producer into every variant's build.
+abstract class GenerateLicenseCatalog extends DefaultTask {
+    @OutputDirectory abstract DirectoryProperty getAssetDirectory()
+}
+
+// No runtime AboutLibraries/phone UI: explicit JSONObject keys and an asset survive
+// R8 without reflective model keep rules. Query artifacts only after AGP creates variants.
+def metadata = layout.buildDirectory.file('licenses/aboutlibraries.json')
+def catalogModule = { id ->
+    if (id instanceof ModuleComponentIdentifier) return true
+    if (id instanceof ProjectComponentIdentifier && id.projectPath in [':app', ':core', ':media3-ffmpeg']) return false
+    throw new GradleException("Unmapped runtime dependency $id: publish module metadata or add an explicit license mapping.")
+}
+def runtimeArtifacts = providers.provider {
+    configurations.releaseRuntimeClasspath.incoming.artifactView { componentFilter(catalogModule) }.artifacts
+}
+def desugarArtifacts = providers.provider {
+    configurations.coreLibraryDesugaring.incoming.artifactView { componentFilter(catalogModule) }.artifacts
+}
+def nativeLicense = rootProject.file('third_party/ffmpeg/COPYING.LGPLv2.1')
+def extensionLicense = rootProject.file('media3-ffmpeg/LICENSE')
+def kotlinNotice = rootProject.file('third_party/kotlin/NOTICE')
+def desugarNotices = rootProject.file('third_party/desugar')
+
+def embedded
+embedded = { byte[] bytes, String prefix = '' ->
+    def result = []
+    new ZipInputStream(new ByteArrayInputStream(bytes)).withCloseable { zip ->
+        def entry
+        while ((entry = zip.nextEntry) != null) {
+            def path = entry.name
+            def base = path.tokenize('/').last().toUpperCase(Locale.ROOT)
+            if (!entry.directory && ['NOTICE', 'LICENSE', 'COPYING'].any { base.startsWith(it) }) {
+                result.add("$prefix$path\n\n" + new String(zip.readAllBytes(), 'UTF-8').trim())
+            } else if (!entry.directory && path.endsWith('.jar')) {
+                result.addAll(embedded(zip.readAllBytes(), "$prefix$path!/"))
+            }
+        }
+    }
+    result
+}
+
+def generateLicenseCatalog = tasks.register('generateLicenseCatalog', GenerateLicenseCatalog) {
+    dependsOn('exportLibraryDefinitions')
+    assetDirectory.set(layout.buildDirectory.dir('generated/licenseAssets'))
+    inputs.file(file('licenses.gradle'))
+    inputs.file(metadata)
+    inputs.files(runtimeArtifacts.map { it.artifactFiles }, desugarArtifacts.map { it.artifactFiles })
+    inputs.files(nativeLicense, extensionLicense, kotlinNotice)
+    inputs.dir(desugarNotices)
+    doLast {
+        def data = new JsonSlurper().parse(metadata.get().asFile)
+        def artifacts = (runtimeArtifacts.get().artifacts + desugarArtifacts.get().artifacts).findAll {
+            !it.id.componentIdentifier.module.startsWith('desugar_jdk_libs_configuration')
+        }
+        def rows = artifacts.collect { artifact ->
+            def module = artifact.id.componentIdentifier
+            def id = "${module.group}:${module.module}".toString()
+            def definitions = data.libraries.findAll { it.uniqueId == id }
+            def isDesugar = id == 'com.android.tools:desugar_jdk_libs'
+            if (isDesugar && module.version != '2.1.5') {
+                throw new GradleException("Update third_party/desugar notices for ${module.version}")
+            }
+            if (definitions.size() != 1 && !isDesugar) {
+                throw new GradleException("Missing license metadata for $id:${module.version}")
+            }
+            def definition = definitions ? definitions.first() : null
+            def licenseDefinitions = (definition?.licenses ?: []).collect { hash ->
+                def license = data.licenses[hash]
+                if (!license) throw new GradleException("Missing license $hash for $id")
+                license
+            }
+            def notices = embedded(artifact.file.bytes)
+            if (id == 'org.jetbrains.kotlin:kotlin-stdlib') notices.add(kotlinNotice.getText('UTF-8'))
+            if (isDesugar) {
+                notices.addAll(['LICENSE', 'ASSEMBLY_EXCEPTION', 'ADDITIONAL_LICENSE_INFO'].collect {
+                    new File(desugarNotices, it).getText('UTF-8')
+                })
+                notices.add(extensionLicense.getText('UTF-8'))
+            }
+            notices = notices.unique().sort()
+            def identifiers = licenseDefinitions.collect { it.spdxId ?: it.name }
+            def texts = licenseDefinitions.collect { it.content ?: '' }
+            if (!isDesugar && (!identifiers || !texts.every { it.length() > 500 })) {
+                throw new GradleException("Missing full license for $id: $identifiers. Add a verified upstream override; do not ship an unknown license.")
+            }
+            def source = isDesugar ? ['Source: https://github.com/google/desugar_jdk_libs/tree/73170c345e6a762fc6a1f0301bb15218850023ef'] : []
+            [id: id, name: definition?.name ?: module.module, version: module.version,
+             license: isDesugar ? 'GPL-2.0-only WITH Classpath-exception-2.0 AND Apache-2.0' : identifiers.join(' / '),
+             text: (texts + notices + source).join('\n\n'), notices: notices]
+        }.unique { it.id }
+        rows.add([
+            id: 'ffmpeg', name: 'FFmpeg', version: '6.0.1', license: 'LGPL-2.1-or-later', notices: [],
+            text: '''FFmpeg 6.0.1 — Copyright the FFmpeg developers.
+Licensed under the GNU Lesser General Public License 2.1 or later.
+libavcodec, libavutil and libswresample are shared libraries, dynamically linked by the Media3 JNI wrapper.
+Unmodified source: https://ffmpeg.org/releases/ffmpeg-6.0.1.tar.xz
+Source, checksum, configure lines and replacement instructions:
+https://github.com/pictureshow/pictureshow/blob/main/third_party/ffmpeg/README.md
+Our build configuration:
+https://github.com/pictureshow/pictureshow/blob/main/tools/ffmpeg/build.sh
+
+''' + nativeLicense.getText('UTF-8')
+        ])
+        rows.add([
+            id: 'media3-ffmpeg', name: 'Media3 FFmpeg decoder extension and JNI wrapper', version: '1.11.1',
+            license: 'Apache-2.0', notices: [],
+            text: 'Copyright The Android Open Source Project.\n' +
+                'Source: https://github.com/androidx/media/tree/1.11.1/libraries/decoder_ffmpeg\n\n' + extensionLicense.getText('UTF-8')
+        ])
+        def target = assetDirectory.file('licenses/catalog.json').get().asFile
+        target.parentFile.mkdirs()
+        target.setText(JsonOutput.toJson([libraries: rows.sort { a, b ->
+            a.name.toLowerCase(Locale.ROOT) <=> b.name.toLowerCase(Locale.ROOT) ?: a.id <=> b.id
+        }]), 'UTF-8')
+        logger.lifecycle("License catalog: ${rows.size()} libraries; no unknown licenses")
+    }
+}
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(generateLicenseCatalog) { it.assetDirectory }
+}
+// Keep the shared directory's producer explicit for asset merges across all variants.
+tasks.matching { it.name ==~ /merge.*Assets/ }.configureEach { dependsOn(generateLicenseCatalog) }

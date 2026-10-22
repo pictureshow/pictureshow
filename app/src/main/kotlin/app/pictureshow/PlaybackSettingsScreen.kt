@@ -129,12 +129,14 @@ internal fun PlaybackSettingsScreen(
     onServer: (String, String) -> Unit,
     onRetry: () -> Unit,
     onThisTv: () -> Unit = {},
+    onAbout: () -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
     val first = remember { FocusRequester() }
     val thisTvFocus = remember { FocusRequester() }
-    var restoreThisTv by rememberSaveable { mutableStateOf(false) }
+    val aboutFocus = remember { FocusRequester() }
+    var restoreEntry by rememberSaveable { mutableStateOf("") }
     val local = state.local
     val configuration = state.configuration
     Column(
@@ -144,11 +146,18 @@ internal fun PlaybackSettingsScreen(
         Text("Playback settings", style = MaterialTheme.typography.headlineLarge)
         Button(
             onClick = {
-                restoreThisTv = true
+                restoreEntry = "this-tv"
                 onThisTv()
             },
             modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
         ) { Text("This TV") }
+        Button(
+            onClick = {
+                restoreEntry = "about"
+                onAbout()
+            },
+            modifier = Modifier.focusRequester(aboutFocus).testTag("settings:about")
+        ) { Text("About Pictureshow") }
         Text("Press center to change a value. Changes are saved immediately.")
         Button(
             onClick = { onLocal { it.copy(bitrateMbps = nextSetting(PlaybackPreferences.BITRATES, it.bitrateMbps)) } },
@@ -213,7 +222,13 @@ internal fun PlaybackSettingsScreen(
         }
         Button(onClick = onBack, modifier = Modifier.testTag("settings:back")) { Text("Back") }
     }
-    LaunchedEffect(Unit) { if (restoreThisTv) thisTvFocus.requestFocus() else first.requestFocus() }
+    LaunchedEffect(Unit) {
+        when (restoreEntry) {
+            "this-tv" -> thisTvFocus.requestFocus()
+            "about" -> aboutFocus.requestFocus()
+            else -> first.requestFocus()
+        }
+    }
 }
 
 private fun settingLabel(value: String): String = when (value) {

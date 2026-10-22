@@ -15,3 +15,8 @@ This product includes third-party software:
 
 - AndroidX TV Provider (androidx.tvprovider:tvprovider:1.1.0), Copyright The Android Open Source Project.
   Licensed under the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+
+Settings → About Pictureshow → Open-source licenses lists the resolved release libraries, their full licenses,
+embedded notices and the FFmpeg source/build addresses. The catalog is generated during the build, including
+transitive dependencies. It also includes core-library desugaring (GPLv2 with Classpath Exception and Apache-2.0;
+third_party/desugar/) and the Kotlin distribution copyright notice (third_party/kotlin/).

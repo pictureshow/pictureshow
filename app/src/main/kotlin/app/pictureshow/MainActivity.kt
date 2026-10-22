@@ -445,6 +445,7 @@ internal fun Pictureshow(
                 )
             }
         }
+        aboutScreens(nav)
         composable("this-tv") {
             ThisTvScreen(koinInject()) { nav.popBackStack() }
         }
@@ -477,7 +478,8 @@ internal fun Pictureshow(
                     vm::server,
                     vm::reload,
                     onBack = { nav.popBackStack() },
-                    onThisTv = { nav.navigate("this-tv") }
+                    onThisTv = { nav.navigate("this-tv") },
+                    onAbout = { nav.navigate("about") }
                 )
             }
         }
