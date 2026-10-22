@@ -317,8 +317,13 @@ internal fun Pictureshow(
                 }
             }
             Page("Who’s watching?") {
-                state.snapshot.accounts.forEachIndexed { index, account ->
-                    Action("${account.user.name} on ${account.server.name}", initial = index == 0, enabled = !screen.busy) {
+                val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
+                state.snapshot.accounts.forEach { account ->
+                    Action(
+                        "${account.user.name} on ${account.server.name}",
+                        initial = account.key == initialAccount?.key,
+                        enabled = !screen.busy
+                    ) {
                         vm.select(account.key)
                     }
                 }

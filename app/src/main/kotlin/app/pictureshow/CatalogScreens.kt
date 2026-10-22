@@ -3,8 +3,11 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,6 +30,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -83,6 +87,7 @@ private val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
 
 /** Each navigation entry owns its saveable focus identity and lazy-list scroll positions. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CatalogHome(
     state: CatalogHomeState,
@@ -137,7 +142,12 @@ fun CatalogHome(
         val itemIndex = row.items.indexOfFirst { it.id == selections[row.key] }.takeIf { it >= 0 }
             ?: (positions[row.key] ?: 0).coerceIn(0, row.items.lastIndex)
         val horizontal = rowStates.getValue(row.key)
-        if (list.layoutInfo.visibleItemsInfo.none { it.index == rowIndex + 1 }) list.scrollToItem(rowIndex + 1)
+        if (rowIndex == 0) {
+            // The header belongs with the first shelf, including when returning from a lower shelf.
+            list.scrollToItem(0)
+        } else if (list.layoutInfo.visibleItemsInfo.none { it.index == rowIndex + 1 }) {
+            list.scrollToItem(rowIndex + 1)
+        }
         if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
         withFrameNanos { }
         requesters.getValue("${row.key}:${row.items[itemIndex].id}").requestFocus()
@@ -160,25 +170,54 @@ fun CatalogHome(
             }
         }
     }
-    LazyColumn(
-        state = list,
-        modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").onPreviewKeyEvent {
-            if (it.type == KeyEventType.KeyDown) initialNavigation = true
-            false
-        },
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        item(key = "header") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = onSearch,
-                    modifier = Modifier.focusRequester(search).testTag("home:search")
-                        .onFocusChanged {
-                            // The first attached target during the first load, like the profile actions below.
-                            if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
-                        }
-                        .onPreviewKeyEvent {
+    val platformBringIntoView = LocalBringIntoViewSpec.current
+    val firstRowFocused by rememberUpdatedState(rows.firstOrNull()?.key == selectedRow)
+    val homeBringIntoView = remember(platformBringIntoView) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+                // TV's default 30% pivot would hide Search even when the whole first card already fits.
+                if (firstRowFocused && offset >= 0f && offset + size <= containerSize) {
+                    0f
+                } else {
+                    platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+                }
+        }
+    }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides homeBringIntoView) {
+        LazyColumn(
+            state = list,
+            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").onPreviewKeyEvent {
+                if (it.type == KeyEventType.KeyDown) initialNavigation = true
+                false
+            },
+            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            item(key = "header") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = onSearch,
+                        modifier = Modifier.focusRequester(search).testTag("home:search")
+                            .onFocusChanged {
+                                // The first attached target during the first load, like the profile actions below.
+                                if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
+                            }
+                            .onPreviewKeyEvent {
+                                if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                    moveRow(0)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                    ) { Text("Search") }
+                    CatalogHeading("Pictureshow")
+                    Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
+                    if (state.loading) Text("Loading your home…")
+                    CatalogError(
+                        state.error,
+                        onRetry,
+                        Modifier.focusRequester(retry).onPreviewKeyEvent {
                             if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                                 moveRow(0)
                                 true
@@ -186,87 +225,92 @@ fun CatalogHome(
                                 false
                             }
                         }
-                ) { Text("Search") }
-                CatalogHeading("Pictureshow")
-                Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
-                if (state.loading) Text("Loading your home…")
-                CatalogError(
-                    state.error,
-                    onRetry,
-                    Modifier.focusRequester(retry).onPreviewKeyEvent {
-                        if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                            moveRow(0)
-                            true
-                        } else {
-                            false
-                        }
+                    )
+                    if (!state.loading && rows.isEmpty() && state.error == null) {
+                        Text("There are no libraries or videos available for this user yet.")
                     }
-                )
-                if (!state.loading && rows.isEmpty() && state.error == null) {
-                    Text("There are no libraries or videos available for this user yet.")
                 }
             }
-        }
-        rows.forEachIndexed { rowIndex, row ->
-            item(key = row.key) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CatalogHeading(row.title, large = false)
-                    LazyRow(
-                        state = rowStates.getValue(row.key),
-                        modifier = Modifier.fillMaxWidth().focusRestorer(),
-                        contentPadding = PaddingValues(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
-                            CatalogCard(
-                                item = item,
-                                account = account,
-                                wide = row.wide || item.type == "Episode",
-                                onClick = { onOpen(item) },
-                                modifier = Modifier.focusRequester(requesters.getValue("${row.key}:${item.id}"))
-                                    .testTag("home:${row.key}:${item.id}")
-                                    .onFocusChanged {
-                                        if (it.isFocused) {
-                                            selectedRow = row.key
-                                            selectedRowIndex = rowIndex
-                                            selectedItem = item.id
-                                            rowSelections = rowSelections + (row.key to item.id)
-                                            rowPositions = rowPositions + (row.key to itemIndex)
-                                        }
-                                    }.onPreviewKeyEvent {
-                                        if (it.type != KeyEventType.KeyDown) {
-                                            false
-                                        } else if (it.key == Key.DirectionDown) {
-                                            moveRow(rowIndex + 1)
-                                            true
-                                        } else if (it.key == Key.DirectionUp) {
-                                            moveRow(rowIndex - 1)
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    }
-                            )
+            rows.forEachIndexed { rowIndex, row ->
+                item(key = row.key) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CatalogHeading(row.title, large = false)
+                        // Only the outer vertical list changes its pivot; shelves retain platform scrolling.
+                        CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
+                            LazyRow(
+                                state = rowStates.getValue(row.key),
+                                modifier = Modifier.fillMaxWidth().focusRestorer(),
+                                contentPadding = PaddingValues(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(18.dp)
+                            ) {
+                                itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
+                                    CatalogCard(
+                                        item = item,
+                                        account = account,
+                                        wide = row.wide || item.type == "Episode",
+                                        onClick = { onOpen(item) },
+                                        modifier = Modifier.focusRequester(requesters.getValue("${row.key}:${item.id}"))
+                                            .testTag("home:${row.key}:${item.id}")
+                                            .onFocusChanged {
+                                                if (it.isFocused) {
+                                                    selectedRow = row.key
+                                                    selectedRowIndex = rowIndex
+                                                    selectedItem = item.id
+                                                    rowSelections = rowSelections + (row.key to item.id)
+                                                    rowPositions = rowPositions + (row.key to itemIndex)
+                                                }
+                                            }.onPreviewKeyEvent {
+                                                if (it.type != KeyEventType.KeyDown) {
+                                                    false
+                                                } else if (it.key == Key.DirectionDown) {
+                                                    moveRow(rowIndex + 1)
+                                                    true
+                                                } else if (it.key == Key.DirectionUp) {
+                                                    moveRow(rowIndex - 1)
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-        item(key = "profile") {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(
-                    onClick = onSwitchUser,
-                    enabled = !state.busy,
-                    modifier = Modifier.focusRequester(profile).testTag("home:switch-user")
-                        .onFocusChanged {
-                            // During the first load these are the only attached targets. Automatic focus is
-                            // not a saved user choice and must not outrank the first arriving catalog card.
+            item(key = "profile") {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(
+                        onClick = onSwitchUser,
+                        enabled = !state.busy,
+                        modifier = Modifier.focusRequester(profile).testTag("home:switch-user")
+                            .onFocusChanged {
+                                // During the first load these are the only attached targets. Automatic focus is
+                                // not a saved user choice and must not outrank the first arriving catalog card.
+                                if (it.isFocused && (restored || initialNavigation)) {
+                                    selectedRow = "profile"
+                                    selectedProfile = "switch"
+                                }
+                            }
+                            .onPreviewKeyEvent {
+                                if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                    moveRow(rows.lastIndex)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                    ) { Text("Switch user") }
+                    Button(
+                        onClick = onSignOut,
+                        enabled = !state.busy,
+                        modifier = Modifier.testTag("home:sign-out").onFocusChanged {
                             if (it.isFocused && (restored || initialNavigation)) {
                                 selectedRow = "profile"
                                 selectedProfile = "switch"
                             }
-                        }
-                        .onPreviewKeyEvent {
+                        }.onPreviewKeyEvent {
                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                                 moveRow(rows.lastIndex)
                                 true
@@ -274,41 +318,25 @@ fun CatalogHome(
                                 false
                             }
                         }
-                ) { Text("Switch user") }
-                Button(
-                    onClick = onSignOut,
-                    enabled = !state.busy,
-                    modifier = Modifier.testTag("home:sign-out").onFocusChanged {
-                        if (it.isFocused && (restored || initialNavigation)) {
-                            selectedRow = "profile"
-                            selectedProfile = "switch"
+                    ) { Text(if (state.busy) "Please wait…" else "Sign out") }
+                    Button(
+                        onClick = onSettings,
+                        enabled = !state.busy,
+                        modifier = Modifier.focusRequester(settingsFocus).testTag("home:settings").onFocusChanged {
+                            if (it.isFocused && (restored || initialNavigation)) {
+                                selectedRow = "profile"
+                                selectedProfile = "settings"
+                            }
+                        }.onPreviewKeyEvent {
+                            if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+                                moveRow(rows.lastIndex)
+                                true
+                            } else {
+                                false
+                            }
                         }
-                    }.onPreviewKeyEvent {
-                        if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                            moveRow(rows.lastIndex)
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                ) { Text(if (state.busy) "Please wait…" else "Sign out") }
-                Button(
-                    onClick = onSettings,
-                    enabled = !state.busy,
-                    modifier = Modifier.focusRequester(settingsFocus).testTag("home:settings").onFocusChanged {
-                        if (it.isFocused && (restored || initialNavigation)) {
-                            selectedRow = "profile"
-                            selectedProfile = "settings"
-                        }
-                    }.onPreviewKeyEvent {
-                        if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                            moveRow(rows.lastIndex)
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                ) { Text("Settings") }
+                    ) { Text("Settings") }
+                }
             }
         }
     }
