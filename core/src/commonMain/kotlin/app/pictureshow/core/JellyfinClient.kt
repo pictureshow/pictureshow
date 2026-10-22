@@ -41,7 +41,8 @@ interface JellyfinService {
 
 class JellyfinClient(private val client: HttpClient, private val identity: ClientIdentity) :
     JellyfinService,
-    CatalogService by CatalogClient(client, identity) {
+    CatalogService by CatalogClient(client, identity),
+    SearchService by SearchClient(client, identity) {
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun probe(address: String): ClientResult<Server> {

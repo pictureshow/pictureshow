@@ -15,7 +15,11 @@ interface TextPersistence {
 }
 
 @Serializable
-data class AccountSnapshot(val accounts: List<Account> = emptyList(), val currentKey: String? = null) {
+data class AccountSnapshot(
+    val accounts: List<Account> = emptyList(),
+    val currentKey: String? = null,
+    val recentSearches: Map<String, List<String>> = emptyMap()
+) {
     val currentAccount: Account? get() = accounts.firstOrNull { it.key == currentKey }
 }
 
@@ -30,7 +34,7 @@ class AccountStore(private val persistence: TextPersistence) {
     suspend fun load(): AccountSnapshot = mutex.withLock { loadLocked() }
 
     suspend fun remember(account: Account) = update { snapshot ->
-        AccountSnapshot(snapshot.accounts.filterNot { it.key == account.key } + account, account.key)
+        snapshot.copy(accounts = snapshot.accounts.filterNot { it.key == account.key } + account, currentKey = account.key)
     }
 
     suspend fun select(key: String?) = update { snapshot ->
@@ -55,9 +59,22 @@ class AccountStore(private val persistence: TextPersistence) {
     suspend fun signOut(key: String) = update { snapshot ->
         snapshot.copy(
             accounts = snapshot.accounts.filterNot { it.key == key },
-            currentKey = snapshot.currentKey.takeUnless { it == key }
+            currentKey = snapshot.currentKey.takeUnless { it == key },
+            recentSearches = snapshot.recentSearches - key
         )
     }
+
+    suspend fun recordSearch(key: String, query: String) = update { snapshot ->
+        val term = normalizeSearch(query)
+        if (term.length < 2 || snapshot.accounts.none { it.key == key }) {
+            snapshot
+        } else {
+            val recent = listOf(term) + snapshot.recentSearches[key].orEmpty().filterNot { it.equals(term, ignoreCase = true) }
+            snapshot.copy(recentSearches = snapshot.recentSearches + (key to recent.take(8)))
+        }
+    }
+
+    suspend fun clearSearches(key: String) = update { it.copy(recentSearches = it.recentSearches - key) }
 
     private suspend fun loadLocked(): AccountSnapshot {
         if (!loaded) {

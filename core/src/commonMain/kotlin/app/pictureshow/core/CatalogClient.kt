@@ -106,7 +106,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         method = if (value) HttpMethod.Post else HttpMethod.Delete
     )
 
-    private suspend inline fun <reified T> request(
+    internal suspend inline fun <reified T> request(
         account: Account,
         path: String,
         parameters: Map<String, String?> = emptyMap(),
