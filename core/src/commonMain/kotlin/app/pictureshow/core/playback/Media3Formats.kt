@@ -66,25 +66,6 @@ internal object Media3Formats {
     /** Text formats Media3 renders from a side-loaded file (WebVTT, TTML, SubRip, SSA/ASS). */
     val externalTextSubtitles: List<String> = listOf("srt", "subrip", "ass", "ssa", "vtt", "webvtt", "ttml")
 
-    /** Video codecs the server will put in an HLS stream (StreamBuilder._supportedHlsVideoCodecs). */
-    val hlsVideo: Set<VideoCodec> = setOf(VideoCodec.H264, VideoCodec.HEVC, VideoCodec.VP9, VideoCodec.AV1)
-
-    /**
-     * HLS fMP4 audio accepted by both server and extractor. Opus stays available for direct play, but is excluded
-     * here: remuxed Opus can have a negative first decode timestamp encoded into unsigned tfdt, which Media3 rejects.
-     * Codec order alone cannot prevent copying: the server prefers any matching source codec in this list.
-     */
-    val hlsMp4Audio: Set<AudioCodec> = setOf(
-        AudioCodec.AAC,
-        AudioCodec.AC3,
-        AudioCodec.EAC3,
-        AudioCodec.MP3,
-        AudioCodec.ALAC,
-        AudioCodec.FLAC,
-        AudioCodec.DTS,
-        AudioCodec.TRUEHD
-    )
-
     /** Audio codecs the server allows in HLS MPEG-TS (StreamBuilder._supportedHlsAudioCodecsTs). */
     val hlsTsAudio: Set<AudioCodec> = setOf(AudioCodec.AAC, AudioCodec.AC3, AudioCodec.EAC3, AudioCodec.MP3)
 

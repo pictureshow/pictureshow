@@ -55,17 +55,16 @@ class DeviceProfileBuilderTest {
     }
 
     @Test
-    fun eac3CanOnlyBeCopiedIntoTheFmp4TranscodeAtSevenOne() {
+    fun eac3SevenOneIsNeverCopiedIntoAnyHlsTranscode() {
         for (profile in listOf(projector, streamer)) {
-            val (mp4, ts) = profile.transcodingProfiles
-            assertEquals("mp4", mp4.container)
-            assertEquals(MediaStreamProtocol.Hls, mp4.protocol)
-            assertTrue("eac3" in mp4.audioCodec.split(','))
+            val ts = profile.transcodingProfiles.single()
             assertEquals("ts", ts.container)
-            // The server checks codec profiles against the transcoding container before copying audio, so the TS
-            // limit above also stops a 7.1 E-AC-3 copy into TS segments.
+            assertEquals(MediaStreamProtocol.Hls, ts.protocol)
             assertTrue("eac3" in ts.audioCodec.split(','))
+            // The server checks this container-scoped limit before copying 7.1 audio into a TS transcode.
             assertEquals(6, profile.audioLimit("eac3", "ts,mpegts"))
+            // Decodable direct MKV audio remains available at eight channels.
+            assertEquals(8, profile.audioLimit("eac3"))
         }
     }
 
@@ -529,13 +528,33 @@ class DeviceProfileBuilderTest {
     }
 
     @Test
-    fun tsTranscodeKeepsOnlyCodecsTheServerPutsInTs() {
-        val ts = streamer.transcodingProfiles.single { it.container == "ts" }
+    fun everyHlsTargetUsesTsEvenWhenFmp4CouldCopyMoreCodecs() {
+        for (profile in listOf(stick, projector, streamer)) {
+            assertEquals(listOf("ts"), profile.transcodingProfiles.map { it.container })
+            val ts = profile.transcodingProfiles.single()
+            assertEquals(MediaStreamProtocol.Hls, ts.protocol)
+            assertEquals("h264", ts.videoCodec.split(',').first())
+            assertEquals(false, ts.breakOnNonKeyFrames)
+            assertEquals(1, ts.minSegments)
+        }
+        val ts = streamer.transcodingProfiles.single()
         assertEquals("h264,hevc", ts.videoCodec)
         assertEquals("eac3,ac3,aac,mp3", ts.audioCodec)
-        val mp4 = streamer.transcodingProfiles.single { it.container == "mp4" }
-        assertEquals("h264,hevc,av1,vp9", mp4.videoCodec)
-        assertEquals("eac3,ac3,aac,mp3,flac,dts,truehd", mp4.audioCodec)
+        // The server ranks all profiles by video/audio copy compatibility. A fallback fMP4 profile could win
+        // despite list order, exposing negative audio decode times when only audio must be re-encoded.
+        assertTrue("av1" in streamer.directPlay("mkv")!!.videoCodec!!.split(','))
+        assertTrue("flac" in streamer.directPlay("mkv")!!.audioCodec!!.split(','))
+    }
+
+    @Test
+    fun noHlsTargetIsAdvertisedWithoutATsVideoDecoder() {
+        val onlyVp9 = CapabilityFixtures.basicStick.copy(
+            videoDecoders = CapabilityFixtures.projector.videoDecoders.filter { it.codec == VideoCodec.VP9 }
+        )
+        assertTrue(onlyVp9.videoDecoders.isNotEmpty())
+        val profile = DeviceProfileBuilder.build(onlyVp9)
+        assertTrue(profile.transcodingProfiles.isEmpty())
+        assertTrue(profile.directPlayProfiles.any { "vp9" in it.videoCodec.orEmpty().split(',') })
     }
 
     @Test
@@ -549,7 +568,7 @@ class DeviceProfileBuilderTest {
                 assertTrue("aac" in transcode.audioCodec.split(','), transcode.container)
             }
         }
-        // Ordering AAC first was already the stereo default; removal is what stops source Opus stream copy.
+        // TS cannot carry the server's Opus copy; direct containers remain unaffected.
         assertTrue(projector.transcodingProfiles.first().audioCodec.startsWith("aac,"))
     }
 
