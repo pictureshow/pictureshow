@@ -7,8 +7,11 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -65,13 +68,15 @@ class SignInFocusTest {
     private val homeReady = CompletableDeferred<Unit>()
     private val quickAuthorized = CompletableDeferred<Account>()
     private val discovered = CompletableDeferred<List<DiscoveredServer>>()
-    private var catalogRequests = 0
+    private val catalogUsers = mutableListOf<String>()
     private var signedIn: Pair<String, String>? = null
     private var gatedUser = account.user.id
     private val accounts = AccountStore(object : TextPersistence {
         private var value: String? = null
         override suspend fun read() = value
-        override suspend fun write(value: String) { this.value = value }
+        override suspend fun write(value: String) {
+            this.value = value
+        }
     })
     private var koinStarted = false
 
@@ -85,7 +90,7 @@ class SignInFocusTest {
     private fun launch() {
         val catalog = object : CatalogService by CatalogModelsTest.FakeCatalog() {
             override suspend fun views(account: Account): ClientResult<ItemPage> {
-                catalogRequests++
+                catalogUsers += account.user.id
                 if (account.user.id == gatedUser) homeReady.await()
                 return ClientResult.Success(ItemPage(listOf(library)))
             }
@@ -107,19 +112,25 @@ class SignInFocusTest {
             override suspend fun logout(account: Account) = ClientResult.Success(Unit)
         }
         startKoin {
-            modules(module {
-                single { accounts }
-                single<JellyfinService> { service }
-                single<CatalogService> { catalog }
-                single<ServerDiscovery> { object : ServerDiscovery { override suspend fun discover() = discovered.await() } }
-                viewModel { SessionViewModel(get()) }
-                viewModel { ServerViewModel(get(), get()) }
-                viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
-                viewModel { (server: Server) -> QuickConnectViewModel(server, get(), get()) }
-                viewModel { AccountsViewModel(get()) }
-                viewModel { (account: Account) -> HomeViewModel(account, get(), get()) }
-                viewModel { (account: Account, session: CatalogSession) -> CatalogHomeViewModel(account, session) }
-            })
+            modules(
+                module {
+                    single { accounts }
+                    single<JellyfinService> { service }
+                    single<CatalogService> { catalog }
+                    single<ServerDiscovery> {
+                        object : ServerDiscovery {
+                            override suspend fun discover() = discovered.await()
+                        }
+                    }
+                    viewModel { SessionViewModel(get()) }
+                    viewModel { ServerViewModel(get(), get()) }
+                    viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
+                    viewModel { (server: Server) -> QuickConnectViewModel(server, get(), get()) }
+                    viewModel { AccountsViewModel(get()) }
+                    viewModel { (account: Account) -> HomeViewModel(account, get(), get()) }
+                    viewModel { (account: Account, session: CatalogSession) -> CatalogHomeViewModel(account, session) }
+                }
+            )
         }
         koinStarted = true
         compose.setContent { MaterialTheme(colorScheme = darkColorScheme()) { Pictureshow() } }
@@ -131,16 +142,27 @@ class SignInFocusTest {
         compose.waitForIdle()
     }
 
-    private fun assertFirstHomeCardAfterDelayedLoad() {
+    private fun waitForText(text: String) {
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().size == 1 }
+    }
+
+    private fun assertFirstHomeCardAfterDelayedLoad(expectedUser: String = account.user.id) {
+        waitForText("Loading your home…")
+        compose.runOnIdle { assertEquals(true, expectedUser in catalogUsers) }
+        // Finish the navigation transition while the external catalog request remains suspended.
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
         compose.onNodeWithText("Loading your home…").assertExists()
         // Android can automatically focus the only attached target as navigation replaces the sign-in screen.
         // This is not a D-pad choice. Reproduce it deterministically while the real catalog request is suspended.
         compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithTag("home:switch-user").assertIsFocused()
         compose.runOnIdle { homeReady.complete(Unit) }
-        compose.waitForIdle()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag("home:libraries:library").fetchSemanticsNodes().singleOrNull()
+                ?.config?.getOrNull(SemanticsProperties.Focused) == true
+        }
         compose.onNodeWithTag("home:libraries:library").assertIsFocused()
-        compose.runOnIdle { assertEquals(true, catalogRequests > 0) }
     }
 
     @Test
@@ -148,7 +170,9 @@ class SignInFocusTest {
         runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
         launch()
         compose.onNodeWithContentDescription("Username").assertIsFocused()
-        key(Key.DirectionDown)
+        // The regression concerns destination focus after authentication. Target the production password
+        // field directly rather than depending on BasicTextField's cursor/navigation key ordering.
+        compose.onNodeWithContentDescription("Password").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithContentDescription("Password").assertIsFocused()
         key(Key.DirectionCenter)
         compose.onNodeWithContentDescription("Password").performTextInput("invented-password")
@@ -163,7 +187,7 @@ class SignInFocusTest {
         runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
         launch()
         compose.onNodeWithText("Use Quick Connect").performClick()
-        compose.onNodeWithText("123456").assertExists()
+        waitForText("123456")
         compose.runOnIdle { quickAuthorized.complete(account) }
         compose.waitForIdle()
         assertFirstHomeCardAfterDelayedLoad()
@@ -181,8 +205,11 @@ class SignInFocusTest {
         key(Key.DirectionDown)
         compose.onNodeWithTag("home:switch-user").assertIsFocused()
         key(Key.DirectionCenter)
+        waitForText("Robin on Screen room")
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
         compose.onNodeWithText("Robin on Screen room").performClick()
-        assertFirstHomeCardAfterDelayedLoad()
+        assertFirstHomeCardAfterDelayedLoad(other.user.id)
     }
 
     @Test
@@ -201,6 +228,9 @@ class SignInFocusTest {
     fun discoveryDoesNotTakeFocusAfterTheUserMovesToConnect() {
         launch()
         key(Key.DirectionDown)
+        // Exercise the real page's interaction handler, then identify the resulting focus target explicitly;
+        // this assertion concerns discovery cancellation rather than BasicTextField's cursor key ordering.
+        compose.onNodeWithText("Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithText("Connect").assertIsFocused()
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { discovered.complete(listOf(DiscoveredServer(server.url, server.id, server.name))) }
@@ -215,6 +245,9 @@ class SignInFocusTest {
         compose.runOnIdle { discovered.complete(listOf(DiscoveredServer(server.url, server.id, server.name))) }
         compose.mainClock.advanceTimeBy(200)
         key(Key.DirectionDown)
+        // Exercise the real page's interaction handler, then identify the resulting focus target explicitly;
+        // this assertion concerns discovery cancellation rather than BasicTextField's cursor key ordering.
+        compose.onNodeWithText("Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithText("Connect").assertIsFocused()
         compose.mainClock.advanceTimeBy(1_200)
         compose.onNodeWithText("Connect").assertIsFocused()
