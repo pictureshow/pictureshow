@@ -342,6 +342,40 @@ class CatalogFocusTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun tvHomeKeepsLowerShelfSelectionWhenItDetachesWhileMovingUpAndDown() {
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        val folders = (0..2).map { MediaItem("folder-$it", "Folder $it", "CollectionFolder", isFolder = true) }
+        val stable = home.copy(
+            rows = listOf(
+                home.rows[0].copy(items = movies.take(1)),
+                home.rows[2].copy(items = folders),
+                home.rows[3],
+                HomeRow("shows", "Latest in Shows", listOf(MediaItem("series", "A Show", "Series")))
+            )
+        )
+        compose.setContent { Harness(state = stable) }
+        fun move(direction: Key) {
+            key(direction)
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
+        }
+        move(Key.DirectionDown)
+        move(Key.DirectionDown)
+        compose.onNodeWithTag("home:latest:library:film-0").assertIsFocused()
+        repeat(5) { move(Key.DirectionRight) }
+        compose.onNodeWithTag("home:latest:library:film-5").assertIsFocused()
+        move(Key.DirectionUp)
+        move(Key.DirectionUp)
+        compose.onNodeWithTag("home:resume:film-0").assertIsFocused()
+        move(Key.DirectionDown)
+        move(Key.DirectionDown)
+        compose.onNodeWithTag("home:latest:library:film-5").assertIsFocused()
+        // No refresh or reorder: the same immutable items back both visits.
+        assertEquals(movies.take(9), stable.rows[2].items)
+    }
+
+    @Test
     fun homeInitiallyFocusesFirstCardAndDpadMovesBetweenRows() {
         compose.setContent { Harness() }
         compose.onNodeWithTag("home:resume:film-0").assertIsFocused().assertIsDisplayed()
