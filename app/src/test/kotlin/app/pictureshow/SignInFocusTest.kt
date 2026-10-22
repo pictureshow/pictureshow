@@ -75,6 +75,7 @@ class SignInFocusTest {
     private val serviceEvents = mutableListOf<String>()
     private var probeResult: ClientResult<Server> = ClientResult.Success(server)
     private var probeReady: CompletableDeferred<Unit>? = null
+    private var publicUsers = emptyList<User>()
     private var signedIn: Pair<String, String>? = null
     private var gatedUser = account.user.id
     private var savedAccounts: String? = null
@@ -107,7 +108,7 @@ class SignInFocusTest {
                 probeReady?.await()
                 return probeResult
             }
-            override suspend fun publicUsers(server: Server) = ClientResult.Success(emptyList<User>())
+            override suspend fun publicUsers(server: Server) = ClientResult.Success(publicUsers)
             override suspend fun quickConnectEnabled(server: Server) = ClientResult.Success(true)
             override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> {
                 signedIn = username to password
@@ -229,6 +230,74 @@ class SignInFocusTest {
         compose.onNodeWithText("Add a server").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         key(Key.DirectionCenter)
         waitForText("Renamed Cinema · remembered")
+    }
+
+    @Test
+    fun remoteUpDownTraversesBothLoginFieldsAndEverySignInOption() {
+        publicUsers = listOf(User("guest1", "Guest one"), User("guest2", "Guest two"))
+        runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
+        launch()
+        waitForText("Guest two")
+        compose.onNodeWithContentDescription("Username").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithContentDescription("Password").assertIsFocused()
+        for (label in listOf("Sign in", "Use Quick Connect", "Guest one", "Guest two", "Back")) {
+            key(Key.DirectionDown)
+            compose.onNodeWithText(label).assertIsFocused()
+        }
+        for (label in listOf("Guest two", "Guest one", "Use Quick Connect", "Sign in")) {
+            key(Key.DirectionUp)
+            compose.onNodeWithText(label).assertIsFocused()
+        }
+        key(Key.DirectionUp)
+        compose.onNodeWithContentDescription("Password").assertIsFocused()
+        key(Key.DirectionUp)
+        compose.onNodeWithContentDescription("Username").assertIsFocused()
+        // A boundary Up must not trap subsequent Down or clear the username.
+        key(Key.DirectionUp)
+        key(Key.DirectionDown)
+        compose.onNodeWithContentDescription("Password").assertIsFocused()
+        assertEquals(null, signedIn)
+    }
+
+    @Test
+    fun usernameDoneAdvancesToPasswordAndHiddenKeyboardArrowsStillLeaveEditedFields() {
+        runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
+        launch()
+        key(Key.DirectionCenter)
+        compose.onNodeWithContentDescription("Username").performTextInput("suffix")
+        compose.onNodeWithContentDescription("Username").performImeAction()
+        compose.onNodeWithContentDescription("Password").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithContentDescription("Password").performTextInput("invented-password")
+        // Robolectric has no visible IME. The editing flag remains true, just as after Back hides it on TV.
+        key(Key.DirectionUp)
+        compose.onNodeWithContentDescription("Username").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithContentDescription("Password").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithText("Sign in").assertIsFocused()
+        assertEquals(null, signedIn)
+    }
+
+    @Test
+    fun serverAddressRemoteArrowsReachConnectAndReturnAfterEditingAndDoneConnects() {
+        launch()
+        compose.onNodeWithContentDescription("Server address").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithText("Connect").assertIsFocused()
+        key(Key.DirectionUp)
+        compose.onNodeWithContentDescription("Server address").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithContentDescription("Server address").performTextInput(server.url)
+        key(Key.DirectionDown)
+        compose.onNodeWithText("Connect").assertIsFocused()
+        key(Key.DirectionUp)
+        compose.onNodeWithContentDescription("Server address").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.onNodeWithContentDescription("Server address").performImeAction()
+        waitForText("Sign in to Screen room")
+        compose.onNodeWithContentDescription("Username").assertIsFocused()
     }
 
     @Test

@@ -12,8 +12,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -41,6 +45,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -349,8 +354,16 @@ internal fun Pictureshow(
             val screen by vm.state.collectAsStateWithLifecycle()
             LaunchedEffect(entry) { vm.prefillUsername(entry.arguments?.getString("username").orEmpty()) }
             DisposableEffect(Unit) { onDispose { vm.leave() } }
+            val focusManager = LocalFocusManager.current
             Page("Sign in to ${server.name}") {
-                RemoteField("Username", screen.username, vm::username, initial = true, enabled = !screen.busy)
+                RemoteField(
+                    "Username",
+                    screen.username,
+                    vm::username,
+                    initial = true,
+                    enabled = !screen.busy,
+                    onDone = { focusManager.moveFocus(FocusDirection.Down) }
+                )
                 RemoteField("Password", screen.password, vm::password, password = true, enabled = !screen.busy, onDone = vm::signIn)
                 Action(if (screen.busy) "Signing in…" else "Sign in", enabled = !screen.busy, onClick = vm::signIn)
                 Message(screen.error)
@@ -577,6 +590,7 @@ private fun Message(message: String?) {
     if (message != null) Text(message, color = Color(0xFFFFCCB8))
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RemoteField(
     label: String,
@@ -593,6 +607,10 @@ private fun RemoteField(
     // focused, and on a TV the keyboard then takes the D-pad and the first press types its highlighted key.
     var editing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // Visibility also covers floating TV keyboards with zero bottom inset. Back may hide the IME
+    // without ending editing, so editing alone cannot decide whether arrows should navigate the page.
+    val imeVisible = WindowInsets.isImeVisible
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label)
         BasicTextField(
@@ -621,15 +639,23 @@ private fun RemoteField(
                     if (!it.isFocused) editing = false
                 }
                 .onPreviewKeyEvent {
-                    // Both halves of the press are consumed, so the keyboard opens only after the key is released
-                    // and the release can't reach it.
-                    if (it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter) {
-                        if (it.type == KeyEventType.KeyUp) {
-                            if (editing) keyboard?.show() else editing = true
+                    when {
+                        !enabled -> false
+                        !imeVisible && (it.key == Key.DirectionUp || it.key == Key.DirectionDown) -> {
+                            if (it.type == KeyEventType.KeyDown) {
+                                editing = false
+                                focusManager.moveFocus(if (it.key == Key.DirectionUp) FocusDirection.Up else FocusDirection.Down)
+                            }
+                            true
                         }
-                        true
-                    } else {
-                        false
+                        // Consume both halves so opening the keyboard on release cannot type a key into it.
+                        it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter -> {
+                            if (it.type == KeyEventType.KeyUp) {
+                                if (editing) keyboard?.show() else editing = true
+                            }
+                            true
+                        }
+                        else -> false
                     }
                 }
                 .border(if (focused) 3.dp else 1.dp, if (focused) Color(0xFFB8C4FF) else Color(0xFF747A8E), RoundedCornerShape(8.dp))
