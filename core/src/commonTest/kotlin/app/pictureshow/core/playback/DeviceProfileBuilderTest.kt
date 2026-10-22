@@ -148,7 +148,7 @@ class DeviceProfileBuilderTest {
     @Test
     fun levelsAreInServerUnits() {
         assertEquals("51", projector.video("h264").value(ProfileConditionValue.VideoLevel))
-        assertEquals("153", projector.video("hevc").value(ProfileConditionValue.VideoLevel))
+        assertNull(projector.video("hevc").value(ProfileConditionValue.VideoLevel))
         assertEquals("42", stick.video("h264").value(ProfileConditionValue.VideoLevel))
         assertEquals("123", stick.video("hevc").value(ProfileConditionValue.VideoLevel))
         assertEquals("13", streamer.video("av1").value(ProfileConditionValue.VideoLevel))
@@ -164,7 +164,7 @@ class DeviceProfileBuilderTest {
         assertEquals(setOf("VideoFramerateNotSupported"), ProfileEvaluator.directPlayFailures(projector, uhd60))
         assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(projector, uhd60.copy(frameRate = 24.0)))
         assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(projector, uhd60.copy(width = 1920, height = 1080)))
-        assertFalse(projector.codecProfiles.any { it.codec == "hevc" && it.applyConditions.isNotEmpty() })
+        assertTrue(projector.codecProfiles.any { it.codec == "hevc" && it.applyConditions.isNotEmpty() })
     }
 
     @Test
@@ -206,6 +206,197 @@ class DeviceProfileBuilderTest {
         assertEquals("60", projector.video("h264").value(ProfileConditionValue.VideoFramerate))
         // VP8 has only a software decoder, so it is listed.
         assertNotNull(projector.codecProfiles.singleOrNull { it.codec == "vp8" })
+    }
+
+    @Test
+    fun softwareAv1NeedsRealTimeEvidenceAndStaysInsideIt() {
+        val decoder = VideoDecoder(
+            VideoCodec.AV1,
+            setOf("Main"),
+            CodecLevel(5, 1),
+            4096,
+            4096,
+            120.0,
+            maxBitDepth = 8,
+            hardware = false
+        )
+        fun profile(decoder: VideoDecoder) = DeviceProfileBuilder.build(
+            CapabilityFixtures.projector.copy(videoDecoders = CapabilityFixtures.projector.videoDecoders + decoder)
+        )
+        assertFalse(profile(decoder).directPlayProfiles.any { "av1" in it.videoCodec.orEmpty().split(',') })
+        val measured = profile(decoder.copy(sustainablePerformance = VideoPerformancePoint(1280, 720, 30.0)))
+        val source = combo(video = "av1", profile = "Main", audio = "opus", width = 1280, height = 720, frameRate = 30.0)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(measured, source))
+        assertEquals(
+            setOf("VideoResolutionNotSupported"),
+            ProfileEvaluator.directPlayFailures(measured, source.copy(width = 1920, height = 1080))
+        )
+        assertEquals(setOf("VideoFramerateNotSupported"), ProfileEvaluator.directPlayFailures(measured, source.copy(frameRate = 60.0)))
+        assertEquals(setOf("VideoBitDepthNotSupported"), ProfileEvaluator.directPlayFailures(measured, source.copy(bitDepth = 10)))
+        assertTrue("VideoResolutionNotSupported" in ProfileEvaluator.directPlayFailures(measured, source.copy(width = null)))
+        assertTrue("VideoFramerateNotSupported" in ProfileEvaluator.directPlayFailures(measured, source.copy(frameRate = null)))
+        val scoped = measured.codecProfiles.single { it.codec == "av1" && it.applyConditions.isNotEmpty() }
+        assertEquals(
+            setOf(ProfileConditionValue.Width, ProfileConditionValue.Height, ProfileConditionValue.VideoFramerate),
+            scoped.applyConditions.map { it.property }.toSet()
+        )
+    }
+
+    @Test
+    fun mislabeledHevcLevelOnlyRelaxesInside1080p30OnAProven4k60Engine() {
+        val source = combo(profile = "Main 10", bitDepth = 10, width = 1920, height = 1080, frameRate = 24.0).copy(level = 186)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(projector, source))
+        for (outside in listOf(
+            source.copy(width = 3840, height = 2160),
+            source.copy(frameRate = 60.0),
+            source.copy(height = 1440),
+            source.copy(width = null),
+            source.copy(height = null),
+            source.copy(frameRate = null)
+        )) {
+            assertTrue("VideoLevelNotSupported" in ProfileEvaluator.directPlayFailures(projector, outside), outside.toString())
+        }
+        assertTrue("VideoLevelNotSupported" in ProfileEvaluator.directPlayFailures(stick, source))
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(projector, source.copy(width = 3840, height = 2160, level = 153)))
+        assertEquals(setOf("VideoLevelNotSupported"), ProfileEvaluator.directPlayFailures(projector, source.copy(level = 189)))
+        assertTrue("VideoProfileNotSupported" in ProfileEvaluator.directPlayFailures(projector, source.copy(videoProfile = "Main 12")))
+    }
+
+    @Test
+    fun distinctProfileLevelDepthAndHdrTuplesStayTogether() {
+        val decoder = VideoDecoder(
+            VideoCodec.HEVC, setOf("Main", "Main 10"), CodecLevel(5, 1),
+            3840, 2160, 60.0, maxFrameRateAtMaxSize = 60.0, maxBitDepth = 10,
+            hdrFormats = setOf(HdrFormat.HDR10),
+            profileCapabilities = listOf(
+                VideoProfileCapability("Main", CodecLevel(5, 1), 8),
+                VideoProfileCapability("Main 10", CodecLevel(4, 1), 10, setOf(HdrFormat.HDR10))
+            )
+        )
+        val profile = DeviceProfileBuilder.build(CapabilityFixtures.projector.copy(videoDecoders = listOf(decoder)))
+        val main = combo(profile = "Main", width = 1920, height = 1080, frameRate = 24.0).copy(level = 153)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, main))
+        assertTrue("VideoLevelNotSupported" in ProfileEvaluator.directPlayFailures(profile, main.copy(videoProfile = "Main 10")))
+        assertEquals(
+            emptySet(),
+            ProfileEvaluator.directPlayFailures(
+                profile,
+                main.copy(videoProfile = "Main 10", bitDepth = 10, level = 123)
+            )
+        )
+        assertTrue("VideoBitDepthNotSupported" in ProfileEvaluator.directPlayFailures(profile, main.copy(bitDepth = 10)))
+        assertTrue("VideoRangeTypeNotSupported" in ProfileEvaluator.directPlayFailures(profile, main.copy(rangeType = "HDR10")))
+        assertEquals(
+            emptySet(),
+            ProfileEvaluator.directPlayFailures(
+                profile,
+                main.copy(videoProfile = "Main 10", bitDepth = 10, level = 123, rangeType = "HDR10")
+            )
+        )
+    }
+
+    @Test
+    fun av1VariantsSharingMainNameCannotCombineTenBitDepthWithTheEightBitLevel() {
+        val decoder = VideoDecoder(
+            VideoCodec.AV1, setOf("Main"), CodecLevel(5, 1), 3840, 2160, 60.0,
+            maxBitDepth = 10, hdrFormats = setOf(HdrFormat.HDR10),
+            profileCapabilities = listOf(
+                VideoProfileCapability("Main", CodecLevel(5, 1), 8),
+                VideoProfileCapability("Main", CodecLevel(4, 1), 10, setOf(HdrFormat.HDR10))
+            )
+        )
+        val profile = DeviceProfileBuilder.build(CapabilityFixtures.projector.copy(videoDecoders = listOf(decoder)))
+        val source = combo(video = "av1", profile = "Main", width = 1920, height = 1080, frameRate = 24.0).copy(level = 13)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, source))
+        assertTrue("VideoBitDepthNotSupported" in ProfileEvaluator.directPlayFailures(profile, source.copy(bitDepth = 10)))
+        // Same server profile: the selected real 8-bit envelope conservatively forgoes the other variant's 10-bit support.
+        assertTrue("VideoBitDepthNotSupported" in ProfileEvaluator.directPlayFailures(profile, source.copy(bitDepth = 10, level = 9)))
+    }
+
+    @Test
+    fun hdrVariantLevelCannotRaiseTheSamePhysicalDecodersSdrCeiling() {
+        val sdr = VideoProfileCapability("Main 10", CodecLevel(4, 1), 10, setOf(HdrFormat.HDR10, HdrFormat.HLG))
+        val hdrPlus = VideoProfileCapability(
+            "Main 10",
+            CodecLevel(5, 1),
+            10,
+            setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS)
+        )
+        val decoder = VideoDecoder(
+            VideoCodec.HEVC, setOf("Main 10"), CodecLevel(5, 1), 3840, 2160, 60.0,
+            maxBitDepth = 10, hdrFormats = hdrPlus.hdrFormats, profileCapabilities = listOf(sdr, hdrPlus)
+        )
+        fun profile(decoders: List<VideoDecoder>) = DeviceProfileBuilder.build(
+            CapabilityFixtures.dolbyVisionStreamer.copy(videoDecoders = decoders)
+        )
+        val onePhysicalDecoder = profile(listOf(decoder))
+        val source = combo(profile = "Main 10", bitDepth = 10, width = 1920, height = 1080, frameRate = 24.0).copy(level = 153)
+        assertEquals(setOf("VideoLevelNotSupported"), ProfileEvaluator.directPlayFailures(onePhysicalDecoder, source))
+        assertEquals(setOf("VideoLevelNotSupported"), ProfileEvaluator.directPlayFailures(onePhysicalDecoder, source.copy(level = 186)))
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(onePhysicalDecoder, source.copy(level = 123)))
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(onePhysicalDecoder, source.copy(level = 123, rangeType = "HDR10Plus")))
+        assertEquals(
+            setOf("VideoLevelNotSupported"),
+            ProfileEvaluator.directPlayFailures(
+                onePhysicalDecoder,
+                source.copy(rangeType = "HDR10Plus")
+            )
+        )
+        // The minimum is local to one physical decoder, never taken across separate decoder reports.
+        val separateDecoders = profile(
+            listOf(
+                decoder.copy(profileCapabilities = listOf(sdr)),
+                decoder.copy(profileCapabilities = listOf(hdrPlus))
+            )
+        )
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(separateDecoders, source))
+    }
+
+    @Test
+    fun complementaryHardwareDecodersDoNotManufactureACombinedEnvelope() {
+        val large = VideoDecoder(
+            VideoCodec.HEVC,
+            setOf("Main"),
+            CodecLevel(5, 1),
+            3840,
+            2160,
+            30.0,
+            maxBitDepth = 8
+        )
+        val deep = VideoDecoder(
+            VideoCodec.HEVC,
+            setOf("Main 10"),
+            CodecLevel(4, 1),
+            1920,
+            1080,
+            60.0,
+            maxBitDepth = 10,
+            hdrFormats = setOf(HdrFormat.HDR10)
+        )
+        val profile = DeviceProfileBuilder.build(CapabilityFixtures.projector.copy(videoDecoders = listOf(large, deep)))
+        val uhd = combo(profile = "Main", width = 3840, height = 2160, frameRate = 30.0).copy(level = 153)
+        val fullHd = uhd.copy(videoProfile = "Main 10", bitDepth = 10, width = 1920, height = 1080, frameRate = 60.0, level = 123)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, uhd))
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, fullHd))
+        assertTrue("VideoResolutionNotSupported" in ProfileEvaluator.directPlayFailures(profile, fullHd.copy(width = 3840, height = 2160)))
+        assertTrue("VideoFramerateNotSupported" in ProfileEvaluator.directPlayFailures(profile, uhd.copy(frameRate = 60.0)))
+        assertTrue("VideoBitDepthNotSupported" in ProfileEvaluator.directPlayFailures(profile, uhd.copy(bitDepth = 10)))
+    }
+
+    @Test
+    fun incomparableDecodersForOneProfileSelectARealEnvelope() {
+        val large = VideoDecoder(VideoCodec.H264, setOf("High"), CodecLevel(5, 1), 3840, 2160, 30.0)
+        val fast = large.copy(maxWidth = 1920, maxHeight = 1080, maxFrameRate = 60.0)
+        val profile = DeviceProfileBuilder.build(CapabilityFixtures.projector.copy(videoDecoders = listOf(large, fast)))
+        val source = combo(video = "h264", profile = "High", width = 3840, height = 2160, frameRate = 30.0)
+        assertEquals(emptySet(), ProfileEvaluator.directPlayFailures(profile, source))
+        assertTrue("VideoFramerateNotSupported" in ProfileEvaluator.directPlayFailures(profile, source.copy(frameRate = 60.0)))
+        assertTrue(
+            "VideoFramerateNotSupported" in ProfileEvaluator.directPlayFailures(
+                profile,
+                source.copy(width = 1920, height = 1080, frameRate = 60.0)
+            )
+        )
     }
 
     // Audio channels with and without passthrough.

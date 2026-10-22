@@ -58,8 +58,23 @@ data class VideoDecoder(
     val maxBitDepth: Int = 8,
     val hdrFormats: Set<HdrFormat> = emptySet(),
     val dolbyVisionProfiles: Set<Int> = emptySet(),
-    val hardware: Boolean = true
+    val hardware: Boolean = true,
+    /** A real-time envelope established by a performance point or measured achievable frame rates, not size support. */
+    val sustainablePerformance: VideoPerformancePoint? = null,
+    /** Exact Android profile/level/depth/HDR tuples; aggregate fields above are only summaries when this is populated. */
+    val profileCapabilities: List<VideoProfileCapability> = emptyList()
 )
+
+/** One profile on one decoder. Its level, depth and HDR support must not be transferred to another profile. */
+data class VideoProfileCapability(
+    val profile: String,
+    val maxLevel: CodecLevel?,
+    val maxBitDepth: Int,
+    val hdrFormats: Set<HdrFormat> = emptySet()
+)
+
+/** One conservative rectangular real-time envelope. Values outside it require transcoding. */
+data class VideoPerformancePoint(val width: Int, val height: Int, val frameRate: Double)
 
 data class DisplayCapabilities(
     val maxWidth: Int,

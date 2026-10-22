@@ -39,6 +39,12 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ui.compose)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.decoder)
+    implementation(libs.media3.common)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)
@@ -60,6 +66,7 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.compose.ui.test)
     testImplementation(libs.robolectric)
+    testImplementation(libs.media3.test.utils)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.turbine)

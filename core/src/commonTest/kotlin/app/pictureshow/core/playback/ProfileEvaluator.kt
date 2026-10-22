@@ -77,7 +77,7 @@ object ProfileEvaluator {
             ProfileConditionValue.VideoRangeType -> combo.rangeType
             ProfileConditionValue.Width -> combo.width?.toString()
             ProfileConditionValue.Height -> combo.height?.toString()
-            ProfileConditionValue.VideoFramerate -> combo.frameRate?.toString()
+            ProfileConditionValue.VideoFramerate -> (combo.frameRate ?: 0.0).toString()
             ProfileConditionValue.VideoLevel -> combo.level?.toString()
             else -> null
         }

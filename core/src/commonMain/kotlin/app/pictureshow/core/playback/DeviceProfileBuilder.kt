@@ -26,17 +26,35 @@ object DeviceProfileBuilder {
             maxStaticBitrate = bitrate,
             directPlayProfiles = directPlayProfiles(video.keys, audio.keys),
             transcodingProfiles = transcodingProfiles(capabilities, video.keys, audio.keys),
-            codecProfiles = videoCodecProfiles(video.values, capabilities.display) + audioCodecProfiles(audio),
+            codecProfiles = guardedVideoCodecProfiles(capabilities.videoDecoders, video, capabilities.display) + audioCodecProfiles(audio),
             subtitleProfiles = subtitleProfiles()
         )
     }
 
     /** Hardware decoders win; a software decoder is used for a codec only when no hardware decoder exists for it. */
     private fun selectVideoDecoders(decoders: List<VideoDecoder>): Map<VideoCodec, VideoDecoder> =
-        decoders.groupBy { it.codec }.mapValues { (_, forCodec) ->
-            val preferred = forCodec.filter { it.hardware }.ifEmpty { forCodec }
-            preferred.reduce(::merge)
-        }.toSortedMap(compareBy { it.ordinal })
+        decoders.filter { it.codec != VideoCodec.AV1 || it.hardware || it.sustainablePerformance != null }
+            .map { decoder ->
+                val point = decoder.sustainablePerformance
+                if (decoder.codec == VideoCodec.AV1 && !decoder.hardware && point != null) {
+                    decoder.copy(
+                        maxWidth = minOf(decoder.maxWidth, point.width),
+                        maxHeight = minOf(decoder.maxHeight, point.height),
+                        maxFrameRate = minOf(decoder.maxFrameRate, point.frameRate),
+                        maxFrameRateAtMaxSize = minOf(decoder.maxFrameRateAtMaxSize, point.frameRate)
+                    )
+                } else {
+                    decoder
+                }
+            }.groupBy { it.codec }.mapValues { (_, forCodec) ->
+                val preferred = forCodec.filter { it.hardware }.ifEmpty { forCodec }
+                if (preferred.first().codec == VideoCodec.AV1 && preferred.none { it.hardware }) {
+                    // Envelopes belong to individual decoders; combining width from one and speed from another overclaims.
+                    preferred.maxBy { it.maxWidth.toLong() * it.maxHeight * it.maxFrameRate }
+                } else {
+                    preferred.reduce(::merge)
+                }
+            }.toSortedMap(compareBy { it.ordinal })
 
     private fun merge(a: VideoDecoder, b: VideoDecoder): VideoDecoder = a.copy(
         profiles = a.profiles + b.profiles,
@@ -49,6 +67,99 @@ object DeviceProfileBuilder {
         hdrFormats = a.hdrFormats + b.hdrFormats,
         dolbyVisionProfiles = a.dolbyVisionProfiles + b.dolbyVisionProfiles
     )
+
+    /**
+     * The server ANDs every applicable codec profile. A broad outer bound retains the established homogeneous
+     * profile shape; profile-scoped conditions below constrain heterogeneous reports to one real decoder tuple.
+     * Incomparable alternatives for the same profile cannot be expressed as an OR here: choose an actual envelope.
+     */
+    private fun guardedVideoCodecProfiles(
+        reported: List<VideoDecoder>,
+        selected: Map<VideoCodec, VideoDecoder>,
+        display: DisplayCapabilities
+    ): List<CodecProfile> = selected.flatMap { (codec, summary) ->
+        val available = reported.filter {
+            it.codec == codec && (it.hardware || codec != VideoCodec.AV1 || it.sustainablePerformance != null)
+        }
+        val preferred = available.filter { it.hardware }.ifEmpty { available }
+        val tuples = preferred.flatMap { decoder ->
+            if (decoder.profileCapabilities.isEmpty()) {
+                if (decoder.profiles.isEmpty()) listOf(decoder) else decoder.profiles.map { decoder.copy(profiles = setOf(it)) }
+            } else {
+                // Android HDR variants can share the server profile and bit depth. Within this physical decoder,
+                // use their common reported ceiling so an HDR-specific level never leaks into an SDR claim.
+                val commonLevels = decoder.profileCapabilities.groupBy { it.profile.lowercase() to it.maxBitDepth }
+                    .mapValues { (_, variants) ->
+                        variants.mapNotNull { it.maxLevel }.minWithOrNull(compareBy({ it.major }, { it.minor }))
+                    }
+                decoder.profileCapabilities.map { tuple ->
+                    decoder.copy(
+                        profiles = setOf(tuple.profile),
+                        maxLevel = commonLevels[tuple.profile.lowercase() to tuple.maxBitDepth],
+                        maxBitDepth = tuple.maxBitDepth,
+                        hdrFormats = tuple.hdrFormats + if (HdrFormat.DOLBY_VISION in decoder.hdrFormats && tuple.maxBitDepth >= 10) {
+                            setOf(HdrFormat.DOLBY_VISION)
+                        } else {
+                            emptySet()
+                        },
+                        profileCapabilities = emptyList()
+                    )
+                }
+            }
+        }.map { decoder ->
+            val point = decoder.sustainablePerformance
+            if (decoder.codec == VideoCodec.AV1 && !decoder.hardware && point != null) {
+                decoder.copy(
+                    maxWidth = minOf(decoder.maxWidth, point.width),
+                    maxHeight = minOf(decoder.maxHeight, point.height),
+                    maxFrameRate = minOf(decoder.maxFrameRate, point.frameRate),
+                    maxFrameRateAtMaxSize = minOf(decoder.maxFrameRateAtMaxSize, point.frameRate)
+                )
+            } else {
+                decoder
+            }
+        }
+        val heterogeneous = preferred.size > 1 ||
+            preferred.any { decoder ->
+                decoder.profileCapabilities.any {
+                    it.maxLevel != decoder.maxLevel ||
+                        it.maxBitDepth != decoder.maxBitDepth ||
+                        it.hdrFormats != decoder.hdrFormats
+                }
+            }
+        if (!heterogeneous) {
+            videoCodecProfiles(listOf(summary), display)
+        } else {
+            val scoped = tuples.groupBy { it.profiles.singleOrNull() }.flatMap { (profile, alternatives) ->
+                val actual = alternatives.firstOrNull { candidate -> alternatives.all { dominates(candidate, it) } }
+                    ?: alternatives.maxBy { it.maxWidth.toLong() * it.maxHeight * it.maxFrameRate }
+                videoCodecProfiles(listOf(actual), display).map { constraints ->
+                    constraints.copy(
+                        applyConditions = (
+                            profile?.let {
+                                listOf(equalsAny(ProfileConditionValue.VideoProfile, listOf(it.lowercase())))
+                            } ?: emptyList()
+                            ) + constraints.applyConditions
+                    )
+                }
+            }
+            // Without named profiles there is no profile predicate: retain a single real envelope.
+            if (tuples.all { it.profiles.isEmpty() }) scoped else videoCodecProfiles(listOf(summary), display) + scoped
+        }
+    }
+
+    private fun dominates(a: VideoDecoder, b: VideoDecoder): Boolean {
+        val aLevel = a.maxLevel
+        val bLevel = b.maxLevel
+        return a.maxWidth >= b.maxWidth &&
+            a.maxHeight >= b.maxHeight &&
+            a.maxFrameRate >= b.maxFrameRate &&
+            a.maxFrameRateAtMaxSize >= b.maxFrameRateAtMaxSize &&
+            a.maxBitDepth >= b.maxBitDepth &&
+            a.hdrFormats.containsAll(b.hdrFormats) &&
+            a.dolbyVisionProfiles.containsAll(b.dolbyVisionProfiles) &&
+            (aLevel == null || (bLevel != null && compareValuesBy(aLevel, bLevel, { it.major }, { it.minor }) >= 0))
+    }
 
     /** Input channels each playable audio codec accepts: a decoder's limit, or the passthrough limit when enabled. */
     private fun audioChannelLimits(capabilities: DeviceCapabilities): Map<AudioCodec, Int> {
@@ -150,14 +261,76 @@ object DeviceProfileBuilder {
                     add(equalsAny(ProfileConditionValue.VideoProfile, decoder.profiles.map { it.lowercase() }))
                 }
                 val level = decoder.maxLevel?.let { serverLevel(decoder.codec, it) }
-                if (level != null) add(lessThanEqual(ProfileConditionValue.VideoLevel, level.toString()))
+                if (level != null && !relaxHevcLevel(decoder)) add(lessThanEqual(ProfileConditionValue.VideoLevel, level.toString()))
                 add(lessThanEqual(ProfileConditionValue.VideoBitDepth, decoder.maxBitDepth.toString()))
-                add(lessThanEqual(ProfileConditionValue.Width, decoder.maxWidth.toString()))
-                add(lessThanEqual(ProfileConditionValue.Height, decoder.maxHeight.toString()))
-                add(lessThanEqual(ProfileConditionValue.VideoFramerate, number(decoder.maxFrameRate)))
+                val requirePerformance = decoder.codec == VideoCodec.AV1 && !decoder.hardware
+                add(lessThanEqual(ProfileConditionValue.Width, decoder.maxWidth.toString()).copy(isRequired = requirePerformance))
+                add(lessThanEqual(ProfileConditionValue.Height, decoder.maxHeight.toString()).copy(isRequired = requirePerformance))
+                add(lessThanEqual(ProfileConditionValue.VideoFramerate, number(decoder.maxFrameRate)).copy(isRequired = requirePerformance))
+                if (requirePerformance) {
+                    add(
+                        ProfileCondition(
+                            ProfileConditionType.GreaterThanEqual,
+                            ProfileConditionValue.VideoFramerate,
+                            "1",
+                            isRequired = true
+                        )
+                    )
+                }
                 add(equalsAny(ProfileConditionValue.VideoRangeType, rangeTypes(decoder, display).map { it.name }))
             }
             val base = CodecProfile(type = CodecType.Video, codec = decoder.codec.serverName, conditions = conditions)
+            val extras = buildList {
+                if (relaxHevcLevel(decoder)) {
+                    val reportedLevel = serverLevel(decoder.codec, requireNotNull(decoder.maxLevel))!!
+                    val scopes = listOf(
+                        listOf(
+                            lessThanEqual(ProfileConditionValue.Width, "1920"),
+                            lessThanEqual(ProfileConditionValue.Height, "1080"),
+                            lessThanEqual(ProfileConditionValue.VideoFramerate, "30")
+                        ) to 186,
+                        listOf(ProfileCondition(ProfileConditionType.GreaterThanEqual, ProfileConditionValue.Width, "1921")) to
+                            reportedLevel,
+                        listOf(ProfileCondition(ProfileConditionType.GreaterThanEqual, ProfileConditionValue.Height, "1081")) to
+                            reportedLevel,
+                        listOf(
+                            ProfileCondition(
+                                ProfileConditionType.GreaterThanEqual,
+                                ProfileConditionValue.VideoFramerate,
+                                "30.000000000000004"
+                            )
+                        ) to
+                            reportedLevel,
+                        listOf(lessThanEqual(ProfileConditionValue.VideoFramerate, "0")) to
+                            reportedLevel
+                    )
+                    scopes.forEach { (scope, cap) ->
+                        add(
+                            CodecProfile(
+                                type = CodecType.Video,
+                                codec = decoder.codec.serverName,
+                                applyConditions = scope,
+                                conditions = listOf(lessThanEqual(ProfileConditionValue.VideoLevel, cap.toString()))
+                            )
+                        )
+                    }
+                }
+                if (decoder.codec == VideoCodec.AV1 && !decoder.hardware) {
+                    // Explicit scope accompanies the unconditional envelope: unknown/outside values never gain capability.
+                    add(
+                        CodecProfile(
+                            type = CodecType.Video,
+                            codec = decoder.codec.serverName,
+                            applyConditions = listOf(
+                                lessThanEqual(ProfileConditionValue.Width, decoder.maxWidth.toString()),
+                                lessThanEqual(ProfileConditionValue.Height, decoder.maxHeight.toString()),
+                                lessThanEqual(ProfileConditionValue.VideoFramerate, number(decoder.maxFrameRate))
+                            ),
+                            conditions = conditions
+                        )
+                    )
+                }
+            }
             if (decoder.maxWidth > FULL_HD_WIDTH && decoder.maxFrameRateAtMaxSize < decoder.maxFrameRate) {
                 val aboveFullHd = CodecProfile(
                     type = CodecType.Video,
@@ -167,11 +340,20 @@ object DeviceProfileBuilder {
                     ),
                     conditions = listOf(lessThanEqual(ProfileConditionValue.VideoFramerate, number(decoder.maxFrameRateAtMaxSize)))
                 )
-                listOf(base, aboveFullHd)
+                listOf(base, aboveFullHd) + extras
             } else {
-                listOf(base)
+                listOf(base) + extras
             }
         }
+
+    /** A 4K60 HEVC engine has ample throughput for mislabeled 1080p30 streams. Other limits remain enforced. */
+    private fun relaxHevcLevel(decoder: VideoDecoder): Boolean = decoder.codec == VideoCodec.HEVC &&
+        decoder.hardware &&
+        decoder.maxLevel != null &&
+        (serverLevel(decoder.codec, decoder.maxLevel) ?: 0) >= 153 &&
+        decoder.maxWidth >= 3840 &&
+        decoder.maxHeight >= 2160 &&
+        decoder.maxFrameRateAtMaxSize >= 60.0
 
     /**
      * Range types follow MediaStream.GetVideoColorRange on the server. HDR10+ is listed only when it is shown as such;
