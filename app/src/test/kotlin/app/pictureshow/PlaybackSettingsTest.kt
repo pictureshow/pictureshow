@@ -82,6 +82,11 @@ class PlaybackSettingsTest {
         down("settings:background")
         center()
         assertEquals(SubtitleBackground.None, state.local.subtitleBackground)
+        app.pictureshow.core.SegmentType.entries.filter { it != app.pictureshow.core.SegmentType.Unknown }.forEach { type ->
+            down("settings:segment:$type")
+            center()
+            assertEquals(app.pictureshow.core.SegmentMode.Automatic, state.local.segmentModes[type])
+        }
         down("settings:audio-language")
         center()
         assertEquals("spa", state.configuration!!.audioLanguage)
@@ -115,13 +120,20 @@ class PlaybackSettingsTest {
                 )
             }
             store.update {
-                it.copy(passthrough = false, subtitleSize = SubtitleSize.ExtraLarge, subtitleBackground = SubtitleBackground.Box)
+                it.copy(
+                    passthrough = false,
+                    subtitleSize = SubtitleSize.ExtraLarge,
+                    subtitleBackground = SubtitleBackground.Box,
+                    segmentModes = mapOf(app.pictureshow.core.SegmentType.Intro to app.pictureshow.core.SegmentMode.Off)
+                )
             }
             scope.cancel()
             scope.coroutineContext[kotlinx.coroutines.Job]!!.join()
             scope = CoroutineScope(coroutineContext + SupervisorJob())
             preferences = PreferenceDataStoreFactory.create(scope = scope, produceFile = { directory.resolve("settings.preferences_pb") })
             val restored = PlaybackPreferencesStore(preferences).read()
+            assertEquals(app.pictureshow.core.SegmentMode.Off, restored.segmentModes[app.pictureshow.core.SegmentType.Intro])
+            assertEquals(app.pictureshow.core.SegmentMode.Ask, restored.segmentModes[app.pictureshow.core.SegmentType.Outro])
             assertEquals(false, restored.deviceSettings().passthroughEnabled)
             assertEquals(SubtitleAppearance(SubtitleSize.ExtraLarge, SubtitleBackground.Box), restored.appearance)
         } finally {

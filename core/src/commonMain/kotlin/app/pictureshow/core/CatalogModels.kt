@@ -40,6 +40,8 @@ data class MediaItem(
     @SerialName("SeriesPrimaryImageTag") val seriesPrimaryImageTag: String? = null,
     @SerialName("ParentThumbItemId") val parentThumbItemId: String? = null,
     @SerialName("ParentThumbImageTag") val parentThumbImageTag: String? = null,
+    @SerialName("Chapters") val chapters: List<Chapter> = emptyList(),
+    @SerialName("Trickplay") val trickplay: Map<String, Map<String, TrickplayInfo>> = emptyMap(),
     @SerialName("UserData") val userData: ItemUserData = ItemUserData()
 )
 

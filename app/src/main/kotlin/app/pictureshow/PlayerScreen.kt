@@ -8,11 +8,13 @@ package app.pictureshow
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +28,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,14 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -59,9 +59,15 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientIdentity
+import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.MediaSegment
+import app.pictureshow.core.PlaybackExtrasClient
+import app.pictureshow.core.chooseTrickplay
+import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlaybackClient
+import app.pictureshow.core.trickplayTile
 import io.ktor.client.HttpClient
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
@@ -74,7 +80,27 @@ import org.koin.compose.koinInject
 
 @Composable
 internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, catalog: CatalogSession, onExit: () -> Unit) {
+    var current by remember(account.key, item.id) { mutableStateOf(item) }
+    var start by remember(account.key, item.id) { mutableLongStateOf(startMs) }
+    key(current.id) {
+        PlayerItemScreen(account, current, start, catalog, onNext = { next ->
+            start = next.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000
+            current = next
+        }, onExit = onExit)
+    }
+}
+
+@Composable
+private fun PlayerItemScreen(
+    account: Account,
+    item: MediaItem,
+    startMs: Long,
+    catalog: CatalogSession,
+    onNext: (MediaItem) -> Unit,
+    onExit: () -> Unit
+) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val view = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val http: HttpClient = koinInject()
@@ -101,17 +127,51 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
     val playFocus = remember { FocusRequester() }
     val errorFocus = remember { FocusRequester() }
     val error = setupError ?: state.error
+    var metadata by remember { mutableStateOf(item) }
+    var segments by remember { mutableStateOf(emptyList<MediaSegment>()) }
+    var nextEpisode by remember { mutableStateOf<MediaItem?>(null) }
+    var extras by remember { mutableStateOf<PlaybackExtrasClient?>(null) }
+    var tiles by remember { mutableStateOf<TrickplayCache?>(null) }
+    var chaptersOpen by remember { mutableStateOf(false) }
+    var seekPreview by remember { mutableStateOf<Long?>(null) }
+    var rootFocused by remember { mutableStateOf(false) }
+    var focusControls by remember { mutableStateOf(false) }
+    var actionsFocused by remember { mutableStateOf(false) }
+    var nextCancelled by remember { mutableStateOf(false) }
+    var ended by remember { mutableStateOf(false) }
+    var switching by remember { mutableStateOf(false) }
+    var exitRequested by remember { mutableStateOf(false) }
+
+    fun finish(next: MediaItem? = null) {
+        if (next == null) {
+            exitRequested = true
+            controller?.close()
+            onExit()
+            return
+        }
+        if (switching || exitRequested) return
+        switching = true
+        controller?.close { if (!exitRequested) onNext(next) } ?: onExit()
+    }
 
     fun seek(delta: Long) {
         val active = player ?: return
         val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
-        active.seekTo((active.currentPosition + delta).coerceIn(0, limit))
+        val target = ((seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
+        active.seekTo(target)
+        position = target
+        seekPreview = target
         controls = true
         interaction++
     }
 
-    BackHandler {
+    fun handleBack() {
         when {
+            switching -> finish()
+            chaptersOpen -> {
+                chaptersOpen = false
+                rootFocus.requestFocus()
+            }
             chooser != null -> {
                 chooser = null
                 rootFocus.requestFocus()
@@ -120,9 +180,10 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
                 controls = false
                 rootFocus.requestFocus()
             }
-            else -> onExit()
+            else -> finish()
         }
     }
+    BackHandler { handleBack() }
     LaunchedEffect(Unit) {
         rootFocus.requestFocus()
         try {
@@ -130,7 +191,10 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
             output.passthroughEnabled = localPreferences.passthrough
             val activeProbe = DeviceCapabilityProbe(context, localPreferences.deviceSettings())
             probe = activeProbe
-            val client = PlaybackClient(http, ClientIdentity(Build.MODEL, identity.getOrCreate(), BuildConfig.VERSION_NAME))
+            val clientIdentity = ClientIdentity(Build.MODEL, identity.getOrCreate(), BuildConfig.VERSION_NAME)
+            val client = PlaybackClient(http, clientIdentity)
+            extras = PlaybackExtrasClient(http, clientIdentity)
+            tiles = TrickplayCache(http, account, clientIdentity, item.id)
             val session = PlaybackSession(
                 ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot),
                 output,
@@ -145,8 +209,7 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
             output.onProgress = { session.progress(it) }
             output.onFailure = { retry, source -> session.failed(retry, source) }
             output.onEnded = {
-                session.close()
-                onExit()
+                if (nextEpisode != null && !nextCancelled) ended = true else finish()
             }
             activeProbe.start { session.routeChanged() }
             session.start(startMs)
@@ -154,6 +217,30 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
             throw cancelled
         } catch (_: Exception) {
             setupError = "Could not start the player. Return to the item and try again."
+        }
+    }
+    LaunchedEffect(extras) {
+        val client = extras ?: return@LaunchedEffect
+        (client.item(account, item.id) as? ClientResult.Success)?.value?.let { metadata = it }
+    }
+    LaunchedEffect(extras, item.id) {
+        val client = extras ?: return@LaunchedEffect
+        segments = (client.segments(account, item.id) as? ClientResult.Success)?.value.orEmpty()
+    }
+    LaunchedEffect(extras, metadata.seriesId) {
+        val client = extras ?: return@LaunchedEffect
+        nextEpisode = (client.nextEpisode(account, metadata) as? ClientResult.Success)?.value
+    }
+    LaunchedEffect(seekPreview) {
+        if (seekPreview != null) {
+            delay(2_000)
+            seekPreview = null
+        }
+    }
+    LaunchedEffect(controls, focusControls, chaptersOpen, chooser) {
+        if (controls && focusControls && !chaptersOpen && chooser == null) {
+            playFocus.requestFocus()
+            focusControls = false
         }
     }
     LaunchedEffect(player) {
@@ -167,8 +254,8 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
             delay(500)
         }
     }
-    LaunchedEffect(controls, chooser, interaction, paused) {
-        if (controls && chooser == null && !paused) {
+    LaunchedEffect(controls, chooser, chaptersOpen, interaction, paused, actionsFocused) {
+        if (controls && chooser == null && !chaptersOpen && !paused && !actionsFocused) {
             delay(7_000)
             controls = false
             rootFocus.requestFocus()
@@ -181,8 +268,10 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
     }
     DisposableEffect(Unit) {
         onDispose {
+            exitRequested = true
             view.keepScreenOn = false
             probe?.close()
+            tiles?.close()
             if (controller != null) {
                 controller?.close()
             } else {
@@ -195,71 +284,112 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .focusRequester(rootFocus)
-            .onPreviewKeyEvent { event ->
-                if (chooser != null || error != null) return@onPreviewKeyEvent false
-                val key = event.key
-                val center = key == Key.DirectionCenter || key == Key.Enter || key == Key.NumPadEnter
-                if (event.type == KeyEventType.KeyDown && (key == Key.DirectionLeft || key == Key.DirectionRight)) {
-                    val step = if (event.nativeKeyEvent.repeatCount >= 5) 30_000 else 10_000
-                    seek(if (key == Key.DirectionLeft) -step.toLong() else step.toLong())
-                    true
-                } else if (!controls && center) {
-                    if (event.type == KeyEventType.KeyUp) {
-                        player?.let { if (it.playWhenReady) it.pause() else it.play() }
-                        controls = true
-                        interaction++
-                    }
-                    true
-                } else if (event.type == KeyEventType.KeyDown && key == Key.DirectionDown) {
+            .onFocusChanged { rootFocused = it.isFocused }
+            .playerRemoteKeys(
+                enabled = chooser == null && !chaptersOpen && error == null && !switching,
+                rootFocused = rootFocused,
+                controlsVisible = controls,
+                seek = ::seek,
+                toggleAndShow = {
+                    player?.let { if (it.playWhenReady) it.pause() else it.play() }
                     controls = true
+                    focusControls = true
                     interaction++
-                    // Request after the control is composed.
-                    false
-                } else {
-                    if (event.type == KeyEventType.KeyDown) interaction++
-                    false
-                }
-            }
+                },
+                showControls = {
+                    controls = true
+                    if (rootFocused) focusControls = true
+                },
+                interact = { interaction++ },
+                back = ::handleBack
+            )
             .focusable()
     ) {
         ContentFrame(player, Modifier.fillMaxSize())
         PlayerSubtitles(player, localPreferences.appearance)
-        if (state.preparing && setupError == null) {
+        if (switching) Text("Starting next episode…", modifier = Modifier.align(Alignment.Center))
+        if (state.preparing && setupError == null && !switching) {
             Text("Preparing playback…", modifier = Modifier.align(Alignment.Center))
         }
         if (error != null) {
             Column(Modifier.align(Alignment.Center).widthIn(max = 720.dp).background(Color(0xEE10131C)).padding(32.dp)) {
                 Text(error)
-                Button(onClick = onExit, modifier = Modifier.focusRequester(errorFocus)) { Text("Back to details") }
+                Button(onClick = { finish() }, modifier = Modifier.focusRequester(errorFocus)) { Text("Back to details") }
             }
             LaunchedEffect(error) { errorFocus.requestFocus() }
         }
-        if (controls && chooser == null && error == null) {
+        if (controls && chooser == null && !chaptersOpen && error == null && !switching) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xE610131C)).padding(36.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                val sourceId = state.decision?.mediaSourceId
+                val info = chooseTrickplay(metadata, sourceId, (resources.displayMetrics.widthPixels / 6).coerceIn(160, 640))
+                val tile = seekPreview?.let { target -> info?.let { trickplayTile(it, target) } }
+                if (tile != null && tiles != null && sourceId != null) {
+                    TrickplayPreview(requireNotNull(tiles), sourceId, tile, requireNotNull(seekPreview))
+                }
                 Text(item.name, style = MaterialTheme.typography.headlineSmall)
                 val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
                 Box(Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray)) {
                     Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
                 }
                 Text("${playerTime(position)} / ${playerTime(duration)}  ·  ← / → seek 10 seconds")
-                Button(
-                    onClick = {
-                        player?.let { if (it.playWhenReady) it.pause() else it.play() }
-                        interaction++
-                    },
-                    modifier = Modifier.focusRequester(playFocus)
-                ) { Text(if (paused) "Play" else "Pause") }
-                Button(onClick = { chooser = MediaStreamType.Audio }) { Text("Audio · ${streamLabel(state, MediaStreamType.Audio)}") }
-                Button(onClick = {
-                    chooser = MediaStreamType.Subtitle
-                }) { Text("Subtitles · ${streamLabel(state, MediaStreamType.Subtitle)}") }
-                Button(onClick = onExit) { Text("Stop playback") }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = {
+                            player?.let { if (it.playWhenReady) it.pause() else it.play() }
+                            interaction++
+                        },
+                        modifier = Modifier.focusRequester(playFocus)
+                    ) { Text(if (paused) "Play" else "Pause") }
+                    Button(onClick = { chooser = MediaStreamType.Audio }) { Text("Audio") }
+                    Button(onClick = {
+                        chooser = MediaStreamType.Subtitle
+                    }) { Text("Subtitles") }
+                    if (metadata.chapters.isNotEmpty()) {
+                        Button(onClick = {
+                            chaptersOpen = true
+                            seekPreview = null
+                        }) { Text("Chapters") }
+                    }
+                    Button(onClick = { finish() }) { Text("Stop") }
+                }
                 state.reportError?.let { Text("Could not save progress: $it", color = Color(0xFFFFCCB8)) }
             }
-            LaunchedEffect(controls) { playFocus.requestFocus() }
+        }
+        if (error == null && !switching) {
+            val actionsVisible = chooser == null && !chaptersOpen
+            Column(
+                Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) 240.dp else 36.dp)
+                    .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SegmentControl(segments, position, localPreferences.segmentModes, onSeek = { target ->
+                    player?.seekTo(target)
+                    position = target
+                    interaction++
+                }, onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, showButton = actionsVisible)
+                nextEpisode?.takeUnless { nextCancelled }?.let { next ->
+                    val trigger = nextEpisodeTriggerMs(duration, segments)
+                    NextEpisodeControl(
+                        account, next, trigger != null && position >= trigger, ended, paused || !actionsVisible,
+                        onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, onPlay = { finish(next) },
+                        onCancel = { nextCancelled = true }, visible = actionsVisible, compact = controls
+                    )
+                }
+            }
+        }
+        if (chaptersOpen && error == null) {
+            Box(Modifier.align(Alignment.CenterEnd).widthIn(min = 400.dp, max = 680.dp).fillMaxSize(0.85f)) {
+                ChapterPanel(account, item.id, metadata.chapters, position) { target ->
+                    player?.seekTo(target)
+                    position = target
+                    chaptersOpen = false
+                    interaction++
+                    rootFocus.requestFocus()
+                }
+            }
         }
         chooser?.let { type ->
             val streams = state.decision?.mediaSource?.mediaStreams.orEmpty().filter { it.type == type }
@@ -305,12 +435,6 @@ internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, cata
             LaunchedEffect(type) { choiceFocus.requestFocus() }
         }
     }
-}
-
-private fun streamLabel(state: PlaybackState, type: MediaStreamType): String {
-    val index = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
-    return state.decision?.mediaSource?.mediaStreams?.firstOrNull { it.type == type && it.index == index }
-        ?.let(::trackLabel) ?: "Off"
 }
 
 internal fun playerTime(milliseconds: Long): String {
