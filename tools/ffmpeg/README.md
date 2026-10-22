@@ -13,7 +13,8 @@ those libraries and the test clips from pinned sources. Licensing details: `thir
    maps (aac, mp3, ac3, eac3, truehd, mlp, dca, vorbis, opus, amrnb, amrwb, flac, alac, pcm_mulaw, pcm_alaw),
    as shared libraries with 16 KB page alignment;
 2. builds Media3's JNI wrapper from `media3-ffmpeg/src/main/jni` with CMake, linked dynamically against them;
-3. strips the four libraries into `media3-ffmpeg/src/main/jniLibs/<abi>/`;
+3. copies the four libraries into `media3-ffmpeg/src/main/jniLibs/<abi>/`, without debug info; FFmpeg's keep their
+   symbol table (about 5% of `libavcodec.so`) so the check below can see which decoders were built;
 
 then runs `check.sh` over the result.
 
@@ -37,8 +38,9 @@ tools/ffmpeg/check.sh media3-ffmpeg/src/main/jniLibs
 
 For every ABI it checks that all four libraries exist, sonames are unversioned, LOAD segments are 16 KB aligned,
 `libffmpegJNI.so` links the three FFmpeg libraries, the embedded configure line has no `--enable-gpl`,
-`--enable-nonfree` or `--enable-version3`, each library reports "LGPL version 2.1 or later", and every expected
-decoder is in `libavcodec.so`. It prints the sizes and the configure line and exits non-zero on any failure.
+`--enable-nonfree` or `--enable-version3`, each library reports "LGPL version 2.1 or later", every expected decoder
+is compiled into `libavcodec.so` (its `ff_<name>_decoder` symbol; decoder names alone are no evidence, since FFmpeg's
+codec descriptor table names every codec) and no encoder is. It prints the sizes and the configure line and exits non-zero on any failure.
 `EXPECTED_DECODERS`, `ABIS` and `READELF` (an `llvm-readelf` or `readelf`) can be set in the environment.
 
 ## Test clips

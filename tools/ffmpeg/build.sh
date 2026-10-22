@@ -108,12 +108,14 @@ for ABI in $ABIS; do
     -DCMAKE_BUILD_TYPE=Release -DFFMPEG_INSTALL="$PREFIX" > "$JBUILD.cmake.log" 2>&1
   "$CMAKE" --build "$JBUILD" -j "$JOBS" > "$JBUILD.ninja.log" 2>&1
 
+  # FFmpeg's libraries keep their symbol table (--strip-debug, about 5% of libavcodec) so check.sh can
+  # see which decoders were built; the JNI wrapper is fully stripped.
   mkdir -p "$OUT/$ABI"
   rm -f "$OUT/$ABI"/*.so
-  for lib in "$PREFIX/lib/libavcodec.so" "$PREFIX/lib/libavutil.so" "$PREFIX/lib/libswresample.so" \
-             "$JBUILD/libffmpegJNI.so"; do
-    llvm-strip --strip-unneeded -o "$OUT/$ABI/$(basename "$lib")" "$lib"
+  for lib in avcodec avutil swresample; do
+    llvm-strip --strip-debug -o "$OUT/$ABI/lib$lib.so" "$BUILD/lib$lib/lib$lib.so"
   done
+  llvm-strip --strip-unneeded -o "$OUT/$ABI/libffmpegJNI.so" "$JBUILD/libffmpegJNI.so"
 done
 
 ABIS="$ABIS" READELF="$TOOLCHAIN/bin/llvm-readelf" "$HERE/check.sh" "$OUT"

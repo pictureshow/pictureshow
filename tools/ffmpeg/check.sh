@@ -47,11 +47,19 @@ for ABI in $ABIS; do
       || bad "$ABI/$lib: license string is not 'LGPL version 2.1 or later'"
   done
 
-  names=$(strings -n 3 "$d/libavcodec.so")
+  # Decoders are checked by their AVCodec symbols (ff_<name>_decoder, kept in .symtab by build.sh).
+  # Their names alone prove nothing: libavcodec's codec descriptor table names every codec FFmpeg knows.
+  symbols=$("$READELF" -sW "$d/libavcodec.so" | awk '{print $NF}' | grep -E '^ff_[a-z0-9_]+_(decoder|encoder|parser)$' | sort -u)
+  [ -n "$symbols" ] || bad "$ABI: libavcodec.so has no ff_*_decoder symbols (stripped of .symtab?)"
   for dec in $EXPECTED_DECODERS; do
-    grep -qx -- "$dec" <<<"$names" || bad "$ABI: decoder $dec not in libavcodec.so"
+    grep -qx -- "ff_${dec}_decoder" <<<"$symbols" || bad "$ABI: decoder $dec not in libavcodec.so"
   done
-  [ $fail = 0 ] && echo "ok $ABI: $(cd "$d" && ls -l $LIBS | awk '{printf "%s=%s ", $NF, $5}')"
+  encoders=$(grep -E '_encoder$' <<<"$symbols" | tr '\n' ' ')
+  [ -z "$encoders" ] || bad "$ABI: libavcodec.so has encoders: $encoders"
+  decoders=$(sed -n 's/^ff_\(.*\)_decoder$/\1/p' <<<"$symbols" | tr '\n' ' ')
+  # configure adds the parsers some decoders need (ac3 for eac3, mlp for truehd)
+  parsers=$(sed -n 's/^ff_\(.*\)_parser$/\1/p' <<<"$symbols" | tr '\n' ' ')
+  [ $fail = 0 ] && echo "ok $ABI: $(cd "$d" && ls -l $LIBS | awk '{printf "%s=%s ", $NF, $5}')" && echo "   decoders: $decoders; parsers: $parsers"
 done
 
 if [ $fail = 0 ]; then
