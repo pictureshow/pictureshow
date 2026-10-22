@@ -37,6 +37,7 @@ internal fun supportsWatchNext(context: Context): Boolean = Build.VERSION.SDK_IN
 @RequiresApi(26)
 internal class AndroidWatchProvider(private val context: Context) : WatchProvider {
     private val resolver = context.contentResolver
+
     // Public WatchNextProgram getters inherit @RestrictTo base classes in 1.1.0 (b/138150076).
     @SuppressLint("RestrictedApi")
     override fun rows(): List<WatchRow> = buildList {
