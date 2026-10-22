@@ -38,6 +38,7 @@ class PlaybackSessionTest {
         val encodes = mutableListOf<String>()
         val outcomes = ArrayDeque<ClientResult<PlayOutcome>>()
         var gate: CompletableDeferred<Unit>? = null
+        var stopGate: CompletableDeferred<Unit>? = null
         override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
             requests += request
             gate?.await()
@@ -54,6 +55,7 @@ class PlaybackSessionTest {
             return ClientResult.Success(Unit)
         }
         override suspend fun stopped(info: PlaybackStopInfo): ClientResult<Unit> {
+            stopGate?.await()
             events += "stop"
             stops += info
             return ClientResult.Success(Unit)
@@ -102,6 +104,36 @@ class PlaybackSessionTest {
             mapOf("Authorization" to "test-header"),
             sessionId
         )
+
+    @Test
+    fun nextEpisodeCannotStartUntilFinalStopAndEncodeCleanupComplete() = runTest {
+        val gateway = Gateway().apply {
+            outcomes += ClientResult.Success(PlayOutcome.Play(decision(PlayMethod.Transcode)))
+            stopGate = CompletableDeferred()
+        }
+        val output = Output()
+        var starts = 0
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        output.snapshot = PlaybackPosition(95_000, false)
+        session.close {
+            gateway.events += "next-start"
+            starts++
+        }
+        session.close { starts++ }
+        runCurrent()
+        assertTrue(output.released)
+        assertEquals(0, starts)
+        assertTrue(gateway.stops.isEmpty())
+        gateway.stopGate!!.complete(Unit)
+        runCurrent()
+        assertEquals(1, starts)
+        assertEquals(listOf("progress", "stop", "delete", "next-start"), gateway.events.takeLast(4))
+        assertEquals(950_000_000, gateway.stops.single().positionTicks)
+    }
 
     @Test
     fun serverSubtitleDefaultIsUsedAndOffIsRememberedInFinalProgressBeforeStop() = runTest {

@@ -185,7 +185,7 @@ internal class PlaybackSession(
     }
 
     /** Snapshot before releasing the actual player. Final network work survives the screen's disposal. */
-    fun close() {
+    fun close(afterFinished: () -> Unit = {}) {
         if (closing) return
         closing = true
         lastPosition =
@@ -197,6 +197,7 @@ internal class PlaybackSession(
                 ticker?.cancel()
                 finishDecision()
                 onFinished()
+                afterFinished()
                 commands.close()
             }
         }

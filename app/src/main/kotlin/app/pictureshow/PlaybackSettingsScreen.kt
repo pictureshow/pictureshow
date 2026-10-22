@@ -29,6 +29,8 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.ErrorKind
+import app.pictureshow.core.SegmentMode
+import app.pictureshow.core.SegmentType
 import app.pictureshow.core.UserConfiguration
 import app.pictureshow.core.UserConfigurationService
 import kotlinx.coroutines.CancellationException
@@ -155,6 +157,23 @@ internal fun PlaybackSettingsScreen(
         Text(
             "System follows Android caption settings. Bitmap subtitles keep their authored appearance. These settings apply the next time you open the player."
         )
+        Text("Skip segments", style = MaterialTheme.typography.headlineSmall)
+        SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
+            val mode = local.segmentModes[type] ?: SegmentMode.Ask
+            Button(
+                onClick = {
+                    onLocal { it.copy(segmentModes = it.segmentModes + (type to nextSetting(SegmentMode.entries, mode))) }
+                },
+                modifier = Modifier.testTag("settings:segment:$type")
+            ) {
+                Text(
+                    "${segmentLabel(type).replaceFirstChar {
+                        it.uppercase()
+                    }}: ${if (mode == SegmentMode.Automatic) "Skip automatically" else mode.name}"
+                )
+            }
+        }
+        Text("Ask shows a skip button. These settings apply the next time you open the player.")
         Text("Your server preferences", style = MaterialTheme.typography.headlineSmall)
         Text("These follow your account to other clients.")
         val enabled = !state.loading && !state.saving && configuration != null
