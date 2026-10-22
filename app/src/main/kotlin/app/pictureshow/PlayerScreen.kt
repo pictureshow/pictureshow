@@ -165,7 +165,7 @@ private fun PlayerItemScreen(
         interaction++
     }
 
-    BackHandler {
+    fun handleBack() {
         when {
             switching -> finish()
             chaptersOpen -> {
@@ -183,6 +183,7 @@ private fun PlayerItemScreen(
             else -> finish()
         }
     }
+    BackHandler { handleBack() }
     LaunchedEffect(Unit) {
         rootFocus.requestFocus()
         try {
@@ -299,7 +300,8 @@ private fun PlayerItemScreen(
                     controls = true
                     if (rootFocused) focusControls = true
                 },
-                interact = { interaction++ }
+                interact = { interaction++ },
+                back = ::handleBack
             )
             .focusable()
     ) {

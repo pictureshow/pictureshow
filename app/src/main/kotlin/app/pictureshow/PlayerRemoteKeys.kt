@@ -18,10 +18,15 @@ internal fun Modifier.playerRemoteKeys(
     seek: (Long) -> Unit,
     toggleAndShow: () -> Unit,
     showControls: () -> Unit,
-    interact: () -> Unit
+    interact: () -> Unit,
+    back: () -> Unit
 ): Modifier = onPreviewKeyEvent { event ->
-    if (!enabled) return@onPreviewKeyEvent false
     val key = event.key
+    if (key == Key.Back) {
+        if (event.type == KeyEventType.KeyUp) back()
+        return@onPreviewKeyEvent true
+    }
+    if (!enabled) return@onPreviewKeyEvent false
     val center = key == Key.DirectionCenter || key == Key.Enter || key == Key.NumPadEnter
     if (rootFocused && event.type == KeyEventType.KeyDown && (key == Key.DirectionLeft || key == Key.DirectionRight)) {
         val step = if (event.nativeKeyEvent.repeatCount >= 5) 30_000L else 10_000L

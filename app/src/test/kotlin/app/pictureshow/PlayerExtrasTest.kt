@@ -16,6 +16,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -64,7 +65,7 @@ class PlayerExtrasTest {
             MaterialTheme {
                 Column(
                     Modifier.focusRequester(root).onFocusChanged { focused = it.isFocused }
-                        .playerRemoteKeys(true, focused, false, { sought += it }, { toggles++ }, {}, {})
+                        .playerRemoteKeys(true, focused, false, { sought += it }, { toggles++ }, {}, {}, back = {})
                         .focusable()
                 ) {
                     Row {
@@ -87,6 +88,29 @@ class PlayerExtrasTest {
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithText("Other control").assertIsFocused()
         compose.runOnIdle { assertEquals(20_000, sought) }
+    }
+
+    @Test
+    fun backKeyClosesPanelOnceEvenWhenOtherPlayerKeysAreDisabled() {
+        var open by mutableStateOf(true)
+        var backs = 0
+        compose.setContent {
+            MaterialTheme {
+                Column(
+                    Modifier.playerRemoteKeys(false, false, false, {}, {}, {}, {}, back = {
+                        backs++
+                        open = false
+                    }).focusable()
+                ) {
+                    if (open) Button(onClick = {}, modifier = Modifier.testTag("panel")) { Text("Panel content") }
+                }
+            }
+        }
+        compose.onNodeWithTag("panel").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithTag("panel").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.runOnIdle { assertEquals(1, backs) }
+        compose.onNodeWithTag("panel").assertDoesNotExist()
     }
 
     @Test

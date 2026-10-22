@@ -88,7 +88,7 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
     val initial = remember { FocusRequester() }
     val list = rememberLazyListState(initialFirstVisibleItemIndex = current)
     Column(Modifier.background(Color(0xF510131C)).padding(32.dp)) {
-        Text("Chapters", style = MaterialTheme.typography.headlineSmall)
+        Text("Chapters", color = Color.White, style = MaterialTheme.typography.headlineSmall)
         LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             itemsIndexed(chapters) { index, chapter ->
                 Button(
@@ -157,11 +157,11 @@ internal fun NextEpisodeControl(
                 .onFocusChanged { focused = it.hasFocus }.focusGroup(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Next episode · $remaining", style = MaterialTheme.typography.titleMedium)
+            Text("Next episode · $remaining", color = Color.White, style = MaterialTheme.typography.titleMedium)
             imageUrl(account.server, next, 320, wide = true)?.takeUnless { compact }?.let { url ->
                 AsyncImage(url, contentDescription = null, modifier = Modifier.width(240.dp).height(100.dp))
             }
-            Text(next.name)
+            Text(next.name, color = Color.White)
             Button(onClick = {
                 if (!played) {
                     played = true

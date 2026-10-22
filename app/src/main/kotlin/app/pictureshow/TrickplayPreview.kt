@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
@@ -116,6 +117,6 @@ internal fun TrickplayPreview(cache: TrickplayCache, sourceId: String, tile: Tri
     }
     Column {
         bitmap?.let { Image(it.asImageBitmap(), "Seek preview", Modifier.size(240.dp, 135.dp)) }
-        Text(playerTime(positionMs))
+        Text(playerTime(positionMs), color = Color.White)
     }
 }
