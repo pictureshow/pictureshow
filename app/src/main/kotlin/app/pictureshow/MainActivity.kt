@@ -60,7 +60,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -421,18 +420,10 @@ internal fun Pictureshow(
             val server = remember(entry) { Json.decodeFromString<Server>(requireNotNull(entry.arguments?.getString("server"))) }
             val vm: QuickConnectViewModel = koinViewModel(parameters = { parametersOf(server) })
             val screen by vm.state.collectAsStateWithLifecycle()
-            val lifecycle = LocalLifecycleOwner.current.lifecycle
-            LaunchedEffect(vm, lifecycle) {
-                lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    vm.start()
-                    try {
-                        awaitCancellation()
-                    } finally {
-                        vm.stop()
-                    }
-                }
-            }
-            DisposableEffect(vm) { onDispose { vm.stop() } }
+            // The back-stack ViewModel owns this attempt, including its code and secret. A stopped
+            // Activity or a replaced composition must not abandon a code already entered on a phone.
+            // Popping this entry clears the ViewModel and cancels its polling scope.
+            LaunchedEffect(vm) { vm.start() }
             Page("Quick Connect · ${server.name}") {
                 Text(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
@@ -448,6 +439,7 @@ internal fun Pictureshow(
                         }
                     )
                 }
+                if (screen.renewed) Text("The previous code is no longer valid. Enter this new code.")
                 if (screen.busy) {
                     Text("Getting a code…")
                 } else if (!screen.disabled &&

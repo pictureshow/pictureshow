@@ -15,6 +15,8 @@ import app.pictureshow.core.assembleHome
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -22,13 +24,13 @@ import kotlinx.coroutines.launch
 
 /** Shared across an account's back stack so detail changes immediately reach existing screens. */
 class CatalogSession(val service: CatalogService, private val accounts: AccountStore, private val onRefresh: () -> Unit = {}) {
-    data class Changes(val revision: Long = 0, val users: Map<String, ItemUserData> = emptyMap())
+    data class Changes(val revision: Long = 0, val users: Map<String, ItemUserData> = emptyMap(), val refreshRevision: Long = 0)
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
 
     fun refresh() {
         onRefresh()
-        mutableChanges.update { it.copy(revision = it.revision + 1) }
+        mutableChanges.update { it.copy(revision = it.revision + 1, refreshRevision = it.refreshRevision + 1, users = emptyMap()) }
     }
 
     fun changed(item: MediaItem) {
@@ -208,11 +210,21 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     init {
         reload()
         viewModelScope.launch {
+            var refreshRevision = 0L
             session.changes.collect { changes ->
-                mutableState.update { state ->
-                    state.copy(episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item })
+                val refreshed = changes.refreshRevision != refreshRevision
+                refreshRevision = changes.refreshRevision
+                // A refresh reads server state after playback reporting. Retained local patches may
+                // predate that report; only apply them for a new local mutation, never on refresh.
+                if (!refreshed) {
+                    mutableState.update { state ->
+                        state.copy(
+                            item = state.item?.let { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
+                            episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item }
+                        )
+                    }
                 }
-                if (changes.revision > 0 && original.type in listOf("Series", "Season")) reload()
+                if (changes.revision > 0 && (refreshed || original.type in listOf("Series", "Season"))) reload()
             }
         }
     }
@@ -223,14 +235,20 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         seasonGeneration++
         job = viewModelScope.launch {
             mutableState.update { it.copy(loading = true, error = null) }
-            when (val result = session.call(account) { item(account, original.id) }) {
+            val result = session.call(account) { item(account, original.id) }
+            // A canceled RESUMED request must not overwrite the post-report refresh, even when
+            // its transport finishes cancellation in a non-cancellable cleanup block.
+            currentCoroutineContext().ensureActive()
+            when (result) {
                 is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
                 is ClientResult.Success -> {
                     val item = result.value
                     mutableState.update { it.copy(item = item) }
                     if (item.type == "Series") {
                         val next = session.call(account) { nextUp(account, item.id) }
+                        currentCoroutineContext().ensureActive()
                         val seasons = session.call(account) { seasons(account, item.id) }
+                        currentCoroutineContext().ensureActive()
                         mutableState.update {
                             it.copy(
                                 nextUp = (next as? ClientResult.Success)?.value?.items.orEmpty(),

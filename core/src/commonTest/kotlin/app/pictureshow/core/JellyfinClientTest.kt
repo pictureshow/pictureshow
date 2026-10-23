@@ -232,6 +232,43 @@ class JellyfinClientTest {
     }
 
     @Test
+    fun pendingQuickConnectRetainsOriginalSecretUntilServerApproval() = runTest {
+        var initiations = 0
+        var approved = false
+        val service = client {
+            when (it.url.encodedPath.substringAfter("/jellyfin/")) {
+                "QuickConnect/Enabled" -> respond("true")
+                "QuickConnect/Initiate" -> {
+                    initiations++
+                    respond("""{"Code":"123456","Secret":"original-secret"}""")
+                }
+                "QuickConnect/Connect" -> {
+                    assertEquals("original-secret", it.url.parameters["secret"])
+                    respond("""{"Authenticated":$approved}""")
+                }
+                "Users/AuthenticateWithQuickConnect" -> {
+                    val body = Json.parseToJsonElement(it.body.toByteArray().decodeToString()).jsonObject
+                    assertEquals("original-secret", body.getValue("Secret").jsonPrimitive.content)
+                    respond(successfulAuth)
+                }
+                else -> error("Unexpected endpoint")
+            }
+        }
+        service.quickConnect(server).test {
+            assertEquals(QuickConnectState.Code("123456"), awaitItem())
+            advanceTimeBy(60_000)
+            runCurrent()
+            expectNoEvents()
+            assertEquals(1, initiations)
+            approved = true
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertIs<QuickConnectState.Authorized>(awaitItem())
+            awaitComplete()
+        }
+    }
+
+    @Test
     fun expired401And404RequestsGetNewCodes() = runTest {
         for (expiredStatus in listOf(HttpStatusCode.Unauthorized, HttpStatusCode.NotFound)) {
             var initiations = 0
@@ -308,6 +345,40 @@ class JellyfinClientTest {
     }
 
     @Test
+    fun rejectedExchangeSecretRenewsCodeAndNewApprovalSignsIn() = runTest {
+        for (rejection in listOf(HttpStatusCode.Unauthorized, HttpStatusCode.NotFound)) {
+            var attempts = 0
+            val service = client {
+                when (it.url.encodedPath.substringAfter("/jellyfin/")) {
+                    "QuickConnect/Enabled" -> respond("true")
+                    "QuickConnect/Initiate" -> {
+                        attempts++
+                        respond("""{"Code":"${if (attempts == 1) "111111" else "222222"}","Secret":"attempt-$attempts"}""")
+                    }
+                    "QuickConnect/Connect" -> respond("""{"Authenticated":true}""")
+                    "Users/AuthenticateWithQuickConnect" -> {
+                        val body = Json.parseToJsonElement(it.body.toByteArray().decodeToString()).jsonObject
+                        assertEquals("attempt-$attempts", body.getValue("Secret").jsonPrimitive.content)
+                        if (attempts == 1) respond("", rejection) else respond(successfulAuth)
+                    }
+                    else -> error("Unexpected endpoint")
+                }
+            }
+            service.quickConnect(server).test {
+                assertEquals(QuickConnectState.Code("111111"), awaitItem())
+                advanceTimeBy(5_000)
+                runCurrent()
+                assertEquals(QuickConnectState.Code("222222"), awaitItem())
+                advanceTimeBy(5_000)
+                runCurrent()
+                assertIs<QuickConnectState.Authorized>(awaitItem())
+                awaitComplete()
+                assertEquals(2, attempts)
+            }
+        }
+    }
+
+    @Test
     fun tokenExchangeFailureIsShownAndPollingEnds() = runTest {
         var polls = 0
         val service = client {
@@ -318,7 +389,7 @@ class JellyfinClientTest {
                     polls++
                     respond("""{"Authenticated":true}""")
                 }
-                "Users/AuthenticateWithQuickConnect" -> respond("", HttpStatusCode.Unauthorized)
+                "Users/AuthenticateWithQuickConnect" -> respond("", HttpStatusCode.InternalServerError)
                 else -> error("Unexpected endpoint")
             }
         }
@@ -326,7 +397,7 @@ class JellyfinClientTest {
             assertEquals(QuickConnectState.Code("123456"), awaitItem())
             advanceTimeBy(5_000)
             runCurrent()
-            assertEquals(ErrorKind.INVALID_CREDENTIALS, assertIs<QuickConnectState.Failed>(awaitItem()).error.kind)
+            assertEquals(ErrorKind.SERVER, assertIs<QuickConnectState.Failed>(awaitItem()).error.kind)
             awaitComplete()
         }
         advanceTimeBy(30_000)

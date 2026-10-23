@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -95,7 +96,11 @@ class SignInFocusTest {
         if (koinStarted) stopKoin()
     }
 
-    private fun launch() {
+    private val recreationContent: @androidx.compose.runtime.Composable () -> Unit = {
+        MaterialTheme(colorScheme = darkColorScheme()) { Pictureshow() }
+    }
+
+    private fun launch(forRecreation: Boolean = false) {
         val catalog = object : CatalogService by CatalogModelsTest.FakeCatalog() {
             override suspend fun views(account: Account): ClientResult<ItemPage> {
                 catalogUsers += account.user.id
@@ -148,7 +153,11 @@ class SignInFocusTest {
             )
         }
         koinStarted = true
-        compose.setContent { MaterialTheme(colorScheme = darkColorScheme()) { Pictureshow() } }
+        if (forRecreation) {
+            compose.setContent(recreationContent)
+        } else {
+            compose.setContent { MaterialTheme(colorScheme = darkColorScheme()) { Pictureshow() } }
+        }
         compose.waitForIdle()
     }
 
@@ -328,6 +337,74 @@ class SignInFocusTest {
         compose.runOnIdle { quickAuthorized.complete(account) }
         compose.waitForIdle()
         assertFirstHomeCardAfterDelayedLoad()
+    }
+
+    @Test
+    fun quickConnectKeepsItsFlowAcrossBackgroundAndForegroundAndAcceptsOriginalApproval() {
+        runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
+        launch()
+        compose.onNodeWithText("Use Quick Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        key(Key.DirectionCenter)
+        waitForText("123456")
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        compose.waitForIdle()
+        compose.onNodeWithText("123456").assertExists()
+        compose.runOnIdle { assertEquals(1, serviceEvents.count { it == "quick:start" }) }
+        compose.runOnIdle { quickAuthorized.complete(account) }
+        assertFirstHomeCardAfterDelayedLoad()
+    }
+
+    @Test
+    fun quickConnectKeepsItsFlowAcrossActivityRecreation() {
+        runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
+        launch(forRecreation = true)
+        compose.onNodeWithText("Use Quick Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        key(Key.DirectionCenter)
+        waitForText("123456")
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
+        val callback = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: android.app.Activity, state: android.os.Bundle?) {
+                if (activity is ComponentActivity) activity.setContent(content = recreationContent)
+            }
+            override fun onActivityStarted(activity: android.app.Activity) = Unit
+            override fun onActivityResumed(activity: android.app.Activity) = Unit
+            override fun onActivityPaused(activity: android.app.Activity) = Unit
+            override fun onActivityStopped(activity: android.app.Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, state: android.os.Bundle) = Unit
+            override fun onActivityDestroyed(activity: android.app.Activity) = Unit
+        }
+        app.registerActivityLifecycleCallbacks(callback)
+        try {
+            compose.activityRule.scenario.recreate()
+            waitForText("123456")
+            compose.runOnIdle { assertEquals(1, serviceEvents.count { it == "quick:start" }) }
+            compose.runOnIdle { quickAuthorized.complete(account) }
+            assertFirstHomeCardAfterDelayedLoad()
+        } finally {
+            app.unregisterActivityLifecycleCallbacks(callback)
+        }
+    }
+
+    @Test
+    fun backAbandonsQuickConnectAndReenteringStartsAnotherAttempt() {
+        runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
+        launch()
+        compose.onNodeWithText("Use Quick Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        key(Key.DirectionCenter)
+        waitForText("123456")
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        waitForText("Use Quick Connect")
+        compose.onNodeWithText("Use Quick Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        key(Key.DirectionCenter)
+        waitForText("123456")
+        compose.runOnIdle { assertEquals(2, serviceEvents.count { it == "quick:start" }) }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.runOnIdle { quickAuthorized.complete(account) }
+        compose.waitForIdle()
+        assertTrue(accounts.snapshots.value.currentAccount!!.expired)
     }
 
     @Test

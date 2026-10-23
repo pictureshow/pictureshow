@@ -374,6 +374,137 @@ class CatalogModelsTest {
         assertFalse(vm.state.value.episodes.single().userData.played)
     }
 
+    @Test
+    fun stopReportRefreshReplacesAnEarlyResumedReadForEveryPlayableDetailType() = runTest(dispatcher) {
+        for (type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
+            val item = movie.copy(type = type, seriesId = "series")
+            service.detail = ok(item)
+            val vm = own(CatalogDetailViewModel(account, item, session))
+            advanceUntilIdle()
+            // RESUMED wins the race with the in-flight stop report.
+            vm.reload()
+            advanceUntilIdle()
+            val saved = ItemUserData(playbackPositionTicks = 3_699_730_000, played = true)
+            service.detail = ok(item.copy(userData = saved))
+            session.refresh() // PlaybackSession.onFinished, after the report.
+            advanceUntilIdle()
+            assertEquals(saved, vm.state.value.item!!.userData, type)
+            assertFalse(vm.state.value.loading, type)
+        }
+    }
+
+    @Test
+    fun postReportRefreshCancelsAnOlderDetailReadThatFinishesLate() = runTest(dispatcher) {
+        service.detail = ok(movie)
+        val vm = own(CatalogDetailViewModel(account, movie, session))
+        advanceUntilIdle()
+        val pending = CompletableDeferred<ClientResult<MediaItem>>()
+        service.detailBlock = { withContext(NonCancellable) { pending.await() } }
+        vm.reload()
+        runCurrent()
+        service.detailBlock = null
+        val saved = ItemUserData(playbackPositionTicks = 4_000_000_000)
+        service.detail = ok(movie.copy(userData = saved))
+        session.refresh()
+        runCurrent()
+        pending.complete(ok(movie))
+        advanceUntilIdle()
+        assertEquals(saved, vm.state.value.item!!.userData)
+    }
+
+    @Test
+    fun latestServerRefreshWinsOverAnOlderLocalUserDataPatch() = runTest(dispatcher) {
+        service.detail = ok(movie)
+        val vm = own(CatalogDetailViewModel(account, movie, session))
+        advanceUntilIdle()
+        session.changed(movie.copy(userData = ItemUserData(isFavorite = true)))
+        advanceUntilIdle()
+        val saved = ItemUserData(playbackPositionTicks = 5_000_000_000, played = true)
+        service.detail = ok(movie.copy(userData = saved))
+        session.refresh()
+        advanceUntilIdle()
+        assertEquals(saved, vm.state.value.item!!.userData)
+    }
+
+    @Test
+    fun unrelatedMutationCannotReapplyAPatchFromBeforeTheStopReport() = runTest(dispatcher) {
+        service.detail = ok(movie)
+        val vm = own(CatalogDetailViewModel(account, movie, session))
+        advanceUntilIdle()
+        session.changed(movie.copy(userData = ItemUserData(isFavorite = true)))
+        advanceUntilIdle()
+        val saved = ItemUserData(playbackPositionTicks = 5_000_000_000, played = true)
+        service.detail = ok(movie.copy(userData = saved))
+        session.refresh()
+        advanceUntilIdle()
+        session.changed(MediaItem("other", userData = ItemUserData(played = true)))
+        advanceUntilIdle()
+        assertEquals(saved, vm.state.value.item!!.userData)
+    }
+
+    @Test
+    fun conflatedLocalMutationsStillReachEveryAffectedDetail() = runTest(dispatcher) {
+        service.detailBlock = { ok(movie) }
+        val vm = own(CatalogDetailViewModel(account, movie, session))
+        advanceUntilIdle()
+        val changed = ItemUserData(played = true)
+        session.changed(movie.copy(userData = changed))
+        session.changed(MediaItem("other", userData = ItemUserData(isFavorite = true)))
+        advanceUntilIdle()
+        assertEquals(changed, vm.state.value.item!!.userData)
+    }
+
+    @Test
+    fun canceledSeriesSeasonsResponseCannotReplaceFreshNextUpAndEpisodes() = runTest(dispatcher) {
+        val series = MediaItem("series", type = "Series")
+        val season = MediaItem("season", type = "Season", seriesId = series.id)
+        val oldNext = MediaItem("old", type = "Episode")
+        service.detail = ok(series)
+        service.nextItems = ok(ItemPage(listOf(oldNext)))
+        val pending = CompletableDeferred<ClientResult<ItemPage>>()
+        service.seasonsBlock = { withContext(NonCancellable) { pending.await() } }
+        val vm = own(CatalogDetailViewModel(account, series, session))
+        runCurrent()
+        val fresh = oldNext.copy(id = "fresh", userData = ItemUserData(playbackPositionTicks = 4_000_000_000))
+        service.nextItems = ok(ItemPage(listOf(fresh)))
+        service.seasonsBlock = null
+        service.seasonItems = ok(ItemPage(listOf(season)))
+        service.episodeBlock = { _, _ -> ok(ItemPage(listOf(fresh))) }
+        session.refresh()
+        runCurrent()
+        pending.complete(ok(ItemPage(emptyList())))
+        advanceUntilIdle()
+        assertEquals(listOf(fresh), vm.state.value.nextUp)
+        assertEquals(listOf(season), vm.state.value.seasons)
+        assertEquals(listOf(fresh), vm.state.value.episodes)
+        assertFalse(vm.state.value.loading)
+    }
+
+    @Test
+    fun postStopRefreshUpdatesContainerPrimaryEpisodeAndWatchedState() = runTest(dispatcher) {
+        for (type in listOf("Series", "Season")) {
+            val item = MediaItem("container", type = type, seriesId = "series")
+            val season = MediaItem("season", type = "Season", seriesId = "series")
+            val old = MediaItem("episode", type = "Episode")
+            service.detail = ok(item)
+            service.seasonItems = ok(ItemPage(listOf(season)))
+            service.nextItems = ok(ItemPage(listOf(old)))
+            service.episodeBlock = { _, _ -> ok(ItemPage(listOf(old))) }
+            val vm = own(CatalogDetailViewModel(account, item, session))
+            advanceUntilIdle()
+            vm.reload()
+            advanceUntilIdle()
+            val saved = old.copy(userData = ItemUserData(playbackPositionTicks = 4_000_000_000, played = true))
+            service.nextItems = ok(ItemPage(listOf(saved)))
+            service.episodeBlock = { _, _ -> ok(ItemPage(listOf(saved))) }
+            session.refresh()
+            advanceUntilIdle()
+            assertEquals(listOf(saved), vm.state.value.episodes, type)
+            if (type == "Series") assertEquals(listOf(saved), vm.state.value.nextUp)
+            assertFalse(vm.state.value.loading)
+        }
+    }
+
     internal class FakeCatalog : CatalogService {
         var libraryViews: ClientResult<ItemPage> = ClientResult.Success(ItemPage())
         var resumeItems: ClientResult<ItemPage> = ClientResult.Success(ItemPage())
@@ -410,7 +541,8 @@ class CatalogModelsTest {
         }
         var detailBlock: (suspend () -> ClientResult<MediaItem>)? = null
         override suspend fun item(account: Account, id: String) = detailBlock?.invoke() ?: detail
-        override suspend fun seasons(account: Account, seriesId: String) = seasonItems
+        var seasonsBlock: (suspend () -> ClientResult<ItemPage>)? = null
+        override suspend fun seasons(account: Account, seriesId: String) = seasonsBlock?.invoke() ?: seasonItems
         override suspend fun episodes(account: Account, seriesId: String, seasonId: String): ClientResult<ItemPage> {
             episodeCalls += seriesId to seasonId
             return episodeBlock(seriesId, seasonId)

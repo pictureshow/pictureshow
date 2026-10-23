@@ -381,6 +381,23 @@ class ScreenModelsTest {
     }
 
     @Test
+    fun quickConnectRenewalKeepsNewCodeAndExplainsThatThePreviousOneIsInvalid() = runTest(dispatcher) {
+        service.quick = flow {
+            emit(QuickConnectState.Code("111111"))
+            delay(5000)
+            emit(QuickConnectState.Code("222222"))
+        }
+        val vm = own(QuickConnectViewModel(server, service, accounts))
+        vm.start()
+        runCurrent()
+        assertFalse(vm.state.value.renewed)
+        advanceTimeBy(5000)
+        runCurrent()
+        assertEquals("222222", vm.state.value.code)
+        assertTrue(vm.state.value.renewed)
+    }
+
+    @Test
     fun quickConnectDisabledErrorsAndCancellationAreVisible() = runTest(dispatcher) {
         service.quick = flowOf(QuickConnectState.Disabled)
         val vm = own(QuickConnectViewModel(server, service, accounts))
