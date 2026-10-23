@@ -41,9 +41,22 @@ internal class ServerPlaybackGateway(
     private val account: Account,
     private val itemId: String,
     private val capabilities: () -> DeviceCapabilities,
+    private val captionLanguage: String? = null,
     private val markPlayed: suspend () -> ClientResult<Unit>
 ) : PlaybackGateway {
-    override suspend fun prepare(request: PlaybackRequest) = client.prepare(account, itemId, capabilities(), request)
+    override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
+        val snapshot = capabilities()
+        val prepared = client.prepare(account, itemId, snapshot, request)
+        // Explicit player choices, including Off, survive seeks, route changes and decoder fallback.
+        if (captionLanguage == null || request.subtitleStreamIndex != null) return prepared
+        val decision = ((prepared as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return prepared
+        val index = captionSubtitleIndex(decision.mediaSource, captionLanguage) ?: return prepared
+        if (index == decision.mediaSource.defaultSubtitleStreamIndex) return prepared
+        val sourceId = decision.mediaSourceId?.takeIf(String::isNotBlank) ?: return prepared
+        // Never open the first URL. A fresh PlaybackInfo with the source and track pinned lets the server
+        // negotiate extraction, remuxing or burn-in, just as it does for an explicit track choice.
+        return client.prepare(account, itemId, snapshot, request.copy(mediaSourceId = sourceId, subtitleStreamIndex = index))
+    }
     override suspend fun start(info: PlaybackProgressInfo) = client.reportStart(account, info)
     override suspend fun progress(info: PlaybackProgressInfo) = client.reportProgress(account, info)
     override suspend fun stopped(info: PlaybackStopInfo) = client.reportStopped(account, info)

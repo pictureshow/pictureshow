@@ -12,6 +12,7 @@ import app.pictureshow.core.HomeRow
 import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.assembleHome
+import app.pictureshow.core.isEmptyContainer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -304,6 +305,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     private fun mutate(watched: Boolean) {
         if (action?.isActive == true || state.value.loading) return
         val item = state.value.item ?: return
+        if (watched && item.isEmptyContainer) return
         val old = item.userData
         val optimistic = if (watched) old.copy(played = !old.played) else old.copy(isFavorite = !old.isFavorite)
         mutableState.update { it.copy(item = item.copy(userData = optimistic), busy = true, error = null) }

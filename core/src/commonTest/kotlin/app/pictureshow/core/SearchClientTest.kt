@@ -56,7 +56,7 @@ class SearchClientTest {
                                 "recursive" to "true",
                                 "includeItemTypes" to kind.itemType,
                                 "enableTotalRecordCount" to "true",
-                                "fields" to "PrimaryImageAspectRatio,ProductionYear,Overview,Genres"
+                                "fields" to "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
                             )
                     }
                     assertEquals(expected, request.url.parameters.entries().associate { it.key to it.value.single() })
@@ -92,7 +92,8 @@ class SearchClientTest {
                         mapOf(
                             "userId" to "viewer", "personIds" to "person & #", "recursive" to "true", "includeItemTypes" to "Movie,Series",
                             "sortBy" to "ProductionYear,SortName", "sortOrder" to "Descending", "startIndex" to "60", "limit" to "60",
-                            "enableTotalRecordCount" to "true", "fields" to "PrimaryImageAspectRatio,ProductionYear,Overview,Genres"
+                            "enableTotalRecordCount" to "true",
+                            "fields" to "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
                         ),
                         request.url.parameters.entries().associate { it.key to it.value.single() }
                     )

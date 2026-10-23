@@ -59,4 +59,4 @@ internal class SearchClient(client: HttpClient, identity: ClientIdentity) : Sear
         )
 }
 
-internal const val SEARCH_CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,Genres"
+internal const val SEARCH_CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"

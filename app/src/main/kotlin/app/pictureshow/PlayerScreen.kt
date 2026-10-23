@@ -77,6 +77,7 @@ import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.MediaSegment
 import app.pictureshow.core.PlaybackExtrasClient
+import app.pictureshow.core.UserConfigurationClient
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.nextEpisodeTriggerMs
@@ -247,8 +248,15 @@ private fun PlayerItemScreen(
             val client = PlaybackClient(http, clientIdentity)
             extras = PlaybackExtrasClient(http, clientIdentity)
             tiles = TrickplayCache(http, account, clientIdentity, item.id)
+            val captionsEnabled = (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
+            val configuration = if (captionsEnabled) {
+                (UserConfigurationClient(http, clientIdentity).configuration(account) as? ClientResult.Success)?.value
+            } else {
+                null
+            }
+            val captionLanguage = captionSubtitleLanguage(captionsEnabled, configuration, Locale.getDefault().toLanguageTag())
             val session = PlaybackSession(
-                ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot) {
+                ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
                     catalog.completePlayback(account, item.id)
                 },
                 output,

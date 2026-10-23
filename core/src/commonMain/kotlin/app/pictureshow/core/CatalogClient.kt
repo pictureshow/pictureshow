@@ -44,7 +44,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         coerceInputValues = true
     }
 
-    override suspend fun views(account: Account): ClientResult<ItemPage> = request(account, "UserViews")
+    override suspend fun views(account: Account): ClientResult<ItemPage> = request(account, "UserViews", mapOf("fields" to CARD_FIELDS))
 
     override suspend fun resume(account: Account): ClientResult<ItemPage> = request(
         account,
@@ -147,7 +147,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
     }
 
     private companion object {
-        const val CARD_FIELDS = "Overview,Genres,PrimaryImageAspectRatio"
+        const val CARD_FIELDS = "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
     }
 }
 

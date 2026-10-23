@@ -102,6 +102,8 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.imageUrl
+import app.pictureshow.core.isEmptyContainer
+import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
 import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
@@ -465,7 +467,7 @@ fun CatalogGrid(
             onRetry()
         }, Modifier.focusRequester(retry))
         if (state.loading) Text("Loading…")
-        if (!state.loading && state.items.isEmpty() && state.error == null) Text("This library is empty.")
+        if (!state.loading && state.items.isEmpty() && state.error == null) Text(emptyGridLabel(state.parent))
         LazyVerticalGrid(
             columns = GridCells.Adaptive(144.dp),
             state = grid,
@@ -805,19 +807,28 @@ private fun DetailActions(
         }
         Button(
             onClick = onPlayed,
-            enabled = !busy,
-            modifier = (if (playItem == null) Modifier.focusRequester(initial) else Modifier).testTag("detail:played").semantics {
-                toggleableState = ToggleableState(item.userData.played)
-                stateDescription = if (item.userData.played) "Watched" else "Unwatched"
+            enabled = !busy && !item.isEmptyContainer,
+            modifier = (
+                if (playItem == null &&
+                    !item.isEmptyContainer
+                ) {
+                    Modifier.focusRequester(initial)
+                } else {
+                    Modifier
+                }
+                ).testTag("detail:played").semantics {
+                toggleableState = ToggleableState(item.isWatched)
+                stateDescription = if (item.isWatched) "Watched" else "Unwatched"
             }
-        ) { Text(if (item.userData.played) "Mark unwatched" else "Mark watched") }
+        ) { Text(if (item.isWatched) "Mark unwatched" else "Mark watched") }
         Button(
             onClick = onFavorite,
             enabled = !busy,
-            modifier = Modifier.testTag("detail:favorite").semantics {
-                toggleableState = ToggleableState(item.userData.isFavorite)
-                stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite"
-            }
+            modifier = (if (playItem == null && item.isEmptyContainer) Modifier.focusRequester(initial) else Modifier)
+                .testTag("detail:favorite").semantics {
+                    toggleableState = ToggleableState(item.userData.isFavorite)
+                    stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite"
+                }
         ) {
             Text(if (item.userData.isFavorite) "Unfavorite" else "Favorite")
         }
@@ -953,7 +964,8 @@ internal fun CatalogCard(
             Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
                 CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
                 val badge = when {
-                    item.userData.played -> "✓ Watched"
+                    item.isEmptyContainer -> null
+                    item.isWatched -> "✓ Watched"
                     item.userData.unplayedItemCount != null -> "${item.userData.unplayedItemCount} unplayed"
                     else -> null
                 }
@@ -968,7 +980,7 @@ internal fun CatalogCard(
                     Text("♥", modifier = Modifier.align(Alignment.TopStart).background(Color(0xDD202635)).padding(5.dp))
                 }
                 val fraction = progress(item).coerceIn(0f, 1f)
-                if (fraction > 0f && !item.userData.played) {
+                if (fraction > 0f && !item.isWatched && !item.isEmptyContainer) {
                     Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Color(0xFF505969))) {
                         Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
                     }

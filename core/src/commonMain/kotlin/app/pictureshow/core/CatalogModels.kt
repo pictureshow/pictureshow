@@ -22,6 +22,8 @@ data class MediaItem(
     @SerialName("Type") val type: String = "",
     @SerialName("CollectionType") val collectionType: String? = null,
     @SerialName("IsFolder") val isFolder: Boolean = false,
+    @SerialName("ChildCount") val childCount: Int? = null,
+    @SerialName("RecursiveItemCount") val recursiveItemCount: Int? = null,
     @SerialName("Overview") val overview: String? = null,
     @SerialName("ProductionYear") val productionYear: Int? = null,
     @SerialName("OfficialRating") val officialRating: String? = null,
@@ -44,6 +46,17 @@ data class MediaItem(
     @SerialName("Trickplay") val trickplay: Map<String, Map<String, TrickplayInfo>> = emptyMap(),
     @SerialName("UserData") val userData: ItemUserData = ItemUserData()
 )
+
+/** Counts are nullable: older/partial responses without cardinality do not establish emptiness. */
+val MediaItem.isEmptyContainer: Boolean
+    get() {
+        val container = isFolder || type in setOf("BoxSet", "Playlist", "Folder", "CollectionFolder", "Series", "Season")
+        if (!container || childCount?.let { it > 0 } == true || recursiveItemCount?.let { it > 0 } == true) return false
+        return childCount == 0 || recursiveItemCount == 0
+    }
+
+/** Jellyfin marks an empty folder played because all of its zero children are played. */
+val MediaItem.isWatched: Boolean get() = userData.played && !isEmptyContainer
 
 @Serializable
 data class ItemPage(
