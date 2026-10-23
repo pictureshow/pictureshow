@@ -5,7 +5,9 @@
 
 package app.pictureshow
 
+import app.pictureshow.core.ClientError
 import app.pictureshow.core.ClientResult
+import app.pictureshow.core.ErrorKind
 import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
@@ -45,8 +47,14 @@ class PlaybackBufferingTest {
         val deletes = mutableListOf<String>()
         var progressGate: CompletableDeferred<Unit>? = null
         var stopGate: CompletableDeferred<Unit>? = null
+        var failedDeletes = 0
+
+        /** The server's live encodes; [lateSegmentRequest] restarts that session's job right after its first DELETE. */
+        val jobs = mutableSetOf<String>()
+        var lateSegmentRequest: String? = null
         override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
             prepares++
+            if (method == PlayMethod.Transcode) jobs += "play-$prepares"
             return ClientResult.Success(
                 PlayOutcome.Play(
                     PlayDecision(
@@ -72,6 +80,15 @@ class PlaybackBufferingTest {
         }
         override suspend fun stopEncoding(sessionId: String): ClientResult<Unit> {
             deletes += sessionId
+            if (failedDeletes > 0) {
+                failedDeletes--
+                return ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Server unavailable"))
+            }
+            jobs -= sessionId
+            if (lateSegmentRequest == sessionId) {
+                lateSegmentRequest = null
+                jobs += sessionId
+            }
             return ClientResult.Success(Unit)
         }
     }
@@ -218,7 +235,8 @@ class PlaybackBufferingTest {
         runCurrent()
         assertNull(session.state.value.error)
         assertFalse(session.state.value.bufferingSlow)
-        assertEquals(listOf("play-1"), gateway.deletes)
+        // The old encode's DELETE and its follow-up three seconds later; the replacement is never stopped.
+        assertEquals(listOf("play-1", "play-1"), gateway.deletes)
         session.close()
         runCurrent()
     }
@@ -237,6 +255,123 @@ class PlaybackBufferingTest {
         runCurrent()
         assertNull(session.state.value.error)
         assertEquals(1, gateway.stops.size)
+        assertEquals(listOf("play-1", "play-1"), gateway.deletes) // The DELETE and its follow-up.
+    }
+
+    @Test
+    fun giveUpStopsTheEncodeAgainForSegmentRequestsAlreadyOnTheirWay() = runTest {
+        val gateway = Gateway().apply { lateSegmentRequest = "play-1" }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        session.buffering(true)
+        runCurrent()
+        advanceTimeBy(45_000)
+        runCurrent()
+        assertNotNull(session.state.value.error)
         assertEquals(listOf("play-1"), gateway.deletes)
+        assertEquals(setOf("play-1"), gateway.jobs) // Restarted by the late segment request.
+        advanceTimeBy(2_999)
+        runCurrent()
+        assertEquals(listOf("play-1"), gateway.deletes)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(listOf("play-1", "play-1"), gateway.deletes)
+        assertTrue(gateway.jobs.isEmpty())
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(listOf("play-1", "play-1"), gateway.deletes) // Not a loop.
+        assertEquals(1, gateway.stops.size)
+        session.close()
+        runCurrent()
+    }
+
+    @Test
+    fun followUpStopsOnlyTheOldSessionsRestartedEncodeAndTheReplacementKeepsPlaying() = runTest {
+        val gateway = Gateway().apply { lateSegmentRequest = "play-1" }
+        val session = PlaybackSession(gateway, Output(), backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        session.routeChanged()
+        runCurrent()
+        session.ready()
+        runCurrent()
+        assertEquals(setOf("play-1", "play-2"), gateway.jobs)
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(setOf("play-2"), gateway.jobs)
+        assertNull(session.state.value.error)
+        session.close()
+        runCurrent()
+        assertTrue(gateway.jobs.isEmpty())
+    }
+
+    @Test
+    fun aFailedFirstDeleteIsRepeatedByTheFollowUp() = runTest {
+        val gateway = Gateway().apply { failedDeletes = 1 }
+        val session = PlaybackSession(gateway, Output(), backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        session.close()
+        runCurrent()
+        assertEquals(setOf("play-1"), gateway.jobs)
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertTrue(gateway.jobs.isEmpty())
+    }
+
+    @Test
+    fun closeKeepsTheReportScopeUntilTheFollowUpDeleteHasGone() = runTest {
+        val gateway = Gateway()
+        val events = mutableListOf<String>()
+        val session = PlaybackSession(
+            gateway,
+            Output(),
+            backgroundScope,
+            "en",
+            onFinished = { events += "finished:${gateway.deletes.size}" },
+            onCleanupDone = { events += "cleanup-done:${gateway.deletes.size}" }
+        )
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        session.close { events += "after-finished" }
+        runCurrent()
+        // The catalog refresh and the next item do not wait for the follow-up.
+        assertEquals(listOf("finished:1", "after-finished"), events)
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(listOf("finished:1", "after-finished", "cleanup-done:2"), events)
+    }
+
+    @Test
+    fun directPlayHasNoEncodeToStopAndReleasesTheScopeAtOnce() = runTest {
+        val gateway = Gateway(PlayMethod.DirectPlay)
+        val events = mutableListOf<String>()
+        val session = PlaybackSession(
+            gateway,
+            Output(),
+            backgroundScope,
+            "en",
+            onFinished = { events += "finished" },
+            onCleanupDone = { events += "cleanup-done" }
+        )
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        session.close()
+        runCurrent()
+        assertEquals(listOf("finished", "cleanup-done"), events)
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertTrue(gateway.deletes.isEmpty())
     }
 }

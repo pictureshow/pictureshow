@@ -64,6 +64,33 @@ class TranscodeSeekSessionTest {
     }
 
     @Test
+    fun seekStopsTheOldEncodeAgainLaterAndNeverTheNewOne() = runTest {
+        val events = mutableListOf<String>()
+        val gateway = Gateway(events)
+        val output = Output(events)
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(126_000)
+        runCurrent()
+        val old = assertNotNull(session.state.value.decision)
+        session.ready(old)
+        runCurrent()
+        output.snapshot = PlaybackPosition(226_000, false)
+        session.seek(226_000, old)
+        advanceTimeBy(250)
+        runCurrent()
+        val replacement = assertNotNull(session.state.value.decision)
+        session.ready(replacement)
+        runCurrent()
+        assertEquals(listOf("delete:session-1"), events.filter { it.startsWith("delete:") })
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(listOf("delete:session-1", "delete:session-1"), events.filter { it.startsWith("delete:") })
+        session.close()
+        runCurrent()
+        assertEquals("delete:session-2", events.filter { it.startsWith("delete:") }.last())
+    }
+
+    @Test
     fun seekThatArrivesDuringPrepareDiscardsIntermediateStreamAndOpensLatestOnly() = runTest {
         val events = mutableListOf<String>()
         val gateway = Gateway(events)

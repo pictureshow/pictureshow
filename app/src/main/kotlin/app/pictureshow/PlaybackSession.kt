@@ -23,6 +23,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
 /** Narrow ports allow protocol order and real time scheduling to be tested without a decoder or a server. */
@@ -76,7 +77,9 @@ internal class PlaybackSession(
     private val output: PlaybackOutput,
     scope: CoroutineScope,
     private val preferredLanguage: String,
-    private val onFinished: () -> Unit = {}
+    private val onFinished: () -> Unit = {},
+    /** After the last server cleanup; nothing runs in the scope after this, so its owner may cancel it. */
+    private val onCleanupDone: () -> Unit = {}
 ) {
     private val mutable = MutableStateFlow(PlaybackState())
     val state = mutable.asStateFlow()
@@ -95,6 +98,7 @@ internal class PlaybackSession(
     private var seekSource: PlayDecision? = null
     private var pendingSeek: Long? = null
     private var seeking = false
+    private val followUps = mutableListOf<Job>()
     private val owner = scope
 
     init {
@@ -296,6 +300,8 @@ internal class PlaybackSession(
                 onFinished()
                 afterFinished()
                 commands.close()
+                followUps.toList().joinAll()
+                onCleanupDone()
             }
         }
     }
@@ -369,9 +375,23 @@ internal class PlaybackSession(
         if (releaseOutput) output.release()
         if (ready) gateway.progress(progressInfo())
         reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
-        if (current.method == PlayMethod.Transcode) current.playSessionId?.let { gateway.stopEncoding(it) }
+        if (current.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
         ready = false
         decision = null
+    }
+
+    /**
+     * A segment request already on its way when the player let go can start a fresh encode just after this DELETE
+     * (seen after a fast-forward give-up: the new job ran until the server reaped it), so a second one follows. It also
+     * covers a first DELETE that failed. The play session id is never reused by a later negotiation.
+     */
+    private suspend fun stopEncoding(sessionId: String) {
+        gateway.stopEncoding(sessionId)
+        followUps.removeAll { it.isCompleted }
+        followUps += owner.launch {
+            delay(3_000)
+            gateway.stopEncoding(sessionId)
+        }
     }
 
     /**

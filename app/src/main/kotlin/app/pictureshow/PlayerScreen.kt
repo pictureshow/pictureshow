@@ -231,11 +231,10 @@ private fun PlayerItemScreen(
                 ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot),
                 output,
                 reportScope,
-                Locale.getDefault().language
-            ) {
-                catalog.refresh()
-                reportScope.cancel()
-            }
+                Locale.getDefault().language,
+                onFinished = { catalog.refresh() },
+                onCleanupDone = { reportScope.cancel() }
+            )
             controller = session
             output.onStop = { finish() }
             output.onSeek = { target, source -> session.seek(target, source) }
