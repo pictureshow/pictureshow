@@ -20,16 +20,39 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.android.util.concurrent.PausedExecutorService
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowContentResolver
+import org.robolectric.shadows.ShadowPausedAsyncTask
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [23, 30, 36], application = NoExternalStorageApplication::class)
+@LooperMode(LooperMode.Mode.PAUSED)
 class DeviceProfileExportTest {
+    private val pipeWriter = PausedExecutorService()
+
+    @Before
+    fun pausePipeWriter() {
+        ShadowPausedAsyncTask.overrideExecutor(pipeWriter)
+    }
+
+    @After
+    fun finishPipeWriter() {
+        try {
+            pipeWriter.runAll()
+        } finally {
+            pipeWriter.shutdownNow()
+            ShadowPausedAsyncTask.reset()
+        }
+    }
+
     private val uri = Uri.parse("content://app.pictureshow.deviceprofile/profile.json")
 
     private fun install(): Application {
@@ -61,9 +84,17 @@ class DeviceProfileExportTest {
         app.preferences.edit { it[stringPreferencesKey("device_id")] = "fixture-device-id" }
         val report = captureThisTv(app, preferences.read())
         val actual = app.contentResolver.openFileDescriptor(uri, "r")!!.let { descriptor ->
+            // Robolectric implements createPipe() with a regular file, whose reader can reach EOF
+            // before openPipeHelper's AsyncTask writes. Finish that writer before reading the shadow;
+            // a real Android pipe blocks the reader until bytes arrive or the writer closes.
+            pipeWriter.runAll()
             ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
         }
-        assertContentEquals(report.profileJson.toByteArray(Charsets.UTF_8), actual)
+        assertContentEquals(
+            report.profileJson.toByteArray(Charsets.UTF_8),
+            actual,
+            "Expected profile:\n${report.profileJson}\nExported profile:\n${actual.toString(Charsets.UTF_8)}"
+        )
         assertEquals("application/json", app.contentResolver.getType(uri))
         assertEquals(report.sharedText, thisTvShareIntent(report).getStringExtra(android.content.Intent.EXTRA_TEXT))
         listOf(
