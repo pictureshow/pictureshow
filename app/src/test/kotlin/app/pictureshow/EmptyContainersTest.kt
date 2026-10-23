@@ -59,6 +59,7 @@ class EmptyContainersTest {
         }
         for ((type, message) in listOf(
             "CollectionFolder" to "This library is empty.",
+            "UserView" to "This library is empty.",
             "Playlist" to "This playlist is empty.",
             "Folder" to "This folder is empty.",
             "Genre" to "Nothing here yet.",
