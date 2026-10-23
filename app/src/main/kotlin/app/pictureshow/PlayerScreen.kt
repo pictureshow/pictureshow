@@ -53,7 +53,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
-import androidx.media3.common.util.Util
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.tv.material3.Button
@@ -149,8 +148,12 @@ private fun PlayerItemScreen(
     var interaction by remember { mutableLongStateOf(0) }
     var position by remember { mutableLongStateOf(startMs) }
     var duration by remember { mutableLongStateOf(0) }
-    var paused by remember { mutableStateOf(false) }
-    var showPlayButton by remember { mutableStateOf(true) }
+    val playback = rememberPlayerPlayback(player, onPause = {
+        controls = true
+        interaction++
+    }, onResume = { interaction++ })
+    val paused = playback.paused
+    val showPlayButton = playback.showPlayButton
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
     val errorFocus = remember { FocusRequester() }
@@ -279,19 +282,14 @@ private fun PlayerItemScreen(
             player?.let {
                 position = it.currentPosition.coerceAtLeast(0)
                 duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
-                paused = !it.playWhenReady
-                showPlayButton = Util.shouldShowPlayButton(it)
             }
             view.keepScreenOn = player?.playWhenReady == true && state.error == null
             delay(500)
         }
     }
-    LaunchedEffect(controls, chooser, chaptersOpen, interaction, paused, actionsFocused) {
-        if (controls && chooser == null && !chaptersOpen && !paused && !actionsFocused) {
-            delay(7_000)
-            controls = false
-            rootFocus.requestFocus()
-        }
+    ControlsAutoHide(controls, paused || actionsFocused || chooser != null || chaptersOpen, interaction) {
+        controls = false
+        rootFocus.requestFocus()
     }
     DisposableEffect(lifecycle, output) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) output.pause() }
@@ -320,14 +318,7 @@ private fun PlayerItemScreen(
             .playerRemoteKeys(
                 enabled = chooser == null && !chaptersOpen && error == null && !switching,
                 rootFocused = rootFocused,
-                controlsVisible = controls,
                 seek = ::seek,
-                toggleAndShow = {
-                    player?.togglePlayback()
-                    controls = true
-                    focusControls = true
-                    interaction++
-                },
                 showControls = {
                     controls = true
                     if (rootFocused) focusControls = true
@@ -352,6 +343,7 @@ private fun PlayerItemScreen(
         if (error != null) {
             Column(Modifier.align(Alignment.Center).widthIn(max = 720.dp).background(Color(0xEE10131C)).padding(32.dp)) {
                 Text(error)
+                state.reportError?.let { Text("Could not save progress: $it") }
                 Button(onClick = { finish() }, modifier = Modifier.focusRequester(errorFocus)) { Text("Back to details") }
             }
             LaunchedEffect(error) { errorFocus.requestFocus() }
@@ -372,7 +364,8 @@ private fun PlayerItemScreen(
                 Box(Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray)) {
                     Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
                 }
-                Text("${playerTime(position)} / ${playerTime(duration)}  ·  ← / → seek 10 seconds")
+                val clock = (if (paused) "Paused  ·  " else "") + "${playerTime(position)} / ${playerTime(duration)}"
+                Text("$clock  ·  ← / → seek 10 seconds")
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = {
@@ -393,7 +386,7 @@ private fun PlayerItemScreen(
                     }
                     Button(onClick = { finish() }) { Text("Stop") }
                 }
-                state.reportError?.let { Text("Could not save progress: $it", color = Color(0xFFFFCCB8)) }
+                state.reportError?.let { Text("Could not save progress: $it") }
             }
         }
         if (error == null && !switching) {
@@ -433,6 +426,7 @@ private fun PlayerItemScreen(
         chooser?.let { type ->
             val streams = state.decision?.mediaSource?.mediaStreams.orEmpty().filter { it.type == type }
             val selected = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
+            val labels = trackLabels(streams)
             val choiceFocus = remember(type) { FocusRequester() }
             Column(
                 Modifier.align(Alignment.CenterEnd).widthIn(min = 400.dp, max = 680.dp).fillMaxSize(0.85f)
@@ -441,9 +435,7 @@ private fun PlayerItemScreen(
             ) {
                 Text(if (type == MediaStreamType.Audio) "Audio" else "Subtitles", style = MaterialTheme.typography.headlineSmall)
                 (
-                    listOf(-1 to "Off") + streams.map {
-                        it.index to trackLabel(it)
-                    }
+                    listOf(-1 to "Off") + streams.mapIndexed { i, stream -> stream.index to labels[i] }
                     ).forEach { (index, label) ->
                     Button(
                         onClick = {

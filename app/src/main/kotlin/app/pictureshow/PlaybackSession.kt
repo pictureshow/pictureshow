@@ -106,8 +106,8 @@ internal class PlaybackSession(
     fun ready(source: PlayDecision? = decision) = enqueue {
         if (source !== decision || ready || decision == null || mutable.value.error != null) return@enqueue
         ready = true
-        mutable.value = mutable.value.copy(preparing = false)
-        report(gateway.start(progressInfo()))
+        mutable.value = mutable.value.copy(preparing = false, reportError = null)
+        gateway.start(progressInfo())
         ticker?.cancel()
         ticker = owner.launch {
             while (true) {
@@ -151,7 +151,7 @@ internal class PlaybackSession(
     }
 
     fun progress(source: PlayDecision? = decision) = enqueue {
-        if (source === decision && ready && mutable.value.error == null) report(gateway.progress(progressInfo()))
+        if (source === decision && ready && mutable.value.error == null) gateway.progress(progressInfo())
     }
 
     fun select(type: MediaStreamType, index: Int) = enqueue {
@@ -164,7 +164,7 @@ internal class PlaybackSession(
         if (current.method != PlayMethod.Transcode && output.select(type, index)) {
             mutable.value = mutable.value.copy(audioIndex = nextAudio, subtitleIndex = nextSubtitle)
             requested = requested.copy(audioStreamIndex = nextAudio, subtitleStreamIndex = nextSubtitle)
-            if (ready) report(gateway.progress(progressInfo()))
+            if (ready) gateway.progress(progressInfo())
         } else {
             finishDecision()
             negotiate(
@@ -257,7 +257,7 @@ internal class PlaybackSession(
         requested = request
         ready = false
         lastPosition = PlaybackPosition(request.startPosition.inWholeMilliseconds, paused)
-        mutable.value = mutable.value.copy(preparing = true, error = null)
+        mutable.value = mutable.value.copy(preparing = true, error = null, reportError = null)
         when (val result = gateway.prepare(request)) {
             is ClientResult.Failure -> mutable.value = mutable.value.copy(preparing = false, error = result.error.message)
             is ClientResult.Success -> when (val outcome = result.value) {
@@ -311,14 +311,20 @@ internal class PlaybackSession(
         val current = decision ?: return
         // Freeze the snapshot and detach callbacks before any suspending reports or new negotiation.
         output.release()
-        if (ready) report(gateway.progress(progressInfo()))
-        report(gateway.stopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed)))
-        if (current.method == PlayMethod.Transcode) current.playSessionId?.let { report(gateway.stopEncoding(it)) }
+        if (ready) gateway.progress(progressInfo())
+        reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
+        if (current.method == PlayMethod.Transcode) current.playSessionId?.let { gateway.stopEncoding(it) }
         ready = false
         decision = null
     }
 
-    private fun report(result: ClientResult<Unit>) {
+    /**
+     * Periodic reports retry on the ticker's own schedule, so a single failure is never shown to the viewer. The
+     * final stop report is the one that keeps the viewer's place, so it gets one retry before it is surfaced.
+     */
+    private suspend fun reportStopped(info: PlaybackStopInfo) {
+        var result = gateway.stopped(info)
+        if (result is ClientResult.Failure) result = gateway.stopped(info)
         if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
     }
 }
