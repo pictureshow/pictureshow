@@ -210,7 +210,9 @@ class LoginViewModel(val server: Server, private val service: JellyfinService, p
         }
     }
 
-    fun leave() {
+    fun leave(preserveInput: Boolean = false) {
+        // The retained ViewModel owns both the input and the in-flight authentication request.
+        if (preserveInput) return
         signInJob?.cancel()
         mutableState.update { it.copy(password = "", busy = false) }
     }
