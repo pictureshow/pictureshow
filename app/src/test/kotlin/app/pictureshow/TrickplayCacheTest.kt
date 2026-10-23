@@ -95,13 +95,15 @@ class TrickplayCacheTest {
 
     @Test
     fun largeValidSheetIsSubsampledAndCroppedAtTheScaledTileCoordinates() = runTest {
+        // 3840x2160 is just over the 8 MP decode limit, so the sheet is sampled by 2. A larger sheet only costs heap:
+        // Robolectric keeps pixels on the JVM heap, and a 6400x3600 sheet ran the 512 MB test JVM out mid-suite.
         val image = ByteArrayOutputStream().also { out ->
-            Bitmap.createBitmap(6400, 3600, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.JPEG, 80, out)
+            Bitmap.createBitmap(3840, 2160, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.JPEG, 80, out)
         }.toByteArray()
         val http = HttpClient(MockEngine { respond(image) })
         val cache = TrickplayCache(http, account, ClientIdentity("TV", "device"), "item")
         try {
-            val tile = TrickplayTile(TrickplayInfo(640, 360, 10, 10, 100, 1_000), 0, 9, 9)
+            val tile = TrickplayTile(TrickplayInfo(640, 360, 6, 6, 36, 1_000), 0, 5, 5)
             val thumbnail = assertNotNull(cache.thumbnail("source", tile))
             assertEquals(320, thumbnail.width)
             assertEquals(180, thumbnail.height)
