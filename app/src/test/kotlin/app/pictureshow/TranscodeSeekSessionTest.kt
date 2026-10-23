@@ -144,10 +144,10 @@ class TranscodeSeekSessionTest {
         assertTrue(gateway.requests.last().enableDirectStream)
         session.ready(assertNotNull(session.state.value.decision))
         runCurrent()
-        assertEquals(2_260_000_000L, gateway.starts.last().positionTicks)
-        assertTrue(gateway.starts.last().isPaused)
-        assertEquals(2, gateway.starts.last().audioStreamIndex)
-        assertEquals(3, gateway.starts.last().subtitleStreamIndex)
+        assertEquals(2_260_000_000L, gateway.progresses.last().positionTicks)
+        assertTrue(gateway.progresses.last().isPaused)
+        assertEquals(2, gateway.progresses.last().audioStreamIndex)
+        assertEquals(3, gateway.progresses.last().subtitleStreamIndex)
         session.close()
         runCurrent()
     }
@@ -329,6 +329,7 @@ class TranscodeSeekSessionTest {
     private class Gateway(private val events: MutableList<String>) : PlaybackGateway {
         val requests = mutableListOf<PlaybackRequest>()
         val starts = mutableListOf<PlaybackProgressInfo>()
+        val progresses = mutableListOf<PlaybackProgressInfo>()
         var gate: CompletableDeferred<Unit>? = null
         var fail = false
         override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
@@ -345,6 +346,7 @@ class TranscodeSeekSessionTest {
             return ClientResult.Success(Unit)
         }
         override suspend fun progress(info: PlaybackProgressInfo): ClientResult<Unit> {
+            progresses += info
             events += "progress:${info.playSessionId}"
             return ClientResult.Success(Unit)
         }

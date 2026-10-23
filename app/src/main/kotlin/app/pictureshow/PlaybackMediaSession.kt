@@ -34,14 +34,16 @@ internal object PlaybackMediaSession {
 
         // STOP means leaving this viewer. Do not idle the decoder before finish captures its position.
         // A plain forwarding wrapper also permits finish to synchronously release the session/player.
-        private val sessionPlayer = if (onStop == null) {
+        private val stop = onStop
+
+        private fun sessionPlayer(player: Player): Player = if (stop == null) {
             player
         } else {
             object : ForwardingPlayer(player) {
                 override fun stop() {
                     if (closed || stopRequested) return
                     stopRequested = true
-                    onStop()
+                    stop.invoke()
                 }
             }
         }
@@ -49,7 +51,10 @@ internal object PlaybackMediaSession {
         internal val controller: MediaController
 
         init {
-            val builder = MediaSession.Builder(context, sessionPlayer).setId("pictureshow-player").setCallback(AnonymousMediaButtons)
+            val builder = MediaSession.Builder(
+                context,
+                sessionPlayer(player)
+            ).setId("pictureshow-player").setCallback(AnonymousMediaButtons)
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launch ->
                 builder.setSessionActivity(
                     PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -57,6 +62,11 @@ internal object PlaybackMediaSession {
             }
             session = builder.build()
             controller = MediaController(context, session.platformToken)
+        }
+
+        /** Keep the platform token and external controllers alive while replacing only the decoder. */
+        fun replacePlayer(player: Player) {
+            if (!closed) session.setPlayer(sessionPlayer(player))
         }
 
         fun close() {

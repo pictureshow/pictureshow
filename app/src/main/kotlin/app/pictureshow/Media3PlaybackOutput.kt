@@ -67,7 +67,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     } ?: saved
 
     override fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean) {
-        release()
+        releasePlayer(closeSession = false)
         current = decision
         audio = audioIndex
         subtitle = subtitleIndex
@@ -187,8 +187,11 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         }
         next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
         next.playWhenReady = !paused
-        mediaSession = PlaybackMediaSession.open(context, exposed) {
-            if (activePlayer === next) onStop()
+        val existingSession = mediaSession
+        if (existingSession == null) {
+            mediaSession = PlaybackMediaSession.open(context, exposed) { onStop() }
+        } else {
+            existingSession.replacePlayer(exposed)
         }
         next.prepare()
     }
@@ -225,17 +228,28 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         activePlayer?.stop()
     }
 
-    override fun release() {
+    override fun release() = releasePlayer(closeSession = true)
+
+    private fun releasePlayer(closeSession: Boolean) {
         physicalEnd?.invalidate()
         physicalEnd = null
-        val active = activePlayer ?: return
+        val active = activePlayer
+        if (active == null) {
+            if (closeSession) {
+                mediaSession?.close()
+                mediaSession = null
+            }
+            return
+        }
         val exposed = mutablePlayer.value
         saved = position()
         mutablePlayer.value = null
         activePlayer = null
         listener?.let { exposed?.removeListener(it) }
-        mediaSession?.close()
-        mediaSession = null
+        if (closeSession) {
+            mediaSession?.close()
+            mediaSession = null
+        }
         active.release()
         listener = null
     }

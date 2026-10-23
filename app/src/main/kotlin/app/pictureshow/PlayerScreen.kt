@@ -444,7 +444,8 @@ private fun PlayerItemScreen(
                 nextEpisode?.takeUnless { nextCancelled }?.let { next ->
                     val trigger = nextEpisodeTriggerMs(duration, segments)
                     NextEpisodeControl(
-                        account, next, trigger != null && position >= trigger, ended, paused || !actionsVisible,
+                        account, next, trigger != null && position >= trigger, ended,
+                        paused || playback.buffering || state.preparing || !actionsVisible,
                         onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, onPlay = { finish(next) },
                         onCancel = { nextCancelled = true }, visible = actionsVisible, compact = controls,
                         remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null,

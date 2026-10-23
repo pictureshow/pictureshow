@@ -342,15 +342,15 @@ class PlaybackSessionTest {
         assertEquals(1, gateway.requests.last().audioStreamIndex)
         assertEquals(-1, gateway.requests.last().subtitleStreamIndex)
         assertEquals(listOf("session-one"), gateway.encodes)
-        assertEquals(listOf("start", "progress", "stop", "delete"), gateway.events)
+        assertEquals(listOf("start", "delete"), gateway.events)
         assertEquals(PlaybackPosition(42_125, true), output.snapshot)
         session.ready()
         runCurrent()
         session.close()
         runCurrent()
         assertEquals(listOf("session-one", "session-two"), gateway.encodes)
-        assertEquals(2, gateway.starts.size)
-        assertEquals(2, gateway.stops.size)
+        assertEquals(1, gateway.starts.size)
+        assertEquals(1, gateway.stops.size)
     }
 
     @Test
@@ -379,7 +379,7 @@ class PlaybackSessionTest {
         assertEquals(listOf("fallback"), gateway.encodes)
         session.close()
         runCurrent()
-        assertEquals(2, gateway.stops.size)
+        assertEquals(1, gateway.stops.size)
     }
 
     @Test

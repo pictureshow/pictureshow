@@ -99,7 +99,11 @@ class PlaybackEntryTest {
         val item = MediaItem(id, "An Invented Film", "Movie", userData = ItemUserData(playbackPositionTicks = 456_789_000))
         val http = http(Json.encodeToString(item)) { request ->
             requests++
-            assertEquals("/base/Items/$id", request.url.encodedPath)
+            if (request.url.encodedPath == "/base/Items") {
+                assertEquals(id, request.url.parameters["ids"])
+            } else {
+                assertEquals("/base/Items/$id", request.url.encodedPath)
+            }
             assertEquals(true, request.headers[HttpHeaders.Authorization]?.contains("fake-token"))
             assertEquals(null, request.url.parameters["api_key"])
         }
@@ -107,7 +111,7 @@ class PlaybackEntryTest {
         assertEquals(ResolvedPlaybackEntry.Open(item, 45_678), resolvePlaybackEntry(PlaybackEntry(id), account, session))
         assertEquals(ResolvedPlaybackEntry.Open(item, 0), resolvePlaybackEntry(PlaybackEntry(id, 0), account, session))
         assertEquals(ResolvedPlaybackEntry.Open(item, 123), resolvePlaybackEntry(PlaybackEntry(id, 123), account, session))
-        assertEquals(3, requests)
+        assertEquals(6, requests)
         http.close()
     }
 
@@ -147,7 +151,8 @@ class PlaybackEntryTest {
             dispatcher = StandardTestDispatcher(testScheduler)
             addHandler { request ->
                 inspect(request)
-                respond(body, status, headersOf(HttpHeaders.ContentType, "application/json"))
+                val responseBody = if (request.url.parameters["ids"] != null) """{"Items":[$body]}""" else body
+                respond(responseBody, status, headersOf(HttpHeaders.ContentType, "application/json"))
             }
         }
     }

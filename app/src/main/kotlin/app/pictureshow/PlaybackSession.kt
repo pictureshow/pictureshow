@@ -90,6 +90,10 @@ internal class PlaybackSession(
     private var decision: PlayDecision? = null
     private var requested = PlaybackRequest()
     private var ready = false
+    private var started = false
+
+    // Retain the viewing even if replacement negotiation fails after retiring its old stream.
+    private var reportingDecision: PlayDecision? = null
     private var fallbackUsed = false
     private var closed = false
     private var closing = false
@@ -122,7 +126,12 @@ internal class PlaybackSession(
         if (source !== decision || ready || decision == null || mutable.value.error != null) return@enqueue
         ready = true
         mutable.value = mutable.value.copy(preparing = false, reportError = null)
-        gateway.start(progressInfo())
+        if (started) {
+            gateway.progress(progressInfo())
+        } else {
+            started = true
+            gateway.start(progressInfo())
+        }
         ticker?.cancel()
         ticker = owner.launch {
             while (true) {
@@ -166,7 +175,9 @@ internal class PlaybackSession(
     }
 
     fun progress(source: PlayDecision? = decision) = enqueue {
-        if (source === decision && ready && mutable.value.error == null) gateway.progress(progressInfo())
+        if (source === decision && ready && pendingSeek == null && !seeking && mutable.value.error == null) {
+            gateway.progress(progressInfo())
+        }
     }
 
     /** Coalesce held/rapid remote steps before stopping the old encode and negotiating the final target. */
@@ -193,7 +204,7 @@ internal class PlaybackSession(
                     val current = decision ?: return@enqueue
                     capture()
                     val paused = lastPosition.paused
-                    finishDecision(releaseOutput = false)
+                    retireStream(releaseOutput = false)
                     while (pendingSeek != null && !closing && mutable.value.error == null) {
                         val target = requireNotNull(pendingSeek)
                         pendingSeek = null
@@ -211,6 +222,7 @@ internal class PlaybackSession(
                 } finally {
                     seeking = false
                     seekSource = null
+                    pendingSeek = null
                 }
             }
         }
@@ -229,7 +241,7 @@ internal class PlaybackSession(
             requested = requested.copy(audioStreamIndex = nextAudio, subtitleStreamIndex = nextSubtitle)
             if (ready) gateway.progress(progressInfo())
         } else {
-            finishDecision()
+            retireStream(releaseOutput = false)
             negotiate(
                 requested.copy(
                     startPosition = lastPosition.milliseconds.milliseconds,
@@ -248,7 +260,7 @@ internal class PlaybackSession(
         if (mutable.value.error != null) return@enqueue
         val current = decision ?: return@enqueue
         capture()
-        finishDecision()
+        retireStream(releaseOutput = false)
         negotiate(
             requested.copy(
                 startPosition = lastPosition.milliseconds.milliseconds,
@@ -265,7 +277,7 @@ internal class PlaybackSession(
         val current = decision ?: return@enqueue
         capture()
         val retry = canRetryWithTranscode && current.method != PlayMethod.Transcode && !fallbackUsed
-        finishDecision(failed = true)
+        if (retry) retireStream(releaseOutput = false) else finishDecision(failed = true)
         if (retry) {
             fallbackUsed = true
             negotiate(
@@ -316,9 +328,16 @@ internal class PlaybackSession(
         if (closing) return
         closing = true
         seekTimer?.cancel()
+        val finalSeekTarget = pendingSeek
         pendingSeek = null
         lastPosition =
-            output.position().let { if (ready) it else it.copy(milliseconds = maxOf(it.milliseconds, lastPosition.milliseconds)) }
+            output.position().let {
+                when {
+                    finalSeekTarget != null -> it.copy(milliseconds = finalSeekTarget)
+                    ready -> it
+                    else -> it.copy(milliseconds = maxOf(it.milliseconds, lastPosition.milliseconds))
+                }
+            }
         output.release()
         commands.trySend {
             if (!closed) {
@@ -350,12 +369,19 @@ internal class PlaybackSession(
         lastPosition = PlaybackPosition(request.startPosition.inWholeMilliseconds, paused)
         mutable.value = mutable.value.copy(preparing = true, error = null, reportError = null)
         when (val result = gateway.prepare(request)) {
-            is ClientResult.Failure -> mutable.value = mutable.value.copy(preparing = false, error = result.error.message)
+            is ClientResult.Failure -> {
+                mutable.value = mutable.value.copy(preparing = false, error = result.error.message)
+                finishDecision(failed = !closing)
+            }
             is ClientResult.Success -> when (val outcome = result.value) {
-                is PlayOutcome.Unplayable -> mutable.value = mutable.value.copy(preparing = false, error = outcome.message)
+                is PlayOutcome.Unplayable -> {
+                    mutable.value = mutable.value.copy(preparing = false, error = outcome.message)
+                    finishDecision(failed = !closing)
+                }
                 is PlayOutcome.Play -> {
                     val next = outcome.decision
                     decision = next
+                    reportingDecision = next
                     val audio = request.audioStreamIndex ?: PlaybackMedia.defaultStream(
                         next.mediaSource.mediaStreams,
                         MediaStreamType.Audio,
@@ -369,9 +395,11 @@ internal class PlaybackSession(
                         preferredLanguage
                     )
                     mutable.value = mutable.value.copy(decision = next, audioIndex = audio, subtitleIndex = subtitle)
-                    if (closing || !openWhen()) {
+                    if (closing) {
                         // PlaybackInfo may already have created an encode even though the screen is gone.
-                        finishDecision(releaseOutput = closing)
+                        finishDecision()
+                    } else if (!openWhen()) {
+                        retireStream(releaseOutput = false)
                     } else {
                         try {
                             output.open(next, lastPosition.milliseconds, audio, subtitle, if (seeking) output.position().paused else paused)
@@ -396,17 +424,29 @@ internal class PlaybackSession(
         )
     }
 
+    /** Retire an encode, not a viewing. A new PlaybackInfo gets a new id for scoped delayed cleanup. */
+    private suspend fun retireStream(releaseOutput: Boolean = true) {
+        cancelBuffering()
+        ticker?.cancel()
+        val current = decision
+        if (releaseOutput) output.release() else output.beginSeek()
+        ready = false
+        decision = null
+        if (current?.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
+    }
+
     private suspend fun finishDecision(failed: Boolean = false, releaseOutput: Boolean = true): Boolean {
         cancelBuffering()
         ticker?.cancel()
-        val current = decision ?: return false
-        // Freeze the snapshot and detach callbacks before any suspending reports or new negotiation.
+        val current = decision ?: reportingDecision ?: return false
         if (releaseOutput) output.release()
         if (ready) gateway.progress(progressInfo())
         val stopped = reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
-        if (current.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
+        // Retired encodes already have their two scoped DELETEs scheduled.
+        if (decision?.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
         ready = false
         decision = null
+        reportingDecision = null
         return stopped
     }
 

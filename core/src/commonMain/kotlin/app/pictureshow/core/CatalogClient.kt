@@ -80,7 +80,18 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         )
     )
 
-    override suspend fun item(account: Account, id: String): ClientResult<MediaItem> = request(account, "Items/${id.encodeURLPathPart()}")
+    override suspend fun item(account: Account, id: String): ClientResult<MediaItem> {
+        val detail = request<MediaItem>(account, "Items/${id.encodeURLPathPart()}")
+        if (detail !is ClientResult.Success || detail.value.type !in listOf("Movie", "Episode", "Video")) return detail
+        // Jellyfin 12 can project a different UserData key for a single item. Use the same batch
+        // projection as Continue watching, scoped to this item (without its 24-item row limit).
+        return when (val batch = request<ItemPage>(account, "Items", mapOf("ids" to id))) {
+            is ClientResult.Failure -> if (batch.error.kind == ErrorKind.EXPIRED) batch else detail
+            is ClientResult.Success -> ClientResult.Success(
+                batch.value.items.firstOrNull { it.id == id }?.let { detail.value.copy(userData = it.userData) } ?: detail.value
+            )
+        }
+    }
 
     override suspend fun seasons(account: Account, seriesId: String): ClientResult<ItemPage> = request(
         account,

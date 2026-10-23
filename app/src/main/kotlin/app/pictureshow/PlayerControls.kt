@@ -29,7 +29,7 @@ import kotlinx.coroutines.delay
 internal const val CONTROLS_TIMEOUT_MS = 10_000L
 
 /** The two playback facts the controls render, refreshed from player events rather than a polling loop. */
-internal data class PlayerPlayback(val paused: Boolean, val showPlayButton: Boolean)
+internal data class PlayerPlayback(val paused: Boolean, val showPlayButton: Boolean, val buffering: Boolean = false)
 
 /**
  * Follows play/pause, buffering and end-of-stream transitions as they happen, including media keys delivered
@@ -39,6 +39,11 @@ internal data class PlayerPlayback(val paused: Boolean, val showPlayButton: Bool
 @Composable
 internal fun rememberPlayerPlayback(player: Player?, onPause: () -> Unit, onResume: () -> Unit): PlayerPlayback {
     var paused by remember(player) { mutableStateOf(player?.let { !it.playWhenReady } ?: false) }
+    var buffering by remember(player) {
+        mutableStateOf(
+            player == null || player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_IDLE
+        )
+    }
     var showPlayButton by remember(player) { mutableStateOf(player?.let { Util.shouldShowPlayButton(it) } ?: true) }
     DisposableEffect(player) {
         if (player == null) return@DisposableEffect onDispose {}
@@ -46,6 +51,7 @@ internal fun rememberPlayerPlayback(player: Player?, onPause: () -> Unit, onResu
             override fun onEvents(player: Player, events: Player.Events) {
                 val wasPaused = paused
                 paused = !player.playWhenReady
+                buffering = player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_IDLE
                 showPlayButton = Util.shouldShowPlayButton(player)
                 if (paused && !wasPaused) {
                     onPause()
@@ -60,7 +66,7 @@ internal fun rememberPlayerPlayback(player: Player?, onPause: () -> Unit, onResu
         if (paused) onPause()
         onDispose { player.removeListener(listener) }
     }
-    return PlayerPlayback(paused, showPlayButton)
+    return PlayerPlayback(paused, showPlayButton, buffering)
 }
 
 /** Hides the controls after an idle [timeoutMs] unless pinned (paused playback, an open panel or focused actions). */
