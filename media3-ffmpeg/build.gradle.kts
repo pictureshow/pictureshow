@@ -1,7 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // Media3's FFmpeg audio extension (androidx.media3.decoder.ffmpeg, Apache-2.0, sources unchanged from
-// Media3 1.11.1) with prebuilt LGPL FFmpeg libraries in src/main/jniLibs. Normal builds need no NDK;
+// Media3 1.11.1) with prebuilt LGPL FFmpeg libraries in src/main/jniLibs. Builds do not compile native code;
+// the app uses its pinned NDK to strip APK copies and extract release function symbols.
 // tools/ffmpeg/build.sh rebuilds the libraries from pinned sources.
 plugins {
     alias(libs.plugins.android.library)

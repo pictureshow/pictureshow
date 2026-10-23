@@ -1,7 +1,11 @@
+import app.pictureshow.buildlogic.Media3ControllerIdentityFix
+import com.android.build.api.instrumentation.FramesComputationMode
+import com.android.build.api.instrumentation.InstrumentationScope
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
+    id("pictureshow.media3-controller-identity")
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ktlint)
     id("com.mikepenz.aboutlibraries.plugin") version "15.3.0"
@@ -10,6 +14,7 @@ plugins {
 android {
     namespace = "app.pictureshow"
     compileSdk = 37
+    ndkVersion = "26.1.10909125"
     defaultConfig {
         applicationId = "app.pictureshow"
         minSdk = 23
@@ -19,6 +24,8 @@ android {
     }
     buildTypes {
         getByName("release") {
+            // Keep function names in bundle metadata; APK libraries are still stripped.
+            ndk.debugSymbolLevel = "SYMBOL_TABLE"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -55,6 +62,14 @@ android {
 }
 kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+}
+
+// The compat stub reads the framework caller before MediaSession.Callback can intercept a key.
+// Review/remove this narrow patch when upstream fixes https://github.com/androidx/media/issues/3214.
+check(libs.versions.media3.get() == "1.11.1") { "Review the Media3 caller-identity workaround before upgrading" }
+androidComponents.onVariants { variant ->
+    variant.instrumentation.transformClassesWith(Media3ControllerIdentityFix::class.java, InstrumentationScope.ALL) {}
+    variant.instrumentation.setAsmFramesComputationMode(FramesComputationMode.COMPUTE_FRAMES_FOR_INSTRUMENTED_METHODS)
 }
 
 dependencies {

@@ -1,7 +1,7 @@
 # FFmpeg for media3-ffmpeg
 
 `media3-ffmpeg` ships Media3's FFmpeg audio extension with prebuilt native libraries in
-`media3-ffmpeg/src/main/jniLibs/<abi>/`, so `./gradlew check assembleDebug` needs no NDK. These scripts rebuild
+`media3-ffmpeg/src/main/jniLibs/<abi>/`, so `./gradlew check assembleDebug` needs no native compilation. Release symbol extraction uses NDK r26b. These scripts rebuild
 those libraries and the test clips from pinned sources. Licensing details: `third_party/ffmpeg/README.md`.
 
 ## Rebuilding the libraries
@@ -13,8 +13,8 @@ those libraries and the test clips from pinned sources. Licensing details: `thir
    maps (aac, mp3, ac3, eac3, truehd, mlp, dca, vorbis, opus, amrnb, amrwb, flac, alac, pcm_mulaw, pcm_alaw),
    as shared libraries with 16 KB page alignment;
 2. builds Media3's JNI wrapper from `media3-ffmpeg/src/main/jni` with CMake, linked dynamically against them;
-3. copies the four libraries into `media3-ffmpeg/src/main/jniLibs/<abi>/`, without debug info; FFmpeg's keep their
-   symbol table (about 5% of `libavcodec.so`) so the check below can see which decoders were built;
+3. copies the four libraries into `media3-ffmpeg/src/main/jniLibs/<abi>/`, without DWARF debug info but retaining symbol tables, so the check below can see which
+   decoders were built and release bundles can include native function names;
 
 then runs `check.sh` over the result.
 
@@ -71,3 +71,15 @@ adb shell am instrument -w androidx.media3.decoder.ffmpeg.test/androidx.test.run
 Each test plays one clip through ExoPlayer with `FfmpegAudioRenderer` as the only renderer and checks the decoder
 name, the PCM channel count and that every channel carries sound; one more checks that `DefaultRenderersFactory`
 finds the renderer by reflection.
+
+## Release crash symbols
+
+The app pins NDK r26b and sets release `ndk.debugSymbolLevel = "SYMBOL_TABLE"`. AGP extracts
+function names from every prebuilt into `BUNDLE-METADATA/com.android.tools.build.debugsymbols/`
+and strips the installed APK copies. The FFmpeg prebuilts are unchanged from the documented LGPL
+build. The JNI prebuilts retain symbol tables recovered from that same build's original outputs;
+stripping those outputs reproduces the previously committed JNI libraries byte for byte.
+
+This provides function names, including private decoder and JNI functions, without rebuilding
+FFmpeg. Source files and line numbers require a future native build retaining DWARF and `FULL`
+metadata. Do not apply `keepDebugSymbols` to APK packaging: that would increase installed size.
