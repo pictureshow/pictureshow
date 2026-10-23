@@ -93,6 +93,49 @@ class SubtitlePresentationTest {
         assertEquals(Rect(0, 0, 1920, 1080), subtitleVideoFrame(1920, 1080, VideoSize.UNKNOWN))
     }
 
+    @Test
+    fun bottomOverlaysMoveTextAndBitmapCuesAboveTheirTopAndRestoreWhenHidden() {
+        val video = subtitleVideoFrame(1920, 1080, VideoSize(1920, 800))
+        for (overlayTop in listOf(800, 620, 460)) {
+            val safe = subtitleSafeFrame(video, overlayTop, 16)
+            assertEquals(video.left, safe.left)
+            assertEquals(video.top, safe.top)
+            assertEquals(overlayTop - 16, safe.bottom)
+            val view = SubtitleView(context)
+            view.layout(0, 0, safe.width(), safe.height())
+            view.getChildAt(0).layout(0, 0, safe.width(), safe.height())
+            SubtitleAppearance(size = SubtitleSize.Large).applyTo(view, context, video.height().toFloat() / safe.height())
+            val bitmap = Bitmap.createBitmap(100, 20, Bitmap.Config.ARGB_8888)
+            val cues = listOf(
+                Cue.Builder().setText("A paused line").build(),
+                Cue.Builder().setText("A positioned line").setLine(0.95f, Cue.LINE_TYPE_FRACTION).build(),
+                Cue.Builder().setText("A numbered line").setLine(-1f, Cue.LINE_TYPE_NUMBER).build(),
+                Cue.Builder().setBitmap(bitmap).setPosition(0.5f).setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
+                    .setLine(0.95f, Cue.LINE_TYPE_FRACTION).setLineAnchor(Cue.ANCHOR_TYPE_START)
+                    .setSize(0.3f).setBitmapHeight(0.1f).build()
+            )
+            view.setCues(subtitleCuesInFrame(cues, video.width(), video.height(), safe.height()))
+            view.draw(Canvas(Bitmap.createBitmap(safe.width(), safe.height(), Bitmap.Config.ARGB_8888)))
+            val painters = field(view.getChildAt(0), "painters") as List<*>
+            for (painter in painters.take(3)) {
+                val top = field(painter!!, "textTop") as Int
+                val layout = field(painter, "textLayout") as android.text.StaticLayout
+                kotlin.test.assertTrue(top >= 0 && top + layout.height <= safe.height())
+                assertEquals(
+                    SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.25f * video.height(),
+                    field(painter, "defaultTextSizePx") as Float,
+                    0.001f
+                )
+            }
+            val rect = field(painters.last()!!, "bitmapRect") as Rect
+            kotlin.test.assertTrue(rect.bottom <= safe.height())
+            assertEquals(80, rect.height())
+        }
+        assertEquals(video, subtitleSafeFrame(video, null, 16))
+        val cue = Cue.Builder().setText("Original").build()
+        assertSame(cue, subtitleCuesInFrame(listOf(cue), video.width(), video.height(), video.height()).single())
+    }
+
     private fun field(instance: Any, name: String): Any? = instance.javaClass.getDeclaredField(name).let {
         it.isAccessible = true
         it.get(instance)

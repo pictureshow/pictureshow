@@ -40,18 +40,31 @@ data class MediaSegment(
     val endMs: Long get() = endTicks.coerceAtLeast(0) / 10_000
 }
 
-/** Segment end is exclusive. Unknown and malformed server data never cause a seek. */
+/**
+ * Chapter-derived segments sometimes inherit a DVD subtitle duration overflow. Never skip hours of
+ * story because a server label looks valid: intro/recap/preview get a generous 10 minutes, credits
+ * and commercial blocks 30 minutes. A segment must also end within a day (long recordings still
+ * play normally). These are safety ceilings, not estimates of the video's real runtime.
+ */
+private fun MediaSegment.isPlausible(): Boolean {
+    val maximumMs = when (type) {
+        SegmentType.Intro, SegmentType.Recap, SegmentType.Preview -> 10 * 60_000L
+        SegmentType.Outro, SegmentType.Commercial -> 30 * 60_000L
+        SegmentType.Unknown -> return false
+    }
+    return startTicks >= 0 && endMs > startMs && endMs <= 24 * 60 * 60_000L && endMs - startMs <= maximumMs
+}
+
+/** Segment end is exclusive. Unknown, malformed and implausible server data never cause a seek. */
 fun activeSegment(segments: List<MediaSegment>, positionMs: Long, modes: Map<SegmentType, SegmentMode> = emptyMap()): MediaSegment? =
     segments.filter {
-        it.type != SegmentType.Unknown &&
-            it.startTicks >= 0 &&
-            it.endMs > it.startMs &&
+        it.isPlausible() &&
             positionMs >= it.startMs &&
             positionMs < it.endMs &&
             modes[it.type] != SegmentMode.Off
     }.minByOrNull { it.startTicks }
 fun creditsStartMs(durationMs: Long, segments: List<MediaSegment>): Long? = segments.filter {
-    it.type == SegmentType.Outro && it.startTicks >= 0 && it.endMs > it.startMs && it.startMs < durationMs
+    it.type == SegmentType.Outro && it.isPlausible() && it.startMs < durationMs
 }.minOfOrNull { it.startMs }
 
 /** From the credits, or for the last 10 seconds when there is no credits segment, so no story is cut. */

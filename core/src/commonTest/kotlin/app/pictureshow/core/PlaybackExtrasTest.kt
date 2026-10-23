@@ -12,6 +12,47 @@ class PlaybackExtrasTest {
     private val outro = MediaSegment("credits", SegmentType.Outro, 900_000_000, 1_000_000_000)
 
     @Test
+    fun implausibleSegmentsCannotSkipOrTriggerNextEpisode() {
+        val overflowIntro = MediaSegment("bad", SegmentType.Intro, 0, 5_153_978_750_000)
+        val overflowOutro = MediaSegment("bad-end", SegmentType.Outro, 42_949_722_950_000, 42_949_822_950_000)
+        assertNull(activeSegment(listOf(overflowIntro), 0))
+        assertNull(activeSegment(listOf(overflowOutro), overflowOutro.startMs))
+        assertNull(creditsStartMs(4_294_982_295, listOf(overflowOutro)))
+        for ((type, minutes) in listOf(
+            SegmentType.Intro to 11,
+            SegmentType.Recap to 11,
+            SegmentType.Preview to 11,
+            SegmentType.Commercial to 31,
+            SegmentType.Outro to 31
+        )) {
+            val bad = MediaSegment("long", type, 0, minutes * 60L * 10_000_000)
+            assertNull(activeSegment(listOf(bad), 0), "$type must not skip $minutes minutes")
+            if (type == SegmentType.Outro) {
+                assertNull(creditsStartMs(7_200_000, listOf(bad)))
+                assertEquals(7_190_000, nextEpisodeTriggerMs(7_200_000, listOf(bad)))
+            }
+        }
+    }
+
+    @Test
+    fun ordinarySegmentsRetainAskAutomaticOffAndCreditsBehavior() {
+        for ((type, seconds) in listOf(
+            SegmentType.Intro to 7,
+            SegmentType.Recap to 90,
+            SegmentType.Preview to 120,
+            SegmentType.Commercial to 240,
+            SegmentType.Outro to 600
+        )) {
+            val segment = MediaSegment("ordinary", type, 0, seconds * 10_000_000L)
+            assertEquals(segment, activeSegment(listOf(segment), 1))
+            assertEquals(segment, activeSegment(listOf(segment), 1, mapOf(type to SegmentMode.Automatic)))
+            assertNull(activeSegment(listOf(segment), 1, mapOf(type to SegmentMode.Off)))
+            assertNull(activeSegment(listOf(segment), segment.endMs))
+            if (type == SegmentType.Outro) assertEquals(0, creditsStartMs(600_000, listOf(segment)))
+        }
+    }
+
+    @Test
     fun activeSegmentUsesHalfOpenBoundariesAndIgnoresOffUnknownAndInvalidSegments() {
         val segments = listOf(intro.copy(type = SegmentType.Unknown), intro.copy(endTicks = 0), intro)
         assertNull(activeSegment(segments, 9_999))
@@ -34,6 +75,7 @@ class PlaybackExtrasTest {
     @Test
     fun creditsStartComesOnlyFromAnOutroInsideTheItem() {
         assertEquals(90_000, creditsStartMs(100_000, listOf(intro, outro)))
+        assertEquals(90_000, creditsStartMs(100_000, listOf(outro.copy(endTicks = 1_050_000_000))))
         assertNull(creditsStartMs(100_000, listOf(intro)))
         assertNull(creditsStartMs(100_000, listOf(outro.copy(startTicks = 2_000_000_000))))
         assertNull(creditsStartMs(100_000, listOf(outro.copy(endTicks = 0))))

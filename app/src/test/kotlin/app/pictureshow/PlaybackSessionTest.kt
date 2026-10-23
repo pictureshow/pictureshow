@@ -38,6 +38,15 @@ class PlaybackSessionTest {
         val encodes = mutableListOf<String>()
         val outcomes = ArrayDeque<ClientResult<PlayOutcome>>()
         var gate: CompletableDeferred<Unit>? = null
+        var stopFailures = 0
+        var playedFailures = 0
+        var playedGate: CompletableDeferred<Unit>? = null
+        override suspend fun played(): ClientResult<Unit> {
+            playedGate?.await()
+            events += "played"
+            if (playedFailures-- > 0) return ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Offline"))
+            return ClientResult.Success(Unit)
+        }
         var stopGate: CompletableDeferred<Unit>? = null
         override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
             requests += request
@@ -58,6 +67,7 @@ class PlaybackSessionTest {
             stopGate?.await()
             events += "stop"
             stops += info
+            if (stopFailures-- > 0) return ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Offline"))
             return ClientResult.Success(Unit)
         }
         override suspend fun stopEncoding(sessionId: String): ClientResult<Unit> {
@@ -86,24 +96,125 @@ class PlaybackSessionTest {
             released = true
         }
     }
-    private fun decision(method: PlayMethod = PlayMethod.DirectPlay, sessionId: String = "session-one", subtitleIndex: Int = -1) =
-        PlayDecision(
-            "item-one",
-            MediaSourceInfo(
-                id = "source-one",
-                defaultAudioStreamIndex = 2,
-                defaultSubtitleStreamIndex = subtitleIndex,
-                mediaStreams = listOf(
-                    MediaStream(type = MediaStreamType.Audio, index = 1, language = "en"),
-                    MediaStream(type = MediaStreamType.Audio, index = 2, language = "fr"),
-                    MediaStream(type = MediaStreamType.Subtitle, index = 3, language = "en")
-                )
-            ),
-            method,
-            "https://example.test/video",
-            mapOf("Authorization" to "test-header"),
-            sessionId
-        )
+    private fun decision(
+        method: PlayMethod = PlayMethod.DirectPlay,
+        sessionId: String = "session-one",
+        subtitleIndex: Int = -1,
+        runtime: Long? = null
+    ) = PlayDecision(
+        "item-one",
+        MediaSourceInfo(
+            id = "source-one",
+            runTimeTicks = runtime,
+            defaultAudioStreamIndex = 2,
+            defaultSubtitleStreamIndex = subtitleIndex,
+            mediaStreams = listOf(
+                MediaStream(type = MediaStreamType.Audio, index = 1, language = "en"),
+                MediaStream(type = MediaStreamType.Audio, index = 2, language = "fr"),
+                MediaStream(type = MediaStreamType.Subtitle, index = 3, language = "en")
+            )
+        ),
+        method,
+        "https://example.test/video",
+        mapOf("Authorization" to "test-header"),
+        sessionId
+    )
+
+    @Test
+    fun naturalEndMarksPlayedAfterStopBeforeRefreshAndNextEvenWithBogusRuntime() = runTest {
+        val chosen = decision(runtime = 42_949_822_950_000)
+        val gateway = Gateway().apply {
+            outcomes += ClientResult.Success(PlayOutcome.Play(chosen))
+            stopGate = CompletableDeferred()
+            playedGate = CompletableDeferred()
+        }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en", onFinished = { gateway.events += "refresh" })
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        output.snapshot = PlaybackPosition(60_000, false)
+        session.ended(chosen)
+        session.close { gateway.events += "next" }
+        runCurrent()
+        assertEquals(listOf("start", "progress"), gateway.events)
+        gateway.stopGate!!.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("start", "progress", "stop"), gateway.events)
+        gateway.playedGate!!.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("start", "progress", "stop", "played", "refresh", "next"), gateway.events)
+        assertEquals(600_000_000L, gateway.stops.single().positionTicks)
+    }
+
+    @Test
+    fun stopBackErrorsAndGiveUpNeverMarkPlayedAndStaleEndCannotFinishReplacement() = runTest {
+        for (exit in listOf("stop", "back", "error", "give-up", "stale")) {
+            val chosen = decision()
+            val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(chosen)) }
+            val session = PlaybackSession(gateway, Output(), backgroundScope, "en")
+            session.start(0)
+            runCurrent()
+            session.ready()
+            runCurrent()
+            when (exit) {
+                "error" -> session.failed(false, chosen)
+                "give-up" -> {
+                    session.buffering(true, chosen)
+                    advanceTimeBy(45_000)
+                }
+                "stale" -> session.ended(decision(sessionId = "old"))
+            }
+            runCurrent()
+            if (exit == "error" || exit == "give-up") session.ended(chosen)
+            session.close()
+            runCurrent()
+            assertFalse("played" in gateway.events, exit)
+        }
+    }
+
+    @Test
+    fun naturalEndReportsImmediatelyWithoutNavigationAndDuplicateEndDoesNotMarkTwice() = runTest {
+        val chosen = decision()
+        val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(chosen)) }
+        val session = PlaybackSession(gateway, Output(), backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        session.ended(chosen)
+        session.ended(chosen)
+        runCurrent()
+        assertEquals(listOf("start", "progress", "stop", "played"), gateway.events)
+        session.close()
+        runCurrent()
+        assertEquals(1, gateway.stops.size)
+        assertEquals(1, gateway.events.count { it == "played" })
+    }
+
+    @Test
+    fun naturalEndRetriesTransientReportsButDoesNotMarkPlayedBeforeAnAcknowledgedStop() = runTest {
+        for (failures in listOf(1, 2)) {
+            val chosen = decision()
+            val gateway = Gateway().apply {
+                outcomes += ClientResult.Success(PlayOutcome.Play(chosen))
+                stopFailures = failures
+                playedFailures = 1
+            }
+            val session = PlaybackSession(gateway, Output(), backgroundScope, "en")
+            session.start(0)
+            runCurrent()
+            session.ready()
+            runCurrent()
+            session.ended(chosen)
+            session.close()
+            runCurrent()
+            assertEquals(2, gateway.events.count { it == "stop" })
+            assertEquals(if (failures == 1) 2 else 0, gateway.events.count { it == "played" })
+            if (failures == 2) assertEquals("Offline", session.state.value.reportError)
+        }
+    }
 
     @Test
     fun nextEpisodeCannotStartUntilFinalStopAndEncodeCleanupComplete() = runTest {

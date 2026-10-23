@@ -5,7 +5,9 @@
 
 package app.pictureshow
 
+import android.content.Context
 import android.os.Build
+import android.view.accessibility.CaptioningManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -42,7 +45,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
@@ -52,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -155,6 +161,9 @@ private fun PlayerItemScreen(
     var controls by remember { mutableStateOf(false) }
     var controlsHeight by remember { mutableStateOf(240.dp) }
     val density = LocalDensity.current
+    var controlsTop by remember { mutableStateOf<Int?>(null) }
+    var actionsTop by remember { mutableStateOf<Int?>(null) }
+    var playerTop by remember { mutableIntStateOf(0) }
     var chooser by remember { mutableStateOf<MediaStreamType?>(null) }
     var interaction by remember { mutableLongStateOf(0) }
     var position by remember { mutableLongStateOf(startMs) }
@@ -239,7 +248,9 @@ private fun PlayerItemScreen(
             extras = PlaybackExtrasClient(http, clientIdentity)
             tiles = TrickplayCache(http, account, clientIdentity, item.id)
             val session = PlaybackSession(
-                ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot),
+                ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot) {
+                    catalog.completePlayback(account, item.id)
+                },
                 output,
                 reportScope,
                 Locale.getDefault().language,
@@ -253,7 +264,8 @@ private fun PlayerItemScreen(
             output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
             output.onProgress = { session.progress(it) }
             output.onFailure = { retry, source -> session.failed(retry, source) }
-            output.onEnded = {
+            output.onEnded = { source ->
+                session.ended(source)
                 if (nextEpisode != null && !nextCancelled) ended = true else finish()
             }
             activeProbe.start { session.routeChanged() }
@@ -324,6 +336,7 @@ private fun PlayerItemScreen(
 
     Box(
         Modifier.fillMaxSize().background(Color.Black)
+            .onGloballyPositioned { playerTop = it.positionInRoot().y.toInt() }
             .focusRequester(rootFocus)
             .onFocusChanged { rootFocused = it.isFocused }
             .playerRemoteKeys(
@@ -349,7 +362,10 @@ private fun PlayerItemScreen(
             .focusable()
     ) {
         ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
-        PlayerSubtitles(player, localPreferences.appearance)
+        val controlsVisible = controls && chooser == null && !chaptersOpen && error == null && !switching
+        val actionsVisible = chooser == null && !chaptersOpen && error == null && !switching
+        val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
+        PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop))
         if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
         if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
             PlaybackStatus("Preparing playback…", Modifier.align(Alignment.Center))
@@ -368,11 +384,11 @@ private fun PlayerItemScreen(
             }
             LaunchedEffect(error) { errorFocus.requestFocus() }
         }
-        if (controls && chooser == null && !chaptersOpen && error == null && !switching) {
+        if (controlsVisible) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged {
                     controlsHeight = with(density) { it.height.toDp() }
-                }.background(Color(0xE610131C)).padding(36.dp),
+                }.onGloballyPositioned { controlsTop = it.positionInRoot().y.toInt() }.background(Color(0xE610131C)).padding(36.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val sourceId = state.decision?.mediaSourceId
@@ -414,9 +430,9 @@ private fun PlayerItemScreen(
             }
         }
         if (error == null && !switching) {
-            val actionsVisible = chooser == null && !chaptersOpen
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
+                    .onGloballyPositioned { actionsTop = it.positionInRoot().y.toInt().takeIf { _ -> it.size.height > 0 } }
                     .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -508,42 +524,51 @@ internal fun playerTime(milliseconds: Long): String {
 }
 
 @Composable
-private fun PlayerSubtitles(player: Player?, appearance: SubtitleAppearance) {
+internal fun PlayerSubtitles(player: Player?, appearance: SubtitleAppearance, overlayTop: Int? = null) {
     val context = LocalContext.current
     val subtitles = remember { SubtitleView(context).apply { isFocusable = false } }
     var videoSize by remember { mutableStateOf(player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN) }
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    var cues by remember { mutableStateOf(player?.currentCues?.cues.orEmpty()) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
         val bounds = with(density) { subtitleVideoFrame(maxWidth.roundToPx(), maxHeight.roundToPx(), videoSize) }
-        val width = with(density) { bounds.width().toDp() }
-        val height = with(density) { bounds.height().toDp() }
-        AndroidView(factory = { subtitles }, modifier = Modifier.size(width, height), update = { appearance.applyTo(it, context) })
-    }
-    DisposableEffect(appearance) {
-        val manager = context.getSystemService(android.content.Context.CAPTIONING_SERVICE) as? android.view.accessibility.CaptioningManager
-        val listener = object : android.view.accessibility.CaptioningManager.CaptioningChangeListener() {
-            override fun onEnabledChanged(enabled: Boolean) {
-                appearance.applyTo(subtitles, context)
+        val safe = subtitleSafeFrame(bounds, overlayTop, with(density) { 12.dp.roundToPx() })
+        val width = with(density) { safe.width().toDp() }
+        val height = with(density) { safe.height().toDp() }
+        AndroidView(
+            factory = { subtitles },
+            modifier = Modifier.offset { IntOffset(safe.left, safe.top) }.size(width, height),
+            update = {
+                appearance.applyTo(it, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+                it.setCues(subtitleCuesInFrame(cues, bounds.width(), bounds.height(), safe.height()))
             }
-            override fun onFontScaleChanged(fontScale: Float) {
-                appearance.applyTo(subtitles, context)
+        )
+        DisposableEffect(appearance, bounds.height(), safe.height()) {
+            val manager = context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
+            val listener = object : CaptioningManager.CaptioningChangeListener() {
+                override fun onEnabledChanged(enabled: Boolean) {
+                    appearance.applyTo(subtitles, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+                }
+                override fun onFontScaleChanged(fontScale: Float) {
+                    appearance.applyTo(subtitles, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+                }
+                override fun onUserStyleChanged(userStyle: CaptioningManager.CaptionStyle) {
+                    appearance.applyTo(subtitles, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+                }
             }
-            override fun onUserStyleChanged(userStyle: android.view.accessibility.CaptioningManager.CaptionStyle) {
-                appearance.applyTo(subtitles, context)
-            }
+            manager?.addCaptioningChangeListener(listener)
+            onDispose { manager?.removeCaptioningChangeListener(listener) }
         }
-        manager?.addCaptioningChangeListener(listener)
-        onDispose { manager?.removeCaptioningChangeListener(listener) }
     }
     DisposableEffect(player) {
         videoSize = player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
-        subtitles.setCues(player?.currentCues?.cues.orEmpty())
+        cues = player?.currentCues?.cues.orEmpty()
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
                 videoSize = size
             }
             override fun onCues(cueGroup: CueGroup) {
-                subtitles.setCues(cueGroup.cues)
+                cues = cueGroup.cues
             }
         }
         player?.addListener(listener)

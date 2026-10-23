@@ -16,6 +16,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import app.pictureshow.core.Server
 import app.pictureshow.core.playback.MediaStreamType
@@ -35,7 +36,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     var onBuffering: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onProgress: (PlayDecision) -> Unit = {}
     var onFailure: (Boolean, PlayDecision) -> Unit = { _, _ -> }
-    var onEnded: () -> Unit = {}
+    var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
     private var activePlayer: ExoPlayer? = null
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
@@ -46,6 +47,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     private var listener: Player.Listener? = null
     private var mediaSession: PlaybackMediaSession.Handle? = null
     private val subtitleDelay = SubtitleDelay()
+    private var physicalEnd: PhysicalPlaybackEnd? = null
     var passthroughEnabled: Boolean = true
     val subtitleDelayMs: Int get() = subtitleDelay.milliseconds
 
@@ -78,16 +80,31 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, audio < 0)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle < 0)
             .build()
-        val sourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(PlaybackMedia.dataSourceFactory(server, decision))
-        val next = ExoPlayer.Builder(context, PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled))
+        val serverSeek = TranscodeSeek.required(decision)
+        val startMs = if (serverSeek) TranscodeSeek.startPositionMs(decision, positionMs) else 0
+        val media = PlaybackMedia.item(server, decision, title, if (serverSeek) startMs else null)
+        lateinit var next: ExoPlayer
+        val endSignal = PlaybackEndSignal({ next.takeIf { activePlayer === it } }) { onEnded(decision) }
+        val detector = if (decision.method != PlayMethod.Transcode) {
+            PhysicalPlaybackEnd(requireNotNull(media.localConfiguration).uri, endSignal::ended)
+        } else {
+            null
+        }
+        physicalEnd = detector
+        val dataSources = PlaybackMedia.dataSourceFactory(server, decision)
+        val sourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
+        val baseRenderers = PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled)
+        val renderers = RenderersFactory { handler, video, audio, text, metadata ->
+            val created = baseRenderers.createRenderers(handler, video, audio, text, metadata)
+            detector?.wrap(created, handler) ?: created
+        }
+        next = ExoPlayer.Builder(context, renderers)
             .setTrackSelector(selector)
             .setMediaSourceFactory(sourceFactory)
             .setLoadControl(createPictureshowLoadControl())
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()
-        val serverSeek = TranscodeSeek.required(decision)
-        val startMs = if (serverSeek) TranscodeSeek.startPositionMs(decision, positionMs) else 0
         subtitleDelay.sourceStartMs = if (serverSeek &&
             decision.mediaSource.mediaStreams.any {
                 it.type == MediaStreamType.Subtitle && it.index == subtitleIndex && PlaybackMedia.subtitleUsesFullTimeline(server, it)
@@ -126,13 +143,16 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (activePlayer !== next) return
                 if (playbackState == Player.STATE_READY) onReady(decision)
-                if (playbackState == Player.STATE_ENDED) onEnded()
+                if (playbackState == Player.STATE_ENDED) endSignal.ended()
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (activePlayer === next) onProgress(decision)
             }
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-                if (activePlayer === next) onProgress(decision)
+                if (activePlayer === next) {
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK) detector?.invalidate()
+                    onProgress(decision)
+                }
             }
             override fun onTracksChanged(tracks: Tracks) {
                 if (activePlayer === next) {
@@ -148,6 +168,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             }
             override fun onPlayerError(error: PlaybackException) {
                 if (activePlayer === next) {
+                    detector?.invalidate()
                     // Never display/log the exception: upstream source errors include request URLs.
                     val retryable = error is ExoPlaybackException &&
                         error.type in listOf(ExoPlaybackException.TYPE_SOURCE, ExoPlaybackException.TYPE_RENDERER)
@@ -156,7 +177,6 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             }
         }.also(exposed::addListener)
         mutablePlayer.value = exposed
-        val media = PlaybackMedia.item(server, decision, title, if (serverSeek) startMs else null)
         val clipped = if (serverSeek && positionMs > startMs) {
             media.buildUpon().setClippingConfiguration(
                 androidx.media3.common.MediaItem.ClippingConfiguration.Builder()
@@ -201,10 +221,13 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     }
 
     override fun beginSeek() {
+        physicalEnd?.invalidate()
         activePlayer?.stop()
     }
 
     override fun release() {
+        physicalEnd?.invalidate()
+        physicalEnd = null
         val active = activePlayer ?: return
         val exposed = mutablePlayer.value
         saved = position()
@@ -215,5 +238,21 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         mediaSession = null
         active.release()
         listener = null
+    }
+}
+
+/** The app-thread seek mask is BUFFERING before the playback thread has reset the old renderers. */
+internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, private val onEnd: () -> Unit) {
+    private var sent = false
+    fun ended() {
+        val player = currentPlayer() ?: return
+        if (sent ||
+            player.playerError != null ||
+            (player.playbackState != Player.STATE_READY && player.playbackState != Player.STATE_ENDED)
+        ) {
+            return
+        }
+        sent = true
+        onEnd()
     }
 }

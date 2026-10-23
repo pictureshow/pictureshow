@@ -33,19 +33,22 @@ internal interface PlaybackGateway {
     suspend fun progress(info: PlaybackProgressInfo): ClientResult<Unit>
     suspend fun stopped(info: PlaybackStopInfo): ClientResult<Unit>
     suspend fun stopEncoding(sessionId: String): ClientResult<Unit>
+    suspend fun played(): ClientResult<Unit> = ClientResult.Success(Unit)
 }
 
 internal class ServerPlaybackGateway(
     private val client: PlaybackClient,
     private val account: Account,
     private val itemId: String,
-    private val capabilities: () -> DeviceCapabilities
+    private val capabilities: () -> DeviceCapabilities,
+    private val markPlayed: suspend () -> ClientResult<Unit>
 ) : PlaybackGateway {
     override suspend fun prepare(request: PlaybackRequest) = client.prepare(account, itemId, capabilities(), request)
     override suspend fun start(info: PlaybackProgressInfo) = client.reportStart(account, info)
     override suspend fun progress(info: PlaybackProgressInfo) = client.reportProgress(account, info)
     override suspend fun stopped(info: PlaybackStopInfo) = client.reportStopped(account, info)
     override suspend fun stopEncoding(sessionId: String) = client.stopEncoding(account, sessionId)
+    override suspend fun played() = markPlayed()
 }
 
 internal data class PlaybackPosition(val milliseconds: Long, val paused: Boolean)
@@ -90,6 +93,8 @@ internal class PlaybackSession(
     private var fallbackUsed = false
     private var closed = false
     private var closing = false
+    private var ending = false
+    private var endReported = false
     private var lastPosition = PlaybackPosition(0, false)
     private var ticker: Job? = null
     private var bufferingTimer: Job? = null
@@ -282,6 +287,30 @@ internal class PlaybackSession(
         }
     }
 
+    /** EOS is authoritative even when the server runtime is wrong. Stop must land before played. */
+    fun ended(source: PlayDecision? = decision) {
+        if (closing || ending || source == null || source !== decision || mutable.value.error != null) return
+        ending = true
+        capture()
+        output.release()
+        ticker?.cancel()
+        cancelBuffering()
+        // This command survives a close queued by navigation immediately after the decoder's EOS.
+        commands.trySend {
+            if (source === decision && mutable.value.error == null) {
+                val stopped = finishDecision()
+                if (stopped) {
+                    var result = gateway.played()
+                    if (result is ClientResult.Failure) result = gateway.played()
+                    if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
+                }
+                endReported = true
+                onFinished()
+            }
+            ending = false
+        }
+    }
+
     /** Snapshot before releasing the actual player. Final network work survives the screen's disposal. */
     fun close(afterFinished: () -> Unit = {}) {
         if (closing) return
@@ -297,7 +326,7 @@ internal class PlaybackSession(
                 ticker?.cancel()
                 cancelBuffering()
                 finishDecision()
-                onFinished()
+                if (!endReported) onFinished()
                 afterFinished()
                 commands.close()
                 followUps.toList().joinAll()
@@ -307,7 +336,7 @@ internal class PlaybackSession(
     }
 
     private fun enqueue(block: suspend () -> Unit) {
-        if (!closing) commands.trySend { if (!closed && !closing) block() }
+        if (!closing && !ending) commands.trySend { if (!closed && !closing) block() }
     }
 
     private fun capture() {
@@ -367,17 +396,18 @@ internal class PlaybackSession(
         )
     }
 
-    private suspend fun finishDecision(failed: Boolean = false, releaseOutput: Boolean = true) {
+    private suspend fun finishDecision(failed: Boolean = false, releaseOutput: Boolean = true): Boolean {
         cancelBuffering()
         ticker?.cancel()
-        val current = decision ?: return
+        val current = decision ?: return false
         // Freeze the snapshot and detach callbacks before any suspending reports or new negotiation.
         if (releaseOutput) output.release()
         if (ready) gateway.progress(progressInfo())
-        reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
+        val stopped = reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
         if (current.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
         ready = false
         decision = null
+        return stopped
     }
 
     /**
@@ -398,9 +428,10 @@ internal class PlaybackSession(
      * Periodic reports retry on the ticker's own schedule, so a single failure is never shown to the viewer. The
      * final stop report is the one that keeps the viewer's place, so it gets one retry before it is surfaced.
      */
-    private suspend fun reportStopped(info: PlaybackStopInfo) {
+    private suspend fun reportStopped(info: PlaybackStopInfo): Boolean {
         var result = gateway.stopped(info)
         if (result is ClientResult.Failure) result = gateway.stopped(info)
         if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
+        return result is ClientResult.Success
     }
 }
