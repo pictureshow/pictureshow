@@ -112,7 +112,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         parameters: Map<String, String?> = emptyMap(),
         method: HttpMethod = HttpMethod.Get
     ): ClientResult<T> = try {
-        withTimeoutOrNull(15_000) {
+        withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
             val response = client.request("${account.server.url.trimEnd('/')}/$path") {
                 this.method = method
                 headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))

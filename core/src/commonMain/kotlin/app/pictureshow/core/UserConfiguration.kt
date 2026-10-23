@@ -67,7 +67,7 @@ class UserConfigurationClient(private val http: HttpClient, private val identity
         body: String? = null,
         decode: (String) -> T
     ): ClientResult<T> = try {
-        withTimeoutOrNull(5_000) {
+        withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
             val response = http.request("${account.server.url.trimEnd('/')}/$path") {
                 this.method = method
                 headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))
