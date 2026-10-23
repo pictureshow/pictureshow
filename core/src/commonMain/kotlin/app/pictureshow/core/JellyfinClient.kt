@@ -52,9 +52,11 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         } catch (_: IllegalArgumentException) {
             return failure(ErrorKind.INVALID_ADDRESS, "Enter an HTTP or HTTPS server address without a query or credentials.")
         }
+        // A fully specified endpoint can be slow; only automatic port discovery needs short probes.
+        val probeTimeout = if (candidates.size == 1) ApiTimeouts.REQUEST_MILLIS else ApiTimeouts.PROBE_MILLIS
         var error = ClientError(ErrorKind.NETWORK, "Could not reach the server. Check its address and connection.")
         for (url in candidates) {
-            val result = request(url, "System/Info/Public") { text ->
+            val result = request(url, "System/Info/Public", timeoutMillis = probeTimeout) { text ->
                 val info = json.parseToJsonElement(text).jsonObject
                 if (info.string("ProductName") != "Jellyfin Server") {
                     throw ProtocolFailure(ErrorKind.NOT_JELLYFIN, "This address is not a Jellyfin server.")
@@ -76,7 +78,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                     } else {
                         result.error
                     }
-                    if (probeErrorPriority(candidateError.kind) > probeErrorPriority(error.kind)) error = candidateError
+                    if (probeErrorPriority(candidateError.kind) >= probeErrorPriority(error.kind)) error = candidateError
                 }
             }
         }
@@ -176,9 +178,10 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         token: String? = null,
         secret: String? = null,
         expiryStatus: Boolean = false,
+        timeoutMillis: Long = ApiTimeouts.REQUEST_MILLIS,
         decode: (String) -> T
     ): ClientResult<T> = try {
-        withTimeoutOrNull(4_000) {
+        withTimeoutOrNull(timeoutMillis) {
             val response = client.request("${baseUrl.trimEnd('/')}/$path") {
                 this.method = method
                 headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, token))

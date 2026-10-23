@@ -1,6 +1,7 @@
 package app.pictureshow.core.playback
 
 import app.pictureshow.core.Account
+import app.pictureshow.core.ApiTimeouts
 import app.pictureshow.core.AuthorizationHeader
 import app.pictureshow.core.ClientError
 import app.pictureshow.core.ClientIdentity
@@ -94,7 +95,7 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         method: HttpMethod = HttpMethod.Post,
         decode: (String) -> T
     ): ClientResult<T> = try {
-        withTimeoutOrNull(TIMEOUT_MILLIS) {
+        withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
             val response = client.request("${account.server.url.trimEnd('/')}/$path") {
                 this.method = method
                 headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))
@@ -122,9 +123,6 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
     private fun failure(kind: ErrorKind, message: String) = ClientResult.Failure(ClientError(kind, message))
 
     companion object {
-        /** PlaybackInfo may probe the file or open a live stream, so it gets longer than the 4 s sign-in calls. */
-        private const val TIMEOUT_MILLIS = 20_000L
-
         fun playbackInfoRequest(account: Account, capabilities: DeviceCapabilities, playback: PlaybackRequest): PlaybackInfoRequest =
             PlaybackInfoRequest(
                 userId = account.user.id,

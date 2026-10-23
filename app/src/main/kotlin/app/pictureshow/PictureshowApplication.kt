@@ -21,8 +21,6 @@ import app.pictureshow.core.SearchService
 import app.pictureshow.core.Server
 import app.pictureshow.core.ServerDiscovery
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,16 +60,7 @@ class PictureshowApplication : Application() {
                     single { PlaybackPreferencesStore(get()) }
                     single<ServerDiscovery> { JvmServerDiscovery() }
                     single {
-                        HttpClient(OkHttp) {
-                            expectSuccess = false
-                            // A probe never follows a redirect to a different base address or sends auth to it.
-                            followRedirects = false
-                            install(HttpTimeout) {
-                                requestTimeoutMillis = 5_000
-                                connectTimeoutMillis = 3_000
-                                socketTimeoutMillis = 5_000
-                            }
-                        }
+                        createApiHttpClient()
                     }
                     single<JellyfinService> {
                         val name =
