@@ -235,6 +235,7 @@ private fun PlayerItemScreen(
             }
             controller = session
             output.onStop = { finish() }
+            output.onSeek = { target, source -> session.seek(target, source) }
             output.onReady = { session.ready(it) }
             output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
             output.onProgress = { session.progress(it) }

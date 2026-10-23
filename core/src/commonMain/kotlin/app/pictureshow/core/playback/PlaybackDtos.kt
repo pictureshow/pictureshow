@@ -92,6 +92,8 @@ data class MediaStream(
     @SerialName("Channels") val channels: Int? = null,
     @SerialName("Width") val width: Int? = null,
     @SerialName("Height") val height: Int? = null,
+    @SerialName("RealFrameRate") val realFrameRate: Double? = null,
+    @SerialName("AverageFrameRate") val averageFrameRate: Double? = null,
     @SerialName("VideoRangeType") val videoRangeType: VideoRangeType? = null,
     @SerialName("DvProfile") val dvProfile: Int? = null,
     @SerialName("DvBlSignalCompatibilityId") val dvBlSignalCompatibilityId: Int? = null,

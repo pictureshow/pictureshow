@@ -244,6 +244,22 @@ object DeviceProfileBuilder {
             ProfileCondition(ProfileConditionType.LessThanEqual, ProfileConditionValue.Width, capabilities.display.maxWidth.toString()),
             ProfileCondition(ProfileConditionType.LessThanEqual, ProfileConditionValue.Height, capabilities.display.maxHeight.toString())
         )
+        // Software AVC levels often describe a 14 fps legal input at 1080p, rather than decoder speed.
+        // Keep direct-play validation intact; use ordinary 30 fps for the server's AVC encode target.
+        val softwareAvc = selectVideoDecoders(capabilities.videoDecoders)[VideoCodec.H264]
+        val point = softwareAvc?.sustainablePerformance
+        val encodeRate = if (videoOrder.firstOrNull() == VideoCodec.H264 &&
+            softwareAvc?.hardware == false &&
+            softwareAvc.maxFrameRate < 30 &&
+            point != null &&
+            point.frameRate >= 30 &&
+            capabilities.display.maxWidth <= point.width &&
+            capabilities.display.maxHeight <= point.height
+        ) {
+            listOf(ProfileCondition(ProfileConditionType.GreaterThanEqual, ProfileConditionValue.VideoFramerate, "30"))
+        } else {
+            emptyList()
+        }
 
         fun hls(container: String, videoCodecs: List<VideoCodec>, audioCodecs: List<AudioCodec>) = TranscodingProfile(
             container = container,
@@ -255,7 +271,7 @@ object DeviceProfileBuilder {
             maxAudioChannels = routeChannels,
             minSegments = 1,
             breakOnNonKeyFrames = false,
-            conditions = size
+            conditions = size + encodeRate
         )
 
         // The server preserves encoder delay in fMP4's unsigned tfdt (including AAC re-encodes), which Media3

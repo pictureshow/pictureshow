@@ -181,7 +181,15 @@ class DeviceCapabilityProbe(
         return VideoDecoder(
             codec, profiles, caps.profileLevels.mapNotNull { level(codec, it.level) }.maxWithOrNull(compareBy({ it.major }, { it.minor })),
             width, height, rate, maxRate, depth, hdr, hardware = hardware(info),
-            sustainablePerformance = if (codec == VideoCodec.AV1 && !hardware(info)) sustainable(video, width, height) else null,
+            sustainablePerformance = if (!hardware(info) && codec in setOf(VideoCodec.AV1, VideoCodec.H264)) {
+                sustainable(
+                    video,
+                    width,
+                    if (codec == VideoCodec.H264) video.supportedHeights.upper else height
+                )
+            } else {
+                null
+            },
             profileCapabilities = tuples
         )
     }

@@ -22,6 +22,7 @@ import app.pictureshow.core.playback.PlayDecisions
 import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.Redaction
 import app.pictureshow.core.playback.SubtitleDeliveryMethod
+import app.pictureshow.core.playback.TranscodeSeek
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 
@@ -60,15 +61,15 @@ internal object PlaybackMedia {
 
     fun sanitized(spec: DataSpec): DataSpec = spec.withUri(Redaction.stripApiKey(spec.uri.toString()).toUri())
 
-    fun item(server: Server, decision: PlayDecision, title: String? = null): MediaItem = MediaItem.Builder()
+    fun item(server: Server, decision: PlayDecision, title: String? = null, serverStartMs: Long? = null): MediaItem = MediaItem.Builder()
         .setMediaId(decision.itemId)
         .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
-        .setUri(Redaction.stripApiKey(decision.url))
+        .setUri(if (serverStartMs != null) TranscodeSeek.url(decision, serverStartMs) else Redaction.stripApiKey(decision.url))
         .apply {
             if (decision.method == PlayMethod.Transcode &&
                 decision.mediaSource.transcodingSubProtocol == app.pictureshow.core.playback.MediaStreamProtocol.Hls
             ) {
-                setMimeType(MimeTypes.APPLICATION_M3U8)
+                setMimeType(if (serverStartMs != null) MimeTypes.VIDEO_MP2T else MimeTypes.APPLICATION_M3U8)
             }
         }
         .setSubtitleConfigurations(
@@ -80,7 +81,7 @@ internal object PlaybackMedia {
                     subtitleMime(it.codec) != null
             }.map { stream ->
                 MediaItem.SubtitleConfiguration.Builder(
-                    PlayDecisions.resolve(server, Redaction.stripApiKey(stream.deliveryUrl!!)).toUri()
+                    subtitleUrl(server, stream, serverStartMs).toUri()
                 )
                     .setId(subtitleId(stream.index))
                     .setMimeType(subtitleMime(stream.codec))
@@ -94,6 +95,32 @@ internal object PlaybackMedia {
             }
         )
         .build()
+
+    fun subtitleUsesFullTimeline(server: Server, stream: MediaStream): Boolean {
+        val url = stream.deliveryUrl?.let { PlayDecisions.resolve(server, Redaction.stripApiKey(it)) } ?: return false
+        return deliveredExternally(stream) &&
+            (
+                !PlayDecisions.isSameOrigin(server, url) ||
+                    !url.toUri().path.orEmpty().contains("/Subtitles/", ignoreCase = true)
+                )
+    }
+
+    private fun subtitleUrl(server: Server, stream: MediaStream, startMs: Long?): String {
+        val url = PlayDecisions.resolve(server, Redaction.stripApiKey(requireNotNull(stream.deliveryUrl)))
+        val uri = url.toUri()
+        if (startMs == null ||
+            !PlayDecisions.isSameOrigin(server, url) ||
+            !uri.path.orEmpty().contains("/Subtitles/", ignoreCase = true)
+        ) {
+            return url
+        }
+        return uri.buildUpon().clearQuery().apply {
+            uri.queryParameterNames.filter { !it.equals("StartPositionTicks", true) && !it.equals("CopyTimestamps", true) }
+                .forEach { key -> uri.getQueryParameters(key).forEach { value -> appendQueryParameter(key, value) } }
+            appendQueryParameter("StartPositionTicks", (startMs * 10_000).toString())
+            appendQueryParameter("CopyTimestamps", "false")
+        }.build().toString()
+    }
 
     fun deliveredExternally(stream: MediaStream): Boolean =
         stream.isExternal || stream.isExternalUrl || stream.deliveryMethod == SubtitleDeliveryMethod.External

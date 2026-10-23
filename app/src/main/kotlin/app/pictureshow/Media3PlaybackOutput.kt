@@ -6,6 +6,8 @@
 package app.pictureshow
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
@@ -19,6 +21,7 @@ import app.pictureshow.core.Server
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
+import app.pictureshow.core.playback.TranscodeSeek
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /** The only layer that owns a decoder. Replacing a source releases the old player and its callbacks first. */
 internal class Media3PlaybackOutput(private val context: Context, private val server: Server, private val title: String? = null) :
     PlaybackOutput {
-    private val mutablePlayer = MutableStateFlow<ExoPlayer?>(null)
+    private val mutablePlayer = MutableStateFlow<Player?>(null)
     val player = mutablePlayer.asStateFlow()
     var onReady: (PlayDecision) -> Unit = {}
     var onBuffering: (Boolean, PlayDecision) -> Unit = { _, _ -> }
@@ -34,6 +37,8 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     var onFailure: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onEnded: () -> Unit = {}
     var onStop: () -> Unit = {}
+    private var activePlayer: ExoPlayer? = null
+    var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
     private var current: PlayDecision? = null
     private var saved = PlaybackPosition(0, false)
     private var audio = -1
@@ -81,28 +86,56 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()
+        val serverSeek = TranscodeSeek.required(decision)
+        val startMs = if (serverSeek) TranscodeSeek.startPositionMs(decision, positionMs) else 0
+        subtitleDelay.sourceStartMs = if (serverSeek &&
+            decision.mediaSource.mediaStreams.any {
+                it.type == MediaStreamType.Subtitle && it.index == subtitleIndex && PlaybackMedia.subtitleUsesFullTimeline(server, it)
+            }
+        ) {
+            startMs
+        } else {
+            0
+        }
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
+        activePlayer = next
+        val exposed = if (serverSeek) {
+            TranscodeSeekPlayer(next, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
+                onSeek(target, decision)
+            }
+        } else {
+            next
+        }
         listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                if (BuildConfig.DEBUG && activePlayer === next) {
+                    Log.d(
+                        "PictureshowPlayback",
+                        "first-frame uptimeMs=${SystemClock.elapsedRealtime()} positionMs=${position().milliseconds}"
+                    )
+                }
+            }
+
             override fun onEvents(player: Player, events: Player.Events) {
-                if (mutablePlayer.value === next) {
+                if (activePlayer === next) {
                     onBuffering(player.playbackState == Player.STATE_BUFFERING && player.playWhenReady, decision)
                 }
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (mutablePlayer.value !== next) return
+                if (activePlayer !== next) return
                 if (playbackState == Player.STATE_READY) onReady(decision)
                 if (playbackState == Player.STATE_ENDED) onEnded()
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                if (mutablePlayer.value === next) onProgress(decision)
+                if (activePlayer === next) onProgress(decision)
             }
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-                if (mutablePlayer.value === next) onProgress(decision)
+                if (activePlayer === next) onProgress(decision)
             }
             override fun onTracksChanged(tracks: Tracks) {
-                if (mutablePlayer.value === next) {
+                if (activePlayer === next) {
                     if (decision.method != PlayMethod.Transcode) select(MediaStreamType.Audio, audio)
                     val selected = decision.mediaSource.mediaStreams.firstOrNull {
                         it.index == subtitle &&
@@ -114,25 +147,34 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
-                if (mutablePlayer.value === next) {
+                if (activePlayer === next) {
                     // Never display/log the exception: upstream source errors include request URLs.
                     val retryable = error is ExoPlaybackException &&
                         error.type in listOf(ExoPlaybackException.TYPE_SOURCE, ExoPlaybackException.TYPE_RENDERER)
                     onFailure(retryable, decision)
                 }
             }
-        }.also(next::addListener)
-        mutablePlayer.value = next
-        next.setMediaItem(PlaybackMedia.item(server, decision, title), positionMs)
+        }.also(exposed::addListener)
+        mutablePlayer.value = exposed
+        val media = PlaybackMedia.item(server, decision, title, if (serverSeek) startMs else null)
+        val clipped = if (serverSeek && positionMs > startMs) {
+            media.buildUpon().setClippingConfiguration(
+                androidx.media3.common.MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(positionMs - startMs).setAllowUnseekableMedia(true).build()
+            ).build()
+        } else {
+            media
+        }
+        next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
         next.playWhenReady = !paused
-        mediaSession = PlaybackMediaSession.open(context, next) {
-            if (mutablePlayer.value === next) onStop()
+        mediaSession = PlaybackMediaSession.open(context, exposed) {
+            if (activePlayer === next) onStop()
         }
         next.prepare()
     }
 
     override fun select(type: MediaStreamType, index: Int): Boolean {
-        val active = mutablePlayer.value ?: return false
+        val active = activePlayer ?: return false
         val trackType = if (type == MediaStreamType.Audio) C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val parameters = active.trackSelectionParameters.buildUpon()
         if (index < 0) {
@@ -158,11 +200,17 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         mutablePlayer.value?.pause()
     }
 
+    override fun beginSeek() {
+        activePlayer?.stop()
+    }
+
     override fun release() {
-        val active = mutablePlayer.value ?: return
+        val active = activePlayer ?: return
+        val exposed = mutablePlayer.value
         saved = position()
         mutablePlayer.value = null
-        listener?.let(active::removeListener)
+        activePlayer = null
+        listener?.let { exposed?.removeListener(it) }
         mediaSession?.close()
         mediaSession = null
         active.release()
