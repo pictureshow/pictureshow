@@ -104,7 +104,7 @@ class ViewingSessionHttpTest {
             {
                 DeviceCapabilities("TV", emptyList(), DisplayCapabilities(1920, 1080, 60.0), emptyList(), AudioOutput(2))
             },
-            { ClientResult.Success(Unit) }
+            markPlayed = { ClientResult.Success(Unit) }
         )
         fun reports(path: String) = calls.filter { it.first == "/Sessions/Playing$path" }.map { it.second }
     }
