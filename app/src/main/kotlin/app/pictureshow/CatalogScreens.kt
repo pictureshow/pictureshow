@@ -223,6 +223,7 @@ fun CatalogHome(
                         ) { Text("Search") }
                         Button(
                             onClick = onSettings,
+                            enabled = !state.busy,
                             modifier = Modifier.focusRequester(settingsFocus).testTag("home:settings")
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
                                 .onPreviewKeyEvent { headerDown(it) }

@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -55,12 +56,12 @@ class HomeSettingsAndBackTest {
     private var signOuts = 0
 
     @Composable
-    private fun Harness() {
+    private fun Harness(state: CatalogHomeState = home) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             val nav = rememberNavController()
             NavHost(nav, startDestination = "home") {
                 composable("home") {
-                    CatalogHome(home, account, {}, {}, {}, { signOuts++ }, onSettings = { nav.navigate("settings") })
+                    CatalogHome(state, account, {}, {}, {}, { signOuts++ }, onSettings = { nav.navigate("settings") })
                 }
                 composable("settings") {
                     PlaybackSettingsScreen(PlaybackSettingsState(), "PCM only", {}, { _, _ -> }, {}) { nav.popBackStack() }
@@ -151,5 +152,12 @@ class HomeSettingsAndBackTest {
         compose.onNodeWithTag("home:search").assertIsFocused()
         key(Key.Back)
         assertTrue(compose.activity.isFinishing)
+    }
+
+    @Test
+    fun settingsWaitsWhileSignOutIsRunning() {
+        // Opening Settings mid-sign-out would land on a screen whose account is about to disappear.
+        compose.setContent { Harness(home.copy(busy = true)) }
+        compose.onNodeWithTag("home:settings").assertIsNotEnabled()
     }
 }
