@@ -16,4 +16,16 @@ class PlaybackTrackLabelsTest {
         )
         assertEquals("English · ASS · Forced · SDH · External", trackLabel(subtitle))
     }
+
+    @Test
+    fun tracksWithoutLanguageUseTheServerTitleOrCodecAndNeverClaimUnknownLanguage() {
+        val titled = MediaStream(type = MediaStreamType.Audio, index = 1, codec = "ac3", channels = 2, title = "Director's commentary")
+        assertEquals("Director's commentary · AC-3 stereo", trackLabel(titled))
+        val bare = MediaStream(type = MediaStreamType.Audio, index = 2, codec = "truehd", channels = 6, isDefault = true)
+        assertEquals("TrueHD 5.1 · Default", trackLabel(bare))
+        val subtitle = MediaStream(type = MediaStreamType.Subtitle, index = 3, codec = "subrip", isExternal = true)
+        assertEquals("SRT · External", trackLabel(subtitle))
+        val twoLetter = MediaStream(type = MediaStreamType.Audio, index = 4, language = "fr", codec = "ac3", channels = 2)
+        assertEquals("French · AC-3 stereo", trackLabel(twoLetter))
+    }
 }

@@ -120,7 +120,7 @@ internal class PlaybackSettingsViewModel(
 internal val preferenceLanguages = listOf("", "eng", "spa", "fra", "deu", "jpn", "zho", "kor", "por", "ita", "rus", "ara", "hin")
 internal val subtitleModes = listOf("Default", "Always", "OnlyForced", "None", "Smart")
 internal fun <T> nextSetting(values: List<T>, current: T): T = values[(values.indexOf(current) + 1).mod(values.size)]
-internal fun preferenceLanguageLabel(value: String): String = if (value.isBlank()) "No preference" else trackLanguage(value)
+internal fun preferenceLanguageLabel(value: String): String = if (value.isBlank()) "No preference" else trackLanguage(value) ?: value
 
 @Composable
 internal fun PlaybackSettingsScreen(

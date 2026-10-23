@@ -60,12 +60,11 @@ class PlayerExtrasTest {
         val root = FocusRequester()
         var focused by mutableStateOf(false)
         var sought = 0L
-        var toggles = 0
         compose.setContent {
             MaterialTheme {
                 Column(
                     Modifier.focusRequester(root).onFocusChanged { focused = it.isFocused }
-                        .playerRemoteKeys(true, focused, false, { sought += it }, { toggles++ }, {}, {}, back = {})
+                        .playerRemoteKeys(true, focused, { sought += it }, {}, {}, back = {})
                         .focusable()
                 ) {
                     Row {
@@ -81,10 +80,7 @@ class PlayerExtrasTest {
         compose.onNodeWithTag("skip:Intro").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithTag("skip:Intro").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
-        compose.runOnIdle {
-            assertEquals(20_000, sought)
-            assertEquals(0, toggles)
-        }
+        compose.runOnIdle { assertEquals(20_000, sought) }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithText("Other control").assertIsFocused()
         compose.runOnIdle { assertEquals(20_000, sought) }
@@ -97,7 +93,7 @@ class PlayerExtrasTest {
         compose.setContent {
             MaterialTheme {
                 Column(
-                    Modifier.playerRemoteKeys(false, false, false, {}, {}, {}, {}, back = {
+                    Modifier.playerRemoteKeys(false, false, {}, {}, {}, back = {
                         backs++
                         open = false
                     }).focusable()
