@@ -3,9 +3,10 @@
  */
 package app.pictureshow
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -68,8 +70,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
@@ -86,6 +90,7 @@ import kotlinx.coroutines.launch
 
 private val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
+internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
 
 /** Each navigation entry owns its saveable focus identity and lazy-list scroll positions. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -115,8 +120,6 @@ fun CatalogHome(
     var initialNavigation by remember { mutableStateOf(false) }
     val profile = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
-    var selectedProfile by rememberSaveable { mutableStateOf("switch") }
-    val profileTarget = if (selectedProfile == "settings") settingsFocus else profile
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
@@ -161,7 +164,7 @@ fun CatalogHome(
                 index >= rows.size -> {
                     list.scrollToItem(rows.size + 1)
                     withFrameNanos { }
-                    profileTarget.requestFocus()
+                    profile.requestFocus()
                 }
                 else -> {
                     list.scrollToItem(0)
@@ -171,6 +174,16 @@ fun CatalogHome(
             }
         }
     }
+    fun headerDown(event: androidx.compose.ui.input.key.KeyEvent): Boolean =
+        if (event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
+            moveRow(0)
+            true
+        } else {
+            false
+        }
+    // Back below the first shelf returns to the top of home, where it opened; Back at the top leaves the app.
+    val belowTop = rows.isNotEmpty() && selectedRow.isNotEmpty() && selectedRow !in listOf("search", "settings", rows.first().key)
+    BackHandler(enabled = belowTop) { moveRow(0) }
     val platformBringIntoView = LocalBringIntoViewSpec.current
     val firstRowFocused by rememberUpdatedState(rows.firstOrNull()?.key == selectedRow)
     val homeBringIntoView = remember(platformBringIntoView) {
@@ -196,22 +209,26 @@ fun CatalogHome(
         ) {
             item(key = "header") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = onSearch,
-                        modifier = Modifier.focusRequester(search).testTag("home:search")
-                            .onFocusChanged {
-                                // The first attached target during the first load, like the profile actions below.
-                                if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
-                            }
-                            .onPreviewKeyEvent {
-                                if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                                    moveRow(0)
-                                    true
-                                } else {
-                                    false
+                    // Settings sits beside Search, one Up from where home opens. Sign out stays alone with
+                    // Switch user at the bottom, away from the buttons viewers press often.
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Button(
+                            onClick = onSearch,
+                            modifier = Modifier.focusRequester(search).testTag("home:search")
+                                .onFocusChanged {
+                                    // The first attached target during the first load, like the profile actions below.
+                                    if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
                                 }
-                            }
-                    ) { Text("Search") }
+                                .onPreviewKeyEvent { headerDown(it) }
+                        ) { Text("Search") }
+                        Button(
+                            onClick = onSettings,
+                            enabled = !state.busy,
+                            modifier = Modifier.focusRequester(settingsFocus).testTag("home:settings")
+                                .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
+                                .onPreviewKeyEvent { headerDown(it) }
+                        ) { Text("Settings") }
+                    }
                     CatalogHeading("Pictureshow")
                     Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
                     if (state.loading) Text("Loading your home…")
@@ -292,10 +309,7 @@ fun CatalogHome(
                             .onFocusChanged {
                                 // During the first load these are the only attached targets. Automatic focus is
                                 // not a saved user choice and must not outrank the first arriving catalog card.
-                                if (it.isFocused && (restored || initialNavigation)) {
-                                    selectedRow = "profile"
-                                    selectedProfile = "switch"
-                                }
+                                if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
                             }
                             .onPreviewKeyEvent {
                                 if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
@@ -310,10 +324,7 @@ fun CatalogHome(
                         onClick = onSignOut,
                         enabled = !state.busy,
                         modifier = Modifier.testTag("home:sign-out").onFocusChanged {
-                            if (it.isFocused && (restored || initialNavigation)) {
-                                selectedRow = "profile"
-                                selectedProfile = "switch"
-                            }
+                            if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
                         }.onPreviewKeyEvent {
                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                                 moveRow(rows.lastIndex)
@@ -323,23 +334,6 @@ fun CatalogHome(
                             }
                         }
                     ) { Text(if (state.busy) "Please wait…" else "Sign out") }
-                    Button(
-                        onClick = onSettings,
-                        enabled = !state.busy,
-                        modifier = Modifier.focusRequester(settingsFocus).testTag("home:settings").onFocusChanged {
-                            if (it.isFocused && (restored || initialNavigation)) {
-                                selectedRow = "profile"
-                                selectedProfile = "settings"
-                            }
-                        }.onPreviewKeyEvent {
-                            if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
-                                moveRow(rows.lastIndex)
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                    ) { Text("Settings") }
                 }
             }
         }
@@ -350,15 +344,15 @@ fun CatalogHome(
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             when {
-                savedRow == "search" -> {
+                savedRow == "search" || savedRow == "settings" -> {
                     list.scrollToItem(0)
                     withFrameNanos { }
-                    search.requestFocus()
+                    (if (savedRow == "settings") settingsFocus else search).requestFocus()
                 }
                 savedRow == "profile" -> {
                     list.scrollToItem(rows.size + 1)
                     withFrameNanos { }
-                    if (!initialNavigation) profileTarget.requestFocus()
+                    if (!initialNavigation) profile.requestFocus()
                 }
                 rows.isNotEmpty() -> {
                     val rowIndex = rows.indexOfFirst { it.key == savedRow }.takeIf { it >= 0 }
@@ -367,12 +361,12 @@ fun CatalogHome(
                     focusRow(rowIndex, savedRowSelections, savedRowPositions)
                 }
                 state.error != null -> retry.requestFocus()
-                else -> profileTarget.requestFocus()
+                else -> profile.requestFocus()
             }
             restored = true
         } else if (!state.loading &&
             restored &&
-            savedRow !in listOf("profile", "search") &&
+            savedRow !in listOf("profile", "search", "settings") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
@@ -383,7 +377,7 @@ fun CatalogHome(
             } else {
                 list.scrollToItem(rows.size + 1)
                 withFrameNanos { }
-                profileTarget.requestFocus()
+                profile.requestFocus()
             }
         }
     }
@@ -812,15 +806,24 @@ internal fun CatalogCard(
     selected: Boolean = false
 ) {
     val selection = if (selected) {
-        Modifier.border(2.dp, Color(0xFFB8C4FF)).semantics {
+        Modifier.semantics {
             this.selected = true
             contentDescription = "${item.name}, selected season"
         }
     } else {
         Modifier
     }
+    // The selected outline is the card's own resting border, so it scales with the card and the focused border
+    // replaces it. As a separate modifier it stayed at the unscaled bounds and drew a second rectangle through the
+    // focused card's badge and under its label.
     Card(
         onClick = onClick,
+        border = if (selected) {
+            // tv-material's card shape is 8dp rounded corners; the resting outline follows it.
+            CardDefaults.border(border = Border(BorderStroke(2.dp, SelectedSeasonOutline), shape = RoundedCornerShape(8.dp)))
+        } else {
+            CardDefaults.border()
+        },
         modifier = modifier.then(selection).then(
             if (width ==
                 null

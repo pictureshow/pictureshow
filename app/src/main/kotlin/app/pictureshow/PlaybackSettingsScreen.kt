@@ -149,13 +149,6 @@ internal fun PlaybackSettingsScreen(
         Text("Settings", style = MaterialTheme.typography.headlineLarge)
         Button(
             onClick = {
-                restoreEntry = "this-tv"
-                onThisTv()
-            },
-            modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
-        ) { Text("This TV") }
-        Button(
-            onClick = {
                 restoreEntry = "supporter"
                 onSupport()
             },
@@ -230,6 +223,16 @@ internal fun PlaybackSettingsScreen(
             Text(it)
             Button(onClick = onRetry) { Text("Retry") }
         }
+        // The decoder report is for troubleshooting, so it follows the viewer's own settings.
+        Text("Troubleshooting", style = MaterialTheme.typography.headlineSmall)
+        Text("A technical report of the video and audio formats this TV can play.")
+        Button(
+            onClick = {
+                restoreEntry = "this-tv"
+                onThisTv()
+            },
+            modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
+        ) { Text("This TV") }
         Button(onClick = onBack, modifier = Modifier.testTag("settings:back")) { Text("Back") }
     }
     LaunchedEffect(Unit) {

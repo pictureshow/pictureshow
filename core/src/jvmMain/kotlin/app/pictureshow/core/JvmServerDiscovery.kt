@@ -10,14 +10,21 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
-class JvmServerDiscovery(private val durationMillis: Long = 3_000) : ServerDiscovery {
-    override suspend fun discover(): List<DiscoveredServer> = withContext(Dispatchers.IO) {
+/** [port] and [targets] exist for tests; the defaults broadcast Jellyfin's discovery request on every network. */
+class JvmServerDiscovery(
+    private val durationMillis: Long = 3_000,
+    private val port: Int = 7359,
+    private val targets: (() -> Set<InetAddress>)? = null
+) : ServerDiscovery {
+    override suspend fun discover(): List<DiscoveredServer> = discover {}
+
+    override suspend fun discover(onFound: (DiscoveredServer) -> Unit): List<DiscoveredServer> = withContext(Dispatchers.IO) {
         val found = linkedMapOf<String, DiscoveredServer>()
         DatagramSocket().use { socket ->
             socket.broadcast = true
             socket.soTimeout = 200
             val payload = "Who is JellyfinServer?".toByteArray(Charsets.US_ASCII)
-            val addresses = buildSet {
+            val addresses = targets?.invoke() ?: buildSet {
                 add(InetAddress.getByName("255.255.255.255"))
                 NetworkInterface.getNetworkInterfaces()?.toList()?.filter { it.isUp && !it.isLoopback }?.forEach { network ->
                     network.interfaceAddresses.mapNotNull { it.broadcast }.forEach(::add)
@@ -26,7 +33,7 @@ class JvmServerDiscovery(private val durationMillis: Long = 3_000) : ServerDisco
             addresses.forEach { address ->
                 currentCoroutineContext().ensureActive()
                 try {
-                    socket.send(DatagramPacket(payload, payload.size, address, 7359))
+                    socket.send(DatagramPacket(payload, payload.size, address, port))
                 } catch (_: java.io.IOException) {
                     // An interface can disappear or deny broadcast while another remains usable.
                 }
@@ -38,7 +45,8 @@ class JvmServerDiscovery(private val durationMillis: Long = 3_000) : ServerDisco
                 try {
                     socket.receive(packet)
                     val parsed = DiscoveryReplies.parse(String(packet.data, packet.offset, packet.length, Charsets.UTF_8))
-                    if (parsed != null) found.putIfAbsent(parsed.id, parsed)
+                    // A server answers once per interface it hears on; report it the first time only.
+                    if (parsed != null && found.putIfAbsent(parsed.id, parsed) == null) onFound(parsed)
                 } catch (_: SocketTimeoutException) {
                     // Short receive timeouts allow coroutine cancellation to close the socket promptly.
                 }

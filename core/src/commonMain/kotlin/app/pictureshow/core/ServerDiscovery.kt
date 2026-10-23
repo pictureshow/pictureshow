@@ -7,6 +7,12 @@ import kotlinx.serialization.json.Json
 
 interface ServerDiscovery {
     suspend fun discover(): List<DiscoveredServer>
+
+    /**
+     * Reports each server once, as its reply arrives, and returns the whole list when the search window closes.
+     * The default suits implementations that only learn the list at the end.
+     */
+    suspend fun discover(onFound: (DiscoveredServer) -> Unit): List<DiscoveredServer> = discover().distinctBy { it.id }.onEach(onFound)
 }
 
 @Serializable

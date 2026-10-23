@@ -14,7 +14,7 @@
     <string name="supporter_manage">Manage or cancel in Google Play</string>
     <string name="supporter_manage_fallback">To manage or cancel, open Google Play Store → Payments and subscriptions → Subscriptions.</string>
     <string name="supporter_loading">Checking Google Play…</string>
-    <string name="supporter_billing_unavailable">Google Play billing is unavailable on this device or account.</string>
+    <string name="supporter_billing_unavailable">You can\'t subscribe on this TV. Subscribing needs Google Play billing, which isn\'t available on this TV or its Google account.</string>
     <string name="supporter_network_unavailable">Could not reach Google Play. Check your connection and try again later.</string>
     <string name="supporter_product_unavailable">The Supporter subscription is not available in Google Play.</string>
     <string name="supporter_error">Could not complete the Google Play request. Try again later.</string>
