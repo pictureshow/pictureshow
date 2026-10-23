@@ -404,12 +404,19 @@ internal fun Pictureshow(
                 onDispose { vm.leave(preserveInput = activity?.isChangingConfigurations == true) }
             }
             val focusManager = LocalFocusManager.current
+            var quickFocus by rememberSaveable { mutableStateOf(false) }
+            val sessionEnded = state.snapshot.currentAccount?.let {
+                it.expired &&
+                    it.server.id == server.id &&
+                    it.server.url == server.url &&
+                    it.user.name == entry.arguments?.getString("username")
+            } == true
             Page("Sign in to ${server.name}") {
                 RemoteField(
                     "Username",
                     screen.username,
                     vm::username,
-                    initial = true,
+                    initial = !quickFocus,
                     enabled = !screen.busy,
                     onDone = { focusManager.moveFocus(FocusDirection.Down) }
                 )
@@ -417,9 +424,11 @@ internal fun Pictureshow(
                 Action(if (screen.busy) "Signing in…" else "Sign in", enabled = !screen.busy, onClick = vm::signIn)
                 Message(screen.error)
                 Message(screen.notice)
+                if (sessionEnded) Text("Your session ended. Sign in again.")
                 if (screen.loading) Text("Loading sign-in options…")
                 if (screen.quickConnect) {
-                    Action("Use Quick Connect", enabled = !screen.busy) {
+                    Action("Use Quick Connect", initial = quickFocus, enabled = !screen.busy) {
+                        quickFocus = true
                         nav.navigate(serverRoute("quick", server))
                     }
                 }
@@ -430,11 +439,17 @@ internal fun Pictureshow(
         }
         composable("quick?server={server}", arguments = listOf(navArgument("server") { type = NavType.StringType })) { entry ->
             val server = remember(entry) { Json.decodeFromString<Server>(requireNotNull(entry.arguments?.getString("server"))) }
-            val vm: QuickConnectViewModel = koinViewModel(parameters = { parametersOf(server) })
+            val loginEntry = remember(entry) {
+                nav.getBackStackEntry("login?server={server}&username={username}")
+            }
+            val vm: QuickConnectViewModel = koinViewModel(
+                viewModelStoreOwner = loginEntry,
+                parameters = { parametersOf(server, loginEntry.savedStateHandle) }
+            )
             val screen by vm.state.collectAsStateWithLifecycle()
-            // The back-stack ViewModel owns this attempt, including its code and secret. A stopped
-            // Activity or a replaced composition must not abandon a code already entered on a phone.
-            // Popping this entry clears the ViewModel and cancels its polling scope.
+            // The parent sign-in entry keeps this attempt across Back. Android saves its short-lived
+            // code and secret with that entry for process restoration, never in account persistence.
+            // Leaving the sign-in flow clears the owner and cancels polling.
             LaunchedEffect(vm) { vm.start() }
             Page("Quick Connect · ${server.name}") {
                 Text(

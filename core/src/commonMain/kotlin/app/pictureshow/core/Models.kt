@@ -37,6 +37,11 @@ sealed interface ClientResult<out T> {
     data class Failure(val error: ClientError) : ClientResult<Nothing>
 }
 
+/** Short-lived server credential; never include its secret in diagnostics. */
+class PendingQuickConnect(val code: String, val secret: String) {
+    override fun toString() = "PendingQuickConnect(<redacted>)"
+}
+
 sealed interface QuickConnectState {
     data class Code(val code: String) : QuickConnectState
 

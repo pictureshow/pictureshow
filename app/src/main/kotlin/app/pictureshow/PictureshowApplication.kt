@@ -82,7 +82,9 @@ class PictureshowApplication : Application() {
                     viewModel { (account: Account) -> PlaybackSettingsViewModel(account, get(), get(), get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
-                    viewModel { (server: Server) -> QuickConnectViewModel(server, get(), get()) }
+                    viewModel { (server: Server, saved: androidx.lifecycle.SavedStateHandle) ->
+                        QuickConnectViewModel(server, get(), get(), saved)
+                    }
                     viewModel { AccountsViewModel(get()) }
                     viewModel { (account: Account) -> HomeViewModel(account, get(), get()) }
                     viewModel { (account: Account, session: CatalogSession) -> CatalogHomeViewModel(account, session) }
@@ -125,7 +127,12 @@ internal class PersistentIdentityService(
     override suspend fun authenticate(server: Server, username: String, password: String) =
         call { it.authenticate(server, username, password) }
     override suspend fun quickConnectEnabled(server: Server) = call { it.quickConnectEnabled(server) }
-    override fun quickConnect(server: Server) = kotlinx.coroutines.flow.flow {
+    override fun quickConnect(server: Server) = quickConnect(server, null) {}
+    override fun quickConnect(
+        server: Server,
+        pending: app.pictureshow.core.PendingQuickConnect?,
+        onPending: (app.pictureshow.core.PendingQuickConnect?) -> Unit
+    ) = kotlinx.coroutines.flow.flow {
         val resolved = try {
             client()
         } catch (e: CancellationException) {
@@ -134,7 +141,7 @@ internal class PersistentIdentityService(
             emit(QuickConnectState.Failed(identityError()))
             return@flow
         }
-        resolved.quickConnect(server).collect { emit(it) }
+        resolved.quickConnect(server, pending, onPending).collect { emit(it) }
     }
     override suspend fun me(account: Account) = call { it.me(account) }
     override suspend fun logout(account: Account) = call { it.logout(account) }

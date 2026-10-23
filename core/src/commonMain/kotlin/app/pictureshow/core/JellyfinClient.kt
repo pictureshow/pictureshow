@@ -34,6 +34,9 @@ interface JellyfinService {
 
     fun quickConnect(server: Server): Flow<QuickConnectState>
 
+    fun quickConnect(server: Server, pending: PendingQuickConnect?, onPending: (PendingQuickConnect?) -> Unit): Flow<QuickConnectState> =
+        quickConnect(server)
+
     suspend fun me(account: Account): ClientResult<User>
 
     suspend fun logout(account: Account): ClientResult<Unit>
@@ -102,37 +105,56 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
     override suspend fun quickConnectEnabled(server: Server): ClientResult<Boolean> =
         request(server.url, "QuickConnect/Enabled") { json.parseToJsonElement(it).jsonPrimitive.boolean }
 
-    override fun quickConnect(server: Server): Flow<QuickConnectState> = flow {
+    override fun quickConnect(server: Server): Flow<QuickConnectState> = quickConnect(server, null) {}
+
+    override fun quickConnect(
+        server: Server,
+        pending: PendingQuickConnect?,
+        onPending: (PendingQuickConnect?) -> Unit
+    ): Flow<QuickConnectState> = flow {
         when (val enabled = quickConnectEnabled(server)) {
             is ClientResult.Failure -> {
                 emit(QuickConnectState.Failed(enabled.error))
                 return@flow
             }
             is ClientResult.Success -> if (!enabled.value) {
+                onPending(null)
                 emit(QuickConnectState.Disabled)
                 return@flow
             }
         }
+        var attempt = pending
+        var resumeImmediately = pending != null
         while (true) {
-            val initiation = request(server.url, "QuickConnect/Initiate", HttpMethod.Post) {
-                val body = json.parseToJsonElement(it).jsonObject
-                val code = body.string("Code")
-                require(code.length == 6 && code.all(Char::isDigit))
-                code to body.string("Secret")
+            if (attempt == null) {
+                val initiation = request(server.url, "QuickConnect/Initiate", HttpMethod.Post) {
+                    val body = json.parseToJsonElement(it).jsonObject
+                    val code = body.string("Code")
+                    require(code.length == 6 && code.all(Char::isDigit))
+                    code to body.string("Secret")
+                }
+                if (initiation is ClientResult.Failure) {
+                    emit(QuickConnectState.Failed(initiation.error))
+                    return@flow
+                }
+                val (code, secret) = (initiation as ClientResult.Success).value
+                attempt = PendingQuickConnect(code, secret)
+                onPending(attempt)
             }
-            if (initiation is ClientResult.Failure) {
-                emit(QuickConnectState.Failed(initiation.error))
-                return@flow
-            }
-            val (code, secret) = (initiation as ClientResult.Success).value
-            emit(QuickConnectState.Code(code))
+            val secret = attempt.secret
+            emit(QuickConnectState.Code(attempt.code))
             while (true) {
-                delay(5_000)
+                if (!resumeImmediately) delay(5_000)
+                resumeImmediately = false
                 val connected = request(server.url, "QuickConnect/Connect", secret = secret, expiryStatus = true) {
                     json.parseToJsonElement(it).jsonObject.getValue("Authenticated").jsonPrimitive.boolean
                 }
                 if (connected is ClientResult.Failure) {
-                    if (connected.error.kind == ErrorKind.EXPIRED) break
+                    if (connected.error.kind == ErrorKind.EXPIRED) {
+                        attempt = null
+                        onPending(null)
+                        break
+                    }
                     emit(QuickConnectState.Failed(connected.error))
                     return@flow
                 }
@@ -146,7 +168,12 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                     ) { account(server, it) }
                     // Approval and exchange can straddle expiry or revocation. Renew the attempt
                     // just as when polling rejects its secret; other failures still stop for retry.
-                    if (exchanged is ClientResult.Failure && exchanged.error.kind == ErrorKind.EXPIRED) break
+                    if (exchanged is ClientResult.Failure && exchanged.error.kind == ErrorKind.EXPIRED) {
+                        attempt = null
+                        onPending(null)
+                        break
+                    }
+                    if (exchanged is ClientResult.Success) onPending(null)
                     emit(
                         when (exchanged) {
                             is ClientResult.Success -> QuickConnectState.Authorized(exchanged.value)

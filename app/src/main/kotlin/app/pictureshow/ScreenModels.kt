@@ -1,5 +1,7 @@
 package app.pictureshow
 
+import androidx.annotation.VisibleForTesting
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pictureshow.core.Account
@@ -9,6 +11,7 @@ import app.pictureshow.core.ClientResult
 import app.pictureshow.core.DiscoveredServer
 import app.pictureshow.core.ErrorKind
 import app.pictureshow.core.JellyfinService
+import app.pictureshow.core.PendingQuickConnect
 import app.pictureshow.core.QuickConnectState
 import app.pictureshow.core.Server
 import app.pictureshow.core.ServerDiscovery
@@ -237,30 +240,73 @@ data class QuickState(
     val error: String? = null
 )
 
-class QuickConnectViewModel(val server: Server, private val service: JellyfinService, private val accounts: AccountStore) : ViewModel() {
+class QuickConnectViewModel(
+    val server: Server,
+    private val service: JellyfinService,
+    private val accounts: AccountStore,
+    private val savedState: SavedStateHandle
+) : ViewModel() {
+    @VisibleForTesting
+    constructor(server: Server, service: JellyfinService, accounts: AccountStore) : this(server, service, accounts, SavedStateHandle())
+
     private val mutableState = MutableStateFlow(QuickState())
     val state = mutableState.asStateFlow()
     private var polling: Job? = null
+    private var authorized: Account? = null
+
+    private fun pending(): PendingQuickConnect? {
+        val code = savedState.get<String>("quick.code") ?: return null
+        val secret = savedState.get<String>("quick.secret") ?: return null
+        return PendingQuickConnect(code, secret)
+    }
+
+    private fun savePending(attempt: PendingQuickConnect?) {
+        if (attempt == null) {
+            savedState.remove<String>("quick.code")
+            savedState.remove<String>("quick.secret")
+        } else {
+            savedState["quick.code"] = attempt.code
+            savedState["quick.secret"] = attempt.secret
+        }
+    }
+
+    private suspend fun remember(account: Account) {
+        // A failed local write retries the same account rather than exchanging the secret twice.
+        authorized = account
+        savePending(null)
+        try {
+            accounts.remember(account)
+            authorized = null
+            mutableState.update { it.copy(busy = false, signedIn = true) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            mutableState.update { it.copy(busy = false, error = SAVE_ERROR) }
+        }
+    }
 
     fun start() {
         if (polling?.isActive == true || state.value.signedIn) return
-        mutableState.value = QuickState()
+        mutableState.update { it.copy(busy = true, error = null, disabled = false) }
         polling = viewModelScope.launch {
-            service.quickConnect(server).collect { result ->
+            val account = authorized
+            if (account != null) {
+                remember(account)
+                return@launch
+            }
+            service.quickConnect(server, pending(), ::savePending).collect { result ->
                 when (result) {
                     is QuickConnectState.Code ->
                         mutableState.value =
-                            QuickState(code = result.code, renewed = state.value.code != null, busy = false)
+                            QuickState(
+                                code = result.code,
+                                renewed =
+                                state.value.renewed || state.value.code?.let { it != result.code } == true,
+                                busy = false
+                            )
                     is QuickConnectState.Failed -> mutableState.update { it.copy(busy = false, error = result.error.message) }
                     QuickConnectState.Disabled -> mutableState.value = QuickState(busy = false, disabled = true)
-                    is QuickConnectState.Authorized -> try {
-                        accounts.remember(result.account)
-                        mutableState.update { it.copy(busy = false, signedIn = true) }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        mutableState.update { it.copy(busy = false, error = SAVE_ERROR) }
-                    }
+                    is QuickConnectState.Authorized -> remember(result.account)
                 }
             }
         }

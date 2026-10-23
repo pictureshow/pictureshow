@@ -387,7 +387,7 @@ class SignInFocusTest {
     }
 
     @Test
-    fun backAbandonsQuickConnectAndReenteringStartsAnotherAttempt() {
+    fun backKeepsQuickConnectAndApprovalFromLoginSignsIn() {
         runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
         launch()
         compose.onNodeWithText("Use Quick Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
@@ -399,12 +399,13 @@ class SignInFocusTest {
         compose.onNodeWithText("Use Quick Connect").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         key(Key.DirectionCenter)
         waitForText("123456")
-        compose.runOnIdle { assertEquals(2, serviceEvents.count { it == "quick:start" }) }
+        compose.runOnIdle { assertEquals(1, serviceEvents.count { it == "quick:start" }) }
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
         compose.runOnIdle { quickAuthorized.complete(account) }
         compose.waitForIdle()
-        assertTrue(accounts.snapshots.value.currentAccount!!.expired)
+        assertFirstHomeCardAfterDelayedLoad()
+        assertEquals(account, accounts.snapshots.value.currentAccount)
     }
 
     @Test
