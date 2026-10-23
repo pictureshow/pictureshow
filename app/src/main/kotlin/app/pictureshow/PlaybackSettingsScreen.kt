@@ -146,7 +146,7 @@ internal fun PlaybackSettingsScreen(
         Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Playback settings", style = MaterialTheme.typography.headlineLarge)
+        Text("Settings", style = MaterialTheme.typography.headlineLarge)
         Button(
             onClick = {
                 restoreEntry = "this-tv"
