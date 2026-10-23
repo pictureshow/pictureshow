@@ -485,12 +485,11 @@ class CatalogFocusTest {
     }
 
     @Test
-    fun settingsIsReachedInAccountAreaAndBackRestoresItsButton() {
+    fun settingsIsReachedInHeaderAndBackRestoresItsButton() {
         compose.setContent { Harness(state = home.copy(rows = home.rows.drop(2))) }
-        key(Key.DirectionDown)
-        key(Key.DirectionDown)
-        compose.onNodeWithTag("home:switch-user").assertIsFocused()
-        key(Key.DirectionRight)
+        // Settings moved from beside Sign out to beside Search (usability report, leg 26).
+        key(Key.DirectionUp)
+        compose.onNodeWithTag("home:search").assertIsFocused()
         key(Key.DirectionRight)
         compose.onNodeWithTag("home:settings").assertIsFocused()
         key(Key.DirectionCenter)

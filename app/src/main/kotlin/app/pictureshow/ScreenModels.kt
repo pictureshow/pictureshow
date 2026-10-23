@@ -106,8 +106,18 @@ class ServerViewModel(private val service: JellyfinService, private val discover
         scanJob = viewModelScope.launch {
             mutableState.update { it.copy(scanning = true, error = null) }
             try {
-                val found = discovery.discover()
-                mutableState.update { it.copy(discovered = found) }
+                // Show each server as it answers rather than after the whole search window. A repeat search keeps
+                // the servers already listed in place, then drops any that did not answer this time.
+                val found = discovery.discover { server ->
+                    mutableState.update { state ->
+                        if (state.discovered.any { it.id == server.id }) state else state.copy(discovered = state.discovered + server)
+                    }
+                }
+                val ids = found.map { it.id }.toSet()
+                mutableState.update { state ->
+                    val kept = state.discovered.filter { it.id in ids }
+                    state.copy(discovered = kept + found.filter { server -> kept.none { it.id == server.id } })
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

@@ -10,12 +10,14 @@ import android.content.ContextWrapper
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -73,9 +76,14 @@ internal fun SupporterScreen(state: SupporterState, onPurchase: () -> Unit, onBa
         Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Unavailable has one explanation and remote Back, with no alternative payment route.
+        // Unavailable still says what supporting is (the approved Offer copy, unchanged) and why this TV can't
+        // subscribe, in a focused panel so the remote lands somewhere visible. Remote Back leaves; there is no
+        // alternative payment route.
         if (state is SupporterState.Unavailable) {
-            Text(stringResource(state.reason.message()), Modifier.focusRequester(first).focusable())
+            Text(stringResource(R.string.supporter_title), style = MaterialTheme.typography.headlineLarge)
+            Text(stringResource(R.string.supporter_description))
+            Text(stringResource(R.string.supporter_no_guarantee))
+            UnavailableReason(stringResource(state.reason.message()), Modifier.focusRequester(first))
         } else {
             Text(stringResource(R.string.supporter_title), style = MaterialTheme.typography.headlineLarge)
             when (state) {
@@ -126,6 +134,18 @@ internal fun SupporterScreen(state: SupporterState, onPurchase: () -> Unit, onBa
         }
     }
     LaunchedEffect(state::class) { first.requestFocus() }
+}
+
+@Composable
+private fun UnavailableReason(text: String, modifier: Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    // The same focus outline as the About screen's readable panels; nothing here is pressable.
+    Text(
+        text,
+        modifier = modifier.onFocusChanged { focused = it.isFocused }.focusable()
+            .border(2.dp, if (focused) Color.White else Color(0xFF747A8E), RoundedCornerShape(8.dp))
+            .padding(16.dp).testTag("supporter:unavailable")
+    )
 }
 
 private fun BillingFailure.message(): Int = when (this) {
