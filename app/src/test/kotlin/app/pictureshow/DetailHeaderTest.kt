@@ -83,6 +83,69 @@ class DetailHeaderTest {
         assertTrue(bounds.top.value >= 0 && bounds.bottom.value <= 540, "Title is offscreen: $bounds")
     }
 
+    @Test
+    fun mediaPlayResumesEvenWhenFavoriteHasFocusAndDoesNotRepeatOnKeyUp() {
+        val plays = mutableListOf<Pair<MediaItem, Boolean>>()
+        show(CatalogDetailState(account, episode, loading = false), { item, resume -> plays += item to resume })
+        key(Key.DirectionRight)
+        key(Key.MediaPlay)
+        assertEquals(listOf(episode to true), plays)
+    }
+
+    @Test
+    fun mediaPlayPausePlaysFromStartWhenThereIsNoResumePosition() {
+        val movie = MediaItem("movie", "Invented feature", "Movie")
+        val plays = mutableListOf<Pair<MediaItem, Boolean>>()
+        show(CatalogDetailState(account, movie, loading = false), { item, resume -> plays += item to resume })
+        key(Key.MediaPlayPause)
+        assertEquals(listOf(movie to false), plays)
+    }
+
+    @Test
+    fun seriesMediaPlayUsesTheSameNextUpAsItsPrimaryButton() {
+        val plays = mutableListOf<Pair<MediaItem, Boolean>>()
+        show(
+            CatalogDetailState(account, series, loading = false, nextUp = listOf(episode)),
+            { item, resume -> plays += item to resume }
+        )
+        key(Key.MediaPlayPause)
+        assertEquals(listOf(episode to true), plays)
+    }
+
+    @Test
+    fun seasonMediaPlaySkipsWatchedEpisodesLikeItsPrimaryButton() {
+        val watched = episode.copy(id = "watched", userData = ItemUserData(played = true))
+        val plays = mutableListOf<Pair<MediaItem, Boolean>>()
+        show(
+            CatalogDetailState(account, season, loading = false, episodes = listOf(watched, episode)),
+            { item, resume -> plays += item to resume }
+        )
+        key(Key.MediaPlay)
+        assertEquals(listOf(episode to true), plays)
+    }
+
+    @Test
+    fun mediaPlayDoesNothingWhileDetailIsLoadingOrHasNoPlayableEpisode() {
+        var state by mutableStateOf(CatalogDetailState(account, episode, loading = true))
+        var plays = 0
+        compose.setContent { PictureshowTheme { CatalogDetail(state, {}, {}, {}, {}, {}, { _, _ -> plays++ }) } }
+        compose.waitForIdle()
+        key(Key.MediaPlayPause)
+        compose.runOnIdle { state = CatalogDetailState(account, series, loading = false) }
+        key(Key.MediaPlay)
+        assertEquals(0, plays)
+    }
+
+    @Test
+    fun videoDetailsOfferPrimaryPlaybackToMediaKeysAndOk() {
+        val video = MediaItem("video", "Invented video", "Video")
+        val plays = mutableListOf<Pair<MediaItem, Boolean>>()
+        show(CatalogDetailState(account, video, loading = false), { item, resume -> plays += item to resume })
+        key(Key.MediaPlay)
+        key(Key.DirectionCenter)
+        assertEquals(listOf(video to false, video to false), plays)
+    }
+
     @OptIn(coil3.annotation.DelicateCoilApi::class)
     @Test
     fun detailHeroRetainsUpperImageWhenCroppingWideBackdrop() {

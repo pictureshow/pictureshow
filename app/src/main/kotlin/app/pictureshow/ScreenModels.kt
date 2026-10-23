@@ -220,6 +220,7 @@ class LoginViewModel(val server: Server, private val service: JellyfinService, p
 
 data class QuickState(
     val code: String? = null,
+    val renewed: Boolean = false,
     val busy: Boolean = true,
     val signedIn: Boolean = false,
     val disabled: Boolean = false,
@@ -237,7 +238,9 @@ class QuickConnectViewModel(val server: Server, private val service: JellyfinSer
         polling = viewModelScope.launch {
             service.quickConnect(server).collect { result ->
                 when (result) {
-                    is QuickConnectState.Code -> mutableState.value = QuickState(code = result.code, busy = false)
+                    is QuickConnectState.Code ->
+                        mutableState.value =
+                            QuickState(code = result.code, renewed = state.value.code != null, busy = false)
                     is QuickConnectState.Failed -> mutableState.update { it.copy(busy = false, error = result.error.message) }
                     QuickConnectState.Disabled -> mutableState.value = QuickState(busy = false, disabled = true)
                     is QuickConnectState.Authorized -> try {

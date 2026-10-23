@@ -509,10 +509,10 @@ fun CatalogDetail(
     val playItem = when (item?.type) {
         "Series" -> state.nextUp.firstOrNull() ?: state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
         "Season" -> state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
-        "Movie", "Episode" -> item
+        "Movie", "Episode", "Video" -> item
         else -> null
     }
-    val hasActions = item?.type in listOf("Movie", "Episode", "Series", "Season")
+    val hasActions = item?.type in listOf("Movie", "Episode", "Video", "Series", "Season")
     val sections = buildList {
         if (item?.type == "Series" && state.nextUp.isNotEmpty()) add("next" to state.nextUp)
         if (item?.type == "Series" && state.seasons.isNotEmpty()) add("seasons" to state.seasons)
@@ -560,7 +560,12 @@ fun CatalogDetail(
         LazyColumn(
             state = list,
             modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").onPreviewKeyEvent {
-                if (it.type == KeyEventType.KeyDown && it.key in listOf(Key.DirectionUp, Key.DirectionDown) && hasActions) {
+                if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && !state.loading && playItem != null) {
+                    if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
+                        onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
+                    }
+                    true
+                } else if (it.type == KeyEventType.KeyDown && it.key in listOf(Key.DirectionUp, Key.DirectionDown) && hasActions) {
                     val index = sections.indexOfFirst { section -> section.first == selectedSection }
                     val target = index + if (it.key == Key.DirectionUp) -1 else 1
                     if (target < sections.size) {

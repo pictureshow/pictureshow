@@ -141,8 +141,12 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                         server.url,
                         "Users/AuthenticateWithQuickConnect",
                         HttpMethod.Post,
-                        buildJsonObject { put("Secret", secret) }
+                        buildJsonObject { put("Secret", secret) },
+                        expiryStatus = true
                     ) { account(server, it) }
+                    // Approval and exchange can straddle expiry or revocation. Renew the attempt
+                    // just as when polling rejects its secret; other failures still stop for retry.
+                    if (exchanged is ClientResult.Failure && exchanged.error.kind == ErrorKind.EXPIRED) break
                     emit(
                         when (exchanged) {
                             is ClientResult.Success -> QuickConnectState.Authorized(exchanged.value)
