@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -176,6 +178,22 @@ internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlayba
     nav.navigate(playerRoute(entry.item, entry.positionMs))
 }
 
+/** Remove the player during recovery; reuse a matching detail or open the current auto-next item. */
+internal fun recoverPlaybackEntry(nav: NavHostController, item: MediaItem) {
+    val player = nav.currentBackStackEntry?.takeIf { it.destination.route?.startsWith("player?") == true } ?: return
+    val previous = nav.previousBackStackEntry
+    val previousItem = previous?.arguments?.getString("item")
+        ?.takeIf { previous?.destination?.route?.startsWith("item?") == true }
+        ?.let { Json.decodeFromString<MediaItem>(it) }
+    if (previousItem?.id == item.id) {
+        nav.popBackStack()
+    } else {
+        nav.navigate(itemRoute(item)) {
+            popUpTo(player.destination.id) { inclusive = true }
+        }
+    }
+}
+
 private fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
 
 internal fun accountDestination(snapshot: AccountSnapshot): String {
@@ -221,8 +239,18 @@ internal fun Pictureshow(
         }
         return
     }
-    // Only account selection changes reset the graph. Ordinary route changes remain on Back's stack.
+    // Navigation restores its own stack. Save the identity that installed it too: the first
+    // composition after recreation is not an account change. Do not put credentials in saved state.
+    var accountInstalled by rememberSaveable { mutableStateOf(false) }
+    var installedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var installedExpired by rememberSaveable { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired) {
+        val key = state.snapshot.currentKey
+        val expired = state.snapshot.currentAccount?.expired
+        if (accountInstalled && installedKey == key && installedExpired == expired) return@LaunchedEffect
+        installedKey = key
+        installedExpired = expired
+        accountInstalled = true
         val destination = accountDestination(state.snapshot)
         nav.navigate(destination) {
             popUpTo(nav.graph.id) { inclusive = true }
@@ -360,7 +388,10 @@ internal fun Pictureshow(
             val vm: LoginViewModel = koinViewModel(parameters = { parametersOf(server) })
             val screen by vm.state.collectAsStateWithLifecycle()
             LaunchedEffect(entry) { vm.prefillUsername(entry.arguments?.getString("username").orEmpty()) }
-            DisposableEffect(Unit) { onDispose { vm.leave() } }
+            val activity = LocalActivity.current
+            DisposableEffect(vm, activity) {
+                onDispose { vm.leave(preserveInput = activity?.isChangingConfigurations == true) }
+            }
             val focusManager = LocalFocusManager.current
             Page("Sign in to ${server.name}") {
                 RemoteField(
@@ -535,7 +566,12 @@ internal fun Pictureshow(
         ) { entry ->
             state.snapshot.currentAccount?.let { account ->
                 val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
-                PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog) { nav.popBackStack() }
+                // Recover to detail rather than replaying the route's original start offset.
+                PlayerRestoration(item, onRestore = {
+                    if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
+                }) { onCurrentItem ->
+                    PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem) { nav.popBackStack() }
+                }
             }
         }
         composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->

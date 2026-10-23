@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,12 +78,36 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
 
+/** A restored route is a recovery destination, not a request to replay its original start offset. */
 @Composable
-internal fun PlayerScreen(account: Account, item: MediaItem, startMs: Long, catalog: CatalogSession, onExit: () -> Unit) {
+internal fun PlayerRestoration(item: MediaItem, onRestore: (MediaItem) -> Unit, content: @Composable ((MediaItem) -> Unit) -> Unit) {
+    // The original item already lives in the navigation argument. Save another only after auto-next.
+    var recoveryItem by rememberSaveable { mutableStateOf<String?>(null) }
+    var opened by rememberSaveable { mutableStateOf(false) }
+    val restoring = remember { opened }
+    if (restoring) {
+        LaunchedEffect(Unit) { onRestore(recoveryItem?.let { Json.decodeFromString<MediaItem>(it) } ?: item) }
+    } else {
+        LaunchedEffect(Unit) { opened = true }
+        content { current -> recoveryItem = current.takeIf { it.id != item.id }?.let { Json.encodeToString(it) } }
+    }
+}
+
+@Composable
+internal fun PlayerScreen(
+    account: Account,
+    item: MediaItem,
+    startMs: Long,
+    catalog: CatalogSession,
+    onCurrentItem: (MediaItem) -> Unit = {},
+    onExit: () -> Unit
+) {
     var current by remember(account.key, item.id) { mutableStateOf(item) }
     var start by remember(account.key, item.id) { mutableLongStateOf(startMs) }
+    LaunchedEffect(current) { onCurrentItem(current) }
     key(current.id) {
         PlayerItemScreen(account, current, start, catalog, onNext = { next ->
             start = next.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000
