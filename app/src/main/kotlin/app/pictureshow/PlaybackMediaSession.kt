@@ -18,7 +18,7 @@ internal object PlaybackMediaSession {
 
     fun open(context: Context, player: Player): Handle {
         active?.close()
-        val builder = MediaSession.Builder(context, player).setId("pictureshow-player")
+        val builder = MediaSession.Builder(context, player).setId("pictureshow-player").setCallback(AnonymousMediaButtons)
         context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launch ->
             builder.setSessionActivity(
                 PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
