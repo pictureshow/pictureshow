@@ -18,9 +18,11 @@ interface TextPersistence {
 data class AccountSnapshot(
     val accounts: List<Account> = emptyList(),
     val currentKey: String? = null,
-    val recentSearches: Map<String, List<String>> = emptyMap()
+    val recentSearches: Map<String, List<String>> = emptyMap(),
+    val lastServer: Server? = null
 ) {
     val currentAccount: Account? get() = accounts.firstOrNull { it.key == currentKey }
+    val rememberedServers: List<Server> get() = (listOfNotNull(lastServer) + accounts.map { it.server }).distinctBy { it.id to it.url }
 }
 
 /** Writes commit before publishing state, so failed persistence never pretends a sign-in was saved. */
@@ -42,6 +44,13 @@ class AccountStore(private val persistence: TextPersistence) {
         if (reported.id != expected.id) return@withLock
         val before = loadLocked()
         val after = before.copy(
+            lastServer = before.lastServer?.let { server ->
+                if (server.id == expected.id && server.url == expected.url) {
+                    server.copy(name = reported.name, version = reported.version)
+                } else {
+                    server
+                }
+            },
             accounts = before.accounts.map { account ->
                 if (account.server.id == expected.id && account.server.url == expected.url) {
                     account.copy(server = account.server.copy(name = reported.name, version = reported.version))
@@ -78,7 +87,9 @@ class AccountStore(private val persistence: TextPersistence) {
         snapshot.copy(
             accounts = snapshot.accounts.filterNot { it.key == key },
             currentKey = snapshot.currentKey.takeUnless { it == key },
-            recentSearches = snapshot.recentSearches - key
+            recentSearches = snapshot.recentSearches - key,
+            // Retain only the public server record, never the signed-out user's identity or token.
+            lastServer = snapshot.accounts.firstOrNull { it.key == key }?.server ?: snapshot.lastServer
         )
     }
 

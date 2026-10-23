@@ -66,6 +66,36 @@ class AccountStoreTest {
     }
 
     @Test
+    fun signedOutServerSurvivesReloadWithoutUserTokenOrRecentSearches() = runTest {
+        val persistence = MemoryPersistence()
+        val store = AccountStore(persistence)
+        store.remember(first)
+        store.recordSearch(first.key, "private search")
+        store.signOut(first.key)
+        val restored = AccountStore(persistence).load()
+        assertEquals(listOf(first.server), restored.rememberedServers)
+        assertEquals(first.server, restored.lastServer)
+        assertTrue(restored.accounts.isEmpty())
+        assertTrue(restored.recentSearches.isEmpty())
+        assertNull(restored.currentAccount)
+        for (privateValue in listOf(first.accessToken, first.user.id, first.user.name, "private search")) {
+            assertFalse(persistence.value.orEmpty().contains(privateValue))
+        }
+    }
+
+    @Test
+    fun lastSignedOutServerComesFirstWithoutHidingOtherSavedServersOrDuplicatingEndpoints() = runTest {
+        val store = AccountStore(MemoryPersistence())
+        listOf(first, second, third).forEach { store.remember(it) }
+        store.signOut(second.key)
+        assertEquals(listOf(first.server, third.server), store.load().rememberedServers)
+        store.signOut(third.key)
+        assertEquals(listOf(third.server, first.server), store.load().rememberedServers)
+        store.signOut("missing")
+        assertEquals(third.server, store.load().lastServer)
+    }
+
+    @Test
     fun switchUserClearsSelectionAndKeepsSavedTokens() = runTest {
         val persistence = MemoryPersistence()
         val store = AccountStore(persistence)

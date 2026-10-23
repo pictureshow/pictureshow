@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pictureshow.core.Account
@@ -45,6 +46,14 @@ class SearchViewModel(private val account: Account, private val session: Catalog
     val state = mutableState.asStateFlow()
     private var job: Job? = null
     private var generation = 0
+    private var savedQuery: SavedStateHandle? = null
+
+    /** The entry query is a one-time seed; an intentionally cleared query is still initialized. */
+    fun initialize(savedState: SavedStateHandle, initialQuery: String) {
+        if (savedQuery != null) return
+        savedQuery = savedState
+        query(savedState.get<String>("searchQuery") ?: initialQuery, immediate = true)
+    }
 
     init {
         viewModelScope.launch {
@@ -56,6 +65,7 @@ class SearchViewModel(private val account: Account, private val session: Catalog
 
     fun query(value: String, immediate: Boolean = false) {
         val bounded = value.take(app.pictureshow.core.SEARCH_QUERY_LIMIT)
+        savedQuery?.set("searchQuery", bounded)
         val term = normalizeSearch(bounded)
         if (bounded == state.value.query && !immediate) return
         val epoch = ++generation

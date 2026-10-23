@@ -313,15 +313,24 @@ internal fun Pictureshow(
                     nav.navigate(serverRoute("login", it))
                 }
             }
-            val discoveryFocus = rememberDiscoveryFocus(screen.discovered.firstOrNull()?.id, screen.connecting)
+            val remembered = state.snapshot.rememberedServers
+            val discoveryFocus =
+                rememberDiscoveryFocus(screen.discovered.firstOrNull()?.id.takeIf { state.snapshot.lastServer == null }, screen.connecting)
             Page("Find your Jellyfin server", modifier = discoveryFocus.container) {
                 Text("Choose a server on your network, or enter an address.")
-                RemoteField("Server address", screen.address, vm::address, initial = true, onDone = { vm.connect() })
+                remembered.forEachIndexed { index, server ->
+                    val label = if (server == state.snapshot.lastServer) "Sign in to ${server.name}" else "${server.name} · remembered"
+                    Action(label, initial = index == 0 && state.snapshot.lastServer != null) { nav.navigate(serverRoute("login", server)) }
+                }
+                RemoteField(
+                    "Server address",
+                    screen.address,
+                    vm::address,
+                    initial = state.snapshot.lastServer == null,
+                    onDone = { vm.connect() }
+                )
                 Action(if (screen.connecting) "Connecting…" else "Connect", enabled = !screen.connecting) { vm.connect() }
                 Message(screen.error)
-                state.snapshot.accounts.map { it.server }.distinctBy { it.id }.forEach { server ->
-                    Action("${server.name} · remembered") { nav.navigate(serverRoute("login", server)) }
-                }
                 screen.discovered.forEachIndexed { index, server ->
                     Action(
                         "${server.name} · ${server.address}",
@@ -356,19 +365,22 @@ internal fun Pictureshow(
                 }
             }
             Page("Who’s watching?") {
+                val offerSignedOutServer = state.snapshot.currentAccount == null && state.snapshot.lastServer != null
                 val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
                 state.snapshot.accounts.forEach { account ->
                     Action(
                         "${account.user.name} on ${account.server.name}",
-                        initial = account.key == initialAccount?.key,
+                        initial = !offerSignedOutServer && account.key == initialAccount?.key,
                         enabled = !screen.busy
                     ) {
                         vm.select(account.key)
                     }
                 }
                 Message(screen.error)
-                state.snapshot.accounts.map { it.server }.distinctBy { it.id }.forEach { server ->
-                    Action("Sign in another user on ${server.name}") { nav.navigate(serverRoute("login", server)) }
+                state.snapshot.rememberedServers.forEachIndexed { index, server ->
+                    Action("Sign in another user on ${server.name}", initial = offerSignedOutServer && index == 0) {
+                        nav.navigate(serverRoute("login", server))
+                    }
                 }
                 Action("Add a server", initial = state.snapshot.accounts.isEmpty()) { nav.navigate("servers") }
             }
@@ -531,9 +543,8 @@ internal fun Pictureshow(
             state.snapshot.currentAccount?.takeUnless { it.expired }?.let { account ->
                 val vm: SearchViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                 val screen by vm.state.collectAsStateWithLifecycle()
-                // Runs once per entry, never when returning from detail.
                 LaunchedEffect(entry) {
-                    if (screen.query.isEmpty()) vm.query(entry.arguments?.getString("query").orEmpty(), immediate = true)
+                    vm.initialize(entry.savedStateHandle, entry.arguments?.getString("query").orEmpty())
                 }
                 SearchScreen(
                     screen, account, entry.arguments?.getBoolean("keyboard") ?: true,

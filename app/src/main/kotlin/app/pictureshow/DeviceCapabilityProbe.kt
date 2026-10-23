@@ -42,7 +42,13 @@ class DeviceCapabilityProbe(
     private var routeCapabilities: AudioCapabilities? = null
 
     fun snapshot(): DeviceCapabilities {
-        val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }
+        val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }
+        // API 29 exposes the underlying codec. Older inventories can contain distinct OMX and Codec2 decoders.
+        val codecs = if (Build.VERSION.SDK_INT >= 29) {
+            decoders.groupBy { it.canonicalName }.values.map { aliases -> aliases.firstOrNull { !it.isAlias } ?: aliases.first() }
+        } else {
+            decoders
+        }
         val video = codecs.flatMap { info ->
             info.supportedTypes.mapNotNull { mime ->
                 VIDEO_MIMES[mime]?.let { codec -> runCatching { videoDecoder(info, mime, codec) }.getOrNull() }

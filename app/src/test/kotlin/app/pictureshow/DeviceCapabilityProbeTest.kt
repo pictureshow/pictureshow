@@ -37,6 +37,7 @@ import org.robolectric.shadows.MediaCodecInfoBuilder
 import org.robolectric.shadows.MediaCodecInfoBuilder.CodecCapabilitiesBuilder
 import org.robolectric.shadows.ShadowDisplayManager
 import org.robolectric.shadows.ShadowMediaCodecList
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
@@ -45,6 +46,69 @@ class DeviceCapabilityProbeTest {
 
     @AfterTest
     fun clearCodecs() = ShadowMediaCodecList.reset()
+
+    private fun softwareAvc(name: String = "c2.android.avc.decoder", canonicalName: String? = null) = video(
+        name,
+        "video/avc",
+        1920,
+        1080,
+        489600,
+        CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42,
+        software = true,
+        canonicalName = canonicalName
+    )
+
+    @Test
+    fun aliasesCollapseInReportToTheCanonicalDecoder() {
+        // Alias first: enumeration order must not pick the compatibility name over the real codec.
+        softwareAvc("OMX.google.h264.decoder", "c2.android.avc.decoder")
+        softwareAvc()
+        val capabilities = DeviceCapabilityProbe(context, ffmpegSupport = { false }).snapshot()
+        assertEquals(1, capabilities.videoDecoders.size)
+        val report = thisTvReport(capabilities, "test", "11", "PCM", emptyList())
+        assertEquals(1, report.summary.lineSequence().count { it == "H264 · software" })
+    }
+
+    @Test
+    fun aliasesDoNotCreateExtraDeviceProfileConstraints() {
+        softwareAvc()
+        val probe = DeviceCapabilityProbe(context, ffmpegSupport = { false })
+        val canonical = probe.snapshot()
+        ShadowMediaCodecList.reset()
+        softwareAvc("OMX.google.h264.decoder", "c2.android.avc.decoder")
+        softwareAvc()
+        val aliased = probe.snapshot()
+        assertEquals(DeviceProfileBuilder.build(canonical), DeviceProfileBuilder.build(aliased))
+        assertEquals(
+            thisTvReport(canonical, "test", "11", "PCM", emptyList()).profileJson,
+            thisTvReport(aliased, "test", "11", "PCM", emptyList()).profileJson
+        )
+    }
+
+    @Test
+    @Config(sdk = [28, 30])
+    fun distinctSoftwareCodecsRemainSeparateEvenWithMatchingLimits() {
+        for (name in listOf("OMX.google.h264.decoder", "c2.android.avc.decoder")) {
+            video(
+                name,
+                "video/avc",
+                1920,
+                1080,
+                489600,
+                CodecProfileLevel.AVCProfileHigh to CodecProfileLevel.AVCLevel42,
+                software = true
+            )
+        }
+        val capabilities = DeviceCapabilityProbe(context, ffmpegSupport = { false }).snapshot()
+        assertEquals(2, capabilities.videoDecoders.size)
+        assertEquals(
+            2,
+            thisTvReport(capabilities, "test", "test", "PCM", emptyList()).summary.lineSequence().count {
+                it ==
+                    "H264 · software"
+            }
+        )
+    }
 
     @Test
     fun projectorCodecSnapshotMapsSizeThroughputProfilesHdrAndAudio() {
@@ -365,7 +429,8 @@ class DeviceCapabilityProbeTest {
         blocksPerSecond: Int,
         vararg profiles: Pair<Int, Int>,
         software: Boolean = false,
-        measurements: Map<String, String> = emptyMap()
+        measurements: Map<String, String> = emptyMap(),
+        canonicalName: String? = null
     ) {
         val format = MediaFormat().apply {
             setString(MediaFormat.KEY_MIME, mime)
@@ -388,10 +453,10 @@ class DeviceCapabilityProbeTest {
                 }.toTypedArray()
             )
             .setColorFormats(intArrayOf(android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)).build()
-        ShadowMediaCodecList.addCodec(
-            MediaCodecInfoBuilder.newBuilder().setName(name).setCapabilities(caps)
-                .setIsSoftwareOnly(software).setIsHardwareAccelerated(!software).build()
-        )
+        val info = MediaCodecInfoBuilder.newBuilder().setName(name).setCapabilities(caps)
+            .setIsSoftwareOnly(software).setIsHardwareAccelerated(!software).build()
+        if (canonicalName != null) ReflectionHelpers.setField(info, "mCanonicalName", canonicalName)
+        ShadowMediaCodecList.addCodec(info)
     }
 
     private fun audio(name: String, mime: String, channels: Int, software: Boolean = false) {

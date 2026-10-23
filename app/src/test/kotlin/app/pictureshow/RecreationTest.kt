@@ -9,11 +9,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -25,6 +29,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
@@ -61,10 +66,28 @@ import org.robolectric.annotation.LooperMode
 class RecreationTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val restoration = StateRestorationTester(compose)
-    private val screenContent: @Composable () -> Unit = { MaterialTheme { Pictureshow() } }
+    private var searchEntry by mutableStateOf<String?>(null)
+    private var entrySequence by mutableStateOf(0L)
+    private val screenContent: @Composable () -> Unit = {
+        MaterialTheme { Pictureshow(searchEntry = searchEntry, entrySequence = entrySequence, consumeSearchEntry = { searchEntry = null }) }
+    }
+    private val search = SearchModelsTest.FakeSearch().apply {
+        searchBlock = { query, kind ->
+            ClientResult.Success(
+                app.pictureshow.core.ItemPage(
+                    if (kind == app.pictureshow.core.SearchKind.MOVIES) {
+                        listOf(app.pictureshow.core.MediaItem(query, "$query result", "Movie"))
+                    } else {
+                        emptyList()
+                    }
+                )
+            )
+        }
+    }
     private val server = Server("server", "Screen room", "https://media.example.test", "12")
     private val account = Account(server, User("viewer", "Viewer"), "fake-token")
     private var saved: String? = null
+    private var discovered = emptyList<app.pictureshow.core.DiscoveredServer>()
     private var authentication: CompletableDeferred<Account>? = null
     private val accounts = AccountStore(object : TextPersistence {
         override suspend fun read() = saved
@@ -96,15 +119,16 @@ class RecreationTest {
                 module {
                     single { accounts }
                     single<JellyfinService> { service }
-                    single<CatalogService> { CatalogModelsTest.FakeCatalog() }
+                    single<CatalogService> { search }
                     single<ServerDiscovery> {
                         object : ServerDiscovery {
-                            override suspend fun discover() = emptyList<app.pictureshow.core.DiscoveredServer>()
+                            override suspend fun discover() = discovered
                         }
                     }
                     viewModel { SessionViewModel(get(), get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { AccountsViewModel(get()) }
+                    viewModel { (account: Account, session: CatalogSession) -> SearchViewModel(account, session, get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
                     viewModel { (account: Account) -> HomeViewModel(account, get(), get()) }
                     viewModel { (account: Account, session: CatalogSession) -> CatalogHomeViewModel(account, session) }
@@ -153,6 +177,89 @@ class RecreationTest {
         } finally {
             app.unregisterActivityLifecycleCallbacks(callback)
         }
+    }
+
+    private fun externalSearch(query: String) {
+        compose.runOnIdle {
+            searchEntry = query
+            entrySequence++
+        }
+        waitFor("$query result")
+    }
+
+    private fun replaceSearch(query: String) {
+        compose.onNodeWithTag("search:field").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.onNodeWithTag("search:field").performTextReplacement(query)
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun clearedExternalQueryStaysEmptyAfterActivityRecreationAndFreshIntentReplacesIt() {
+        launch(signedIn = true, activityRecreation = true)
+        externalSearch("original")
+        replaceSearch("")
+        recreateActivity()
+        compose.onNodeWithTag("search:field").assertTextEquals("")
+        compose.onNodeWithText("original result").assertDoesNotExist()
+        externalSearch("fresh")
+        compose.onNodeWithTag("search:field").assertTextEquals("fresh")
+        // Even the same original intent is a fresh entry, not a restored query.
+        externalSearch("original")
+        compose.onNodeWithTag("search:field").assertTextEquals("original")
+    }
+
+    @Test
+    fun editedExternalQueryAndResultsSurviveActivityRecreation() {
+        launch(signedIn = true, activityRecreation = true)
+        externalSearch("original")
+        replaceSearch("edited")
+        waitFor("edited result")
+        recreateActivity()
+        compose.onNodeWithTag("search:field").assertTextEquals("edited")
+        waitFor("edited result")
+        compose.onNodeWithText("original result").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(sdk = [24, 30])
+    fun signedOutServerIsOfferedWithInitialFocusAfterRecreationAndOneOkOpensLogin() {
+        discovered = listOf(app.pictureshow.core.DiscoveredServer("https://other.example.test", "other", "Other server"))
+        launch(signedIn = true, activityRecreation = true)
+        compose.runOnIdle { runBlocking { accounts.signOut(account.key) } }
+        waitFor("Find your Jellyfin server")
+        recreateActivity()
+        compose.onNodeWithText("Other server · https://other.example.test").assertExists()
+        compose.onNodeWithText("Sign in to Screen room").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        waitFor("Sign in to Screen room")
+        compose.onNodeWithContentDescription("Username").assertExists()
+    }
+
+    @Test
+    fun addingAServerStillStartsAtTheAddressWhenNoServerWasSignedOut() {
+        launch(signedIn = true)
+        compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        waitFor("Who’s watching?")
+        click("Add a server")
+        waitFor("Find your Jellyfin server")
+        compose.onNodeWithContentDescription("Server address").assertIsFocused()
+        compose.onNodeWithText("Screen room · remembered").assertExists()
+    }
+
+    @Test
+    fun signedOutServerKeepsOneOkSignInWhenAnotherServersAccountRemains() {
+        val other = account.copy(server = server.copy(id = "other", name = "Other server", url = "https://other.example.test"))
+        runBlocking { accounts.remember(other) }
+        launch(signedIn = true, activityRecreation = true)
+        compose.runOnIdle { runBlocking { accounts.signOut(account.key) } }
+        waitFor("Who’s watching?")
+        compose.onNodeWithText("Viewer on Other server").assertExists()
+        compose.onNodeWithText("Sign in another user on Screen room").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        waitFor("Sign in to Screen room")
+        compose.onNodeWithContentDescription("Username").assertExists()
     }
 
     @Test

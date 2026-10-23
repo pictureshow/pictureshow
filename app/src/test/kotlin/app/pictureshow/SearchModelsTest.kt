@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import app.pictureshow.core.Account
@@ -89,6 +90,31 @@ class SearchModelsTest {
     fun teardown() {
         stores.forEach(ViewModelStore::clear)
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun savedEntryRestoresLatestQueryAndResultsIncludingAnIntentionalClear() = runTest(dispatcher) {
+        fake.searchBlock = { query, _ -> ClientResult.Success(ItemPage(listOf(movie.copy(id = query)))) }
+        val saved = SavedStateHandle()
+        val vm = model()
+        vm.initialize(saved, "original")
+        vm.query("edited")
+        advanceUntilIdle()
+        val restored = model()
+        restored.initialize(SavedStateHandle(mapOf("searchQuery" to saved.get<String>("searchQuery"))), "original")
+        advanceUntilIdle()
+        assertEquals("edited", restored.state.value.query)
+        assertTrue(restored.state.value.rows.all { it.items.single().id == "edited" })
+        assertTrue(restored.state.value.completed)
+        vm.query("")
+        val cleared = model()
+        cleared.initialize(SavedStateHandle(mapOf("searchQuery" to saved.get<String>("searchQuery"))), "original")
+        advanceUntilIdle()
+        assertEquals("", cleared.state.value.query)
+        assertTrue(cleared.state.value.rows.isEmpty())
+        assertFalse(cleared.state.value.completed)
+        cleared.initialize(saved, "must not reapply")
+        assertEquals("", cleared.state.value.query)
     }
 
     @Test
