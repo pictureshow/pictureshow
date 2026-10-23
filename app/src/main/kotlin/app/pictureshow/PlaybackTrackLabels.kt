@@ -58,6 +58,8 @@ internal fun trackLabel(stream: MediaStream, trackNumber: Int? = null, showDefau
     } else {
         add(format)
     }
+    // Keep descriptive titles (for example audio description or commentary) even when a language is present.
+    stream.title?.takeIf { language != null && it.isNotBlank() && !it.equals(name, true) && !it.equals(format, true) }?.let(::add)
     if (language == null && trackNumber != null) add("Track $trackNumber")
     if (showDefault && stream.isDefault) add("Default")
     if (stream.isForced) add("Forced")

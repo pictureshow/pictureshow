@@ -1,0 +1,88 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
+package app.pictureshow
+
+import android.app.Application
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.Density
+import kotlin.test.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.annotation.LooperMode
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@LooperMode(LooperMode.Mode.PAUSED)
+class AccessibilityReadingTest {
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    private fun show(report: ThisTvReport) {
+        val preferences = PlaybackPreferencesStore(RuntimeEnvironment.getApplication().preferences)
+        compose.setContent {
+            PictureshowTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.3f)) {
+                    ThisTvScreen(preferences, capture = { _, _ -> report }, onBack = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    private fun down() = compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+
+    private fun readToBack(): String {
+        val text = StringBuilder()
+        repeat(40) {
+            down()
+            val focused = compose.onNode(isFocused())
+            val value = focused.fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+            if (value == "Back") return text.toString()
+            val bounds = focused.getUnclippedBoundsInRoot()
+            assertTrue(bounds.top.value >= 0f && bounds.bottom.value <= 540f, "Focused reading block is outside viewport: $bounds")
+            assertTrue(bounds.bottom.value - bounds.top.value <= 488f, "Focused reading block is too tall: $bounds")
+            focused.assertIsDisplayed()
+            text.append(value)
+        }
+        error("D-pad did not reach Back after reading diagnostics")
+    }
+
+    @Test
+    fun compactJsonIsReadableWithoutAnOversizedFocusedNode() {
+        val json = "{\"DirectPlayProfiles\":[" + (1..120).joinToString(",") { "{\"Codec\":\"format-$it\"}" } + "]}"
+        show(ThisTvReport("Reported capabilities", json))
+        compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        val read = readToBack().replace("\n", "")
+        assertTrue(read == json, "Every part of the compact JSON must remain readable")
+    }
+
+    @Test
+    fun longDiagnosticParagraphCanBeReadToItsEndAtLargeText() {
+        val summary = (1..100).joinToString(" ") { "Wide format $it WWWWWWWWWWWWWWWWWWWW" }
+        show(ThisTvReport(summary, "{}"))
+        compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        val read = readToBack().replace("\n", "")
+        assertTrue(read == summary, "Every part of the long summary must remain readable")
+    }
+}

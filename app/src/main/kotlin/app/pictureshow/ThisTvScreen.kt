@@ -12,7 +12,6 @@ import android.os.Build
 import android.view.Display
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +29,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
@@ -76,6 +78,11 @@ internal fun thisTvShareIntent(report: ThisTvReport): Intent = Intent(Intent.ACT
     putExtra(Intent.EXTRA_TEXT, report.sharedText)
 }
 
+/** Bound both long logical lines and wrapped rows so a focused diagnostic block fits on a TV. */
+internal fun diagnosticTextChunks(text: String, fontScale: Float): List<String> = text.lines().flatMap { line ->
+    if (line.isEmpty()) listOf("") else line.chunked(80)
+}.chunked(if (fontScale > 1.15f) 7 else 12).map { it.joinToString("\n") }
+
 @Composable
 internal fun ThisTvScreen(
     preferences: PlaybackPreferencesStore,
@@ -84,6 +91,7 @@ internal fun ThisTvScreen(
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
+    val fontScale = LocalDensity.current.fontScale
     val first = remember { FocusRequester() }
     var report by remember { mutableStateOf<ThisTvReport?>(null) }
     var error by remember { mutableStateOf(false) }
@@ -103,7 +111,7 @@ internal fun ThisTvScreen(
         Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("This TV", style = MaterialTheme.typography.headlineLarge)
+        Text("This TV", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
         Text("Reported capabilities, not a playback benchmark. Shared diagnostics contain no account or server information.")
         Button(onClick = { generation++ }, modifier = Modifier.focusRequester(first)) { Text("Refresh capabilities") }
         report?.let { captured ->
@@ -112,10 +120,17 @@ internal fun ThisTvScreen(
             }
             Button(onClick = { showJson = !showJson }) { Text(if (showJson) "Hide device profile JSON" else "View device profile JSON") }
             if (showJson) {
-                Text("Full device profile JSON", style = MaterialTheme.typography.headlineSmall)
-                captured.profileJson.lines().chunked(12).forEach { Text(it.joinToString("\n"), modifier = Modifier.focusable()) }
+                Text(
+                    "Full device profile JSON",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.semantics {
+                        heading()
+                    }
+                )
+                diagnosticTextChunks(captured.profileJson, fontScale).forEach { Text(it, modifier = Modifier.readableFocus()) }
             } else {
-                captured.summary.split("\n\n").forEach { Text(it, modifier = Modifier.focusable()) }
+                captured.summary.split("\n\n").flatMap { diagnosticTextChunks(it, fontScale) }
+                    .forEach { Text(it, modifier = Modifier.readableFocus()) }
             }
         } ?: Text(if (error) "Capabilities unavailable" else "Reading device capabilities…")
         if (error) Text("Could not read capabilities. Select Refresh to try again.")

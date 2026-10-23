@@ -29,6 +29,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
@@ -93,7 +97,15 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
             itemsIndexed(chapters) { index, chapter ->
                 Button(
                     onClick = { onSeek(chapter.startMs) },
-                    modifier = Modifier.testTag("chapter:$index").then(if (index == current) Modifier.focusRequester(initial) else Modifier)
+                    modifier = Modifier.testTag("chapter:$index").semantics { selected = index == current }.then(
+                        if (index ==
+                            current
+                        ) {
+                            Modifier.focusRequester(initial)
+                        } else {
+                            Modifier
+                        }
+                    )
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         chapter.imageTag?.let { tag ->
@@ -132,7 +144,8 @@ internal fun NextEpisodeControl(
     visible: Boolean = true,
     compact: Boolean = false,
     // Time left in this episode when there are no credits to skip: the card shows it and waits for the end.
-    remainingMs: Long? = null
+    remainingMs: Long? = null,
+    autoPlay: Boolean = true
 ) {
     var cancelled by remember(next.id) { mutableStateOf(false) }
     var played by remember(next.id) { mutableStateOf(false) }
@@ -142,8 +155,8 @@ internal fun NextEpisodeControl(
     val restore by rememberUpdatedState(onFocusRemoved)
     val untilEnd = remainingMs != null
     LaunchedEffect(eligible) { if (!eligible) remaining = countdownSeconds }
-    LaunchedEffect(eligible, ended, paused, cancelled, untilEnd) {
-        if ((!eligible && !ended) || cancelled || played) return@LaunchedEffect
+    LaunchedEffect(eligible, ended, paused, cancelled, untilEnd, autoPlay) {
+        if (!autoPlay || (!eligible && !ended) || cancelled || played) return@LaunchedEffect
         if (!ended && (paused || untilEnd)) return@LaunchedEffect
         while (!ended && remaining > 0) {
             delay(1_000)
@@ -161,17 +174,27 @@ internal fun NextEpisodeControl(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
-            Text("Next episode · $seconds", color = Color.White, style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (autoPlay) "Next episode · $seconds" else "Next episode",
+                modifier = Modifier.semantics { heading() },
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium
+            )
             imageUrl(account.server, next, 320, wide = true)?.takeUnless { compact }?.let { url ->
                 AsyncImage(url, contentDescription = null, modifier = Modifier.width(240.dp).height(100.dp))
             }
             Text(next.name, color = Color.White)
-            Button(onClick = {
-                if (!played) {
-                    played = true
-                    play()
+            Button(
+                onClick = {
+                    if (!played) {
+                        played = true
+                        play()
+                    }
+                },
+                modifier = Modifier.testTag("next:play").semantics {
+                    contentDescription = "Play next episode, ${catalogAnnouncement(next)}"
                 }
-            }, modifier = Modifier.testTag("next:play")) { Text("Play now") }
+            ) { Text("Play now") }
             Button(onClick = {
                 cancelled = true
                 onCancel()

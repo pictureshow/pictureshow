@@ -12,8 +12,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.media3.common.Player
 import androidx.media3.common.util.Util
+import androidx.tv.material3.Button
+import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 
 /**
@@ -72,5 +77,18 @@ internal fun ControlsAutoHide(
             delay(timeoutMs)
             onHide()
         }
+    }
+}
+
+/** The label names the next action; the state names what playback is doing now. */
+@Composable
+internal fun PlaybackToggle(paused: Boolean, showPlayButton: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.semantics {
+            stateDescription = if (paused) "Paused" else "Playing"
+        }
+    ) {
+        Text(if (showPlayButton) "Play" else "Pause")
     }
 }

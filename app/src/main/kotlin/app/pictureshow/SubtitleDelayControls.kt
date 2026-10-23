@@ -12,6 +12,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import java.util.Locale
@@ -40,12 +42,33 @@ internal fun SubtitleDelayControls(delayMs: Int, enabled: Boolean, onChange: (In
     ) {
         Text("Subtitle delay: ${String.format(Locale.ROOT, "%+.1f s", delayMs / 1000.0)}")
         Text("Positive delay shows subtitles later. Applies to this playback only. ← / → adjusts.")
-        Button(onClick = { adjust(-100) }, enabled = enabled && delayMs > -10_000, modifier = Modifier.testTag("delay:earlier")) {
+        Button(
+            onClick = { adjust(-100) },
+            enabled = enabled && delayMs > -10_000,
+            modifier = Modifier.testTag("delay:earlier").semantics {
+                stateDescription =
+                    String.format(Locale.ROOT, "%+.1f s", delayMs / 1000.0)
+            }
+        ) {
             Text("Subtitles earlier (−0.1 s)")
         }
-        Button(onClick = { adjust(100) }, enabled = enabled && delayMs < 10_000, modifier = Modifier.testTag("delay:later")) {
+        Button(
+            onClick = { adjust(100) },
+            enabled = enabled && delayMs < 10_000,
+            modifier = Modifier.testTag("delay:later").semantics {
+                stateDescription =
+                    String.format(Locale.ROOT, "%+.1f s", delayMs / 1000.0)
+            }
+        ) {
             Text("Subtitles later (+0.1 s)")
         }
-        Button(onClick = { onChange(0) }, enabled = enabled, modifier = Modifier.testTag("delay:reset")) { Text("Reset subtitle delay") }
+        Button(
+            onClick = { onChange(0) },
+            enabled = enabled,
+            modifier = Modifier.testTag("delay:reset").semantics {
+                stateDescription =
+                    String.format(Locale.ROOT, "%+.1f s", delayMs / 1000.0)
+            }
+        ) { Text("Reset subtitle delay") }
     }
 }

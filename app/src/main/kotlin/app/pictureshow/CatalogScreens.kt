@@ -7,12 +7,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -30,6 +34,8 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -48,10 +54,13 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -59,12 +68,25 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -200,7 +222,7 @@ fun CatalogHome(
     CompositionLocalProvider(LocalBringIntoViewSpec provides homeBringIntoView) {
         LazyColumn(
             state = list,
-            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").onPreviewKeyEvent {
+            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").accessibilityGroup().onPreviewKeyEvent {
                 if (it.type == KeyEventType.KeyDown) initialNavigation = true
                 false
             },
@@ -208,7 +230,7 @@ fun CatalogHome(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item(key = "header") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Settings sits beside Search, one Up from where home opens. Sign out stays alone with
                     // Switch user at the bottom, away from the buttons viewers press often.
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -251,7 +273,7 @@ fun CatalogHome(
             }
             rows.forEachIndexed { rowIndex, row ->
                 item(key = row.key) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         CatalogHeading(row.title, large = false)
                         // Only the outer vertical list changes its pivot; shelves retain platform scrolling.
                         CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
@@ -383,6 +405,7 @@ fun CatalogHome(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CatalogGrid(
     state: CatalogGridState,
@@ -399,21 +422,40 @@ fun CatalogGrid(
     val retry = remember { FocusRequester() }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
     Column(
-        modifier = Modifier.fillMaxSize().background(CatalogBackground).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid"),
+        modifier = Modifier.fillMaxSize().background(
+            CatalogBackground
+        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CatalogHeading(state.parent.name)
         Text(itemCountLabel(state.total), color = CatalogMuted, modifier = Modifier.testTag("grid:count"))
         if (showSort) {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val sorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
                 sorts.forEachIndexed { index, (sort, title) ->
                     Button(
                         onClick = { onSort(sort, state.descending) },
-                        modifier = (if (index == 0) Modifier.focusRequester(firstSort) else Modifier).testTag("grid:sort:$sort")
+                        modifier = (
+                            if (index ==
+                                0
+                            ) {
+                                Modifier.focusRequester(firstSort)
+                            } else {
+                                Modifier
+                            }
+                            ).testTag("grid:sort:$sort").semantics {
+                            selected =
+                                state.sortBy == sort
+                        }
                     ) { Text(if (state.sortBy == sort) "$title ✓" else title) }
                 }
-                Button(onClick = { onSort(state.sortBy, !state.descending) }, modifier = Modifier.testTag("grid:sort-order")) {
+                Button(
+                    onClick = { onSort(state.sortBy, !state.descending) },
+                    modifier = Modifier.testTag("grid:sort-order").semantics {
+                        stateDescription =
+                            if (state.descending) "Descending" else "Ascending"
+                    }
+                ) {
                     Text(if (state.descending) "Descending ↓" else "Ascending ↑")
                 }
             }
@@ -506,6 +548,7 @@ fun CatalogDetail(
         "Movie", "Episode", "Video" -> item
         else -> null
     }
+    val focusManager = LocalFocusManager.current
     val hasActions = item?.type in listOf("Movie", "Episode", "Video", "Series", "Season")
     val sections = buildList {
         if (item?.type == "Series" && state.nextUp.isNotEmpty()) add("next" to state.nextUp)
@@ -553,7 +596,7 @@ fun CatalogDetail(
     CompositionLocalProvider(LocalBringIntoViewSpec provides detailBringIntoView) {
         LazyColumn(
             state = list,
-            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").onPreviewKeyEvent {
+            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").accessibilityGroup().onPreviewKeyEvent {
                 if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && !state.loading && playItem != null) {
                     if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
                         onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
@@ -562,7 +605,11 @@ fun CatalogDetail(
                 } else if (it.type == KeyEventType.KeyDown && it.key in listOf(Key.DirectionUp, Key.DirectionDown) && hasActions) {
                     val index = sections.indexOfFirst { section -> section.first == selectedSection }
                     val target = index + if (it.key == Key.DirectionUp) -1 else 1
-                    if (target < sections.size) {
+                    if (headerFocused &&
+                        focusManager.moveFocus(if (it.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                    ) {
+                        true
+                    } else if (target < sections.size) {
                         moveSection(target)
                         true
                     } else {
@@ -576,7 +623,7 @@ fun CatalogDetail(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item(key = "body") {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (state.loading && item == null) Text("Loading item…")
                     CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
                     if (item != null) {
@@ -701,6 +748,7 @@ fun CatalogDetail(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailActions(
     item: MediaItem,
@@ -712,9 +760,39 @@ private fun DetailActions(
     onPlay: (MediaItem, Boolean) -> Unit,
     onFocus: () -> Unit
 ) {
-    Row(
+    val bringIntoView = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    var focused by remember { mutableStateOf(false) }
+    var scrolling by remember { mutableStateOf<Job?>(null) }
+    val focusMargin = with(LocalDensity.current) { 8.dp.toPx() }
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.onFocusChanged { if (it.hasFocus) onFocus() }
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.bringIntoViewRequester(bringIntoView).onFocusChanged {
+            focused = it.hasFocus
+            if (it.hasFocus) onFocus()
+        }.onGloballyPositioned { coordinates ->
+            // Metadata can arrive after focus, moving the same action below the viewport without
+            // another focus event. Recheck its un-clipped position after layout in that case.
+            if (focused && scrolling?.isActive != true) {
+                val top = coordinates.positionInRoot().y
+                val bottom = top + coordinates.size.height
+                val viewport = coordinates.findRootCoordinates().size.height
+                if (top < focusMargin || bottom > viewport - focusMargin) {
+                    scrolling = scope.launch {
+                        bringIntoView.bringIntoView(
+                            Rect(-focusMargin, -focusMargin, coordinates.size.width + focusMargin, coordinates.size.height + focusMargin)
+                        )
+                    }
+                }
+            }
+        }.focusProperties {
+            // Let the parent route a shelf exit to its remembered card, after spatial navigation
+            // has exhausted the wrapped action rows. Programmatic requests remain unrestricted.
+            onExit = {
+                if (requestedFocusDirection == FocusDirection.Up || requestedFocusDirection == FocusDirection.Down) cancelFocusChange()
+            }
+        }.focusGroup()
     ) {
         val position = playItem?.userData?.playbackPositionTicks ?: 0
         Button(
@@ -728,9 +806,19 @@ private fun DetailActions(
         Button(
             onClick = onPlayed,
             enabled = !busy,
-            modifier = (if (playItem == null) Modifier.focusRequester(initial) else Modifier).testTag("detail:played")
+            modifier = (if (playItem == null) Modifier.focusRequester(initial) else Modifier).testTag("detail:played").semantics {
+                toggleableState = ToggleableState(item.userData.played)
+                stateDescription = if (item.userData.played) "Watched" else "Unwatched"
+            }
         ) { Text(if (item.userData.played) "Mark unwatched" else "Mark watched") }
-        Button(onClick = onFavorite, enabled = !busy, modifier = Modifier.testTag("detail:favorite")) {
+        Button(
+            onClick = onFavorite,
+            enabled = !busy,
+            modifier = Modifier.testTag("detail:favorite").semantics {
+                toggleableState = ToggleableState(item.userData.isFavorite)
+                stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite"
+            }
+        ) {
             Text(if (item.userData.isFavorite) "Unfavorite" else "Favorite")
         }
     }
@@ -750,7 +838,7 @@ private fun DetailRow(
     selectedId: String? = null,
     onFocusRested: ((MediaItem) -> Unit)? = null
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         CatalogHeading(title, large = false)
         LazyRow(
             state = rowState,
@@ -810,13 +898,23 @@ internal fun CatalogCard(
     width: Dp? = if (wide) 240.dp else 144.dp,
     selected: Boolean = false
 ) {
-    val selection = if (selected) {
-        Modifier.semantics {
-            this.selected = true
-            contentDescription = "${item.name}, selected season"
-        }
-    } else {
-        Modifier
+    var focused by remember { mutableStateOf(false) }
+    val selection = Modifier.semantics {
+        role = Role.Button
+        // Retain one title for text navigation; screen readers prefer the complete description.
+        text = AnnotatedString(item.name)
+        if (item.type == "Season") this.selected = selected
+        // Keep the existing selected-season wording as well as the explicit selected state.
+        contentDescription = catalogAnnouncement(item) + if (selected) ", selected season" else ""
+        onClick(
+            label = when (item.type) {
+                "Season" -> "Open season"
+                "CollectionFolder", "Folder" -> "Open library"
+                "BoxSet" -> "Open collection"
+                else -> "Open details"
+            },
+            action = null
+        )
     }
     // The selected outline is the card's own resting border, so it scales with the card and the focused border
     // replaces it. As a separate modifier it stayed at the unscaled bounds and drew a second rectangle through the
@@ -829,7 +927,7 @@ internal fun CatalogCard(
         } else {
             CardDefaults.border()
         },
-        modifier = modifier.then(selection).then(
+        modifier = modifier.onFocusChanged { focused = it.isFocused }.then(selection).then(
             if (width ==
                 null
             ) {
@@ -839,7 +937,19 @@ internal fun CatalogCard(
             }
         )
     ) {
-        Column {
+        // The inset keyline keeps poster pixels away from the outline's inside edge. The card owns
+        // the outline and scale, so there is still one focus border at the original geometry.
+        Column(
+            Modifier.clearAndSetSemantics {}.then(
+                if (focused ||
+                    selected
+                ) {
+                    Modifier.border(3.dp, CatalogBackground, RoundedCornerShape(8.dp))
+                } else {
+                    Modifier
+                }
+            )
+        ) {
             Box(Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f)) {
                 CatalogArtwork(item, account, wide, Modifier.fillMaxSize())
                 val badge = when {
@@ -867,14 +977,14 @@ internal fun CatalogCard(
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     item.name,
-                    maxLines = 2,
+                    maxLines = if (LocalDensity.current.fontScale > 1.15f) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleSmall
                 )
                 if (item.type == "Episode") {
                     Text(
                         listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
-                        maxLines = 1,
+                        maxLines = if (LocalDensity.current.fontScale > 1.15f) Int.MAX_VALUE else 1,
                         overflow = TextOverflow.Ellipsis,
                         color = CatalogMuted,
                         style = MaterialTheme.typography.labelSmall
@@ -893,7 +1003,7 @@ internal fun CatalogArtwork(
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.Center
 ) {
-    BoxWithConstraints(modifier.background(Color(0xFF262D3D)), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier.clearAndSetSemantics {}.background(Color(0xFF262D3D)), contentAlignment = Alignment.Center) {
         val pixels = with(LocalDensity.current) { maxWidth.roundToPx() }
         val url = imageUrl(account.server, item, pixels, wide = wide)
         var loaded by remember(url) { mutableStateOf(false) }
@@ -924,7 +1034,7 @@ private fun CatalogHeading(title: String, large: Boolean = true) {
 @Composable
 private fun CatalogError(message: String?, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     if (message != null) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(message, color = Color(0xFFFFCCB8))
             Button(onClick = onRetry, modifier = modifier.semantics { contentDescription = "Retry" }) { Text("Retry") }
         }

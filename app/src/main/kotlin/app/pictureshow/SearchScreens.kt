@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -135,10 +136,12 @@ fun SearchScreen(
     // so editing is not evidence that a keyboard is still visible when Back reaches us.
     BackHandler(enabled = !fieldFocused) { focusField() }
     Column(
-        Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 24.dp).testTag("search"),
+        Modifier.fillMaxSize().background(
+            Color(0xFF10131C)
+        ).padding(horizontal = 48.dp, vertical = 24.dp).testTag("search").accessibilityGroup(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Search", style = MaterialTheme.typography.headlineLarge)
+        Text("Search", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
         InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
             BasicTextField(
                 value = state.query,
@@ -168,6 +171,11 @@ fun SearchScreen(
                 ),
                 modifier = Modifier.fillMaxWidth().focusRequester(field).testTag("search:field")
                     .semantics { contentDescription = "Search your video library" }
+                    .editWithKeyboard {
+                        field.requestFocus()
+                        editing = true
+                        keyboard?.show()
+                    }
                     .onFocusChanged {
                         // Attachment reports false before the first focus request. Preserve entry-time editing.
                         if (fieldFocused && !it.isFocused) editing = false
@@ -242,8 +250,8 @@ fun SearchScreen(
         LazyColumn(state = list, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             state.rows.forEachIndexed { rowIndex, row ->
                 item(key = row.key) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(row.title, style = MaterialTheme.typography.headlineSmall)
+                    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(row.title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                         LazyRow(
                             state = rowStates.getValue(row.key),
                             contentPadding = PaddingValues(16.dp),
@@ -332,7 +340,7 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
     Column(Modifier.fillMaxSize().background(Color(0xFF10131C))) {
         Row(Modifier.padding(start = 48.dp, top = 24.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             CatalogArtwork(state.person, state.grid.account, false, Modifier.width(64.dp).height(96.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(state.person.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("person:name"))
                 Button(onClick = onBack, modifier = Modifier.focusRequester(back).testTag("person:back")) { Text("Back") }
             }

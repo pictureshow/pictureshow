@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,12 +82,24 @@ internal fun SupporterScreen(state: SupporterState, onPurchase: () -> Unit, onBa
         // subscribe, in a focused panel so the remote lands somewhere visible. Remote Back leaves; there is no
         // alternative payment route.
         if (state is SupporterState.Unavailable) {
-            Text(stringResource(R.string.supporter_title), style = MaterialTheme.typography.headlineLarge)
+            Text(
+                stringResource(R.string.supporter_title),
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.semantics {
+                    heading()
+                }
+            )
             Text(stringResource(R.string.supporter_description))
             Text(stringResource(R.string.supporter_no_guarantee))
             UnavailableReason(stringResource(state.reason.message()), Modifier.focusRequester(first))
         } else {
-            Text(stringResource(R.string.supporter_title), style = MaterialTheme.typography.headlineLarge)
+            Text(
+                stringResource(R.string.supporter_title),
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.semantics {
+                    heading()
+                }
+            )
             when (state) {
                 SupporterState.Loading -> Text(stringResource(R.string.supporter_loading), Modifier.focusRequester(first).focusable())
                 is SupporterState.Offer -> {

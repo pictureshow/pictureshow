@@ -116,7 +116,7 @@ internal fun TrickplayPreview(cache: TrickplayCache, sourceId: String, tile: Tri
         value = cache.thumbnail(sourceId, tile)
     }
     Column {
-        bitmap?.let { Image(it.asImageBitmap(), "Seek preview", Modifier.size(240.dp, 135.dp)) }
+        bitmap?.let { Image(it.asImageBitmap(), null, Modifier.size(240.dp, 135.dp)) }
         Text(playerTime(positionMs), color = Color.White)
     }
 }

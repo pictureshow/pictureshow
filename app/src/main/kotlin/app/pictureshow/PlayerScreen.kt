@@ -14,7 +14,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,10 +42,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -116,6 +123,7 @@ internal fun PlayerScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PlayerItemScreen(
     account: Account,
@@ -128,6 +136,7 @@ private fun PlayerItemScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val view = LocalView.current
+    val accessibleControls = rememberAccessibilityEnabled()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val http: HttpClient = koinInject()
     val identity: DeviceIdentityStore = koinInject()
@@ -144,6 +153,8 @@ private fun PlayerItemScreen(
     val player by output.player.collectAsState()
     var setupError by remember { mutableStateOf<String?>(null) }
     var controls by remember { mutableStateOf(false) }
+    var controlsHeight by remember { mutableStateOf(240.dp) }
+    val density = LocalDensity.current
     var chooser by remember { mutableStateOf<MediaStreamType?>(null) }
     var interaction by remember { mutableLongStateOf(0) }
     var position by remember { mutableLongStateOf(startMs) }
@@ -287,7 +298,7 @@ private fun PlayerItemScreen(
             delay(500)
         }
     }
-    ControlsAutoHide(controls, paused || actionsFocused || chooser != null || chaptersOpen, interaction) {
+    ControlsAutoHide(controls, accessibleControls || paused || actionsFocused || chooser != null || chaptersOpen, interaction) {
         controls = false
         rootFocus.requestFocus()
     }
@@ -326,13 +337,22 @@ private fun PlayerItemScreen(
                 interact = { interaction++ },
                 back = ::handleBack
             )
+            .semantics {
+                contentDescription = "Video player"
+                onClick(label = "Show controls") {
+                    controls = true
+                    focusControls = true
+                    interaction++
+                    true
+                }
+            }
             .focusable()
     ) {
-        ContentFrame(player, Modifier.fillMaxSize())
+        ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
         PlayerSubtitles(player, localPreferences.appearance)
-        if (switching) Text("Starting next episode…", modifier = Modifier.align(Alignment.Center))
+        if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
         if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
-            Text("Preparing playback…", modifier = Modifier.align(Alignment.Center))
+            PlaybackStatus("Preparing playback…", Modifier.align(Alignment.Center))
         }
         if (state.bufferingSlow && error == null && !switching) {
             Text(
@@ -350,7 +370,9 @@ private fun PlayerItemScreen(
         }
         if (controls && chooser == null && !chaptersOpen && error == null && !switching) {
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xE610131C)).padding(36.dp),
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged {
+                    controlsHeight = with(density) { it.height.toDp() }
+                }.background(Color(0xE610131C)).padding(36.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val sourceId = state.decision?.mediaSourceId
@@ -360,20 +382,22 @@ private fun PlayerItemScreen(
                     TrickplayPreview(requireNotNull(tiles), sourceId, tile, requireNotNull(seekPreview))
                 }
                 Text(item.name, style = MaterialTheme.typography.headlineSmall)
-                val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-                Box(Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray)) {
-                    Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
+                // Capture for speech when controls open, on pause/resume, and after an explicit seek.
+                // The visual clock keeps moving; it is not a live accessibility announcement.
+                val announcedPosition = remember(paused, seekPreview, duration) { position }
+                PlayerTimeline(position, announcedPosition, duration) { target ->
+                    player?.seekTo(target)
+                    position = target
+                    seekPreview = target
+                    interaction++
                 }
                 val clock = (if (paused) "Paused  ·  " else "") + "${playerTime(position)} / ${playerTime(duration)}"
-                Text("$clock  ·  ← / → seek 10 seconds")
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = {
-                            player?.togglePlayback()
-                            interaction++
-                        },
-                        modifier = Modifier.focusRequester(playFocus)
-                    ) { Text(if (showPlayButton) "Play" else "Pause") }
+                Text("$clock  ·  ← / → seek 10 seconds", modifier = Modifier.clearAndSetSemantics {})
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus)) {
+                        player?.togglePlayback()
+                        interaction++
+                    }
                     Button(onClick = { chooser = MediaStreamType.Audio }) { Text("Audio") }
                     Button(onClick = {
                         chooser = MediaStreamType.Subtitle
@@ -392,7 +416,7 @@ private fun PlayerItemScreen(
         if (error == null && !switching) {
             val actionsVisible = chooser == null && !chaptersOpen
             Column(
-                Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) 240.dp else 36.dp)
+                Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
                     .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -407,7 +431,8 @@ private fun PlayerItemScreen(
                         account, next, trigger != null && position >= trigger, ended, paused || !actionsVisible,
                         onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, onPlay = { finish(next) },
                         onCancel = { nextCancelled = true }, visible = actionsVisible, compact = controls,
-                        remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null
+                        remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null,
+                        autoPlay = !accessibleControls
                     )
                 }
             }
@@ -444,11 +469,15 @@ private fun PlayerItemScreen(
                             interaction++
                             rootFocus.requestFocus()
                         },
-                        modifier = if (index == selected || (selected !in streams.map { it.index } && index == -1)) {
-                            Modifier.focusRequester(choiceFocus)
-                        } else {
-                            Modifier
-                        }
+                        modifier = Modifier.semantics { this.selected = index == selected }.then(
+                            if (index == selected ||
+                                (selected !in streams.map { it.index } && index == -1)
+                            ) {
+                                Modifier.focusRequester(choiceFocus)
+                            } else {
+                                Modifier
+                            }
+                        )
                     ) { Text(if (index == selected) "$label · selected" else label) }
                 }
                 if (type == MediaStreamType.Subtitle) {

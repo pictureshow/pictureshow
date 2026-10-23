@@ -24,6 +24,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -146,7 +152,7 @@ internal fun PlaybackSettingsScreen(
         Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineLarge)
+        Text("Settings", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
         Button(
             onClick = {
                 restoreEntry = "supporter"
@@ -164,33 +170,43 @@ internal fun PlaybackSettingsScreen(
         Text("Press center to change a value. Changes are saved immediately.")
         Button(
             onClick = { onLocal { it.copy(bitrateMbps = nextSetting(PlaybackPreferences.BITRATES, it.bitrateMbps)) } },
-            modifier = Modifier.focusRequester(first).testTag("settings:bitrate")
+            modifier = Modifier.focusRequester(first).testTag("settings:bitrate").semantics {
+                onClick(label = "Change value", action = null)
+            }
         ) { Text("Max streaming bitrate: ${local.bitrateMbps?.let { "$it Mbps" } ?: "Auto (200 Mbps)"}") }
-        Button(onClick = { onLocal { it.copy(passthrough = !it.passthrough) } }, modifier = Modifier.testTag("settings:passthrough")) {
+        Button(
+            onClick = {
+                onLocal { it.copy(passthrough = !it.passthrough) }
+            },
+            modifier = Modifier.testTag("settings:passthrough").semantics {
+                toggleableState = ToggleableState(local.passthrough)
+                stateDescription = if (local.passthrough) "On" else "Off"
+            }
+        ) {
             Text("Audio passthrough: ${if (local.passthrough) "On" else "Off"}")
         }
         Text("This TV's audio output accepts: $acceptedAudio")
         Button(onClick = {
             onLocal { it.copy(subtitleSize = nextSetting(SubtitleSize.entries, it.subtitleSize)) }
-        }, modifier = Modifier.testTag("settings:size")) {
+        }, modifier = Modifier.testTag("settings:size").semantics { onClick(label = "Change value", action = null) }) {
             Text("Subtitle size: ${settingLabel(local.subtitleSize.name)}")
         }
         Button(onClick = {
             onLocal { it.copy(subtitleBackground = nextSetting(SubtitleBackground.entries, it.subtitleBackground)) }
-        }, modifier = Modifier.testTag("settings:background")) {
+        }, modifier = Modifier.testTag("settings:background").semantics { onClick(label = "Change value", action = null) }) {
             Text("Subtitle background: ${settingLabel(local.subtitleBackground.name)}")
         }
         Text(
             "System follows Android caption settings. Bitmap subtitles keep their authored appearance. These settings apply the next time you open the player."
         )
-        Text("Skip segments", style = MaterialTheme.typography.headlineSmall)
+        Text("Skip segments", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
             val mode = local.segmentModes[type] ?: SegmentMode.Ask
             Button(
                 onClick = {
                     onLocal { it.copy(segmentModes = it.segmentModes + (type to nextSetting(SegmentMode.entries, mode))) }
                 },
-                modifier = Modifier.testTag("settings:segment:$type")
+                modifier = Modifier.testTag("settings:segment:$type").semantics { onClick(label = "Change value", action = null) }
             ) {
                 Text(
                     "${segmentLabel(type).replaceFirstChar {
@@ -200,23 +216,23 @@ internal fun PlaybackSettingsScreen(
             }
         }
         Text("Ask shows a skip button. These settings apply the next time you open the player.")
-        Text("Your server preferences", style = MaterialTheme.typography.headlineSmall)
+        Text("Your server preferences", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text("These follow your account to other clients.")
         val enabled = !state.loading && !state.saving && configuration != null
         Button(
             onClick = { onServer("AudioLanguagePreference", nextSetting(preferenceLanguages, configuration!!.audioLanguage)) },
             enabled = enabled,
-            modifier = Modifier.testTag("settings:audio-language")
+            modifier = Modifier.testTag("settings:audio-language").semantics { onClick(label = "Change value", action = null) }
         ) { Text("Audio language: ${configuration?.audioLanguage?.let(::preferenceLanguageLabel) ?: "Loading…"}") }
         Button(
             onClick = { onServer("SubtitleLanguagePreference", nextSetting(preferenceLanguages, configuration!!.subtitleLanguage)) },
             enabled = enabled,
-            modifier = Modifier.testTag("settings:subtitle-language")
+            modifier = Modifier.testTag("settings:subtitle-language").semantics { onClick(label = "Change value", action = null) }
         ) { Text("Subtitle language: ${configuration?.subtitleLanguage?.let(::preferenceLanguageLabel) ?: "Loading…"}") }
         Button(
             onClick = { onServer("SubtitleMode", nextSetting(subtitleModes, configuration!!.subtitleMode)) },
             enabled = enabled,
-            modifier = Modifier.testTag("settings:subtitle-mode")
+            modifier = Modifier.testTag("settings:subtitle-mode").semantics { onClick(label = "Change value", action = null) }
         ) { Text("Subtitle mode: ${configuration?.subtitleMode ?: "Loading…"}") }
         if (state.saving) Text("Saving server preferences…")
         state.error?.let {
@@ -224,7 +240,7 @@ internal fun PlaybackSettingsScreen(
             Button(onClick = onRetry) { Text("Retry") }
         }
         // The decoder report is for troubleshooting, so it follows the viewer's own settings.
-        Text("Troubleshooting", style = MaterialTheme.typography.headlineSmall)
+        Text("Troubleshooting", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text("A technical report of the video and audio formats this TV can play.")
         Button(
             onClick = {

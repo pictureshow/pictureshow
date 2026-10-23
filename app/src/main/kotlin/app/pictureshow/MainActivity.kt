@@ -642,7 +642,7 @@ private fun Message(message: String?) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RemoteField(
+internal fun RemoteField(
     label: String,
     value: String,
     onValue: (String) -> Unit,
@@ -661,7 +661,7 @@ private fun RemoteField(
     // Visibility also covers floating TV keyboards with zero bottom inset. Back may hide the IME
     // without ending editing, so editing alone cannot decide whether arrows should navigate the page.
     val imeVisible = WindowInsets.isImeVisible
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label)
         BasicTextField(
             value = value,
@@ -712,6 +712,11 @@ private fun RemoteField(
                 .background(Color(0xFF202635), RoundedCornerShape(8.dp))
                 .padding(16.dp)
                 .semantics { contentDescription = label }
+                .editWithKeyboard {
+                    focus.requestFocus()
+                    editing = true
+                    keyboard?.show()
+                }
         )
     }
     LaunchedEffect(Unit) { if (initial) focus.requestFocus() }
