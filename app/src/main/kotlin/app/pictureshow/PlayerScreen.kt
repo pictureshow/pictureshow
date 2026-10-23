@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
+import androidx.media3.common.util.Util
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.tv.material3.Button
@@ -124,6 +125,7 @@ private fun PlayerItemScreen(
     var position by remember { mutableLongStateOf(startMs) }
     var duration by remember { mutableLongStateOf(0) }
     var paused by remember { mutableStateOf(false) }
+    var showPlayButton by remember { mutableStateOf(true) }
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
     val errorFocus = remember { FocusRequester() }
@@ -145,6 +147,7 @@ private fun PlayerItemScreen(
 
     fun finish(next: MediaItem? = null) {
         if (next == null) {
+            if (exitRequested) return
             exitRequested = true
             controller?.close()
             onExit()
@@ -206,6 +209,7 @@ private fun PlayerItemScreen(
                 reportScope.cancel()
             }
             controller = session
+            output.onStop = { finish() }
             output.onReady = { session.ready(it) }
             output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
             output.onProgress = { session.progress(it) }
@@ -251,6 +255,7 @@ private fun PlayerItemScreen(
                 position = it.currentPosition.coerceAtLeast(0)
                 duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
                 paused = !it.playWhenReady
+                showPlayButton = Util.shouldShowPlayButton(it)
             }
             view.keepScreenOn = player?.playWhenReady == true && state.error == null
             delay(500)
@@ -293,7 +298,7 @@ private fun PlayerItemScreen(
                 controlsVisible = controls,
                 seek = ::seek,
                 toggleAndShow = {
-                    player?.let { if (it.playWhenReady) it.pause() else it.play() }
+                    player?.togglePlayback()
                     controls = true
                     focusControls = true
                     interaction++
@@ -346,11 +351,11 @@ private fun PlayerItemScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = {
-                            player?.let { if (it.playWhenReady) it.pause() else it.play() }
+                            player?.togglePlayback()
                             interaction++
                         },
                         modifier = Modifier.focusRequester(playFocus)
-                    ) { Text(if (paused) "Play" else "Pause") }
+                    ) { Text(if (showPlayButton) "Play" else "Pause") }
                     Button(onClick = { chooser = MediaStreamType.Audio }) { Text("Audio") }
                     Button(onClick = {
                         chooser = MediaStreamType.Subtitle
