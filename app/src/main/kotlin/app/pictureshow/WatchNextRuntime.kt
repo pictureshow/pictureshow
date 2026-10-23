@@ -64,7 +64,13 @@ internal class AndroidWatchProvider(private val context: Context) : WatchProvide
         checkNotNull(resolver.insert(TvContractCompat.WatchNextPrograms.CONTENT_URI, program.toContentValues()))
     }
     override fun update(id: Long, program: WatchNextProgram) {
-        resolver.update(TvContractCompat.buildWatchNextProgramUri(id), program.toContentValues(), null, null)
+        val values = program.toContentValues().apply {
+            // An omitted duration on an update would retain the previous (possibly malformed) total.
+            if (!containsKey(TvContractCompat.WatchNextPrograms.COLUMN_DURATION_MILLIS)) {
+                putNull(TvContractCompat.WatchNextPrograms.COLUMN_DURATION_MILLIS)
+            }
+        }
+        resolver.update(TvContractCompat.buildWatchNextProgramUri(id), values, null, null)
     }
     override fun delete(id: Long) {
         resolver.delete(TvContractCompat.buildWatchNextProgramUri(id), null, null)

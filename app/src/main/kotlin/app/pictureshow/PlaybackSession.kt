@@ -95,7 +95,9 @@ internal class PlaybackSession(
     private val preferredLanguage: String,
     private val onFinished: () -> Unit = {},
     /** After the last server cleanup; nothing runs in the scope after this, so its owner may cancel it. */
-    private val onCleanupDone: () -> Unit = {}
+    private val onCleanupDone: () -> Unit = {},
+    /** Published synchronously, before leaving the ended player can expose cached details. */
+    private val onCompletionPending: () -> Unit = {}
 ) {
     private val mutable = MutableStateFlow(PlaybackState())
     val state = mutable.asStateFlow()
@@ -316,6 +318,7 @@ internal class PlaybackSession(
     fun ended(source: PlayDecision? = decision) {
         if (closing || ending || source == null || source !== decision || mutable.value.error != null) return
         ending = true
+        onCompletionPending()
         capture()
         output.release()
         ticker?.cancel()

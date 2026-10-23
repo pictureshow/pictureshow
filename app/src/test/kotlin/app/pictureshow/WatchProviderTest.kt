@@ -84,6 +84,17 @@ class WatchProviderTest {
     }
 
     @Test
+    fun omittingAnUntrustedDurationClearsAnExistingLauncherTotal() {
+        val fake = FakeTvProvider()
+        ShadowContentResolver.registerProviderInternal(TvContractCompat.AUTHORITY, fake)
+        val provider = AndroidWatchProvider(RuntimeEnvironment.getApplication())
+        provider.insert(WatchNextProgram.Builder().setTitle("Fictional sample").setDurationMillis(Int.MAX_VALUE).build())
+        provider.update(1, WatchNextProgram.Builder().setTitle("Fictional sample").build())
+        assertTrue(fake.updates.single().containsKey(TvContractCompat.WatchNextPrograms.COLUMN_DURATION_MILLIS))
+        assertEquals(null, fake.rows[1]!![TvContractCompat.WatchNextPrograms.COLUMN_DURATION_MILLIS])
+    }
+
+    @Test
     @Config(sdk = [23])
     fun unsupportedApiNeverAccessesTvProvider() {
         assertFalse(supportsWatchNext(RuntimeEnvironment.getApplication()))

@@ -543,7 +543,7 @@ fun CatalogDetail(
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
     var rowSelections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
-    val item = state.item
+    val item = state.item.takeUnless { state.playbackPending }
     val playItem = when (item?.type) {
         "Series" -> state.nextUp.firstOrNull() ?: state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
         "Season" -> state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
@@ -626,7 +626,11 @@ fun CatalogDetail(
         ) {
             item(key = "body") {
                 Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (state.loading && item == null) Text("Loading item…")
+                    if (state.playbackPending) {
+                        Text("Saving progress…")
+                    } else if (state.loading && item == null) {
+                        Text("Loading item…")
+                    }
                     CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
                     if (item != null) {
                         val backdrop = if (item.backdropImageTags.isNotEmpty() || item.parentBackdropImageTags.isNotEmpty()) {
@@ -713,7 +717,11 @@ fun CatalogDetail(
             }
         }
     }
-    LaunchedEffect(state.loading, item?.id, state.error, sections.map { it.first to it.second.map(MediaItem::id) }) {
+    LaunchedEffect(state.loading, state.playbackPending, item?.id, state.error, sections.map { it.first to it.second.map(MediaItem::id) }) {
+        if (state.playbackPending) {
+            restored = false
+            return@LaunchedEffect
+        }
         if (state.loading && selectedSection != "header") restored = false
         if (!state.loading && !restored) {
             withFrameNanos { }

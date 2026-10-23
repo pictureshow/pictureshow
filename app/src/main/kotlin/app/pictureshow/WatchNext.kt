@@ -12,6 +12,7 @@ import androidx.tvprovider.media.tv.WatchNextProgram
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.imageUrl
+import app.pictureshow.core.displayRuntimeMillis
 import java.security.MessageDigest
 
 internal data class WatchRow(val id: Long, val key: String, val browsable: Boolean, val positionMs: Int = 0, val engagementTime: Long = 0)
@@ -40,8 +41,8 @@ private fun millis(ticks: Long): Int = (ticks.coerceAtLeast(0) / 10_000).coerceA
 // Android's documented builder usage; annotation issue: https://issuetracker.google.com/issues/138150076
 @SuppressLint("RestrictedApi")
 internal fun watchProgram(account: Account, item: MediaItem, next: Boolean, time: Long): WatchNextProgram {
-    val duration = millis(item.runTimeTicks ?: 0)
-    val position = millis(item.userData.playbackPositionTicks).let { if (duration > 0) it.coerceAtMost(duration) else it }
+    val duration = displayRuntimeMillis((item.runTimeTicks ?: 0) / 10_000)?.toInt()
+    val position = millis(item.userData.playbackPositionTicks).let { if (duration != null) it.coerceAtMost(duration) else it }
     val uri = Uri.Builder().scheme("pictureshow").authority("play").appendPath(item.id)
         .appendQueryParameter("positionMs", position.toString()).build()
     val episode = item.type == "Episode"
@@ -63,7 +64,7 @@ internal fun watchProgram(account: Account, item: MediaItem, next: Boolean, time
             imageUrl(account.server, item, 640, 360, wide = true)?.let { setPosterArtUri(it.toUri()) }
         }
         .setPosterArtAspectRatio(TvContractCompat.WatchNextPrograms.ASPECT_RATIO_16_9)
-        .setDurationMillis(duration)
+        .apply { duration?.let { setDurationMillis(it) } }
         .setLastPlaybackPositionMillis(position)
         .setLastEngagementTimeUtcMillis(time)
         .setIntent(Intent(Intent.ACTION_VIEW, uri).setPackage("app.pictureshow"))

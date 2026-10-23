@@ -102,8 +102,14 @@ fun resumeLabel(ticks: Long): String {
     return "Resume from $time"
 }
 
+/** Unknown or implausible totals are omitted without changing the server's playback timeline. */
+fun displayRuntimeMillis(milliseconds: Long): Long? = milliseconds.takeIf { it in 1..86_400_000L }
+
+/** A display safety ceiling, not a correction to the server's playback timeline. */
 fun runtimeLabel(ticks: Long?): String {
-    if (ticks == null || ticks <= 0) return ""
+    // A generous 24-hour display ceiling rejects overflow-derived DVD runtimes. Neither chapters
+    // (start positions) nor an EOF playhead after a seek establishes a replacement total. Omit it.
+    if (ticks == null || ticks !in 1..864_000_000_000L) return ""
     val minutes = (ticks / 600_000_000).coerceAtLeast(1)
     val hours = minutes / 60
     return if (hours > 0) "${hours}h ${minutes % 60}m" else "${minutes}m"

@@ -48,6 +48,23 @@ class PlaybackCompletionTest {
     }
 
     @Test
+    fun refreshPublishesOnlyAcknowledgedCompletionDataAndDiscardsOlderMutationPatches() = runTest {
+        for (alreadyPlayed in listOf(true, false)) {
+            val confirmed = ItemUserData(played = true, isFavorite = true)
+            val service = CatalogModelsTest.FakeCatalog()
+            service.detail = ClientResult.Success(MediaItem("item", userData = if (alreadyPlayed) confirmed else ItemUserData()))
+            service.actionResult = ClientResult.Success(confirmed)
+            val session = CatalogSession(service, accounts)
+            session.changed(MediaItem("older", userData = ItemUserData(played = true)))
+            assertTrue(session.completePlayback(account, "item") is ClientResult.Success)
+            session.refresh()
+            assertEquals(mapOf("item" to confirmed), session.changes.value.users)
+            session.refresh()
+            assertTrue(session.changes.value.users.isEmpty())
+        }
+    }
+
+    @Test
     fun failedUserDataReadDoesNotBlindlyIncrementThePlayCount() = runTest {
         val service = CatalogModelsTest.FakeCatalog()
         service.detail = ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Offline"))

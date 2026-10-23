@@ -19,21 +19,23 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
+import app.pictureshow.core.displayRuntimeMillis
 
 /** Only deliberate interactions update the spoken position, so a focused timeline never chatters on every tick. */
 @Composable
 internal fun PlayerTimeline(positionMs: Long, announcedPositionMs: Long, durationMs: Long, onSeek: (Long) -> Unit) {
-    val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    val total = displayRuntimeMillis(durationMs)
+    val fraction = if (total != null) (positionMs.toFloat() / total).coerceIn(0f, 1f) else 0f
     Box(
         Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray).semantics {
             contentDescription = "Playback position"
             stateDescription =
-                if (durationMs > 0) "${playerTime(announcedPositionMs)} of ${playerTime(durationMs)}" else playerTime(announcedPositionMs)
-            if (durationMs > 0) {
-                progressBarRangeInfo = ProgressBarRangeInfo((announcedPositionMs.toFloat() / durationMs).coerceIn(0f, 1f), 0f..1f)
+                if (total != null) "${playerTime(announcedPositionMs)} of ${playerTime(total)}" else playerTime(announcedPositionMs)
+            if (total != null) {
+                progressBarRangeInfo = ProgressBarRangeInfo((announcedPositionMs.toFloat() / total).coerceIn(0f, 1f), 0f..1f)
                 setProgress { value ->
                     if (value.isFinite()) {
-                        onSeek((durationMs * value.coerceIn(0f, 1f)).toLong())
+                        onSeek((total * value.coerceIn(0f, 1f)).toLong())
                         true
                     } else {
                         false

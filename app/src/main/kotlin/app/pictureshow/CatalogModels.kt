@@ -25,13 +25,33 @@ import kotlinx.coroutines.launch
 
 /** Shared across an account's back stack so detail changes immediately reach existing screens. */
 class CatalogSession(val service: CatalogService, private val accounts: AccountStore, private val onRefresh: () -> Unit = {}) {
-    data class Changes(val revision: Long = 0, val users: Map<String, ItemUserData> = emptyMap(), val refreshRevision: Long = 0)
+    data class Changes(
+        val revision: Long = 0,
+        val users: Map<String, ItemUserData> = emptyMap(),
+        val refreshRevision: Long = 0,
+        val pendingPlayback: Set<String> = emptySet()
+    )
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
+    private var completedUsers = emptyMap<String, ItemUserData>()
+
+    fun playbackPending(itemId: String) {
+        mutableChanges.update { it.copy(pendingPlayback = it.pendingPlayback + itemId) }
+    }
+
+    internal fun playbackCompleted(item: MediaItem) {
+        completedUsers = completedUsers + (item.id to item.userData)
+    }
 
     fun refresh() {
         onRefresh()
-        mutableChanges.update { it.copy(revision = it.revision + 1, refreshRevision = it.refreshRevision + 1, users = emptyMap()) }
+        // Publish the acknowledged completion with the refresh atomically, so retained or newly
+        // opened details cannot show pre-completion state while their fresh server read is pending.
+        val confirmed = completedUsers
+        completedUsers = emptyMap()
+        mutableChanges.update {
+            it.copy(revision = it.revision + 1, refreshRevision = it.refreshRevision + 1, users = confirmed, pendingPlayback = emptySet())
+        }
     }
 
     fun changed(item: MediaItem) {
@@ -196,12 +216,15 @@ data class CatalogDetailState(
     val nextUp: List<MediaItem> = emptyList(),
     val seasons: List<MediaItem> = emptyList(),
     val selectedSeasonId: String? = null,
-    val episodes: List<MediaItem> = emptyList()
+    val episodes: List<MediaItem> = emptyList(),
+    val playbackPending: Boolean = false
 )
 
 class CatalogDetailViewModel(private val account: Account, private val original: MediaItem, private val session: CatalogSession) :
     ViewModel() {
-    private val mutableState = MutableStateFlow(CatalogDetailState(account, original))
+    private val mutableState = MutableStateFlow(
+        CatalogDetailState(account, original, playbackPending = original.id in session.changes.value.pendingPlayback)
+    )
     val state = mutableState.asStateFlow()
     private var job: Job? = null
     private var action: Job? = null
@@ -215,15 +238,15 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             session.changes.collect { changes ->
                 val refreshed = changes.refreshRevision != refreshRevision
                 refreshRevision = changes.refreshRevision
-                // A refresh reads server state after playback reporting. Retained local patches may
-                // predate that report; only apply them for a new local mutation, never on refresh.
-                if (!refreshed) {
-                    mutableState.update { state ->
-                        state.copy(
-                            item = state.item?.let { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
-                            episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item }
-                        )
-                    }
+                // Refresh discards older local mutations and carries only a just-acknowledged
+                // playback completion. Apply that state while loading; the fresh read then wins.
+                mutableState.update { state ->
+                    state.copy(
+                        item = state.item?.let { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
+                        episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
+                        playbackPending = original.id in changes.pendingPlayback ||
+                            (state.playbackPending && !(refreshed && original.id in changes.users))
+                    )
                 }
                 if (changes.revision > 0 && (refreshed || original.type in listOf("Series", "Season"))) reload()
             }
@@ -244,7 +267,9 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                 is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
                 is ClientResult.Success -> {
                     val item = result.value
-                    mutableState.update { it.copy(item = item) }
+                    mutableState.update {
+                        it.copy(item = item, playbackPending = original.id in session.changes.value.pendingPlayback)
+                    }
                     if (item.type == "Series") {
                         val next = session.call(account) { nextUp(account, item.id) }
                         currentCoroutineContext().ensureActive()
@@ -303,7 +328,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     fun favorite() = mutate(false)
 
     private fun mutate(watched: Boolean) {
-        if (action?.isActive == true || state.value.loading) return
+        if (action?.isActive == true || state.value.loading || state.value.playbackPending) return
         val item = state.value.item ?: return
         if (watched && item.isEmptyContainer) return
         val old = item.userData

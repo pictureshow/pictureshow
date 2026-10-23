@@ -119,7 +119,7 @@ class WatchNextTest {
             false,
             1
         )
-        assertEquals(Int.MAX_VALUE, huge.durationMillis)
+        assertFalse(huge.toContentValues().containsKey(TvContractCompat.WatchNextPrograms.COLUMN_DURATION_MILLIS))
         assertEquals(Int.MAX_VALUE, huge.lastPlaybackPositionMillis)
     }
 
