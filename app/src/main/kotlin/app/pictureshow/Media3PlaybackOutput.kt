@@ -33,6 +33,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     var onProgress: (PlayDecision) -> Unit = {}
     var onFailure: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onEnded: () -> Unit = {}
+    var onStop: () -> Unit = {}
     private var current: PlayDecision? = null
     private var saved = PlaybackPosition(0, false)
     private var audio = -1
@@ -124,7 +125,9 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         mutablePlayer.value = next
         next.setMediaItem(PlaybackMedia.item(server, decision, title), positionMs)
         next.playWhenReady = !paused
-        mediaSession = PlaybackMediaSession.open(context, next)
+        mediaSession = PlaybackMediaSession.open(context, next) {
+            if (mutablePlayer.value === next) onStop()
+        }
         next.prepare()
     }
 
