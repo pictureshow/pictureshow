@@ -11,6 +11,7 @@ import io.ktor.http.headersOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 
 class RuntimeDisplayTest {
@@ -36,6 +37,7 @@ class RuntimeDisplayTest {
             "Chapters":[{"StartPositionTicks":0,"Name":"Start"},{"StartPositionTicks":450000000,"Name":"Final chapter"}]}"""
         val http = HttpClient(MockEngine) {
             engine {
+                dispatcher = StandardTestDispatcher(testScheduler)
                 addHandler { request ->
                     respond(
                         if (request.url.encodedPath.endsWith("/film")) item else """{"Items":[$item]}""",
