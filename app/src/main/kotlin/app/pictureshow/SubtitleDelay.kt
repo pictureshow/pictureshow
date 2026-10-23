@@ -25,7 +25,11 @@ internal class SubtitleDelay {
         return true
     }
 
-    fun rendererPositionUs(positionUs: Long): Long = positionUs - milliseconds.toLong() * 1_000
+    /** Full-file external captions keep authored timestamps when video restarts at local zero. */
+    @Volatile
+    var sourceStartMs: Long = 0
+
+    fun rendererPositionUs(positionUs: Long): Long = positionUs + sourceStartMs * 1_000 - milliseconds.toLong() * 1_000
 }
 
 /** Shifts the real text renderer's media clock, covering extraction-time and legacy subtitle decoding. */
