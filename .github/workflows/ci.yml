@@ -19,3 +19,10 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
       - run: ./gradlew check assembleDebug
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: unit-test-reports
+          path: |
+            **/build/test-results/**
+            **/build/reports/tests/**
