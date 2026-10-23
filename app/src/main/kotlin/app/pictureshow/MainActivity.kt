@@ -516,14 +516,7 @@ internal fun Pictureshow(
                 DisposableEffect(Unit) {
                     val probe = DeviceCapabilityProbe(settingsContext)
                     fun update(capabilities: app.pictureshow.core.playback.DeviceCapabilities) {
-                        accepted = capabilities.audioOutput.passthrough.joinToString(", ") {
-                            when (it.codec) {
-                                app.pictureshow.core.playback.AudioCodec.AC3 -> "AC-3"
-                                app.pictureshow.core.playback.AudioCodec.EAC3 -> "E-AC-3"
-                                app.pictureshow.core.playback.AudioCodec.TRUEHD -> "TrueHD"
-                                else -> it.codec.name
-                            }
-                        }.ifEmpty { "PCM only" }
+                        accepted = passthroughEncodingLabels(capabilities.audioOutput.passthrough)
                     }
                     update(probe.snapshot())
                     probe.start(::update)
