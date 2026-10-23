@@ -63,11 +63,12 @@ internal data class PlaybackState(
     val preparing: Boolean = true,
     val error: String? = null,
     val reportError: String? = null,
+    val bufferingSlow: Boolean = false,
     val audioIndex: Int = -1,
     val subtitleIndex: Int = -1
 )
 
-/** All session transitions are ordered, including late decoder callbacks and exit during negotiation. */
+/** Used on the player thread: network transitions are serialized; buffering feedback has its own deadline. */
 internal class PlaybackSession(
     private val gateway: PlaybackGateway,
     private val output: PlaybackOutput,
@@ -86,6 +87,8 @@ internal class PlaybackSession(
     private var closing = false
     private var lastPosition = PlaybackPosition(0, false)
     private var ticker: Job? = null
+    private var bufferingTimer: Job? = null
+    private var bufferingGeneration = 0L
     private val owner = scope
 
     init {
@@ -95,11 +98,13 @@ internal class PlaybackSession(
     }
 
     fun start(positionMs: Long) = enqueue {
-        if (decision == null) negotiate(PlaybackRequest(startPosition = positionMs.coerceAtLeast(0).milliseconds), false)
+        if (decision == null && mutable.value.error == null) {
+            negotiate(PlaybackRequest(startPosition = positionMs.coerceAtLeast(0).milliseconds), false)
+        }
     }
 
     fun ready(source: PlayDecision? = decision) = enqueue {
-        if (source !== decision || ready || decision == null) return@enqueue
+        if (source !== decision || ready || decision == null || mutable.value.error != null) return@enqueue
         ready = true
         mutable.value = mutable.value.copy(preparing = false)
         report(gateway.start(progressInfo()))
@@ -112,11 +117,45 @@ internal class PlaybackSession(
         }
     }
 
+    /** Called on the player thread. Feedback must not wait behind a suspending session report. */
+    fun buffering(waiting: Boolean, source: PlayDecision? = decision) {
+        if (closing || source !== decision || decision == null || mutable.value.error != null) return
+        if (!waiting) {
+            cancelBuffering()
+        } else if (bufferingTimer == null) {
+            val generation = ++bufferingGeneration
+            bufferingTimer = owner.launch {
+                delay(10_000)
+                if (source !== decision || generation != bufferingGeneration || closing) return@launch
+                mutable.value = mutable.value.copy(bufferingSlow = true)
+                delay(35_000)
+                if (source !== decision || generation != bufferingGeneration || closing) return@launch
+                capture()
+                // Detach immediately, even while the command consumer awaits a slow report.
+                mutable.value = mutable.value.copy(
+                    preparing = false,
+                    bufferingSlow = false,
+                    error = "Playback is taking too long to resume. Return to details and try again."
+                )
+                output.release()
+                enqueue { if (source === decision) finishDecision(failed = true) }
+            }
+        }
+    }
+
+    private fun cancelBuffering() {
+        bufferingGeneration++
+        bufferingTimer?.cancel()
+        bufferingTimer = null
+        mutable.value = mutable.value.copy(bufferingSlow = false)
+    }
+
     fun progress(source: PlayDecision? = decision) = enqueue {
-        if (source === decision && ready) report(gateway.progress(progressInfo()))
+        if (source === decision && ready && mutable.value.error == null) report(gateway.progress(progressInfo()))
     }
 
     fun select(type: MediaStreamType, index: Int) = enqueue {
+        if (mutable.value.error != null) return@enqueue
         if (type !in listOf(MediaStreamType.Audio, MediaStreamType.Subtitle)) return@enqueue
         val current = decision ?: return@enqueue
         capture()
@@ -143,6 +182,7 @@ internal class PlaybackSession(
     }
 
     fun routeChanged() = enqueue {
+        if (mutable.value.error != null) return@enqueue
         val current = decision ?: return@enqueue
         capture()
         finishDecision()
@@ -158,7 +198,7 @@ internal class PlaybackSession(
     }
 
     fun failed(canRetryWithTranscode: Boolean, source: PlayDecision? = decision) = enqueue {
-        if (source !== decision) return@enqueue
+        if (mutable.value.error != null || source !== decision) return@enqueue
         val current = decision ?: return@enqueue
         capture()
         val retry = canRetryWithTranscode && current.method != PlayMethod.Transcode && !fallbackUsed
@@ -195,6 +235,7 @@ internal class PlaybackSession(
             if (!closed) {
                 closed = true
                 ticker?.cancel()
+                cancelBuffering()
                 finishDecision()
                 onFinished()
                 afterFinished()
@@ -265,6 +306,7 @@ internal class PlaybackSession(
     }
 
     private suspend fun finishDecision(failed: Boolean = false) {
+        cancelBuffering()
         ticker?.cancel()
         val current = decision ?: return
         // Freeze the snapshot and detach callbacks before any suspending reports or new negotiation.

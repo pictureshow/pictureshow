@@ -29,6 +29,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     private val mutablePlayer = MutableStateFlow<ExoPlayer?>(null)
     val player = mutablePlayer.asStateFlow()
     var onReady: (PlayDecision) -> Unit = {}
+    var onBuffering: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onProgress: (PlayDecision) -> Unit = {}
     var onFailure: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onEnded: () -> Unit = {}
@@ -82,6 +83,12 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
         listener = object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (mutablePlayer.value === next) {
+                    onBuffering(player.playbackState == Player.STATE_BUFFERING && player.playWhenReady, decision)
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (mutablePlayer.value !== next) return
                 if (playbackState == Player.STATE_READY) onReady(decision)

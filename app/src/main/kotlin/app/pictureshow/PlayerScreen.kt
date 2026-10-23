@@ -207,6 +207,7 @@ private fun PlayerItemScreen(
             }
             controller = session
             output.onReady = { session.ready(it) }
+            output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
             output.onProgress = { session.progress(it) }
             output.onFailure = { retry, source -> session.failed(retry, source) }
             output.onEnded = {
@@ -309,8 +310,14 @@ private fun PlayerItemScreen(
         ContentFrame(player, Modifier.fillMaxSize())
         PlayerSubtitles(player, localPreferences.appearance)
         if (switching) Text("Starting next episode…", modifier = Modifier.align(Alignment.Center))
-        if (state.preparing && setupError == null && !switching) {
+        if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
             Text("Preparing playback…", modifier = Modifier.align(Alignment.Center))
+        }
+        if (state.bufferingSlow && error == null && !switching) {
+            Text(
+                "Still waiting for playback. You can go back and try again.",
+                modifier = Modifier.align(Alignment.Center).background(Color(0xEE10131C)).padding(24.dp)
+            )
         }
         if (error != null) {
             Column(Modifier.align(Alignment.Center).widthIn(max = 720.dp).background(Color(0xEE10131C)).padding(32.dp)) {
