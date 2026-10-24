@@ -78,15 +78,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.text
 import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -426,13 +427,24 @@ fun CatalogGrid(
     Column(
         modifier = Modifier.fillMaxSize().background(
             CatalogBackground
-        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup(),
+        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup().semantics {
+            if (restored) paneTitle = state.parent.name
+        },
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CatalogHeading(state.parent.name)
         Text(itemCountLabel(state.total), color = CatalogMuted, modifier = Modifier.testTag("grid:count"))
         if (showSort) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            FlowRow(
+                modifier = Modifier.accessibilityGroup().semantics {
+                    traversalIndex = 1f
+                }.then(
+                    // Keep the visual/input controls while withholding their early accessibility targets.
+                    if (!restored) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+                ),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 val sorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
                 sorts.forEachIndexed { index, (sort, title) ->
                     Button(
@@ -471,7 +483,7 @@ fun CatalogGrid(
         LazyVerticalGrid(
             columns = GridCells.Adaptive(144.dp),
             state = grid,
-            modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
+            modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer().testTag("grid:items").semantics { traversalIndex = 0f },
             // Poster height grows more than width; the grid clips along its vertical axis.
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -502,7 +514,7 @@ fun CatalogGrid(
     LaunchedEffect(state.items.map(MediaItem::id), state.loading) {
         if (!state.loading && !restored) {
             withFrameNanos { }
-            if (state.items.isNotEmpty()) {
+            val focused = if (state.items.isNotEmpty()) {
                 val index = state.items.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
                 if (grid.layoutInfo.visibleItemsInfo.none { it.index == index }) grid.scrollToItem(index)
                 withFrameNanos { }
@@ -510,9 +522,10 @@ fun CatalogGrid(
             } else if (state.error != null) {
                 retry.requestFocus()
             } else {
-                if (showSort) firstSort.requestFocus()
+                if (showSort) firstSort.requestFocus() else true
             }
-            restored = true
+            // A failed card request uses the existing sort fallback instead of leaving controls hidden.
+            restored = focused || (showSort && firstSort.requestFocus())
         }
     }
     LaunchedEffect(grid, state.items.size) {
@@ -814,6 +827,15 @@ private fun DetailActions(
             onClick = { playItem?.let { onPlay(it, position > 0) } },
             enabled = playItem != null,
             modifier = (if (playItem != null) Modifier.focusRequester(initial) else Modifier).testTag("detail:play")
+                .then(
+                    if (playItem == null &&
+                        item.type in listOf("Series", "Season")
+                    ) {
+                        Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                    } else {
+                        Modifier
+                    }
+                )
         ) { Text(if (position > 0) resumeLabel(position) else "Play") }
         if (position > 0) {
             Button(onClick = { playItem?.let { onPlay(it, false) } }) { Text("Play from start") }
@@ -925,11 +947,8 @@ internal fun CatalogCard(
     var focused by remember { mutableStateOf(false) }
     val selection = Modifier.semantics {
         role = Role.Button
-        // Retain one title for text navigation; screen readers prefer the complete description.
-        text = AnnotatedString(item.name)
         if (item.type == "Season") this.selected = selected
-        // Keep the existing selected-season wording as well as the explicit selected state.
-        contentDescription = catalogAnnouncement(item) + if (selected) ", selected season" else ""
+        contentDescription = catalogAnnouncement(item)
         onClick(
             label = when (item.type) {
                 "Season" -> "Open season"

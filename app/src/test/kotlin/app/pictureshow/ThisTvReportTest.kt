@@ -51,7 +51,7 @@ class ThisTvReportTest {
         val report = thisTvReport(capabilities, "0.1.0", "11 (API 30)", "HDMI", listOf("dts"))
         assertEquals(DeviceProfileBuilder.build(capabilities), PlaybackJson.decodeFromString<DeviceProfile>(report.profileJson))
         listOf(
-            "HEVC", "hardware", "3840", "2160", "30.0", "HDR10", "DOLBY_VISION", "8",
+            "HEVC", "hardware", "3840", "2160", "30 fps", "HDR10", "DOLBY_VISION", "8",
             "HDMI", "AC3", "PCM", "2", "dts", "40 Mbps", "0.1.0", "API 30"
         ).forEach {
             assertTrue(report.summary.contains(it), "Missing $it in ${report.summary}")

@@ -25,16 +25,23 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
@@ -93,18 +100,52 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
     // Preserve original indexes: the image API uses the chapter's index in the server DTO.
     val current = chapters.indexOfLast { it.startMs <= positionMs }.coerceAtLeast(0)
     val initial = remember { FocusRequester() }
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    val host = LocalView.current
+    val accessible = rememberAccessibilityEnabled()
+    var initialFocusReady by remember(accessible) { mutableStateOf(!accessible) }
+    val initialCurrent = remember(accessible) { current }
+    // Keep one arrival target while TalkBack acknowledges it; playback may cross a boundary.
+    val focusIndex = if (initialFocusReady) current else initialCurrent
     val list = rememberLazyListState(initialFirstVisibleItemIndex = current)
-    Column(Modifier.background(Color(0xF510131C)).padding(32.dp)) {
-        Text("Chapters", color = Color.White, style = MaterialTheme.typography.headlineSmall)
-        LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        Modifier.background(Color(0xF510131C)).padding(32.dp)
+            .focusProperties { onEnter = { if (chapters.isNotEmpty()) initial.requestFocus() } }
+            .focusGroup()
+    ) {
+        Text(
+            "Chapters",
+            color = Color.White,
+            style = MaterialTheme.typography.headlineSmall,
+            // The window/pane announces Chapters; entry focus chooses the current row.
+            modifier = Modifier.clearAndSetSemantics { hideFromAccessibility() }
+        )
+        LazyColumn(
+            state = list,
+            modifier = Modifier.semantics {
+                isTraversalGroup = true
+                traversalIndex = 0f
+            },
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             itemsIndexed(chapters) { index, chapter ->
                 Button(
                     onClick = { onSeek(chapter.startMs) },
-                    modifier = Modifier.testTag("chapter:$index").semantics { selected = index == current }.then(
+                    modifier = Modifier.testTag("chapter:$index").semantics {
+                        selected = index == focusIndex
+                        traversalIndex =
+                            if (index == focusIndex) -1f else 0f
+                    }.then(
                         if (index ==
-                            current
+                            focusIndex
                         ) {
                             Modifier.focusRequester(initial)
+                        } else {
+                            Modifier
+                        }
+                    ).then(
+                        if (!initialFocusReady && index != initialCurrent) {
+                            Modifier.clearAndSetSemantics { hideFromAccessibility() }
                         } else {
                             Modifier
                         }
@@ -124,11 +165,17 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
             }
         }
     }
-    LaunchedEffect(Unit) {
-        if (chapters.isNotEmpty()) {
-            list.scrollToItem(current)
-            androidx.compose.runtime.withFrameNanos { }
-            initial.requestFocus()
+    LaunchedEffect(windowFocused, accessible) {
+        if (windowFocused) {
+            if (chapters.isNotEmpty()) {
+                list.scrollToItem(focusIndex)
+                androidx.compose.runtime.withFrameNanos { }
+                initial.requestFocus()
+            }
+            if (!initialFocusReady) {
+                awaitInitialPlayerPanelFocus(host)
+                initialFocusReady = true
+            }
         }
     }
 }
@@ -179,7 +226,15 @@ internal fun NextEpisodeControl(
             val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
             Text(
                 if (autoPlay) "Next episode · $seconds" else "Next episode",
-                modifier = Modifier.semantics { heading() },
+                modifier = if (autoPlay) {
+                    Modifier.semantics { heading() }
+                } else {
+                    Modifier.clearAndSetSemantics {
+                        heading()
+                        liveRegion = LiveRegionMode.Polite
+                        contentDescription = "Next episode, ${catalogAnnouncement(next)}"
+                    }
+                },
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium
             )

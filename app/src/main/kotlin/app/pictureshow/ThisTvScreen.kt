@@ -56,7 +56,9 @@ internal suspend fun captureThisTv(context: Context, preferences: PlaybackPrefer
             }
         }.distinct().joinToString(", ").ifEmpty { "Not reported" }
     val display = context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
-    val currentMode = display?.mode?.let { "${it.physicalWidth} × ${it.physicalHeight} at ${it.refreshRate} Hz" } ?: "Not reported"
+    val currentMode =
+        display?.mode?.let { "${it.physicalWidth} × ${it.physicalHeight} at ${displayRate(it.refreshRate.toDouble())} Hz" }
+            ?: "Not reported"
     val ffmpeg = mapOf(
         AudioCodec.AAC to "audio/mp4a-latm", AudioCodec.AC3 to "audio/ac3", AudioCodec.EAC3 to "audio/eac3",
         AudioCodec.TRUEHD to "audio/true-hd", AudioCodec.DTS to "audio/vnd.dts", AudioCodec.FLAC to "audio/flac",

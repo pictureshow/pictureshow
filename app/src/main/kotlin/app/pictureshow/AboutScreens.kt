@@ -32,7 +32,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -78,7 +81,7 @@ private fun AboutScreen(onLicenses: () -> Unit, onBack: () -> Unit) {
         Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Pictureshow", style = MaterialTheme.typography.headlineLarge)
+        Text("Pictureshow", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
         Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         Text("Free and open-source under the Mozilla Public License 2.0")
         Text("Made by Legitimate LLC")
@@ -126,16 +129,15 @@ private fun LicenseListScreen(onOpen: (Int) -> Unit, onBack: () -> Unit) {
     }
 }
 
-/** Wrap long notice/source lines too: every focused block fits on a small TV viewport. */
-internal fun licenseTextChunks(text: String): List<String> = text.lines().flatMap { line ->
-    if (line.isEmpty()) listOf("") else line.chunked(80)
-}.chunked(7).map { it.joinToString("\n") }
+/** The same word-boundary blocks as This TV: every focused block fits a TV viewport and no word is cut in two. */
+internal fun licenseTextChunks(text: String, fontScale: Float = 1f): List<String> = diagnosticTextChunks(text, fontScale)
 
 @Composable
 private fun LicenseTextScreen(library: LicenseEntry, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val first = remember { FocusRequester() }
-    val chunks = remember(library.id) { licenseTextChunks(library.text) }
+    val fontScale = LocalDensity.current.fontScale
+    val chunks = remember(library.id, fontScale) { licenseTextChunks(library.text, fontScale) }
     Column(
         Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)

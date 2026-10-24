@@ -92,7 +92,13 @@ internal fun PlaybackToggle(paused: Boolean, showPlayButton: Boolean, modifier: 
     Button(
         onClick = onClick,
         modifier = modifier.semantics {
-            stateDescription = if (paused) "Paused" else "Playing"
+            stateDescription = if (paused) {
+                "Paused"
+            } else if (showPlayButton) {
+                "Not playing"
+            } else {
+                "Playing"
+            }
         }
     ) {
         Text(if (showPlayButton) "Play" else "Pause")

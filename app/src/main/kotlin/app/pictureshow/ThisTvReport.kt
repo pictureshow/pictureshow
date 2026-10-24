@@ -6,6 +6,8 @@ package app.pictureshow
 import app.pictureshow.core.playback.DeviceCapabilities
 import app.pictureshow.core.playback.DeviceProfileBuilder
 import app.pictureshow.core.playback.PlaybackJson
+import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlinx.serialization.json.Json
 
 internal data class ThisTvReport(val summary: String, val profileJson: String) {
@@ -28,8 +30,11 @@ internal fun thisTvReport(
         appendLine("Video decoders (reported limits)")
         capabilities.videoDecoders.forEach { decoder ->
             appendLine("${decoder.codec} · ${if (decoder.hardware) "hardware" else "software"}")
+            val atMaxSize = displayRate(decoder.maxFrameRateAtMaxSize)
             appendLine(
-                "  ${decoder.maxWidth} × ${decoder.maxHeight} at ${decoder.maxFrameRateAtMaxSize} fps; up to ${decoder.maxFrameRate} fps at 1080p or below"
+                "  ${decoder.maxWidth} × ${decoder.maxHeight} at $atMaxSize fps; up to ${displayRate(
+                    decoder.maxFrameRate
+                )} fps at 1080p or below"
             )
             appendLine(
                 "  ${decoder.maxBitDepth}-bit; profiles: ${decoder.profiles.joinToString()}; level: ${decoder.maxLevel?.let {
@@ -48,12 +53,15 @@ internal fun thisTvReport(
                     } ?: "unknown"}, HDR ${tuple.hdrFormats.joinToString().ifEmpty { "none" }}"
                 )
             }
-            decoder.sustainablePerformance?.let { appendLine("  Real-time evidence: ${it.width} × ${it.height} at ${it.frameRate} fps") }
+            decoder.sustainablePerformance?.let {
+                appendLine("  Real-time evidence: ${it.width} × ${it.height} at ${displayRate(it.frameRate)} fps")
+            }
             appendLine()
         }
         if (capabilities.videoDecoders.isEmpty()) appendLine("No video decoder capabilities reported")
         val display = capabilities.display
-        appendLine("Display maximum reported mode: ${display.maxWidth} × ${display.maxHeight} at ${display.maxRefreshRate} Hz")
+        val refresh = displayRate(display.maxRefreshRate)
+        appendLine("Display maximum reported mode: ${display.maxWidth} × ${display.maxHeight} at $refresh Hz")
         appendLine("Display HDR: ${display.hdrFormats.joinToString().ifEmpty { "none reported" }}")
         appendLine()
         appendLine("Audio output: $route")
@@ -69,4 +77,11 @@ internal fun thisTvReport(
         )
     }
     return ThisTvReport(summary, json)
+}
+
+/** Reported rates are measured doubles; people read at most two decimals ("23.98", "60", "119.12"). The JSON keeps raw values. */
+internal fun displayRate(value: Double): String {
+    if (!value.isFinite()) return value.toString()
+    val rounded = BigDecimal(value).setScale(2, RoundingMode.HALF_UP)
+    return if (rounded.signum() == 0) "0" else rounded.stripTrailingZeros().toPlainString()
 }

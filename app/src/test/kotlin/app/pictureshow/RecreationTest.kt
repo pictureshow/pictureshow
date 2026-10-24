@@ -21,6 +21,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -184,7 +185,13 @@ class RecreationTest {
             searchEntry = query
             entrySequence++
         }
-        waitFor("$query result")
+        waitForCard("$query result")
+    }
+
+    // Card titles are announced through one merged label rather than a duplicate Text node.
+    private fun waitForCard(label: String) {
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription(label).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
     }
 
     private fun replaceSearch(query: String) {
@@ -201,7 +208,7 @@ class RecreationTest {
         replaceSearch("")
         recreateActivity()
         compose.onNodeWithTag("search:field").assertTextEquals("")
-        compose.onNodeWithText("original result").assertDoesNotExist()
+        compose.onNodeWithContentDescription("original result").assertDoesNotExist()
         externalSearch("fresh")
         compose.onNodeWithTag("search:field").assertTextEquals("fresh")
         // Even the same original intent is a fresh entry, not a restored query.
@@ -214,11 +221,11 @@ class RecreationTest {
         launch(signedIn = true, activityRecreation = true)
         externalSearch("original")
         replaceSearch("edited")
-        waitFor("edited result")
+        waitForCard("edited result")
         recreateActivity()
         compose.onNodeWithTag("search:field").assertTextEquals("edited")
-        waitFor("edited result")
-        compose.onNodeWithText("original result").assertDoesNotExist()
+        waitForCard("edited result")
+        compose.onNodeWithContentDescription("original result").assertDoesNotExist()
     }
 
     @Test

@@ -10,15 +10,33 @@ import android.content.Context
 import android.media.session.MediaController
 import android.view.KeyEvent
 import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 
 /** Foreground video session: advertise the actual player, never a second hand-maintained playback state. */
 internal object PlaybackMediaSession {
     private var active: Handle? = null
+    private val openingMetadata = ThreadLocal<MediaMetadata?>()
+
+    /** The synchronous output-open call owns this scope, including decoder replacements and failures. */
+    fun <T> withMetadata(metadata: MediaMetadata, open: () -> T): T {
+        val previous = openingMetadata.get()
+        openingMetadata.set(metadata)
+        return try {
+            open()
+        } finally {
+            openingMetadata.set(previous)
+        }
+    }
+
+    private fun applyOpeningMetadata(player: Player) {
+        openingMetadata.get()?.let { updatePlaybackMetadata(player, it) }
+    }
 
     fun open(context: Context, player: Player, onStop: (() -> Unit)? = null): Handle {
         active?.close()
+        applyOpeningMetadata(player)
         return Handle(context, player, onStop).also { active = it }
     }
 
@@ -66,7 +84,10 @@ internal object PlaybackMediaSession {
 
         /** Keep the platform token and external controllers alive while replacing only the decoder. */
         fun replacePlayer(player: Player) {
-            if (!closed) session.setPlayer(sessionPlayer(player))
+            if (!closed) {
+                applyOpeningMetadata(player)
+                session.setPlayer(sessionPlayer(player))
+            }
         }
 
         fun close() {

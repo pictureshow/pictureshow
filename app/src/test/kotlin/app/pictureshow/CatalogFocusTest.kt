@@ -223,7 +223,7 @@ class CatalogFocusTest {
         compose.onNodeWithTag("detail:play").assertIsFocused()
         key(Key.DirectionDown)
         compose.onNodeWithTag("detail:seasons:season-2").assertIsFocused().assertIsSelected()
-            .assertContentDescriptionEquals("Season 2, selected season")
+            .assertContentDescriptionEquals("Season 2")
         compose.onNodeWithText("Season 2 ✓").assertDoesNotExist()
         compose.mainClock.autoAdvance = false
         key(Key.DirectionRight)

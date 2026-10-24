@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -53,10 +51,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -146,6 +144,7 @@ private fun PlayerItemScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val view = LocalView.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
     val accessibleControls = rememberAccessibilityEnabled()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val http: HttpClient = koinInject()
@@ -181,6 +180,13 @@ private fun PlayerItemScreen(
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
     val errorFocus = remember { FocusRequester() }
+    val audioFocus = remember { FocusRequester() }
+    val subtitleFocus = remember { FocusRequester() }
+    val chaptersFocus = remember { FocusRequester() }
+    val timelineFocus = remember { FocusRequester() }
+    var seekOpen by remember { mutableStateOf(false) }
+    var seekPosition by remember { mutableLongStateOf(startMs) }
+    var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
     val error = setupError ?: state.error
     var metadata by remember { mutableStateOf(item) }
     var segments by remember { mutableStateOf(emptyList<MediaSegment>()) }
@@ -218,6 +224,7 @@ private fun PlayerItemScreen(
         val target = ((seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
         active.seekTo(target)
         position = target
+        seekPosition = target
         seekPreview = target
         controls = true
         interaction++
@@ -228,11 +235,15 @@ private fun PlayerItemScreen(
             switching -> finish(reason = "back-during-next")
             chaptersOpen -> {
                 chaptersOpen = false
-                rootFocus.requestFocus()
+                returnFocus = chaptersFocus
+            }
+            seekOpen -> {
+                seekOpen = false
+                returnFocus = timelineFocus
             }
             chooser != null -> {
+                returnFocus = if (chooser == MediaStreamType.Audio) audioFocus else subtitleFocus
                 chooser = null
-                rootFocus.requestFocus()
             }
             controls -> {
                 controls = false
@@ -264,7 +275,7 @@ private fun PlayerItemScreen(
                 ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
                     catalog.completePlayback(account, item.id)
                 },
-                output,
+                MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
                 reportScope,
                 Locale.getDefault().language,
                 onFinished = { catalog.refresh(item.id) },
@@ -299,6 +310,7 @@ private fun PlayerItemScreen(
         val client = extras ?: return@LaunchedEffect
         (client.item(account, item.id) as? ClientResult.Success)?.value?.let { metadata = it }
     }
+    LaunchedEffect(player, metadata) { player?.let { updatePlaybackMetadata(it, metadata) } }
     LaunchedEffect(extras, item.id) {
         val client = extras ?: return@LaunchedEffect
         segments = (client.segments(account, item.id) as? ClientResult.Success)?.value.orEmpty()
@@ -319,6 +331,20 @@ private fun PlayerItemScreen(
             focusControls = false
         }
     }
+    LaunchedEffect(accessibleControls) {
+        if (accessibleControls) {
+            controls = true
+            focusControls = true
+        }
+    }
+    LaunchedEffect(returnFocus, chooser, chaptersOpen, seekOpen, windowFocused) {
+        val target = returnFocus
+        if (target != null && windowFocused && chooser == null && !chaptersOpen && !seekOpen) {
+            androidx.compose.runtime.withFrameNanos { }
+            target.requestFocus()
+            returnFocus = null
+        }
+    }
     LaunchedEffect(player) {
         while (true) {
             player?.let {
@@ -329,7 +355,7 @@ private fun PlayerItemScreen(
             delay(500)
         }
     }
-    ControlsAutoHide(controls, accessibleControls || paused || actionsFocused || chooser != null || chaptersOpen, interaction) {
+    ControlsAutoHide(controls, accessibleControls || paused || actionsFocused || chooser != null || chaptersOpen || seekOpen, interaction) {
         controls = false
         rootFocus.requestFocus()
     }
@@ -360,7 +386,7 @@ private fun PlayerItemScreen(
             .focusRequester(rootFocus)
             .onFocusChanged { rootFocused = it.isFocused }
             .playerRemoteKeys(
-                enabled = chooser == null && !chaptersOpen && error == null && !switching,
+                enabled = chooser == null && !chaptersOpen && !seekOpen && error == null && !switching,
                 rootFocused = rootFocused,
                 seek = ::seek,
                 showControls = {
@@ -391,8 +417,8 @@ private fun PlayerItemScreen(
             .focusable()
     ) {
         ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
-        val controlsVisible = controls && chooser == null && !chaptersOpen && error == null && !switching
-        val actionsVisible = chooser == null && !chaptersOpen && error == null && !switching
+        val controlsVisible = controls && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
+        val actionsVisible = chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
         val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
         PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop))
         if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
@@ -433,28 +459,31 @@ private fun PlayerItemScreen(
                 // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                 // The visual clock keeps moving; it is not a live accessibility announcement.
                 val announcedPosition = remember(paused, seekPreview, duration) { position }
-                PlayerTimeline(position, announcedPosition, duration) { target ->
-                    player?.seekTo(target)
-                    position = target
-                    seekPreview = target
-                    interaction++
-                }
-                val clock = playerClock(position, duration, paused)
-                Text("$clock  ·  ← / → seek 10 seconds", modifier = Modifier.clearAndSetSemantics {})
+                PlayerTimeline(
+                    position,
+                    announcedPosition,
+                    duration,
+                    modifier = Modifier.focusRequester(timelineFocus),
+                    paused = paused,
+                    onOpenSeek = {
+                        seekPosition = player?.currentPosition ?: position
+                        seekOpen = true
+                    }
+                )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus)) {
                         player?.togglePlayback()
                         interaction++
                     }
-                    Button(onClick = { chooser = MediaStreamType.Audio }) { Text("Audio") }
+                    Button(onClick = { chooser = MediaStreamType.Audio }, modifier = Modifier.focusRequester(audioFocus)) { Text("Audio") }
                     Button(onClick = {
                         chooser = MediaStreamType.Subtitle
-                    }) { Text("Subtitles") }
+                    }, modifier = Modifier.focusRequester(subtitleFocus)) { Text("Subtitles") }
                     if (metadata.chapters.isNotEmpty()) {
                         Button(onClick = {
                             chaptersOpen = true
                             seekPreview = null
-                        }) { Text("Chapters") }
+                        }, modifier = Modifier.focusRequester(chaptersFocus)) { Text("Chapters") }
                     }
                     Button(onClick = { finish(reason = "stop-button") }) { Text("Stop") }
                 }
@@ -486,14 +515,28 @@ private fun PlayerItemScreen(
                 }
             }
         }
+        if (seekOpen && error == null) {
+            PlayerPanel("Seek", {
+                seekOpen = false
+                returnFocus = timelineFocus
+            }) {
+                SeekPanel(seekPosition, duration, ::seek) {
+                    seekOpen = false
+                    returnFocus = timelineFocus
+                }
+            }
+        }
         if (chaptersOpen && error == null) {
-            Box(Modifier.align(Alignment.CenterEnd).widthIn(min = 400.dp, max = 680.dp).fillMaxSize(0.85f)) {
+            PlayerPanel("Chapters", {
+                chaptersOpen = false
+                returnFocus = chaptersFocus
+            }, scrollable = false) {
                 ChapterPanel(account, item.id, metadata.chapters, position) { target ->
                     player?.seekTo(target)
                     position = target
                     chaptersOpen = false
                     interaction++
-                    rootFocus.requestFocus()
+                    returnFocus = chaptersFocus
                 }
             }
         }
@@ -501,47 +544,37 @@ private fun PlayerItemScreen(
             val streams = state.decision?.mediaSource?.mediaStreams.orEmpty().filter { it.type == type }
             val selected = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
             val labels = trackLabels(streams)
-            val choiceFocus = remember(type) { FocusRequester() }
-            Column(
-                Modifier.align(Alignment.CenterEnd).widthIn(min = 400.dp, max = 680.dp).fillMaxSize(0.85f)
-                    .background(Color(0xF510131C)).verticalScroll(rememberScrollState()).padding(32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(if (type == MediaStreamType.Audio) "Audio" else "Subtitles", style = MaterialTheme.typography.headlineSmall)
-                (
-                    listOf(-1 to "Off") + streams.mapIndexed { i, stream -> stream.index to labels[i] }
-                    ).forEach { (index, label) ->
-                    Button(
-                        onClick = {
-                            controller?.select(type, index)
-                            chooser = null
-                            interaction++
-                            rootFocus.requestFocus()
-                        },
-                        modifier = Modifier.semantics { this.selected = index == selected }.then(
-                            if (index == selected ||
-                                (selected !in streams.map { it.index } && index == -1)
-                            ) {
-                                Modifier.focusRequester(choiceFocus)
-                            } else {
-                                Modifier
-                            }
-                        )
-                    ) { Text(if (index == selected) "$label · selected" else label) }
-                }
-                if (type == MediaStreamType.Subtitle) {
-                    val burnedIn = streams.firstOrNull { it.index == selected }?.deliveryMethod ==
-                        app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode
-                    if (burnedIn) {
-                        Text("These subtitles are burned into the video. Timing and appearance cannot be changed during playback.")
-                    }
-                    SubtitleDelayControls(subtitleDelayMs, !burnedIn) {
-                        subtitleDelayMs = it
-                        output.setSubtitleDelayMs(it)
+            val title = if (type == MediaStreamType.Audio) "Audio" else "Subtitles"
+            PlayerPanel(title, {
+                chooser = null
+                returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
+            }, scrollable = false) {
+                TrackChoices(
+                    listOf(-1 to "Off") + streams.mapIndexed { i, stream ->
+                        stream.index to labels[i]
+                    },
+                    selected,
+                    onSelect = { index ->
+                        controller?.select(type, index)
+                        chooser = null
+                        interaction++
+                        returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
+                    },
+                    title = title
+                ) {
+                    if (type == MediaStreamType.Subtitle) {
+                        val burnedIn = streams.firstOrNull { it.index == selected }?.deliveryMethod ==
+                            app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode
+                        if (burnedIn) {
+                            Text("These subtitles are burned into the video. Timing and appearance cannot be changed during playback.")
+                        }
+                        SubtitleDelayControls(subtitleDelayMs, !burnedIn) {
+                            subtitleDelayMs = it
+                            output.setSubtitleDelayMs(it)
+                        }
                     }
                 }
             }
-            LaunchedEffect(type) { choiceFocus.requestFocus() }
         }
     }
 }

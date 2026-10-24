@@ -43,16 +43,14 @@ class AccessibilityPlayerTest {
     @Test
     fun playbackClockDoesNotChangeItsSpokenPositionOnEachVisualTickAndAccessibleSeekWorks() {
         val position = mutableLongStateOf(30_000)
-        var seek = -1L
-        compose.setContent { PictureshowTheme { PlayerTimeline(position.longValue, 30_000, 120_000) { seek = it } } }
+        var opened = false
+        compose.setContent { PictureshowTheme { PlayerTimeline(position.longValue, 30_000, 120_000, onOpenSeek = { opened = true }) } }
         val timeline = compose.onNodeWithContentDescription("Playback position")
         timeline.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "0:30 of 2:00"))
         compose.runOnIdle { position.longValue = 31_000 }
         timeline.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "0:30 of 2:00"))
-        timeline.performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(.5f)) }
-        assertEquals(60_000, seek)
-        timeline.performSemanticsAction(SemanticsActions.SetProgress) { assertEquals(false, it(Float.NaN)) }
-        assertEquals(60_000, seek)
+        timeline.performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        assertTrue(opened)
     }
 
     @Test

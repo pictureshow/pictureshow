@@ -12,6 +12,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.tv.material3.Button
@@ -41,7 +43,13 @@ internal fun SubtitleDelayControls(delayMs: Int, enabled: Boolean, onChange: (In
         }
     ) {
         Text("Subtitle delay: ${String.format(Locale.ROOT, "%+.1f s", delayMs / 1000.0)}")
-        Text("Positive delay shows subtitles later. Applies to this playback only. ← / → adjusts.")
+        Text(
+            "Positive delay shows subtitles later. Applies to this playback only. ← / → adjusts.",
+            modifier = Modifier.clearAndSetSemantics {
+                contentDescription =
+                    "Positive delay shows subtitles later. Applies to this playback only. Use Subtitles earlier or Subtitles later to adjust."
+            }
+        )
         Button(
             onClick = { adjust(-100) },
             enabled = enabled && delayMs > -10_000,

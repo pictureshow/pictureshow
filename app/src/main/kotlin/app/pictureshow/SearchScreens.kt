@@ -52,6 +52,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -141,7 +142,15 @@ fun SearchScreen(
         ).padding(horizontal = 48.dp, vertical = 24.dp).testTag("search").accessibilityGroup(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Search", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+        Text(
+            "Search",
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.fillMaxWidth().semantics {
+                heading()
+                traversalIndex =
+                    -2f
+            }
+        )
         InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
             BasicTextField(
                 value = state.query,
@@ -170,7 +179,10 @@ fun SearchScreen(
                     }
                 ),
                 modifier = Modifier.fillMaxWidth().focusRequester(field).testTag("search:field")
-                    .semantics { contentDescription = "Search your video library" }
+                    .semantics {
+                        contentDescription = "Search your video library"
+                        traversalIndex = -1f
+                    }
                     .editWithKeyboard {
                         field.requestFocus()
                         editing = true
@@ -266,11 +278,23 @@ fun SearchScreen(
         } else if (state.completed && state.rows.isEmpty()) {
             Text("No results for “${normalizeSearch(state.query)}”")
         }
-        LazyColumn(state = list, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        LazyColumn(
+            state = list,
+            modifier = Modifier.weight(1f).semantics {
+                traversalIndex = 1f
+            },
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
             state.rows.forEachIndexed { rowIndex, row ->
                 item(key = row.key) {
                     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(row.title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                        Text(
+                            row.title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.fillMaxWidth().semantics {
+                                heading()
+                            }
+                        )
                         LazyRow(
                             state = rowStates.getValue(row.key),
                             contentPadding = PaddingValues(16.dp),

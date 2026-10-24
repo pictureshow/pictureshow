@@ -15,6 +15,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,6 +79,9 @@ internal fun SupporterScreen(state: SupporterState, onPurchase: () -> Unit, onBa
         Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // TalkBack on TV moves by spatial search, scoring candidates by their horizontal center as well as distance.
+        // A short line (the price) between wide ones lost to the line after it, so reading lines span the full width;
+        // left-aligned text without a background looks the same.
         // Unavailable still says what supporting is (the approved Offer copy, unchanged) and why this TV can't
         // subscribe, in a focused panel so the remote lands somewhere visible. Remote Back leaves; there is no
         // alternative payment route.
@@ -85,47 +89,48 @@ internal fun SupporterScreen(state: SupporterState, onPurchase: () -> Unit, onBa
             Text(
                 stringResource(R.string.supporter_title),
                 style = MaterialTheme.typography.headlineLarge,
-                modifier = Modifier.semantics {
+                modifier = Modifier.fillMaxWidth().semantics {
                     heading()
                 }
             )
-            Text(stringResource(R.string.supporter_description))
-            Text(stringResource(R.string.supporter_no_guarantee))
+            Text(stringResource(R.string.supporter_description), Modifier.fillMaxWidth())
+            Text(stringResource(R.string.supporter_no_guarantee), Modifier.fillMaxWidth())
             UnavailableReason(stringResource(state.reason.message()), Modifier.focusRequester(first))
         } else {
             Text(
                 stringResource(R.string.supporter_title),
                 style = MaterialTheme.typography.headlineLarge,
-                modifier = Modifier.semantics {
+                modifier = Modifier.fillMaxWidth().semantics {
                     heading()
                 }
             )
             when (state) {
                 SupporterState.Loading -> Text(stringResource(R.string.supporter_loading), Modifier.focusRequester(first).focusable())
                 is SupporterState.Offer -> {
-                    Text(stringResource(R.string.supporter_description))
-                    Text(stringResource(R.string.supporter_no_guarantee))
+                    Text(stringResource(R.string.supporter_description), Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.supporter_no_guarantee), Modifier.fillMaxWidth())
                     // Only the P1M recurring base plan is accepted at the ProductDetails boundary.
                     Text(
                         stringResource(R.string.supporter_price_month, state.product.price),
-                        style = MaterialTheme.typography.headlineMedium
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    Text(stringResource(R.string.supporter_renewal))
+                    Text(stringResource(R.string.supporter_renewal), Modifier.fillMaxWidth())
                     Button(onClick = onPurchase, modifier = Modifier.focusRequester(first).testTag("supporter:purchase")) {
                         Text(stringResource(R.string.supporter_subscribe))
                     }
                 }
                 SupporterState.Pending -> Text(stringResource(R.string.supporter_pending), Modifier.focusRequester(first).focusable())
                 is SupporterState.Active -> {
-                    Text(stringResource(R.string.supporter_thanks))
-                    Text(stringResource(R.string.supporter_code_label))
+                    Text(stringResource(R.string.supporter_thanks), Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.supporter_code_label), Modifier.fillMaxWidth())
                     Text(
                         state.orderId ?: stringResource(R.string.supporter_code_unavailable),
                         style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.focusRequester(first).focusable().testTag("supporter:code")
+                        modifier = Modifier.fillMaxWidth().focusRequester(first).focusable().testTag("supporter:code")
                     )
-                    Text(stringResource(R.string.supporter_request))
-                    Text(stringResource(R.string.supporter_no_guarantee))
+                    Text(stringResource(R.string.supporter_request), Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.supporter_no_guarantee), Modifier.fillMaxWidth())
                     if (canManage) {
                         Button(onClick = {
                             try {
@@ -139,7 +144,7 @@ internal fun SupporterScreen(state: SupporterState, onPurchase: () -> Unit, onBa
                             Text(stringResource(R.string.supporter_manage))
                         }
                     } else {
-                        Text(stringResource(R.string.supporter_manage_fallback), modifier = Modifier.focusable())
+                        Text(stringResource(R.string.supporter_manage_fallback), modifier = Modifier.fillMaxWidth().focusable())
                     }
                 }
                 is SupporterState.Unavailable -> Unit

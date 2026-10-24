@@ -75,7 +75,7 @@ class AccessibilitySemanticsTest {
         compose.setContent { PictureshowTheme { CatalogCard(episode, account, true, {}, Modifier.testTag("card")) } }
         compose.onNodeWithTag("card").assertContentDescriptionEquals("An Episode, A Series, Season 2, Episode 3, Watched")
         assertEquals(
-            listOf(androidx.compose.ui.text.AnnotatedString("An Episode")),
+            null,
             compose.onNodeWithTag("card").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)
         )
     }
@@ -94,7 +94,7 @@ class AccessibilitySemanticsTest {
                 )
             }
         }
-        compose.onNodeWithTag("card").assertIsSelected().assertContentDescriptionEquals("Season 2, 4 unplayed, selected season")
+        compose.onNodeWithTag("card").assertIsSelected().assertContentDescriptionEquals("Season 2, 4 unplayed")
     }
 
     @Test
