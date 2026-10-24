@@ -28,4 +28,15 @@ class PlaybackTrackLabelsTest {
         val twoLetter = MediaStream(type = MediaStreamType.Audio, index = 4, language = "fr", codec = "ac3", channels = 2)
         assertEquals("French · AC-3 stereo", trackLabel(twoLetter))
     }
+
+    @Test
+    fun negatedHyphenatedTitleCannotHideForcedMetadata() {
+        val subtitle = MediaStream(type = MediaStreamType.Subtitle, index = 2, codec = "srt", isForced = true)
+        listOf("Non-Forced", "non-forced", "Non‑Forced", "Non–Forced").forEach { title ->
+            assertEquals("$title · SRT · Forced", trackLabel(subtitle.copy(title = title)))
+        }
+        listOf("English - Forced", "English-Forced").forEach { title ->
+            assertEquals("$title · SRT", trackLabel(subtitle.copy(language = "eng", title = title)))
+        }
+    }
 }

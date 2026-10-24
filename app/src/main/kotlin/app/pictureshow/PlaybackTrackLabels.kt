@@ -21,7 +21,7 @@ internal fun trackLanguage(language: String?): String? {
 
 /** Match a complete metadata word or phrase, so "Unforced" cannot suppress "Forced". */
 private fun String.names(value: String): Boolean = contains(
-    Regex("(?i)(?<![\\p{L}\\p{N}])${Regex.escape(value)}(?![\\p{L}\\p{N}])")
+    Regex("(?i)(?<![\\p{L}\\p{N}])(?<!\\bnon\\p{Pd})${Regex.escape(value)}(?![\\p{L}\\p{N}])")
 )
 
 /**

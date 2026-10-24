@@ -98,6 +98,7 @@ fun SearchScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     var editing by rememberSaveable { mutableStateOf(openKeyboard) }
     var fieldFocused by remember { mutableStateOf(false) }
+    val navigation = remember { RemoteFieldNavigation(setOf(Key.DirectionDown)) }
     var selected by rememberSaveable(state.query) { mutableStateOf("") }
     var selections by rememberSaveable(state.query) { mutableStateOf(mapOf<String, String>()) }
     var focusResults by rememberSaveable { mutableStateOf(!openKeyboard) }
@@ -191,6 +192,7 @@ fun SearchScreen(
                     .onFocusChanged {
                         // Attachment reports false before the first focus request. Preserve entry-time editing.
                         if (fieldFocused && !it.isFocused) editing = false
+                        if (!it.isFocused) navigation.clear()
                         fieldFocused = it.isFocused
                     }
                     .onPreviewKeyEvent {
@@ -202,10 +204,7 @@ fun SearchScreen(
                                 }
                                 true
                             }
-                            it.key == Key.DirectionDown -> {
-                                if (it.type == KeyEventType.KeyDown) down()
-                                true
-                            }
+                            navigation.handle(it) { down() } -> true
                             else -> false
                         }
                     }

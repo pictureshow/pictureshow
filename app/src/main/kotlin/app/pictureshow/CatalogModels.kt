@@ -36,9 +36,13 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
     private var completedUsers = emptyMap<String, ItemUserData>()
     private var unresolvedPlayback = emptySet<String>()
 
-    fun playbackPending(itemId: String) {
-        unresolvedPlayback = unresolvedPlayback + itemId
-        mutableChanges.update { it.copy(pendingPlayback = it.pendingPlayback + itemId) }
+    private var pendingReports = emptyMap<Pair<String, Any>, Set<String>>()
+
+    fun playbackPending(itemId: String, report: Any = itemId, relatedIds: Set<String> = emptySet()) {
+        val affected = relatedIds + itemId
+        pendingReports = pendingReports + ((itemId to report) to affected)
+        unresolvedPlayback = unresolvedPlayback + affected
+        mutableChanges.update { it.copy(pendingPlayback = pendingReports.values.flatten().toSet()) }
     }
 
     internal fun playbackUnresolved(itemId: String) = itemId in unresolvedPlayback
@@ -51,19 +55,21 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         completedUsers = completedUsers + (item.id to item.userData)
     }
 
-    fun refresh(finishedPlaybackId: String? = null) {
+    fun refresh(finishedPlaybackId: String? = null, report: Any? = finishedPlaybackId) {
+        if (finishedPlaybackId != null && report != null) pendingReports = pendingReports - (finishedPlaybackId to report)
+        val pending = pendingReports.values.flatten().toSet()
         onRefresh()
         // Publish the acknowledged completion with the refresh atomically, so retained or newly
         // opened details cannot show pre-completion state while their fresh server read is pending.
         val confirmed = completedUsers
         completedUsers = emptyMap()
-        unresolvedPlayback = unresolvedPlayback - confirmed.keys
+        unresolvedPlayback = unresolvedPlayback - (confirmed.keys - pending)
         mutableChanges.update {
             it.copy(
                 revision = it.revision + 1,
                 refreshRevision = it.refreshRevision + 1,
                 users = confirmed,
-                pendingPlayback = if (finishedPlaybackId == null) it.pendingPlayback else it.pendingPlayback - finishedPlaybackId
+                pendingPlayback = pending
             )
         }
     }
@@ -242,7 +248,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             account,
             item = initialChanges.users[original.id]?.let { original.copy(userData = it) }
                 ?: original.takeUnless { original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id) },
-            playbackPending = original.id in initialChanges.pendingPlayback
+            playbackPending = original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id)
         )
     )
     val state = mutableState.asStateFlow()
@@ -265,6 +271,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                         item = state.item?.let { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
                         episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
                         playbackPending = original.id in changes.pendingPlayback ||
+                            session.playbackUnresolved(original.id) ||
                             (state.playbackPending && !(refreshed && original.id in changes.users))
                     )
                 }
@@ -287,10 +294,10 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                 is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
                 is ClientResult.Success -> {
                     val item = result.value
-                    session.playbackRead(item.id)
-                    mutableState.update {
-                        it.copy(item = item, playbackPending = original.id in session.changes.value.pendingPlayback)
-                    }
+                    mutableState.update { it.copy(item = item) }
+                    // A parent header says nothing about its episode rows or Next up. Keep the
+                    // same Saving progress guard until all of that page's authoritative reads land.
+                    if (item.type !in listOf("Series", "Season")) playbackRead()
                     if (item.type == "Series") {
                         val next = session.call(account) { nextUp(account, item.id) }
                         currentCoroutineContext().ensureActive()
@@ -311,6 +318,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                             loadSeason(selected, preserveError = true)
                         } else {
                             mutableState.update { it.copy(loading = false) }
+                            if (state.value.error == null) playbackRead()
                         }
                     } else if (item.type == "Season") {
                         season(item)
@@ -340,9 +348,17 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             if (generation != seasonGeneration) return@launch
             when (result) {
                 is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
-                is ClientResult.Success -> mutableState.update { it.copy(loading = false, episodes = result.value.items) }
+                is ClientResult.Success -> {
+                    mutableState.update { it.copy(loading = false, episodes = result.value.items) }
+                    if (state.value.error == null) playbackRead()
+                }
             }
         }
+    }
+
+    private fun playbackRead() {
+        session.playbackRead(original.id)
+        mutableState.update { it.copy(playbackPending = original.id in session.changes.value.pendingPlayback) }
     }
 
     fun played() = mutate(true)

@@ -308,4 +308,24 @@ class SearchFocusTest {
         key(Key.DirectionCenter)
         compose.onNodeWithTag("search:MOVIES:movie-0").assertIsFocused()
     }
+
+    @Test
+    fun fieldWaitsForHeldDownReleaseAndDoesNotReuseResultUpRelease() {
+        compose.setContent { Harness(start = "search") }
+        compose.onRoot().performKeyInput { keyDown(Key.DirectionDown) }
+        compose.onNodeWithTag("search:field").assertIsFocused()
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithTag("search:field").assertIsFocused()
+        compose.onRoot().performKeyInput { keyUp(Key.DirectionDown) }
+        compose.onNodeWithTag("search:MOVIES:movie-0").assertIsFocused()
+        compose.mainClock.advanceTimeBy(800)
+        compose.onNodeWithTag("search:MOVIES:movie-0").assertIsFocused()
+        // The result moves focus on Down of Up; the field must ignore the incoming release.
+        key(Key.DirectionUp)
+        compose.onNodeWithTag("search:field").assertIsFocused()
+        compose.mainClock.advanceTimeBy(800)
+        compose.onNodeWithTag("search:field").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("search:MOVIES:movie-0").assertIsFocused()
+    }
 }

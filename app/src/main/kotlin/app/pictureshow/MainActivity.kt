@@ -570,6 +570,31 @@ internal fun Pictureshow(
             // code and secret with that entry for process restoration, never in account persistence.
             // Leaving the sign-in flow clears the owner and cancels polling.
             LaunchedEffect(vm) { vm.start() }
+            // Reauthorizing the current identity need not change currentKey or expired. Success
+            // still completes this flow, including when the server returns the same token.
+            LaunchedEffect(
+                screen.signedIn,
+                state.snapshot.currentKey,
+                state.snapshot.currentAccount?.expired,
+                state.snapshot.currentAccount?.accessToken
+            ) {
+                val saved = accounts.snapshots.value
+                // Changed identities/expiry belong to the bootstrap above. Wait until its snapshot
+                // catches up; only an unchanged identity needs this explicit completion path.
+                if (screen.signedIn &&
+                    installedKey == saved.currentKey &&
+                    installedExpired == saved.currentAccount?.expired &&
+                    state.snapshot.currentKey == saved.currentKey &&
+                    state.snapshot.currentAccount?.expired == saved.currentAccount?.expired &&
+                    state.snapshot.currentAccount?.accessToken == saved.currentAccount?.accessToken &&
+                    nav.currentBackStackEntry?.id == entry.id
+                ) {
+                    nav.navigate("home") {
+                        popUpTo(nav.graph.id) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
             Page("Quick Connect · ${server.name}") {
                 Text(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
@@ -796,7 +821,7 @@ internal fun RemoteField(
     // Read-only until the remote's center button is pressed: a writable text field opens the keyboard as soon as it is
     // focused, and on a TV the keyboard then takes the D-pad and the first press types its highlighted key.
     var editing by remember { mutableStateOf(false) }
-    var navigationKey by remember { mutableStateOf<Key?>(null) }
+    val navigation = remember { RemoteFieldNavigation() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -826,31 +851,17 @@ internal fun RemoteField(
                     focused = it.isFocused
                     if (!it.isFocused) {
                         editing = false
-                        navigationKey = null
+                        navigation.clear()
                     }
                 }
                 .onPreviewKeyEvent {
                     when {
                         !enabled -> false
-                        it.key == Key.DirectionUp || it.key == Key.DirectionDown -> {
-                            // The IME gets first refusal before app dispatch. If an arrow reaches
-                            // this field, keep its focus and keyboard until release: hiding the IME
-                            // on Down lets TalkBack take the matching Up as a second navigation.
-                            if (it.type == KeyEventType.KeyDown) {
-                                navigationKey = it.key
-                            } else if (it.type == KeyEventType.KeyUp) {
-                                val paired = navigationKey == it.key
-                                navigationKey = null
-                                // A button can move focus here on Down. Its release belongs to
-                                // that button, not to a new navigation from this field.
-                                if (paired) {
-                                    editing = false
-                                    keyboard?.hide()
-                                    focusManager.moveFocus(if (it.key == Key.DirectionUp) FocusDirection.Up else FocusDirection.Down)
-                                }
-                            }
-                            true
-                        }
+                        navigation.handle(it) { key ->
+                            editing = false
+                            keyboard?.hide()
+                            focusManager.moveFocus(if (key == Key.DirectionUp) FocusDirection.Up else FocusDirection.Down)
+                        } -> true
                         // Consume both halves so opening the keyboard on release cannot type a key into it.
                         it.key == Key.DirectionCenter || it.key == Key.Enter || it.key == Key.NumPadEnter -> {
                             if (it.type == KeyEventType.KeyUp) {

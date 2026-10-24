@@ -271,6 +271,7 @@ private fun PlayerItemScreen(
                 null
             }
             val captionLanguage = captionSubtitleLanguage(captionsEnabled, configuration, Locale.getDefault().toLanguageTag())
+            val report = Any()
             val session = PlaybackSession(
                 ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
                     catalog.completePlayback(account, item.id)
@@ -278,8 +279,10 @@ private fun PlayerItemScreen(
                 MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
                 reportScope,
                 Locale.getDefault().language,
-                onFinished = { catalog.refresh(item.id) },
-                onCompletionPending = { catalog.playbackPending(item.id) },
+                onFinished = { catalog.refresh(item.id, report) },
+                onCompletionPending = {
+                    catalog.playbackPending(item.id, report, setOfNotNull(item.seriesId, item.seasonId))
+                },
                 onCleanupDone = { reportScope.cancel() },
                 diagnostic = PlaybackDiagnostics::write
             )

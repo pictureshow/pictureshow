@@ -79,6 +79,7 @@ class SignInAccountsTest {
     private val quickAuthorized = CompletableDeferred<Account>()
     private val discovered = CompletableDeferred<List<DiscoveredServer>>()
     private val catalogUsers = mutableListOf<String>()
+    private val catalogTokens = mutableListOf<String>()
     private val serviceEvents = mutableListOf<String>()
     private var probeResult: ClientResult<Server> = ClientResult.Success(server)
     private var probeReady: CompletableDeferred<Unit>? = null
@@ -112,6 +113,7 @@ class SignInAccountsTest {
         val catalog = object : CatalogService by CatalogModelsTest.FakeCatalog() {
             override suspend fun views(account: Account): ClientResult<ItemPage> {
                 catalogUsers += account.user.id
+                catalogTokens += account.accessToken
                 if (account.user.id == gatedUser) homeReady.await()
                 return ClientResult.Success(ItemPage(listOf(library)))
             }
@@ -412,5 +414,28 @@ class SignInAccountsTest {
         waitForText("Who’s watching?")
         assertEquals(listOf(elsewhere), accounts.snapshots.value.accounts)
         assertEquals(listOf(elsewhere.server), accounts.snapshots.value.rememberedServers)
+    }
+
+    @Test
+    fun quickConnectAsCurrentAccountLeavesCodePageEvenWhenTokenIsUnchanged() = sameAccountQuickConnect(account)
+
+    @Test
+    fun quickConnectAsCurrentAccountWithNewTokenLeavesNoSignInBackStack() =
+        sameAccountQuickConnect(account.copy(accessToken = "replacement-token"))
+
+    private fun sameAccountQuickConnect(authorized: Account) {
+        chooser()
+        click("Sign in another user on Screen room")
+        click("Use Quick Connect")
+        waitForText("123456")
+        quickAuthorized.complete(authorized)
+        waitForText("Viewer one · Screen room")
+        compose.onNodeWithText("123456").assertDoesNotExist()
+        assertEquals(authorized, accounts.snapshots.value.currentAccount)
+        assertEquals(authorized.accessToken, catalogTokens.last(), "Home must load with the newly saved credential")
+        // A completed sign-in installs Home as the root, so Back cannot reveal login or its code.
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("Sign in to Screen room").assertDoesNotExist()
+        compose.onNodeWithText("123456").assertDoesNotExist()
     }
 }
