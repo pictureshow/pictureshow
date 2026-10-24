@@ -39,6 +39,7 @@ class ResourceLeakProvider : ContentProvider() {
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
         // ContentProvider.call does not enforce the manifest's read/write permissions.
         requireNotNull(context).enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, "Debug leak checkpoint requires DUMP")
+        val result = Bundle()
         when (method) {
             "collect" -> collect()
             "closed-canary" -> {
@@ -50,9 +51,15 @@ class ResourceLeakProvider : ContentProvider() {
                 collect()
             }
             "counts" -> Unit
-            else -> throw IllegalArgumentException("Use collect, counts, closed-canary or self-test")
+            "threads" -> result.putString(
+                "threads",
+                Thread.getAllStackTraces().entries.sortedBy { it.key.name }.joinToString("\n\n") { (thread, stack) ->
+                    "${thread.name} [${thread.state}]\n" + stack.joinToString("\n") { "    at $it" }
+                }
+            )
+            else -> throw IllegalArgumentException("Use collect, counts, threads, closed-canary or self-test")
         }
-        return Bundle().apply { putInt("violations", violations.get()) }
+        return result.apply { putInt("violations", violations.get()) }
     }
 
     private fun collect() {

@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import time
 
@@ -89,6 +90,23 @@ if threads:
 fds = adb("shell", "run-as", "app.pictureshow", "ls", f"/proc/{pid}/fd").split()
 result["file_descriptors"] = len(fds)
 (args.output / "fds.txt").write_text("\n".join(fds) + "\n")
+# Counts alone cannot distinguish idle pools from unreleased players or growing native handles.
+# A task can exit during enumeration; skip that task rather than losing the whole checkpoint.
+thread_script = (
+    f'for path in /proc/{pid}/task/*/comm; do '
+    'if IFS= read -r name < "$path"; then '
+    'task=${path%/comm}; printf "%s %s\\n" "${task##*/}" "$name"; fi; done 2>/dev/null'
+)
+(args.output / "threads.txt").write_text(adb("shell", "run-as app.pictureshow sh -c " + shlex.quote(thread_script)))
+(args.output / "fd-targets.txt").write_text(adb("shell", "run-as", "app.pictureshow", "ls", "-l", f"/proc/{pid}/fd"))
+try:
+    (args.output / "java-threads.txt").write_text(
+        adb("shell", "content", "call", "--uri", "content://app.pictureshow.resourceleaks", "--method", "threads")
+    )
+except SystemExit as error:
+    # The counted checkpoint and native task/FD samples remain useful if the optional
+    # Java dump exceeds Binder limits or is unavailable in an older diagnostic APK.
+    result["java_threads_note"] = str(error)
 logcat = adb("logcat", "-d", "--pid=" + pid, "-t", "5000", "-v", "threadtime")
 result["retained_log_violation_lines"] = len(re.findall(r"PictureshowLeaks.*VM leak violation #", logcat))
 (args.output / "logcat.txt").write_text(logcat)

@@ -32,14 +32,15 @@ internal object PlaybackMedia {
     // Reopens can happen faster than OkHttp's idle eviction. A pool/dispatcher per source keeps
     // sockets and workers from many retired players alive. Child clients share these bounded
     // process-owned resources, but keep their own origin-scoped request interceptor.
-    private val transport by lazy {
-        OkHttpClient.Builder()
-            // Retiring and replacement manifest/media/subtitle loaders can overlap on one origin.
-            .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-    }
+    private val transport by lazy { createPlaybackHttpClient() }
+
+    internal fun createPlaybackHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(CancelledResponseInterceptor())
+        // Retiring and replacement manifest/media/subtitle loaders can overlap on one origin.
+        .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
 
     /** Network interceptors run again for redirect hops; default request properties cannot enforce origin. */
     fun httpFactory(server: Server, decision: PlayDecision): OkHttpDataSource.Factory {

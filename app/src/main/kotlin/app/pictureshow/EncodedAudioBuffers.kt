@@ -14,7 +14,8 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 /** Keep compressed buffers below AudioFlinger's next power-of-two allocation cliff. */
 internal object EncodedAudioBuffers : DefaultAudioSink.AudioTrackBufferSizeProvider {
     // Android 11 TrackBase rounds bytes to a power of two, then adds the control block.
-    // 2 MiB leaves room for that block and a retiring track in a 4 MiB client heap.
+    // Two 2 MiB tracks plus control blocks cannot coexist in a 4 MiB client heap.
+    // A retiring track can overlap initialization; the bounded 1 MiB retry below leaves headroom.
     const val MAX_BYTES = 2 * 1024 * 1024
 
     override fun getBufferSizeInBytes(
