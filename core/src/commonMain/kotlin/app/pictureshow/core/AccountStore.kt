@@ -19,7 +19,9 @@ data class AccountSnapshot(
     val accounts: List<Account> = emptyList(),
     val currentKey: String? = null,
     val recentSearches: Map<String, List<String>> = emptyMap(),
-    val lastServer: Server? = null
+    val lastServer: Server? = null,
+    val retiredDeviceAccounts: List<Account> = emptyList(),
+    val deviceUpgradeRetryAfter: Map<String, Long> = emptyMap()
 ) {
     val currentAccount: Account? get() = accounts.firstOrNull { it.key == currentKey }
     val rememberedServers: List<Server> get() = (listOfNotNull(lastServer) + accounts.map { it.server }).distinctBy { it.id to it.url }
@@ -35,8 +37,50 @@ class AccountStore(private val persistence: TextPersistence) {
 
     suspend fun load(): AccountSnapshot = mutex.withLock { loadLocked() }
 
-    suspend fun remember(account: Account) = update { snapshot ->
-        snapshot.copy(accounts = snapshot.accounts.filterNot { it.key == account.key } + account, currentKey = account.key)
+    suspend fun remember(account: Account): Account? = mutex.withLock {
+        val before = loadLocked()
+        val previous = before.accounts.firstOrNull { it.key == account.key }
+        val next = before.copy(
+            accounts = before.accounts.filterNot { it.key == account.key } + account,
+            currentKey = account.key,
+            retiredDeviceAccounts = (
+                before.retiredDeviceAccounts + listOfNotNull(
+                    previous?.takeIf {
+                        it.accessToken.isNotBlank() && it.accessToken != account.accessToken && it.deviceId != account.deviceId
+                    }
+                )
+                ).distinctBy { it.key to it.accessToken }
+        )
+        persistence.write(json.encodeToString(next))
+        mutableSnapshots.value = next
+        previous
+    }
+
+    /** Replace matching credentials without resurrecting a removed or concurrently replaced viewer. */
+    suspend fun replaceCredentials(expected: List<Account>, replacements: List<Account>): Boolean = mutex.withLock {
+        require(expected.map { it.key }.toSet() == replacements.map { it.key }.toSet())
+        val before = loadLocked()
+        if (expected.any { old -> before.accounts.firstOrNull { it.key == old.key } != old }) return@withLock false
+        val byKey = replacements.associateBy { it.key }
+        val next = before.copy(
+            accounts = before.accounts.map { byKey[it.key] ?: it },
+            retiredDeviceAccounts = (before.retiredDeviceAccounts + expected).distinctBy { it.key to it.accessToken }
+        )
+        persistence.write(json.encodeToString(next))
+        mutableSnapshots.value = next
+        true
+    }
+
+    suspend fun completeDeviceRetirement(account: Account) = update { snapshot ->
+        snapshot.copy(
+            retiredDeviceAccounts = snapshot.retiredDeviceAccounts.filterNot {
+                it.key == account.key && it.accessToken == account.accessToken && it.deviceId == account.deviceId
+            }
+        )
+    }
+
+    suspend fun deferDeviceUpgrade(serverId: String, untilMillis: Long) = update {
+        it.copy(deviceUpgradeRetryAfter = it.deviceUpgradeRetryAfter + (serverId to untilMillis))
     }
 
     /** Public metadata cannot replace identity, addresses or credentials, including after a delayed reply. */
@@ -88,6 +132,7 @@ class AccountStore(private val persistence: TextPersistence) {
             accounts = snapshot.accounts.filterNot { it.key == key },
             currentKey = snapshot.currentKey.takeUnless { it == key },
             recentSearches = snapshot.recentSearches - key,
+            retiredDeviceAccounts = snapshot.retiredDeviceAccounts.filterNot { it.key == key },
             // Retain only the public server record, never the signed-out user's identity or token.
             lastServer = snapshot.accounts.firstOrNull { it.key == key }?.server ?: snapshot.lastServer
         )
@@ -103,6 +148,8 @@ class AccountStore(private val persistence: TextPersistence) {
             accounts = snapshot.accounts.filterNot { it.key in removed },
             currentKey = snapshot.currentKey.takeUnless { it in removed },
             recentSearches = snapshot.recentSearches - removed,
+            retiredDeviceAccounts = snapshot.retiredDeviceAccounts.filterNot { it.server.id == server.id && it.server.url == server.url },
+            deviceUpgradeRetryAfter = snapshot.deviceUpgradeRetryAfter - server.id,
             lastServer = snapshot.lastServer?.takeUnless { it.id == server.id && it.url == server.url }
         )
     }

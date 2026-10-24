@@ -383,6 +383,114 @@ class SignInAccountsTest {
     }
 
     @Test
+    fun failedPasswordAfterQuickConnectBackDoesNotPullFocusAwayFromSignIn() {
+        runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
+        authResult = ClientResult.Failure(ClientError(ErrorKind.INVALID_CREDENTIALS, "Sign-in refused."))
+        launch()
+        click("Use Quick Connect")
+        waitForText("123456")
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        click("Sign in")
+        waitForText("Sign-in refused.")
+        compose.onNodeWithText("Sign in").assertIsFocused()
+    }
+
+    @Test
+    fun everyRemovalReturnsToItsOpenerAfterCancelAndHardwareBack() {
+        runBlocking { accounts.remember(other) }
+        chooser()
+        for (opener in listOf("Remove Viewer two on Screen room", "Remove server Screen room")) {
+            repeat(2) { attempt ->
+                click(opener)
+                compose.onNodeWithText("Cancel").assertIsFocused()
+                if (attempt == 0) {
+                    click("Cancel")
+                } else {
+                    compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+                    compose.waitForIdle()
+                }
+                compose.onNodeWithText(opener).assertIsFocused()
+            }
+        }
+        assertEquals(2, accounts.snapshots.value.accounts.size)
+    }
+
+    @Test
+    fun removalQuestionIsPartOfTheSafeChoiceRatherThanASeparateArrivalStop() {
+        chooser()
+        click("Remove Viewer one on Screen room")
+        compose.onNodeWithText("Cancel").assertIsFocused()
+        compose.onNodeWithText("Cancel").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ContentDescription,
+                listOf(
+                    "Remove remembered account? This removes Viewer one on Screen room from this TV. Other accounts stay signed in. You can add it again later. Cancel"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun accessibilityOffersCancelAndThenTheOpenerBeforeRevealingOtherActions() {
+        val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+            as android.view.accessibility.AccessibilityManager
+        val shadow = org.robolectric.Shadows.shadowOf(manager)
+        shadow.setEnabled(true)
+        try {
+            chooser()
+            compose.mainClock.autoAdvance = false
+            click("Remove Viewer one on Screen room")
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            compose.onNodeWithText("Cancel").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+            compose.onNodeWithText("Remove account").assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.HideFromAccessibility, Unit)
+            )
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_600))
+            compose.mainClock.advanceTimeBy(1_600)
+            compose.waitForIdle()
+            compose.onNodeWithText("Remove account").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+            click("Cancel")
+            compose.mainClock.advanceTimeBy(300)
+            compose.waitForIdle()
+            compose.onNodeWithText("Remove Viewer one on Screen room").assertIsFocused()
+            compose.onNodeWithText("Remove Viewer one on Screen room").assert(
+                SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility)
+            )
+            compose.onNodeWithText("Remove server Screen room").assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.HideFromAccessibility, Unit)
+            )
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_600))
+            compose.mainClock.advanceTimeBy(1_600)
+            compose.waitForIdle()
+            compose.onNodeWithText("Remove server Screen room").assert(
+                SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility)
+            )
+        } finally {
+            compose.mainClock.autoAdvance = true
+            shadow.setEnabled(false)
+        }
+    }
+
+    @Test
+    fun addressHasOneAccessibleLabel() {
+        launch()
+        compose.onNodeWithText("Server address", useUnmergedTree = true).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.HideFromAccessibility, Unit)
+        )
+    }
+
+    @Test
+    fun statusTextHasInnerPadding() {
+        launch()
+        val status = compose.onNodeWithText("Looking for servers…")
+        val inner = status.fetchSemanticsNode().boundsInRoot
+        val outer = status.onParent().fetchSemanticsNode().boundsInRoot
+        assertTrue(inner.left - outer.left >= 24f, "Text needs padding inside the focus border")
+    }
+
+    @Test
     fun removeAccountRequiresConfirmationAndKeepsOtherAccounts() {
         runBlocking { accounts.remember(other) }
         chooser()

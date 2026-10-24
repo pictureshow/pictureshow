@@ -9,13 +9,22 @@ data class Server(val id: String, val name: String, val url: String, val version
 data class User(val id: String, val name: String)
 
 @Serializable
-data class Account(val server: Server, val user: User, val accessToken: String, val expired: Boolean = false) {
+data class Account(
+    val server: Server,
+    val user: User,
+    val accessToken: String,
+    val expired: Boolean = false,
+    val deviceId: String? = null
+) {
     val key: String get() = "${server.id}:${user.id}"
 
     override fun toString(): String = "Account(server=$server, user=$user, accessToken=[redacted], expired=$expired)"
 }
 
-data class ClientIdentity(val deviceName: String, val deviceId: String, val version: String = "0.1.0")
+data class ClientIdentity(val deviceName: String, val deviceId: String, val version: String = "0.1.0") {
+    /** Legacy tokens remain bound to the install id; new tokens carry their own id with the account. */
+    fun forAccount(account: Account): ClientIdentity = account.deviceId?.takeIf(String::isNotBlank)?.let { copy(deviceId = it) } ?: this
+}
 
 enum class ErrorKind {
     INVALID_ADDRESS,
@@ -38,7 +47,7 @@ sealed interface ClientResult<out T> {
 }
 
 /** Short-lived server credential; never include its secret in diagnostics. */
-class PendingQuickConnect(val code: String, val secret: String) {
+class PendingQuickConnect(val code: String, val secret: String, val deviceId: String? = null) {
     override fun toString() = "PendingQuickConnect(<redacted>)"
 }
 

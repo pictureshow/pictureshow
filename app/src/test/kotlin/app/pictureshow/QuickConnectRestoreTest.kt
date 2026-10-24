@@ -93,6 +93,27 @@ class QuickConnectRestoreTest {
         assertEquals(listOf("fake-secret", "fake-secret"), service.polledSecrets)
     }
 
+    @Test fun processDeathRestoresTheInitiatingDeviceWithItsSecret() = runTest(dispatcher) {
+        service.nextDeviceId = "fake-initiating-device"
+        val saved = SavedStateHandle()
+        val first = model(saved)
+        first.start()
+        runCurrent()
+        val parcel = Parcel.obtain()
+        val restored = try {
+            parcel.writeBundle(saved.savedStateProvider().saveState())
+            parcel.setDataPosition(0)
+            SavedStateHandle.createHandle(parcel.readBundle(Bundle::class.java.classLoader), null)
+        } finally {
+            parcel.recycle()
+        }
+        owners.first().clear()
+        model(restored).start()
+        runCurrent()
+        assertEquals(1, service.initiations)
+        assertEquals(listOf<String?>("fake-initiating-device", "fake-initiating-device"), service.polledDeviceIds)
+    }
+
     @Test fun retryResumesThePendingSecretAndSuccessfulSignInClearsIt() = runTest(dispatcher) {
         val saved = SavedStateHandle()
         val vm = model(saved)
@@ -131,6 +152,8 @@ class QuickConnectRestoreTest {
 
     private inner class FakeService : JellyfinService {
         var initiations = 0
+        var nextDeviceId: String? = null
+        val polledDeviceIds = mutableListOf<String?>()
         var authorized = false
         val polledSecrets = mutableListOf<String>()
         override suspend fun probe(address: String) = ClientResult.Success(server)
@@ -145,10 +168,11 @@ class QuickConnectRestoreTest {
             pending: PendingQuickConnect?,
             onPending: (PendingQuickConnect?) -> Unit
         ): Flow<QuickConnectState> = flow {
-            val attempt = pending ?: PendingQuickConnect("123456", "fake-secret").also { initiations++ }
+            val attempt = pending ?: PendingQuickConnect("123456", "fake-secret", nextDeviceId).also { initiations++ }
             onPending(attempt)
             emit(QuickConnectState.Code(attempt.code))
             polledSecrets += attempt.secret
+            polledDeviceIds += attempt.deviceId
             if (authorized) {
                 emit(QuickConnectState.Authorized(account))
             } else {

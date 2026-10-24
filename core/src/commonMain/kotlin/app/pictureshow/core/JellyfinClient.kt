@@ -39,6 +39,9 @@ interface JellyfinService {
 
     suspend fun me(account: Account): ClientResult<User>
 
+    /** Optional same-user credential rotation; unsupported services retain the original account. */
+    suspend fun separateDevice(account: Account): ClientResult<Account> = ClientResult.Success(account)
+
     suspend fun logout(account: Account): ClientResult<Unit>
 }
 
@@ -112,6 +115,16 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         pending: PendingQuickConnect?,
         onPending: (PendingQuickConnect?) -> Unit
     ): Flow<QuickConnectState> = flow {
+        // A restored attempt is bound to its initiating device, even before its user is known.
+        if (!pending?.deviceId.isNullOrBlank() && pending?.deviceId != identity.deviceId) {
+            JellyfinClient(
+                client,
+                identity.copy(deviceId = requireNotNull(pending?.deviceId))
+            ).quickConnect(server, pending, onPending).collect {
+                emit(it)
+            }
+            return@flow
+        }
         when (val enabled = quickConnectEnabled(server)) {
             is ClientResult.Failure -> {
                 emit(QuickConnectState.Failed(enabled.error))
@@ -138,7 +151,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
                     return@flow
                 }
                 val (code, secret) = (initiation as ClientResult.Success).value
-                attempt = PendingQuickConnect(code, secret)
+                attempt = PendingQuickConnect(code, secret, identity.deviceId)
                 onPending(attempt)
             }
             val secret = attempt.secret
@@ -186,17 +199,80 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         }
     }
 
-    override suspend fun me(account: Account): ClientResult<User> = request(account.server.url, "Users/Me", token = account.accessToken) {
-        user(json.parseToJsonElement(it).jsonObject)
+    override suspend fun me(account: Account): ClientResult<User> =
+        request(account.server.url, "Users/Me", token = account.accessToken, requestIdentity = identity.forAccount(account)) {
+            user(json.parseToJsonElement(it).jsonObject)
+        }
+
+    override suspend fun logout(account: Account): ClientResult<Unit> = request(
+        account.server.url,
+        "Sessions/Logout",
+        HttpMethod.Post,
+        token = account.accessToken,
+        requestIdentity = identity.forAccount(account)
+    ) {
     }
 
-    override suspend fun logout(account: Account): ClientResult<Unit> =
-        request(account.server.url, "Sessions/Logout", HttpMethod.Post, token = account.accessToken) { }
+    /** Existing authorization approves a fresh identity for the same user; no password is retained or requested. */
+    suspend fun renewDevice(account: Account, newDeviceId: String): ClientResult<Account> {
+        val fresh = JellyfinClient(client, identity.copy(deviceId = newDeviceId))
+        val enabled = fresh.request(account.server.url, "QuickConnect/Enabled", timeoutMillis = 1_000) {
+            json.parseToJsonElement(it).jsonPrimitive.boolean
+        }
+        if (enabled is ClientResult.Failure) return enabled
+        if (!(enabled as ClientResult.Success).value) return failure(ErrorKind.SERVER, "The server could not complete the request.")
+        val initiated = fresh.request(account.server.url, "QuickConnect/Initiate", HttpMethod.Post, timeoutMillis = 1_000) {
+            val value = json.parseToJsonElement(it).jsonObject
+            val code = value.string("Code")
+            require(code.length == 6 && code.all(Char::isDigit))
+            code to value.string("Secret")
+        }
+        if (initiated is ClientResult.Failure) return initiated
+        val (code, secret) = (initiated as ClientResult.Success).value
+        val approved = request(
+            account.server.url,
+            "QuickConnect/Authorize?code=$code",
+            HttpMethod.Post,
+            token = account.accessToken,
+            requestIdentity = identity.forAccount(account),
+            timeoutMillis = 1_000
+        ) { require(json.parseToJsonElement(it).jsonPrimitive.boolean) }
+        if (approved is ClientResult.Failure && approved.error.kind == ErrorKind.INVALID_CREDENTIALS) {
+            // Quick Connect can be disabled between Enabled and Authorize. Only expire the saved
+            // credential when a normal authenticated endpoint also refuses it.
+            val checked = withTimeoutOrNull(1_000) { me(account) }
+            return if (checked is ClientResult.Failure && checked.error.kind == ErrorKind.INVALID_CREDENTIALS) {
+                approved
+            } else {
+                failure(ErrorKind.SERVER, "The server could not complete the request.")
+            }
+        }
+        if (approved is ClientResult.Failure && approved.error.kind != ErrorKind.NETWORK) return approved
+        // Exchange is cached by the server. A lost reply can safely be retried with the same
+        // secret and identity, within one bounded window rather than minting another device.
+        val exchanged = withTimeoutOrNull(2_000) {
+            suspend fun exchange() = fresh.request(
+                account.server.url,
+                "Users/AuthenticateWithQuickConnect",
+                HttpMethod.Post,
+                buildJsonObject { put("Secret", secret) },
+                timeoutMillis = 2_000
+            ) { fresh.account(account.server, it) }
+            val first = exchange()
+            if (first is ClientResult.Failure && first.error.kind == ErrorKind.NETWORK) exchange() else first
+        } ?: failure(ErrorKind.NETWORK, "The server took too long to respond. Check your connection and try again.")
+        return if (exchanged is ClientResult.Success && exchanged.value.user.id != account.user.id) {
+            withTimeoutOrNull(2_000) { fresh.logout(exchanged.value) }
+            failure(ErrorKind.INVALID_RESPONSE, "The server returned an unexpected response.")
+        } else {
+            exchanged
+        }
+    }
 
     private fun account(server: Server, text: String): Account {
         val body = json.parseToJsonElement(text).jsonObject
         require(body.string("ServerId") == server.id)
-        return Account(server, user(body.getValue("User").jsonObject), body.string("AccessToken"))
+        return Account(server, user(body.getValue("User").jsonObject), body.string("AccessToken"), deviceId = identity.deviceId)
     }
 
     private fun user(body: JsonObject): User = User(body.string("Id"), body.string("Name"))
@@ -207,6 +283,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         method: HttpMethod = HttpMethod.Get,
         body: JsonObject? = null,
         token: String? = null,
+        requestIdentity: ClientIdentity = identity,
         secret: String? = null,
         expiryStatus: Boolean = false,
         timeoutMillis: Long = ApiTimeouts.REQUEST_MILLIS,
@@ -215,7 +292,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
         withTimeoutOrNull(timeoutMillis) {
             val response = client.request("${baseUrl.trimEnd('/')}/$path") {
                 this.method = method
-                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, token))
+                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(requestIdentity, token))
                 if (secret != null) url.parameters.append("secret", secret)
                 if (body != null) {
                     contentType(ContentType.Application.Json)

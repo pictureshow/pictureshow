@@ -45,6 +45,9 @@ class SessionViewModel(private val accounts: AccountStore, private val service: 
             mutableState.update { it.copy(loading = true, error = null) }
             try {
                 accounts.load()
+                // Rotate legacy credentials before the player can capture an old token. Offline/disabled
+                // servers keep working with the stored identity; this optional upgrade has a time bound.
+                separateLegacyDevices(accounts, service)
                 var restored = false
                 var selection: Triple<String, String, String>? = null
                 accounts.snapshots.collect { snapshot ->
@@ -214,7 +217,7 @@ class LoginViewModel(val server: Server, private val service: JellyfinService, p
             when (val result = service.authenticate(server, input.username.trim(), input.password)) {
                 is ClientResult.Failure -> mutableState.update { it.copy(busy = false, error = result.error.message) }
                 is ClientResult.Success -> try {
-                    accounts.remember(result.value)
+                    rememberSignedIn(accounts, service, result.value)
                     mutableState.update { it.copy(busy = false, signedIn = true, password = "") }
                 } catch (e: CancellationException) {
                     throw e
@@ -259,16 +262,18 @@ class QuickConnectViewModel(
     private fun pending(): PendingQuickConnect? {
         val code = savedState.get<String>("quick.code") ?: return null
         val secret = savedState.get<String>("quick.secret") ?: return null
-        return PendingQuickConnect(code, secret)
+        return PendingQuickConnect(code, secret, savedState.get<String>("quick.deviceId"))
     }
 
     private fun savePending(attempt: PendingQuickConnect?) {
         if (attempt == null) {
             savedState.remove<String>("quick.code")
             savedState.remove<String>("quick.secret")
+            savedState.remove<String>("quick.deviceId")
         } else {
             savedState["quick.code"] = attempt.code
             savedState["quick.secret"] = attempt.secret
+            savedState["quick.deviceId"] = attempt.deviceId
         }
     }
 
@@ -277,7 +282,7 @@ class QuickConnectViewModel(
         authorized = account
         savePending(null)
         try {
-            accounts.remember(account)
+            rememberSignedIn(accounts, service, account)
             authorized = null
             mutableState.update { it.copy(busy = false, signedIn = true) }
         } catch (e: CancellationException) {
@@ -331,12 +336,13 @@ class AccountsViewModel(private val accounts: AccountStore, private val service:
     val snapshots = accounts.snapshots
 
     fun removeAccount(key: String) = remove(
-        targets = accounts.snapshots.value.accounts.filter { it.key == key },
+        targets = (accounts.snapshots.value.accounts + accounts.snapshots.value.retiredDeviceAccounts).filter { it.key == key },
         forget = { accounts.removeAccount(key) }
     )
 
     fun removeServer(server: Server) = remove(
-        targets = accounts.snapshots.value.accounts.filter { it.server.id == server.id && it.server.url == server.url },
+        targets = (accounts.snapshots.value.accounts + accounts.snapshots.value.retiredDeviceAccounts)
+            .filter { it.server.id == server.id && it.server.url == server.url },
         forget = { accounts.removeServer(server) }
     )
 
@@ -432,10 +438,21 @@ class HomeViewModel(account: Account, private val service: JellyfinService, priv
         viewModelScope.launch {
             try {
                 val account = state.value.account
-                // Best effort remote revocation; a network failure must still allow local sign-out.
-                service.logout(account)
-                accounts.signOut(account.key)
-                mutableState.update { it.copy(busy = false, finished = true) }
+                val retired = accounts.snapshots.value.retiredDeviceAccounts.filter { it.key == account.key }
+                withContext(NonCancellable) {
+                    accounts.signOut(account.key)
+                    mutableState.update { it.copy(busy = false, finished = true) }
+                    // Capture queued credentials before forgetting them, just as account removal does.
+                    (listOf(account) + retired).filter { it.accessToken.isNotBlank() }.forEach { credential ->
+                        try {
+                            service.logout(credential)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Offline remote revocation cannot undo local sign-out.
+                        }
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

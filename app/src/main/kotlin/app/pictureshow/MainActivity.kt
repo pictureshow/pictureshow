@@ -50,9 +50,9 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isEditable
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.text.TextStyle
@@ -419,104 +419,148 @@ internal fun Pictureshow(
             val screen by vm.state.collectAsStateWithLifecycle()
             SignInCompletion(screen.selected, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
             var returnFocus by rememberSaveable { mutableStateOf<String?>(null) }
+            var removalOpenerLabel by rememberSaveable { mutableStateOf<String?>(null) }
+            var returningFromRemoval by rememberSaveable { mutableStateOf(false) }
             var removeKey by rememberSaveable { mutableStateOf<String?>(null) }
             var removeServerId by rememberSaveable { mutableStateOf<String?>(null) }
             var removeServerUrl by rememberSaveable { mutableStateOf<String?>(null) }
             val removingAccount = state.snapshot.accounts.firstOrNull { it.key == removeKey }
             val removingServer = state.snapshot.rememberedServers.firstOrNull { it.id == removeServerId && it.url == removeServerUrl }
+            LaunchedEffect(state.snapshot, removeKey, removeServerId, removeServerUrl) {
+                // Once a removal commits, the old target must not reopen if that viewer signs in again.
+                if (removeKey != null && removingAccount == null) removeKey = null
+                if (removeServerId != null && removingServer == null) {
+                    removeServerId = null
+                    removeServerUrl = null
+                }
+            }
             fun cancelRemoval() {
+                returningFromRemoval = true
                 removeKey = null
                 removeServerId = null
                 removeServerUrl = null
             }
             if (removingAccount != null || removingServer != null) {
-                BackHandler(enabled = !screen.busy) { cancelRemoval() }
-                // While committing, hardware Back must not expose controls from the parent page.
-                BackHandler(enabled = screen.busy) { }
-                val description = if (removingAccount != null) {
-                    "This removes ${removingAccount.user.name} on ${removingAccount.server.name} from this TV."
-                } else {
-                    requireNotNull(removingServer)
-                    val count = state.snapshot.accounts.count { it.server.id == removingServer.id && it.server.url == removingServer.url }
-                    if (count == 0) {
-                        "This removes ${removingServer.name} from this TV."
-                    } else {
-                        "This removes ${removingServer.name} and $count remembered " +
-                            "${if (count == 1) "account" else "accounts"} from this TV."
-                    }
-                }
-                Page(
-                    if (removingAccount != null) "Remove remembered account?" else "Remove server?",
-                    modifier = Modifier.semantics { paneTitle = description }
-                ) {
-                    Text(description)
-                    Text("Other accounts stay signed in. You can add it again later.")
-                    Message(screen.error)
-                    Action("Cancel", initial = true, enabled = !screen.busy) { cancelRemoval() }
-                    Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
-                        // The account-store publication drives navigation and dismisses this page.
-                        returnFocus = null
-                        if (removingAccount != null) {
-                            vm.removeAccount(removingAccount.key)
+                androidx.compose.runtime.key("removal") {
+                    ConfirmationFocus("Cancel") {
+                        BackHandler(enabled = !screen.busy) { cancelRemoval() }
+                        // While committing, hardware Back must not expose controls from the parent page.
+                        BackHandler(enabled = screen.busy) { }
+                        val description = if (removingAccount != null) {
+                            "This removes ${removingAccount.user.name} on ${removingAccount.server.name} from this TV."
                         } else {
-                            removingServer?.let(vm::removeServer)
+                            requireNotNull(removingServer)
+                            val count = state.snapshot.accounts.count {
+                                it.server.id == removingServer.id && it.server.url == removingServer.url
+                            }
+                            if (count == 0) {
+                                "This removes ${removingServer.name} from this TV."
+                            } else {
+                                "This removes ${removingServer.name} and $count remembered " +
+                                    "${if (count == 1) "account" else "accounts"} from this TV."
+                            }
+                        }
+                        Page(
+                            if (removingAccount != null) "Remove remembered account?" else "Remove server?",
+                            announceTitle = false
+                        ) {
+                            Text(description, modifier = Modifier.semantics { hideFromAccessibility() })
+                            Text(
+                                "Other accounts stay signed in. You can add it again later.",
+                                modifier = Modifier.semantics {
+                                    hideFromAccessibility()
+                                }
+                            )
+                            Message(screen.error)
+                            val question = if (removingAccount != null) "Remove remembered account?" else "Remove server?"
+                            Action(
+                                "Cancel",
+                                initial = true,
+                                enabled = !screen.busy,
+                                modifier = Modifier.semantics {
+                                    contentDescription =
+                                        "$question $description Other accounts stay signed in. You can add it again later. Cancel"
+                                }
+                            ) { cancelRemoval() }
+                            Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
+                                // The account-store publication drives navigation and dismisses this page.
+                                returnFocus = null
+                                if (removingAccount != null) {
+                                    vm.removeAccount(removingAccount.key)
+                                } else {
+                                    removingServer?.let(vm::removeServer)
+                                }
+                            }
                         }
                     }
                 }
             } else {
-                Page("Who’s watching?") {
-                    val offerSignedOutServer = state.snapshot.currentAccount == null && state.snapshot.lastServer != null
-                    val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
-                    state.snapshot.accounts.forEach { account ->
-                        Action(
-                            "${account.user.name} on ${account.server.name}",
-                            initial = returnFocus == account.key ||
-                                (returnFocus == null && !offerSignedOutServer && account.key == initialAccount?.key),
-                            enabled = !screen.busy
-                        ) {
-                            if (account.expired && account.key == state.snapshot.currentKey) {
-                                returnFocus = account.key
-                                nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}") {
-                                    launchSingleTop = true
+                androidx.compose.runtime.key("chooser") {
+                    ConfirmationFocus(
+                        removalOpenerLabel.takeIf { returningFromRemoval },
+                        onRestored = { returningFromRemoval = false }
+                    ) {
+                        Page("Who’s watching?") {
+                            val offerSignedOutServer = state.snapshot.currentAccount == null && state.snapshot.lastServer != null
+                            val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
+                            state.snapshot.accounts.forEach { account ->
+                                Action(
+                                    "${account.user.name} on ${account.server.name}",
+                                    initial = returnFocus == account.key ||
+                                        (returnFocus == null && !offerSignedOutServer && account.key == initialAccount?.key),
+                                    enabled = !screen.busy
+                                ) {
+                                    if (account.expired && account.key == state.snapshot.currentKey) {
+                                        returnFocus = account.key
+                                        nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}") {
+                                            launchSingleTop = true
+                                        }
+                                    } else {
+                                        vm.select(account.key)
+                                    }
                                 }
-                            } else {
-                                vm.select(account.key)
+                                Action(
+                                    "Remove ${account.user.name} on ${account.server.name}",
+                                    initial = returnFocus == "remove:${account.key}",
+                                    enabled = !screen.busy
+                                ) {
+                                    returnFocus = "remove:${account.key}"
+                                    removalOpenerLabel = "Remove ${account.user.name} on ${account.server.name}"
+                                    removeKey = account.key
+                                }
+                            }
+                            Message(screen.error)
+                            state.snapshot.rememberedServers.forEachIndexed { index, server ->
+                                val identity = "server:${server.id}:${server.url}"
+                                Action(
+                                    "Sign in another user on ${server.name}",
+                                    initial = returnFocus == identity || (returnFocus == null && offerSignedOutServer && index == 0),
+                                    enabled = !screen.busy
+                                ) {
+                                    returnFocus = identity
+                                    nav.navigate(serverRoute("login", server)) { launchSingleTop = true }
+                                }
+                                Action(
+                                    "Remove server ${server.name}",
+                                    initial = returnFocus == "remove:$identity",
+                                    enabled = !screen.busy
+                                ) {
+                                    returnFocus = "remove:$identity"
+                                    removalOpenerLabel = "Remove server ${server.name}"
+                                    removeServerId = server.id
+                                    removeServerUrl = server.url
+                                }
+                            }
+                            Action(
+                                "Add a server",
+                                initial = returnFocus == "add" ||
+                                    (returnFocus == null && state.snapshot.rememberedServers.isEmpty()),
+                                enabled = !screen.busy
+                            ) {
+                                returnFocus = "add"
+                                nav.navigate("servers") { launchSingleTop = true }
                             }
                         }
-                        Action(
-                            "Remove ${account.user.name} on ${account.server.name}",
-                            initial = returnFocus == "remove:${account.key}",
-                            enabled = !screen.busy
-                        ) {
-                            returnFocus = "remove:${account.key}"
-                            removeKey = account.key
-                        }
-                    }
-                    Message(screen.error)
-                    state.snapshot.rememberedServers.forEachIndexed { index, server ->
-                        val identity = "server:${server.id}:${server.url}"
-                        Action(
-                            "Sign in another user on ${server.name}",
-                            initial = returnFocus == identity || (returnFocus == null && offerSignedOutServer && index == 0),
-                            enabled = !screen.busy
-                        ) {
-                            returnFocus = identity
-                            nav.navigate(serverRoute("login", server)) { launchSingleTop = true }
-                        }
-                        Action("Remove server ${server.name}", initial = returnFocus == "remove:$identity", enabled = !screen.busy) {
-                            returnFocus = "remove:$identity"
-                            removeServerId = server.id
-                            removeServerUrl = server.url
-                        }
-                    }
-                    Action(
-                        "Add a server",
-                        initial = returnFocus == "add" ||
-                            (returnFocus == null && state.snapshot.rememberedServers.isEmpty()),
-                        enabled = !screen.busy
-                    ) {
-                        returnFocus = "add"
-                        nav.navigate("servers") { launchSingleTop = true }
                     }
                 }
             }
@@ -771,13 +815,20 @@ internal fun Pictureshow(
 }
 
 @Composable
-private fun Page(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+private fun Page(title: String, modifier: Modifier = Modifier, announceTitle: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+    val restoring = LocalRestoringConfirmationFocus.current
     Box(modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.semantics {
+                    if (announceTitle && !restoring) heading() else hideFromAccessibility()
+                }
+            )
             content()
         }
     }
@@ -786,8 +837,19 @@ private fun Page(title: String, modifier: Modifier = Modifier, content: @Composa
 @Composable
 private fun Action(label: String, modifier: Modifier = Modifier, initial: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val focus = remember { FocusRequester() }
-    Button(onClick = onClick, enabled = enabled, modifier = modifier.focusRequester(focus)) { Text(label) }
-    LaunchedEffect(Unit) { if (initial && enabled) focus.requestFocus() }
+    val restoring = LocalRestoringConfirmationFocus.current
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.focusRequester(focus).semantics {
+            if (restoring && !initial) hideFromAccessibility()
+        }
+    ) { Text(label) }
+    LaunchedEffect(Unit) {
+        if (initial && enabled) {
+            focus.requestFocus()
+        }
+    }
 }
 
 @Composable
@@ -801,7 +863,7 @@ internal fun StatusLine(message: String, color: Color = MaterialTheme.colorSchem
     // its own semantics node; the focusable container reads its non-actionable child.
     // A very wide line can lose spatial Up/Down to a more distant narrow button.
     // Keep status centres near the left-aligned controls, including at larger text sizes.
-    Box(Modifier.widthIn(max = 360.dp).readableFocus()) {
+    Box(Modifier.widthIn(max = 360.dp).readableFocus().padding(12.dp)) {
         Text(message, color = color, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
     }
 }
@@ -825,7 +887,9 @@ internal fun RemoteField(
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label)
+        // The field supplies this label in both traversal directions. A second accessible
+        // text node makes TV TalkBack stop on it only when approaching from below.
+        Text(label, modifier = Modifier.semantics { hideFromAccessibility() })
         BasicTextField(
             value = value,
             onValueChange = onValue,

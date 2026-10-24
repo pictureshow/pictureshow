@@ -73,7 +73,7 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                     account.server,
                     itemId,
                     info.value,
-                    identity,
+                    identity.forAccount(account),
                     account.accessToken,
                     playback.mediaSourceId
                 ).let { outcome ->
@@ -99,7 +99,9 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
     /** End only this device's encode for this play session; never stop another viewer's stream. */
     suspend fun stopEncoding(account: Account, playSessionId: String): ClientResult<Unit> = request(
         account,
-        "Videos/ActiveEncodings?deviceId=${PlayDecisions.encode(identity.deviceId)}&playSessionId=${PlayDecisions.encode(playSessionId)}",
+        "Videos/ActiveEncodings?deviceId=${PlayDecisions.encode(
+            identity.forAccount(account).deviceId
+        )}&playSessionId=${PlayDecisions.encode(playSessionId)}",
         null,
         HttpMethod.Delete
     ) { }
@@ -114,7 +116,7 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
             val response = client.request("${account.server.url.trimEnd('/')}/$path") {
                 this.method = method
-                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))
+                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
                 if (body != null) {
                     contentType(ContentType.Application.Json)
                     setBody(body)

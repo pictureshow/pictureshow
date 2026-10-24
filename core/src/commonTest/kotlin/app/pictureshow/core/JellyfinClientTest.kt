@@ -144,7 +144,10 @@ class JellyfinClientTest {
             assertEquals("p\"a,ss", body.getValue("Pw").jsonPrimitive.content)
             respond(successfulAuth, headers = headersOf(HttpHeaders.ContentType, "application/json"))
         }.authenticate(server, "Taylor", "p\"a,ss")
-        assertEquals(Account(server, User("user-1", "Taylor"), "token-1"), assertIs<ClientResult.Success<Account>>(result).value)
+        assertEquals(
+            Account(server, User("user-1", "Taylor"), "token-1", deviceId = identity.deviceId),
+            assertIs<ClientResult.Success<Account>>(result).value
+        )
     }
 
     @Test

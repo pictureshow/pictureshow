@@ -6,7 +6,6 @@
 package app.pictureshow
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import android.view.accessibility.CaptioningManager
 import androidx.activity.compose.BackHandler
@@ -268,7 +267,12 @@ internal fun PlayerItemScreen(
             output.passthroughEnabled = localPreferences.passthrough
             val activeProbe = DeviceCapabilityProbe(context, localPreferences.deviceSettings())
             probe = activeProbe
-            val clientIdentity = ClientIdentity(Build.MODEL, identity.getOrCreate(), BuildConfig.VERSION_NAME)
+            val clientIdentity =
+                ClientIdentity(
+                    deviceDisplayName(context),
+                    account.deviceId?.takeIf(String::isNotBlank) ?: identity.getOrCreate(),
+                    BuildConfig.VERSION_NAME
+                )
             val client = PlaybackClient(http, clientIdentity)
             extras = PlaybackExtrasClient(http, clientIdentity) { message -> Log.i("NextEpisode", message) }
             tiles = TrickplayCache(http, account, clientIdentity, item.id)

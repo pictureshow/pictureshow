@@ -78,7 +78,7 @@ internal class TrickplayCache(
     private suspend fun download(url: String): Sheet? = try {
         withTimeout(4_000) {
             val response = http.get(url) {
-                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))
+                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
             }
             if (response.status.value != 200) return@withTimeout null
             val bytes = response.body<ByteArray>()

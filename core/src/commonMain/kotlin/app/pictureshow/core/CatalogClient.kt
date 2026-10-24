@@ -149,7 +149,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
             val response = client.request("${account.server.url.trimEnd('/')}/$path") {
                 this.method = method
-                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))
+                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
                 url.parameters.append("userId", account.user.id)
                 parameters.forEach { (name, value) -> if (value != null) url.parameters.append(name, value) }
             }

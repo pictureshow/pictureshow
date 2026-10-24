@@ -70,7 +70,7 @@ class UserConfigurationClient(private val http: HttpClient, private val identity
         withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
             val response = http.request("${account.server.url.trimEnd('/')}/$path") {
                 this.method = method
-                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity, account.accessToken))
+                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
                 if (body != null) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
