@@ -46,6 +46,7 @@ internal class Media3PlaybackOutput(
     var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
     private var activePlayer: ExoPlayer? = null
+    private var playback: PlaybackReleaseFence.Playback? = null
     private var reopenState: ReopeningPlayer? = null
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
     private var current: PlayDecision? = null
@@ -157,13 +158,23 @@ internal class Media3PlaybackOutput(
             val monitored = VideoEndDiagnostics { logVideo("audio-drained-video-pending") }.wrap(created)
             detector?.wrap(monitored, handler) ?: monitored
         }
-        next = ExoPlayer.Builder(context, renderers)
-            .setTrackSelector(selector)
-            .setMediaSourceFactory(sourceFactory)
-            .setLoadControl(createPictureshowLoadControl())
-            .setSeekBackIncrementMs(10_000)
-            .setSeekForwardIncrementMs(10_000)
-            .build()
+        val playbackThread = PlaybackReleaseFence.playback(context)
+        playback = playbackThread
+        next = try {
+            ExoPlayer.Builder(context, renderers)
+                .setPlaybackLooper(playbackThread.looper)
+                .setTrackSelector(selector)
+                .setMediaSourceFactory(sourceFactory)
+                .setLoadControl(createPictureshowLoadControl())
+                .setSeekBackIncrementMs(10_000)
+                .setSeekForwardIncrementMs(10_000)
+                .build()
+        } catch (failure: Throwable) {
+            playbackThread.abortConstruction()
+            playback = null
+            throw failure
+        }
+        activePlayer = next
         subtitleDelay.sourceStartMs = if (serverSeek &&
             decision.mediaSource.mediaStreams.any {
                 it.type == MediaStreamType.Subtitle && it.index == subtitleIndex && PlaybackMedia.subtitleUsesFullTimeline(server, it)
@@ -175,8 +186,25 @@ internal class Media3PlaybackOutput(
         }
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
-        activePlayer = next
         next.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            private var firstVideoDecoder = true
+            override fun onVideoDecoderInitialized(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long
+            ) {
+                if (activePlayer === next && firstVideoDecoder) {
+                    firstVideoDecoder = false
+                    PlaybackDiagnostics.write(
+                        decision,
+                        "video-decoder",
+                        "name=$decoderName initMs=$initializationDurationMs " +
+                            playbackThread.videoInitFields(initializedTimestampMs, initializationDurationMs)
+                    )
+                }
+            }
+
             override fun onAudioDecoderInitialized(
                 eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
                 decoderName: String,
@@ -205,7 +233,8 @@ internal class Media3PlaybackOutput(
                 }
             }
         })
-        val managed = ReopeningPlayer(next)
+        val gated = ReleaseGatedPlayer(next)
+        val managed = ReopeningPlayer(gated)
         reopenState = managed
         val exposed = if (serverSeek) {
             TranscodeSeekPlayer(managed, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
@@ -335,7 +364,10 @@ internal class Media3PlaybackOutput(
         next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
         next.playWhenReady = !paused
         // Publish a prepared replacement: IDLE would advertise no media to external controllers.
-        next.prepare()
+        gated.hold()
+        playbackThread.prepare {
+            if (activePlayer === next) gated.prepareAfterRelease()
+        }
         val existingSession = mediaSession
         if (existingSession == null) {
             mediaSession = PlaybackMediaSession.open(context, exposed) { onStop() }
@@ -414,7 +446,9 @@ internal class Media3PlaybackOutput(
             mediaSession?.close()
             mediaSession = null
         }
-        active.release()
+        active.stop()
+        requireNotNull(playback).release(active, requireNotNull(current))
+        playback = null
         reopenState = null
         listener = null
     }
