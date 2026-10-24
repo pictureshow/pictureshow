@@ -104,7 +104,21 @@ internal class Media3PlaybackOutput(
                 "path=${media.localConfiguration?.uri?.path}"
         )
         lateinit var next: ExoPlayer
+        var videoRenderers = emptyList<EndVideoRenderer>()
+        val videoTail = VideoTail()
+        val playing = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun logVideo(reason: String) {
+            videoRenderers.forEach {
+                PlaybackDiagnostics.write(
+                    decision,
+                    "video-end",
+                    it.endSnapshot.diagnostic(reason) +
+                        " extracted=${videoTail.extracted} tailUs=${videoTail.lastSampleUs} durationUs=${videoTail.durationUs}"
+                )
+            }
+        }
         val endSignal = PlaybackEndSignal({ next.takeIf { activePlayer === it } }) { reason ->
+            logVideo(reason)
             PlaybackDiagnostics.write(decision, "end", "reason=$reason positionMs=${position().milliseconds}")
             onEnded(decision)
         }
@@ -112,6 +126,13 @@ internal class Media3PlaybackOutput(
             PhysicalPlaybackEnd(
                 requireNotNull(media.localConfiguration).uri,
                 canEnd = endSignal::canEnd,
+                videoTail = videoTail,
+                videoSnapshots = {
+                    videoRenderers.filter { it.state != androidx.media3.exoplayer.Renderer.STATE_DISABLED }.map { it.endSnapshot }
+                },
+                isPlaying = { playing.get() },
+                canEndVideoStalled = endSignal::canEndPlaying,
+                onVideoStalled = { endSignal.ended("video-stalled") },
                 diagnostic = { PlaybackDiagnostics.write(decision, "source-end", it) }
             ) { endSignal.ended("av-drained") }
         } else {
@@ -122,14 +143,16 @@ internal class Media3PlaybackOutput(
         val extractors = if (videoClock) {
             VideoClockExtractorsFactory { PlaybackDiagnostics.write(decision, "video-clock", it) }
         } else {
-            DefaultExtractorsFactory()
+            if (detector != null) VideoTailExtractorsFactory(videoTail) else DefaultExtractorsFactory()
         }
         val sourceFactory = DefaultMediaSourceFactory(context, extractors)
             .setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
         val baseRenderers = renderersFactory ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled)
         val renderers = RenderersFactory { handler, video, audio, text, metadata ->
             val created = baseRenderers.createRenderers(handler, video, audio, text, metadata)
-            detector?.wrap(created, handler) ?: created
+            videoRenderers = created.filterIsInstance<EndVideoRenderer>()
+            val monitored = VideoEndDiagnostics { logVideo("audio-drained-video-pending") }.wrap(created)
+            detector?.wrap(monitored, handler) ?: monitored
         }
         next = ExoPlayer.Builder(context, renderers)
             .setTrackSelector(selector)
@@ -171,6 +194,7 @@ internal class Media3PlaybackOutput(
 
             override fun onEvents(player: Player, events: Player.Events) {
                 if (activePlayer === next) {
+                    playing.set(player.isPlaying)
                     onBuffering(player.playbackState == Player.STATE_BUFFERING && player.playWhenReady, decision)
                 }
             }
@@ -325,6 +349,10 @@ internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, priva
             player.playerError == null &&
             (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_ENDED)
     }
+
+    // Called on the app thread: pause/suppression masks can precede onEvents publication.
+    fun canEndPlaying(): Boolean = canEnd() && currentPlayer()?.isPlaying == true
+
     fun ended(reason: String = "media3-eos") {
         if (!canEnd()) return
         sent = true

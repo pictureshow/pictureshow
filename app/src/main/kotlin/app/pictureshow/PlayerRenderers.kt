@@ -18,6 +18,8 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.text.TextOutput
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import androidx.media3.exoplayer.video.VideoRendererEventListener
 import kotlin.math.max
 
 /** Platform decoders first; optional audio extensions fill the gaps by reflection. */
@@ -30,6 +32,46 @@ open class PictureshowRenderersFactory internal constructor(
     init {
         setExtensionRendererMode(EXTENSION_RENDERER_MODE_ON)
         setEnableDecoderFallback(true)
+    }
+
+    override fun buildVideoRenderers(
+        context: Context,
+        extensionRendererMode: Int,
+        mediaCodecSelector: MediaCodecSelector,
+        enableDecoderFallback: Boolean,
+        eventHandler: Handler,
+        eventListener: VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long,
+        out: ArrayList<Renderer>
+    ) {
+        val first = out.size
+        super.buildVideoRenderers(
+            context,
+            extensionRendererMode,
+            mediaCodecSelector,
+            enableDecoderFallback,
+            eventHandler,
+            eventListener,
+            allowedVideoJoiningTimeMs,
+            out
+        )
+        for (index in first until out.size) {
+            if (out[index].javaClass == MediaCodecVideoRenderer::class.java) {
+                // Mirror the default builder settings; review this if enabling experimental video flags.
+                val probe = VideoCodecProbe(codecAdapterFactory)
+                out[index] = EndVideoRenderer(
+                    MediaCodecVideoRenderer.Builder(context)
+                        .setCodecAdapterFactory(probe)
+                        .setMediaCodecSelector(mediaCodecSelector)
+                        .setEnableDecoderFallback(enableDecoderFallback)
+                        .setAllowedJoiningTimeMs(allowedVideoJoiningTimeMs)
+                        .setEventHandler(eventHandler)
+                        .setEventListener(eventListener)
+                        .setMaxDroppedFramesToNotify(MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY),
+                    probe
+                )
+            }
+        }
     }
 
     override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
