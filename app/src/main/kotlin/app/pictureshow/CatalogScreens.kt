@@ -60,6 +60,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -94,6 +95,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
@@ -549,12 +552,16 @@ fun CatalogDetail(
     onRetry: () -> Unit,
     onPlay: (MediaItem, Boolean) -> Unit = { _, _ -> }
 ) {
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val list = rememberLazyListState()
     val initial = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     var selectedSection by rememberSaveable { mutableStateOf("header") }
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
+    var semanticsRevealed by remember { mutableStateOf(false) }
+    val pendingFocus = remember { FocusRequester() }
+    var focusInputRevision by remember { mutableIntStateOf(0) }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
@@ -612,31 +619,57 @@ fun CatalogDetail(
         }
     }
     CompositionLocalProvider(LocalBringIntoViewSpec provides detailBringIntoView) {
+        if (!restored) {
+            // Hold input away from hidden semantics. focusTarget adds no accessibility node.
+            Box(
+                Modifier.width(0.dp).height(0.dp).focusRequester(pendingFocus).onPreviewKeyEvent {
+                    if (it.type == KeyEventType.KeyDown) {
+                        focusInputRevision++
+                        if (semanticsRevealed) restored = true
+                    }
+                    false
+                }.focusTarget()
+            )
+        }
         LazyColumn(
             state = list,
-            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").accessibilityGroup().onPreviewKeyEvent {
-                if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && !state.loading && playItem != null) {
-                    if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
-                        onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
+            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail")
+                // A returning page must expose its restored input target before TalkBack can
+                // choose a heading or overview as a replacement for the departing player.
+                .then(
+                    if (lifecycleState != Lifecycle.State.RESUMED || (playItem != null && !semanticsRevealed && state.error == null)) {
+                        Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                    } else {
+                        Modifier
                     }
-                    true
-                } else if (it.type == KeyEventType.KeyDown && it.key in listOf(Key.DirectionUp, Key.DirectionDown) && hasActions) {
-                    val index = sections.indexOfFirst { section -> section.first == selectedSection }
-                    val target = index + if (it.key == Key.DirectionUp) -1 else 1
-                    if (headerFocused &&
-                        focusManager.moveFocus(if (it.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
-                    ) {
+                ).accessibilityGroup().onPreviewKeyEvent {
+                    if (it.type == KeyEventType.KeyDown) {
+                        focusInputRevision++
+                        // A viewer's first move owns focus even during the brief visible handoff.
+                        if (semanticsRevealed) restored = true
+                    }
+                    if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && !state.loading && playItem != null) {
+                        if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
+                            onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
+                        }
                         true
-                    } else if (target < sections.size) {
-                        moveSection(target)
-                        true
+                    } else if (it.type == KeyEventType.KeyDown && it.key in listOf(Key.DirectionUp, Key.DirectionDown) && hasActions) {
+                        val index = sections.indexOfFirst { section -> section.first == selectedSection }
+                        val target = index + if (it.key == Key.DirectionUp) -1 else 1
+                        if (headerFocused &&
+                            focusManager.moveFocus(if (it.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                        ) {
+                            true
+                        } else if (target < sections.size) {
+                            moveSection(target)
+                            true
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
-                } else {
-                    false
-                }
-            },
+                },
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
@@ -735,9 +768,27 @@ fun CatalogDetail(
             }
         }
     }
-    LaunchedEffect(state.loading, state.playbackPending, item?.id, state.error, sections.map { it.first to it.second.map(MediaItem::id) }) {
+    LaunchedEffect(
+        lifecycleState,
+        state.loading,
+        state.playbackPending,
+        item?.id,
+        state.error,
+        sections.map {
+            it.first to
+                it.second.map(MediaItem::id)
+        }
+    ) {
+        // Navigation composes the returning page before its transition has finished. A focus
+        // event then is hidden from TalkBack, which falls back to the heading/overview instead.
+        if (lifecycleState != Lifecycle.State.RESUMED) {
+            restored = false
+            semanticsRevealed = false
+            return@LaunchedEffect
+        }
         if (state.playbackPending) {
             restored = false
+            semanticsRevealed = false
             if (state.error != null) {
                 list.scrollToItem(0)
                 withFrameNanos { }
@@ -745,9 +796,14 @@ fun CatalogDetail(
             }
             return@LaunchedEffect
         }
-        if (state.loading && selectedSection != "header") restored = false
+        if (state.loading && selectedSection != "header") {
+            restored = false
+            semanticsRevealed = false
+        }
         if (!state.loading && !restored) {
+            val inputBeforeRestore = focusInputRevision
             withFrameNanos { }
+            pendingFocus.requestFocus()
             val savedSectionIndex = sections.indexOfFirst { it.first == selectedSection }
             val sectionIndex = if (savedSectionIndex >= 0) {
                 savedSectionIndex
@@ -756,27 +812,47 @@ fun CatalogDetail(
             } else {
                 sections.indices.firstOrNull() ?: -1
             }
+            var targetKey: String? = null
+            var target: FocusRequester? = null
+            var targetSection: String? = null
+            var targetId: String? = null
             if (sectionIndex >= 0) {
                 val (section, items) = sections[sectionIndex]
-                val targetId = if (savedSectionIndex < 0 && section == "seasons") state.selectedSeasonId else selectedId
-                val itemIndex = items.indexOfFirst { it.id == targetId }.coerceAtLeast(0)
+                val savedId = if (savedSectionIndex < 0 && section == "seasons") state.selectedSeasonId else selectedId
+                val itemIndex = items.indexOfFirst { it.id == savedId }.coerceAtLeast(0)
                 val horizontal = rowStates.getValue(section)
                 list.scrollToItem(sectionIndex + 1)
                 if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
-                restored = requestAttached(requests, "$section:${items[itemIndex].id}")
-                if (restored) {
-                    selectedSection = section
-                    selectedId = items[itemIndex].id
-                    rowSelections = rowSelections + (section to selectedId)
-                }
+                targetKey = "$section:${items[itemIndex].id}"
+                targetSection = section
+                targetId = items[itemIndex].id
             } else if (hasActions || state.error != null) {
                 list.scrollToItem(0)
-                withFrameNanos { }
-                restored = if (state.error != null) retry.requestFocus() else initial.requestFocus()
-                if (restored) selectedSection = "header"
-            } else {
-                restored = true
+                target = if (state.error != null) retry else initial
             }
+            // Publish the target unfocused before requesting it. Focusing a hidden/new node
+            // produces no Focused property change for Compose's accessibility delegate. Clearing
+            // owner focus cannot help on TV: View.clearFocus synchronously refocuses the first item.
+            semanticsRevealed = true
+            repeat(2) { withFrameNanos { } }
+            if (focusInputRevision == inputBeforeRestore) {
+                val key = targetKey
+                val focused = if (key != null) {
+                    requestAttached(requests, key) { focusInputRevision == inputBeforeRestore }
+                } else {
+                    target?.requestFocus() ?: false
+                }
+                if (focused) {
+                    selectedSection = targetSection ?: "header"
+                    targetId?.let {
+                        selectedId = it
+                        rowSelections = rowSelections + (selectedSection to it)
+                    }
+                }
+            }
+            // Failure must still reveal the page and re-enable ordinary selection tracking.
+            // Removing the temporary target also prevents an invisible input-focus trap.
+            restored = true
         }
     }
 }
@@ -930,9 +1006,10 @@ private fun DetailRow(
 }
 
 /** Lazy targets are registered only while attached, including across navigation restoration. */
-private suspend fun requestAttached(requests: Map<String, FocusRequester>, key: String): Boolean {
+private suspend fun requestAttached(requests: Map<String, FocusRequester>, key: String, stillWanted: () -> Boolean = { true }): Boolean {
     repeat(8) {
         withFrameNanos { }
+        if (!stillWanted()) return false
         val requester = requests[key]
         if (requester != null && requester.requestFocus()) return true
     }

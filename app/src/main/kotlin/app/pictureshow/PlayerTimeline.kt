@@ -40,12 +40,15 @@ internal fun PlayerTimeline(
     durationMs: Long,
     modifier: Modifier = Modifier,
     paused: Boolean = false,
+    ended: Boolean = false,
     onOpenSeek: () -> Unit = {}
 ) {
     val accessibleControls = rememberAccessibilityEnabled()
-    var spokenPosition by remember(announcedPositionMs) { mutableLongStateOf(announcedPositionMs) }
+    val timelinePosition = playbackEndPosition(positionMs, durationMs)
+    var spokenPosition by remember(announcedPositionMs, ended) { mutableLongStateOf(if (ended) timelinePosition else announcedPositionMs) }
+    val spokenTimelinePosition = playbackEndPosition(spokenPosition, durationMs)
     val total = displayRuntimeMillis(durationMs)
-    val fraction = if (total != null) (positionMs.toFloat() / total).coerceIn(0f, 1f) else 0f
+    val fraction = if (total != null) (timelinePosition.toFloat() / total).coerceIn(0f, 1f) else 0f
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray).clearAndSetSemantics {}) {
             Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
@@ -55,7 +58,7 @@ internal fun PlayerTimeline(
             // skipped by TV TalkBack's directional distance scoring.
             Box(
                 Modifier.focusProperties { canFocus = accessibleControls }
-                    .onFocusChanged { if (it.isFocused) spokenPosition = positionMs }
+                    .onFocusChanged { if (it.isFocused) spokenPosition = timelinePosition }
                     .clickable(onClickLabel = "Seek", onClick = onOpenSeek).semantics {
                         role = Role.Button
                         contentDescription = "Playback position"
@@ -64,9 +67,15 @@ internal fun PlayerTimeline(
                             true
                         }
                         stateDescription =
-                            if (total != null) "${playerTime(spokenPosition)} of ${playerTime(total)}" else playerTime(spokenPosition)
+                            if (total !=
+                                null
+                            ) {
+                                "${playerTime(spokenTimelinePosition)} of ${playerTime(total)}"
+                            } else {
+                                playerTime(spokenTimelinePosition)
+                            }
                     }
-            ) { Text(playerClock(positionMs, durationMs, paused), modifier = Modifier.clearAndSetSemantics {}) }
+            ) { Text(playerClock(timelinePosition, durationMs, paused), modifier = Modifier.clearAndSetSemantics {}) }
             Text("  ·  ← / → seek 10 seconds", modifier = Modifier.clearAndSetSemantics {})
         }
     }

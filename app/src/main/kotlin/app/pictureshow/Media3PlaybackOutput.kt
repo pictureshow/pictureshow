@@ -50,6 +50,7 @@ internal class Media3PlaybackOutput(
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
     private var current: PlayDecision? = null
     private var saved = PlaybackPosition(0, false)
+    private var completedPosition: PlaybackPosition? = null
     private var audio = -1
     private var subtitle = -1
     private var listener: Player.Listener? = null
@@ -70,9 +71,7 @@ internal class Media3PlaybackOutput(
         }
     }
 
-    override fun position(): PlaybackPosition = mutablePlayer.value?.let {
-        PlaybackPosition(it.currentPosition.coerceAtLeast(0), !it.playWhenReady)
-    } ?: saved
+    override fun position(): PlaybackPosition = completedPosition ?: mutablePlayer.value?.let(::boundedPlaybackPosition) ?: saved
 
     override fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean) {
         releasePlayer(closeSession = false)
@@ -80,6 +79,7 @@ internal class Media3PlaybackOutput(
         audio = audioIndex
         subtitle = subtitleIndex
         saved = PlaybackPosition(positionMs, paused)
+        completedPosition = null
         val selector = PictureshowTrackSelector(context, decision.method == PlayMethod.Transcode)
         selector.parameters = selector.buildUponParameters()
             .setPreferredAudioLanguage(Locale.getDefault().language)
@@ -121,6 +121,7 @@ internal class Media3PlaybackOutput(
         }
         val endSignal = PlaybackEndSignal({ next.takeIf { activePlayer === it } }) { reason ->
             logVideo(reason)
+            captureCompletedPosition(decision)
             PlaybackDiagnostics.write(decision, "end", "reason=$reason positionMs=${position().milliseconds}")
             onEnded(decision)
         }
@@ -364,6 +365,20 @@ internal class Media3PlaybackOutput(
         }
         if (type == MediaStreamType.Audio) audio = index else subtitle = index
         return true
+    }
+
+    /** Snapshot before EOS releases the decoder; both the UI and Stop use this same final clock. */
+    private fun captureCompletedPosition(decision: PlayDecision) {
+        val exposed = mutablePlayer.value ?: activePlayer ?: return
+        val raw = exposed.currentPosition
+        val duration = exposed.duration
+        completedPosition = boundedPlaybackPosition(exposed)
+        PlaybackDiagnostics.write(
+            decision,
+            "end-position",
+            "rawMs=$raw streamDurationMs=$duration serverRuntimeMs=${decision.mediaSource.runTimeTicks?.div(10_000)} " +
+                "finalMs=${completedPosition?.milliseconds}"
+        )
     }
 
     override fun pause() {

@@ -165,6 +165,7 @@ internal fun PlayerItemScreen(
     val player by output.player.collectAsState()
     var setupError by remember { mutableStateOf<String?>(null) }
     var controls by remember { mutableStateOf(false) }
+    var controlsFeedback by remember { mutableStateOf<String?>(null) }
     var controlsHeight by remember { mutableStateOf(240.dp) }
     val density = LocalDensity.current
     var controlsTop by remember { mutableStateOf<Int?>(null) }
@@ -253,6 +254,7 @@ internal fun PlayerItemScreen(
             }
             controls -> {
                 controls = false
+                if (accessibleControls) controlsFeedback = "Controls hidden"
                 rootFocus.requestFocus()
             }
             else -> finish(reason = "back")
@@ -301,7 +303,11 @@ internal fun PlayerItemScreen(
             output.onFailure = { retry, source -> session.failed(retry, source) }
             output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
             output.onEnded = { source ->
+                val finalPosition = output.position().milliseconds
+                val finalDuration = output.player.value?.duration?.takeIf { it > 0 } ?: duration
                 if (session.ended(source)) {
+                    position = finalPosition
+                    duration = finalDuration
                     PlaybackDiagnostics.write(
                         "continuation item=${item.id} lookup=${when (val result = nextLookup?.result) {
                             null -> "pending"
@@ -361,6 +367,7 @@ internal fun PlayerItemScreen(
             focusControls = false
         }
     }
+    LaunchedEffect(controls) { if (controls) controlsFeedback = null }
     LaunchedEffect(accessibleControls) {
         if (accessibleControls) {
             controls = true
@@ -436,7 +443,9 @@ internal fun PlayerItemScreen(
                     }
             )
             .semantics {
-                contentDescription = "Video player"
+                // Back returns both input and accessibility focus here. Name that transition
+                // on the focused node; a sibling live region can be occluded by the video.
+                contentDescription = controlsFeedback ?: "Video player"
                 onClick(label = "Show controls") {
                     controls = true
                     focusControls = true
@@ -491,13 +500,14 @@ internal fun PlayerItemScreen(
                 Text(item.name, style = MaterialTheme.typography.headlineSmall)
                 // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                 // The visual clock keeps moving; it is not a live accessibility announcement.
-                val announcedPosition = remember(paused, seekPreview, duration) { position }
+                val announcedPosition = remember(paused, seekPreview, duration, ended) { position }
                 PlayerTimeline(
                     position,
                     announcedPosition,
                     duration,
                     modifier = Modifier.focusRequester(timelineFocus),
                     paused = paused,
+                    ended = ended,
                     onOpenSeek = {
                         seekPosition = player?.currentPosition ?: position
                         seekOpen = true
