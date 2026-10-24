@@ -248,8 +248,11 @@ fun SearchScreen(
             Text("Enter at least 2 characters.")
         }
         if (state.loading) Text("Searching…")
-        if (state.allFailed || state.someFailed) {
-            Text(if (state.allFailed) "Could not search your library. Try again." else "Some results could not load. Try again.")
+        if (state.allFailed || state.someFailed || state.refreshError != null) {
+            Text(
+                state.refreshError
+                    ?: if (state.allFailed) "Could not search your library. Try again." else "Some results could not load. Try again."
+            )
             Button(
                 onClick = {
                     focusField()

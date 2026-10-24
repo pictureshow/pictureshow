@@ -13,6 +13,7 @@ import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.assembleHome
 import app.pictureshow.core.isEmptyContainer
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -29,7 +30,8 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         val revision: Long = 0,
         val users: Map<String, ItemUserData> = emptyMap(),
         val refreshRevision: Long = 0,
-        val pendingPlayback: Set<String> = emptySet()
+        val pendingPlayback: Set<String> = emptySet(),
+        val userRevisions: Map<String, Long> = emptyMap()
     )
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
@@ -69,6 +71,7 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
                 revision = it.revision + 1,
                 refreshRevision = it.refreshRevision + 1,
                 users = confirmed,
+                userRevisions = confirmed.keys.associateWith { _ -> it.revision + 1 },
                 pendingPlayback = pending
             )
         }
@@ -76,7 +79,13 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
 
     fun changed(item: MediaItem) {
         onRefresh()
-        mutableChanges.update { it.copy(revision = it.revision + 1, users = it.users + (item.id to item.userData)) }
+        mutableChanges.update {
+            it.copy(
+                revision = it.revision + 1,
+                users = it.users + (item.id to item.userData),
+                userRevisions = it.userRevisions + (item.id to it.revision + 1)
+            )
+        }
     }
 
     suspend fun <T> call(account: Account, block: suspend CatalogService.() -> ClientResult<T>): ClientResult<T> {
@@ -88,6 +97,78 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         }
         return result
     }
+}
+
+/** Refresh only retained cards, independently of paging. Never replace IDs, order or metadata.
+ * A revision plus cancellation guard rejects transports that finish non-cancellably after a
+ * newer change, sort or query. Explicit IDs use the same Items list projection as the grid.
+ */
+internal class CatalogCardRefresher(
+    private val scope: CoroutineScope,
+    private val account: Account,
+    private val session: CatalogSession,
+    private val items: () -> List<MediaItem>,
+    private val apply: (Map<String, ItemUserData>) -> Unit,
+    private val failed: (String?) -> Unit
+) {
+    private var job: Job? = null
+    private var generation = 0
+    var needsRetry = false
+        private set
+
+    fun cancel() {
+        generation++
+        job?.cancel()
+        needsRetry = false
+    }
+
+    /** A second Retry while a snapshot is in flight must not fall through to page loading. */
+    fun retry(): Boolean {
+        if (job?.isActive == true) return true
+        if (!needsRetry) return false
+        refresh()
+        return true
+    }
+
+    fun refresh() {
+        cancel()
+        val ids = items().map(MediaItem::id).distinct()
+        if (ids.isEmpty()) return
+        val epoch = generation
+        val revision = session.changes.value.revision
+        job = scope.launch {
+            val users = mutableMapOf<String, ItemUserData>()
+            for (batch in ids.chunked(100)) {
+                val result = session.call(account) { items(account, BrowseQuery("", limit = batch.size, ids = batch)) }
+                currentCoroutineContext().ensureActive()
+                if (epoch != generation || revision != session.changes.value.revision) return@launch
+                when (result) {
+                    is ClientResult.Failure -> {
+                        needsRetry = true
+                        failed(result.error.message)
+                        return@launch
+                    }
+                    is ClientResult.Success -> result.value.items.filter { it.id in batch }.forEach { users[it.id] = it.userData }
+                }
+            }
+            // Keep the current direct leaf acknowledgement immediate. Older patches must not
+            // mask a later list projection, and container counts always come from that list.
+            val changes = session.changes.value
+            val leaves = items().filter { !it.isFolder && it.type !in CONTAINER_TYPES }.map { it.id }.toSet()
+            val direct = changes.users.filterKeys { it in leaves && changes.userRevisions[it] == revision }
+            apply(users + direct)
+            failed(null)
+        }
+    }
+}
+
+internal val CONTAINER_TYPES = setOf("Series", "Season", "BoxSet", "Playlist", "Folder", "CollectionFolder")
+
+internal fun CatalogSession.Changes.usersAfter(revision: Long): Map<String, ItemUserData> =
+    users.filterKeys { (userRevisions[it] ?: 0) > revision }
+
+internal fun List<MediaItem>.withUserData(users: Map<String, ItemUserData>): List<MediaItem> = map { item ->
+    users[item.id]?.let { item.copy(userData = it) } ?: item
 }
 
 data class CatalogHomeState(
@@ -109,7 +190,7 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
     fun reload() {
         job?.cancel()
         job = viewModelScope.launch {
-            mutableState.update { it.copy(loading = true, error = null) }
+            mutableState.update { it.copy(loading = it.rows.isEmpty(), error = null) }
             coroutineScope {
                 val resume = async { session.call(account) { resume(account) } }
                 val next = async { session.call(account) { nextUp(account) } }
@@ -121,6 +202,7 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                 val resumed = resume.await()
                 val upcoming = next.await()
                 val failures = listOf(views, resumed, upcoming) + latest.values
+                currentCoroutineContext().ensureActive()
                 mutableState.update {
                     it.copy(
                         loading = false,
@@ -146,7 +228,8 @@ data class CatalogGridState(
     val loading: Boolean = false,
     val error: String? = null,
     val sortBy: String = "SortName",
-    val descending: Boolean = false
+    val descending: Boolean = false,
+    val refreshError: String? = null
 )
 
 class CatalogGridViewModel(val account: Account, parent: MediaItem, private val session: CatalogSession) : ViewModel() {
@@ -156,13 +239,24 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
     private var offset = 0
     private var ended = false
     private var generation = 0
+    private val refresher = CatalogCardRefresher(
+        viewModelScope,
+        account,
+        session,
+        { state.value.items },
+        { users -> mutableState.update { it.copy(items = it.items.withUserData(users)) } },
+        { error -> mutableState.update { it.copy(refreshError = error) } }
+    )
 
     init {
         load()
         viewModelScope.launch {
+            var revision = session.changes.value.revision
             session.changes.collect { changes ->
-                mutableState.update { state ->
-                    state.copy(items = state.items.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item })
+                mutableState.update { it.copy(items = it.items.withUserData(changes.usersAfter(revision))) }
+                if (changes.revision != revision) {
+                    revision = changes.revision
+                    refresher.refresh()
                 }
             }
         }
@@ -172,16 +266,29 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
         if (index >= state.value.items.size - 12 && state.value.error == null) load()
     }
 
-    fun retry() = load()
+    fun retry() {
+        val retryPage = state.value.error != null
+        val refreshing = refresher.retry()
+        if (retryPage || !refreshing) load()
+    }
 
     fun sort(sortBy: String, descending: Boolean) {
         if (sortBy == state.value.sortBy && descending == state.value.descending) return
         generation++
         job?.cancel()
+        refresher.cancel()
         offset = 0
         ended = false
         mutableState.update {
-            it.copy(items = emptyList(), total = 0, sortBy = sortBy, descending = descending, loading = false, error = null)
+            it.copy(
+                items = emptyList(),
+                total = 0,
+                sortBy = sortBy,
+                descending = descending,
+                loading = false,
+                error = null,
+                refreshError = null
+            )
         }
         load()
     }
@@ -190,6 +297,7 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
         if (job?.isActive == true || ended) return
         val before = state.value
         val epoch = generation
+        val revision = session.changes.value.revision
         val query = BrowseQuery(
             parentId = before.parent.id,
             includeItemTypes = when (before.parent.collectionType) {
@@ -206,7 +314,10 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
         )
         mutableState.update { it.copy(loading = true, error = null) }
         job = viewModelScope.launch {
-            when (val result = session.call(account) { items(account, query) }) {
+            val result = session.call(account) { items(account, query) }
+            currentCoroutineContext().ensureActive()
+            if (epoch != generation) return@launch
+            when (result) {
                 is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
                 is ClientResult.Success -> if (epoch == generation) {
                     val page = result.value
@@ -216,11 +327,12 @@ class CatalogGridViewModel(val account: Account, parent: MediaItem, private val 
                         current.copy(
                             loading = false,
                             total = page.totalRecordCount,
-                            items = (current.items + page.items).distinctBy { it.id }.map { item ->
-                                session.changes.value.users[item.id]?.let { item.copy(userData = it) } ?: item
+                            items = (current.items + page.items.withUserData(session.changes.value.usersAfter(revision))).distinctBy {
+                                it.id
                             }
                         )
                     }
+                    if (revision != session.changes.value.revision) refresher.refresh()
                 }
             }
         }
@@ -279,17 +391,21 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                         playbackReportFinished = original.id !in changes.pendingPlayback
                     )
                 }
-                if (changes.revision > 0 && (refreshed || original.type in listOf("Series", "Season"))) reload()
+                if (changes.revision > 0 && (refreshed || original.type in CONTAINER_TYPES)) {
+                    reload(retainRows = !refreshed && state.value.item != null)
+                }
             }
         }
     }
 
-    fun reload() {
+    fun reload() = reload(retainRows = false)
+
+    private fun reload(retainRows: Boolean) {
         job?.cancel()
         seasonJob?.cancel()
         seasonGeneration++
         job = viewModelScope.launch {
-            mutableState.update { it.copy(loading = true, error = null) }
+            mutableState.update { it.copy(loading = !retainRows, error = null) }
             val result = session.call(account) { item(account, original.id) }
             // A canceled RESUMED request must not overwrite the post-report refresh, even when
             // its transport finishes cancellation in a non-cancellable cleanup block.
@@ -319,13 +435,13 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                         if (selected !=
                             null
                         ) {
-                            loadSeason(selected, preserveError = true)
+                            loadSeason(selected, preserveError = true, retainRows = retainRows)
                         } else {
                             mutableState.update { it.copy(loading = false) }
                             if (state.value.error == null) playbackRead()
                         }
                     } else if (item.type == "Season") {
-                        season(item)
+                        loadSeason(item, preserveError = false, retainRows = retainRows)
                     } else {
                         mutableState.update { it.copy(loading = false) }
                     }
@@ -336,11 +452,16 @@ class CatalogDetailViewModel(private val account: Account, private val original:
 
     fun season(season: MediaItem) = loadSeason(season, preserveError = false)
 
-    private fun loadSeason(season: MediaItem, preserveError: Boolean) {
+    private fun loadSeason(season: MediaItem, preserveError: Boolean, retainRows: Boolean = false) {
         seasonJob?.cancel()
         val generation = ++seasonGeneration
         mutableState.update {
-            it.copy(selectedSeasonId = season.id, episodes = emptyList(), loading = true, error = if (preserveError) it.error else null)
+            it.copy(
+                selectedSeasonId = season.id,
+                episodes = if (retainRows && it.selectedSeasonId == season.id) it.episodes else emptyList(),
+                loading = !retainRows,
+                error = if (preserveError) it.error else null
+            )
         }
         seasonJob = viewModelScope.launch {
             val seriesId = if (original.type == "Series") original.id else season.seriesId

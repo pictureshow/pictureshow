@@ -43,6 +43,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -421,6 +422,7 @@ fun CatalogGrid(
     val grid = rememberLazyGridState()
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
+    var retryFocusRequest by remember { mutableIntStateOf(0) }
     val firstSort = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
@@ -474,8 +476,9 @@ fun CatalogGrid(
                 }
             }
         }
-        CatalogError(state.error, {
+        CatalogError(state.error ?: state.refreshError, {
             restored = false
+            if (state.error == null) retryFocusRequest++
             onRetry()
         }, Modifier.focusRequester(retry))
         if (state.loading) Text("Loading…")
@@ -511,7 +514,7 @@ fun CatalogGrid(
             }
         }
     }
-    LaunchedEffect(state.items.map(MediaItem::id), state.loading) {
+    LaunchedEffect(state.items.map(MediaItem::id), state.loading, retryFocusRequest) {
         if (!state.loading && !restored) {
             withFrameNanos { }
             val focused = if (state.items.isNotEmpty()) {
@@ -914,7 +917,7 @@ private fun DetailRow(
                     account,
                     wide,
                     onClick = { onOpen(item) },
-                    selected = item.id == selectedId,
+                    selected = selectedId?.let { item.id == it },
                     modifier = Modifier.focusRequester(requester).testTag("detail:$focusKey")
                         .onFocusChanged {
                             focused = it.isFocused
@@ -944,12 +947,12 @@ internal fun CatalogCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Dp? = if (wide) 240.dp else 144.dp,
-    selected: Boolean = false
+    selected: Boolean? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val selection = Modifier.semantics {
         role = Role.Button
-        if (item.type == "Season") this.selected = selected
+        if (selected != null) this.selected = selected
         contentDescription = catalogAnnouncement(item)
         onClick(
             label = when (item.type) {
@@ -966,7 +969,7 @@ internal fun CatalogCard(
     // focused card's badge and under its label.
     Card(
         onClick = onClick,
-        border = if (selected) {
+        border = if (selected == true) {
             // tv-material's card shape is 8dp rounded corners; the resting outline follows it.
             CardDefaults.border(border = Border(BorderStroke(2.dp, SelectedSeasonOutline), shape = RoundedCornerShape(8.dp)))
         } else {
@@ -987,7 +990,7 @@ internal fun CatalogCard(
         Column(
             Modifier.clearAndSetSemantics {}.then(
                 if (focused ||
-                    selected
+                    selected == true
                 ) {
                     Modifier.border(3.dp, CatalogBackground, RoundedCornerShape(8.dp))
                 } else {
@@ -1082,7 +1085,7 @@ private fun CatalogError(message: String?, onRetry: () -> Unit, modifier: Modifi
     if (message != null) {
         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(message, color = Color(0xFFFFCCB8))
-            Button(onClick = onRetry, modifier = modifier.semantics { contentDescription = "Retry" }) { Text("Retry") }
+            Button(onClick = onRetry, modifier = modifier) { Text("Retry") }
         }
     }
 }

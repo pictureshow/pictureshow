@@ -19,7 +19,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -39,7 +41,8 @@ data class SearchState(
     val allFailed: Boolean = false,
     val someFailed: Boolean = false,
     val recent: List<String> = emptyList(),
-    val storageError: String? = null
+    val storageError: String? = null,
+    val refreshError: String? = null
 )
 
 class SearchViewModel(private val account: Account, private val session: CatalogSession, private val accounts: AccountStore) : ViewModel() {
@@ -48,6 +51,15 @@ class SearchViewModel(private val account: Account, private val session: Catalog
     private var job: Job? = null
     private var generation = 0
     private var savedQuery: SavedStateHandle? = null
+    private var querySomeFailed = false
+    private val refresher = CatalogCardRefresher(
+        viewModelScope,
+        account,
+        session,
+        { state.value.rows.flatMap { it.items } },
+        { users -> mutableState.update { it.copy(rows = it.rows.map { row -> row.copy(items = row.items.withUserData(users)) }) } },
+        { error -> mutableState.update { it.copy(refreshError = error) } }
+    )
 
     /** The entry query is a one-time seed; an intentionally cleared query is still initialized. */
     fun initialize(savedState: SavedStateHandle, initialQuery: String) {
@@ -57,6 +69,18 @@ class SearchViewModel(private val account: Account, private val session: Catalog
     }
 
     init {
+        viewModelScope.launch {
+            var revision = session.changes.value.revision
+            session.changes.collect { changes ->
+                mutableState.update {
+                    it.copy(rows = it.rows.map { row -> row.copy(items = row.items.withUserData(changes.usersAfter(revision))) })
+                }
+                if (changes.revision != revision) {
+                    revision = changes.revision
+                    refresher.refresh()
+                }
+            }
+        }
         viewModelScope.launch {
             accounts.snapshots.collect { snapshot ->
                 mutableState.update { it.copy(recent = snapshot.recentSearches[account.key].orEmpty()) }
@@ -71,6 +95,8 @@ class SearchViewModel(private val account: Account, private val session: Catalog
         if (bounded == state.value.query && !immediate) return
         val epoch = ++generation
         job?.cancel()
+        refresher.cancel()
+        querySomeFailed = false
         mutableState.update {
             it.copy(
                 query = bounded,
@@ -78,12 +104,14 @@ class SearchViewModel(private val account: Account, private val session: Catalog
                 loading = term.length >= 2,
                 completed = false,
                 allFailed = false,
-                someFailed = false
+                someFailed = false,
+                refreshError = null
             )
         }
         if (term.length < 2) return
         job = viewModelScope.launch {
             if (!immediate) delay(300)
+            val revision = session.changes.value.revision
             val results = coroutineScope {
                 SearchKind.entries.map { kind ->
                     async {
@@ -93,9 +121,12 @@ class SearchViewModel(private val account: Account, private val session: Catalog
             }
             // Also guards a transport that completes non-cancellably after a newer query or a clear.
             if (epoch == generation) {
+                querySomeFailed = results.values.any { it is ClientResult.Failure }
                 mutableState.update {
                     it.copy(
-                        rows = assembleSearch(results),
+                        rows = assembleSearch(results).map { row ->
+                            row.copy(items = row.items.withUserData(session.changes.value.usersAfter(revision)))
+                        },
                         loading = false,
                         completed = true,
                         someFailed = results.values.any { result -> result is ClientResult.Failure },
@@ -104,11 +135,15 @@ class SearchViewModel(private val account: Account, private val session: Catalog
                         }
                     )
                 }
+                if (revision != session.changes.value.revision) refresher.refresh()
             }
         }
     }
 
-    fun retry() = query(state.value.query, immediate = true)
+    fun retry() {
+        // A full query retry also replaces every retained card, resolving a snapshot failure.
+        if (querySomeFailed || !refresher.retry()) query(state.value.query, immediate = true)
+    }
 
     fun submit() = rememberQuery()
 
@@ -147,8 +182,26 @@ class PersonViewModel(private val account: Account, person: MediaItem, private v
     private var job: Job? = null
     private var offset = 0
     private var ended = false
+    private val refresher = CatalogCardRefresher(
+        viewModelScope,
+        account,
+        session,
+        { state.value.grid.items },
+        { users -> mutableState.update { it.copy(grid = it.grid.copy(items = it.grid.items.withUserData(users))) } },
+        { error -> mutableState.update { it.copy(grid = it.grid.copy(refreshError = error)) } }
+    )
 
     init {
+        viewModelScope.launch {
+            var revision = session.changes.value.revision
+            session.changes.collect { changes ->
+                mutableState.update { it.copy(grid = it.grid.copy(items = it.grid.items.withUserData(changes.usersAfter(revision)))) }
+                if (changes.revision != revision) {
+                    revision = changes.revision
+                    refresher.refresh()
+                }
+            }
+        }
         viewModelScope.launch {
             val result = session.call(account) { item(account, person.id) }
             if (result is ClientResult.Success) mutableState.update { it.copy(person = result.value) }
@@ -160,13 +213,20 @@ class PersonViewModel(private val account: Account, person: MediaItem, private v
         if (index >= state.value.grid.items.size - 12 && state.value.grid.error == null) load()
     }
 
-    fun retry() = load()
+    fun retry() {
+        val retryPage = state.value.grid.error != null
+        val refreshing = refresher.retry()
+        if (retryPage || !refreshing) load()
+    }
 
     private fun load() {
         if (job?.isActive == true || ended) return
         mutableState.update { it.copy(grid = it.grid.copy(loading = true, error = null)) }
+        val revision = session.changes.value.revision
         job = viewModelScope.launch {
-            when (val result = session.call(account) { (this as SearchService).personItems(account, state.value.person.id, offset) }) {
+            val result = session.call(account) { (this as SearchService).personItems(account, state.value.person.id, offset) }
+            currentCoroutineContext().ensureActive()
+            when (result) {
                 is ClientResult.Failure -> mutableState.update {
                     it.copy(grid = it.grid.copy(loading = false, error = result.error.message))
                 }
@@ -177,11 +237,16 @@ class PersonViewModel(private val account: Account, person: MediaItem, private v
                         it.copy(
                             grid = it.grid.copy(
                                 loading = false,
-                                items = (it.grid.items + result.value.items).distinctBy(MediaItem::id),
+                                items = (
+                                    it.grid.items + result.value.items.withUserData(
+                                        session.changes.value.usersAfter(revision)
+                                    )
+                                    ).distinctBy(MediaItem::id),
                                 total = result.value.totalRecordCount
                             )
                         )
                     }
+                    if (revision != session.changes.value.revision) refresher.refresh()
                 }
             }
         }

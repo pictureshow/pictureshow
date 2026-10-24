@@ -252,7 +252,7 @@ internal fun NextEpisodeControl(
                 modifier = Modifier.testTag("next:play").semantics {
                     contentDescription = "Play next episode, ${catalogAnnouncement(next)}"
                 }
-            ) { Text("Play now") }
+            ) { Text("Play now", modifier = Modifier.clearAndSetSemantics {}) }
             Button(onClick = {
                 cancelled = true
                 onCancel()

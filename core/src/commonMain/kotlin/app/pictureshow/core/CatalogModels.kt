@@ -72,7 +72,8 @@ data class BrowseQuery(
     val sortBy: String = "SortName",
     val descending: Boolean = false,
     val startIndex: Int = 0,
-    val limit: Int = 60
+    val limit: Int = 60,
+    val ids: List<String> = emptyList()
 )
 
 data class HomeRow(val key: String, val title: String, val items: List<MediaItem>, val library: Boolean = false, val wide: Boolean = false)

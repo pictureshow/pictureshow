@@ -67,26 +67,49 @@ internal class CatalogClient(private val client: HttpClient, private val identit
     override suspend fun items(account: Account, query: BrowseQuery): ClientResult<ItemPage> = request(
         account,
         "Items",
-        mapOf(
-            "parentId" to query.parentId,
-            "recursive" to query.recursive.toString(),
-            "includeItemTypes" to query.includeItemTypes,
-            "sortBy" to query.sortBy,
-            "sortOrder" to if (query.descending) "Descending" else "Ascending",
-            "startIndex" to query.startIndex.coerceAtLeast(0).toString(),
-            "limit" to query.limit.coerceIn(1, 200).toString(),
-            "enableTotalRecordCount" to "true",
-            "fields" to CARD_FIELDS
-        )
+        if (query.ids.isNotEmpty()) {
+            mapOf(
+                "ids" to query.ids.joinToString(","),
+                "limit" to query.limit.coerceIn(1, 200).toString(),
+                "enableUserData" to "true",
+                "fields" to "ChildCount,RecursiveItemCount"
+            )
+        } else {
+            mapOf(
+                "parentId" to query.parentId,
+                "recursive" to query.recursive.toString(),
+                "includeItemTypes" to query.includeItemTypes,
+                "sortBy" to query.sortBy,
+                "sortOrder" to if (query.descending) "Descending" else "Ascending",
+                "startIndex" to query.startIndex.coerceAtLeast(0).toString(),
+                "limit" to query.limit.coerceIn(1, 200).toString(),
+                "enableTotalRecordCount" to "true",
+                "fields" to CARD_FIELDS
+            )
+        }
     )
 
     override suspend fun item(account: Account, id: String): ClientResult<MediaItem> {
         val detail = request<MediaItem>(account, "Items/${id.encodeURLPathPart()}")
-        if (detail !is ClientResult.Success || detail.value.type !in listOf("Movie", "Episode", "Video")) return detail
+        if (detail !is ClientResult.Success ||
+            detail.value.type !in
+            listOf("Movie", "Episode", "Video", "Series", "Season", "BoxSet", "Playlist", "Folder", "CollectionFolder")
+        ) {
+            return detail
+        }
         // Jellyfin 12 can project a different UserData key for a single item. Use the same batch
-        // projection as Continue watching, scoped to this item (without its 24-item row limit).
+        // projection as catalog grids and Continue watching, including parent counts.
+        // Scope it to this item without a row limit; keep the full detail metadata.
         return when (val batch = request<ItemPage>(account, "Items", mapOf("ids" to id))) {
-            is ClientResult.Failure -> if (batch.error.kind == ErrorKind.EXPIRED) batch else detail
+            // Parent counts need the list projection; surfacing its failure allows an explicit
+            // retry instead of presenting a successful detail page with known-ambiguous counts.
+            is ClientResult.Failure -> if (batch.error.kind == ErrorKind.EXPIRED ||
+                detail.value.type !in listOf("Movie", "Episode", "Video")
+            ) {
+                batch
+            } else {
+                detail
+            }
             is ClientResult.Success -> ClientResult.Success(
                 batch.value.items.firstOrNull { it.id == id }?.let { detail.value.copy(userData = it.userData) } ?: detail.value
             )
