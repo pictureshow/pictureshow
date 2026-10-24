@@ -78,7 +78,10 @@ open class PictureshowRenderersFactory internal constructor(
         // The Context-based sink ignores deprecated setAudioCapabilities. Filter its modern provider
         // instead, retaining route notifications and PCM output for both platform and extension decoders.
         val routeProvider =
-            RecoverableAudioOutputProvider(AudioTrackAudioOutputProvider.Builder(context).build(), AudioOutputFailures(context))
+            RecoverableAudioOutputProvider(
+                AudioTrackAudioOutputProvider.Builder(context).setAudioTrackBufferSizeProvider(EncodedAudioBuffers).build(),
+                AudioOutputFailures(context)
+            )
         val provider = if (passthroughEnabled) routeProvider else PcmAudioOutputProvider(routeProvider)
         return DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(enableFloatOutput)

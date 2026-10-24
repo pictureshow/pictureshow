@@ -42,7 +42,8 @@ internal class AudioOutputFailures(
 
     @Synchronized fun rejected(): Set<Int> {
         val time = now()
-        if (preferences.getString("route", null) != route() ||
+        if (preferences.getInt("bufferPolicy", 0) != BUFFER_POLICY ||
+            preferences.getString("route", null) != route() ||
             time < preferences.getLong("at", 0) ||
             time - preferences.getLong("at", 0) >= RETRY_AFTER_MS
         ) {
@@ -58,6 +59,7 @@ internal class AudioOutputFailures(
         val previous = rejected()
         if (encoding in previous) return false
         preferences.edit {
+            putInt("bufferPolicy", BUFFER_POLICY)
             putString("route", failedRoute)
             putLong("at", now())
             putStringSet("encodings", (previous + encoding).map(Int::toString).toSet())
@@ -72,6 +74,7 @@ internal class AudioOutputFailures(
     fun routeKey(): String = route()
 
     companion object {
+        private const val BUFFER_POLICY = 2
         internal const val RETRY_AFTER_MS = 24 * 60 * 60 * 1_000L
         internal val ENCODINGS = mapOf(
             PassthroughEncoding.AC3 to C.ENCODING_AC3,
@@ -114,13 +117,26 @@ internal class RecoverableAudioOutputProvider(delegate: AudioOutputProvider, pri
         return super.getOutputConfig(formatConfig)
     }
 
-    override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput = try {
-        super.getAudioOutput(config)
-    } catch (failure: AudioOutputProvider.InitializationException) {
-        // Do not learn here: DefaultAudioSink may still succeed with its smaller-buffer retry.
-        if (config.encoding in AudioOutputFailures.ENCODINGS.values) {
-            throw AudioOutputProvider.InitializationException(EncodedAudioOutputRefused(config.encoding, configuredRoute, failure))
+    override fun getAudioOutput(config: AudioOutputProvider.OutputConfig): AudioOutput {
+        fun open(candidate: AudioOutputProvider.OutputConfig, retry: Boolean): AudioOutput {
+            PlaybackDiagnostics.write("audio-output encoding=${candidate.encoding} bufferBytes=${candidate.bufferSize} retry=$retry")
+            return super.getAudioOutput(candidate)
         }
-        throw failure
+        try {
+            return open(config, false)
+        } catch (failure: AudioOutputProvider.InitializationException) {
+            EncodedAudioBuffers.smaller(config)?.let { smaller ->
+                try {
+                    return open(smaller, true)
+                } catch (retryFailure: AudioOutputProvider.InitializationException) {
+                    failure.addSuppressed(retryFailure)
+                }
+            }
+            // Do not learn here: DefaultAudioSink may still succeed during its delayed retries.
+            if (config.encoding in AudioOutputFailures.ENCODINGS.values) {
+                throw AudioOutputProvider.InitializationException(EncodedAudioOutputRefused(config.encoding, configuredRoute, failure))
+            }
+            throw failure
+        }
     }
 }
