@@ -24,15 +24,26 @@ import app.pictureshow.core.playback.Redaction
 import app.pictureshow.core.playback.SubtitleDeliveryMethod
 import app.pictureshow.core.playback.TranscodeSeek
 import java.util.concurrent.TimeUnit
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 
 /** One factory is shared by the manifest, media segments and external subtitle media sources. */
 internal object PlaybackMedia {
-    /** Network interceptors run again for redirect hops; default request properties cannot enforce origin. */
-    fun httpFactory(server: Server, decision: PlayDecision): OkHttpDataSource.Factory {
-        val client = OkHttpClient.Builder()
+    // Reopens can happen faster than OkHttp's idle eviction. A pool/dispatcher per source keeps
+    // sockets and workers from many retired players alive. Child clients share these bounded
+    // process-owned resources, but keep their own origin-scoped request interceptor.
+    private val transport by lazy {
+        OkHttpClient.Builder()
+            // Retiring and replacement manifest/media/subtitle loaders can overlap on one origin.
+            .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /** Network interceptors run again for redirect hops; default request properties cannot enforce origin. */
+    fun httpFactory(server: Server, decision: PlayDecision): OkHttpDataSource.Factory {
+        val client = transport.newBuilder()
             .addNetworkInterceptor { chain ->
                 val incoming = chain.request()
                 val cleanUrl = Redaction.stripApiKey(incoming.url.toString())
