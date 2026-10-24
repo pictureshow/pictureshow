@@ -17,6 +17,11 @@ internal object AnonymousMediaButtons : MediaSession.Callback {
     override fun onMediaButtonEvent(session: MediaSession, controllerInfo: MediaSession.ControllerInfo, intent: Intent): Boolean {
         if (controllerInfo.controllerVersion != MediaSession.ControllerInfo.LEGACY_CONTROLLER_VERSION) return false
         if (controllerInfo.packageName != MediaSession.ControllerInfo.LEGACY_CONTROLLER_PACKAGE_NAME) return false
+        return handle(session, intent, "anonymous")
+    }
+
+    /** Single-key handling shared with our activity's own, identified legacy controller. */
+    internal fun handle(session: MediaSession, intent: Intent, origin: String): Boolean {
         if (intent.action != Intent.ACTION_MEDIA_BUTTON) return false
         val key = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java) ?: return false
         val command = when (key.keyCode) {
@@ -30,6 +35,7 @@ internal object AnonymousMediaButtons : MediaSession.Callback {
         if (key.action != KeyEvent.ACTION_DOWN || key.repeatCount != 0) return true
         val player = session.player
         if (!player.isCommandAvailable(command)) return true
+        val before = player.playWhenReady
         when (key.keyCode) {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> Util.handlePlayPauseButtonAction(player)
             KeyEvent.KEYCODE_MEDIA_PLAY -> Util.handlePlayButtonAction(player)
@@ -38,6 +44,10 @@ internal object AnonymousMediaButtons : MediaSession.Callback {
             KeyEvent.KEYCODE_MEDIA_REWIND -> player.seekBack()
             KeyEvent.KEYCODE_MEDIA_STOP -> player.stop()
         }
+        PlaybackDiagnostics.write(
+            "media-button origin=$origin code=${key.keyCode} eventMs=${key.eventTime} " +
+                "playWhenReadyBefore=$before playWhenReadyAfter=${player.playWhenReady}"
+        )
         return true
     }
 }

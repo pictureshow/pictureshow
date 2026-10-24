@@ -43,7 +43,7 @@ internal object PlaybackMediaSession {
         return Handle(context, player, onStop).also { active = it }
     }
 
-    /** Activity-delivered media keys take the same session path as Assistant and system controls. */
+    /** Preserve the platform key bridge; the session callback handles our identified caller. */
     fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode !in MEDIA_KEYS) return false
         return active?.controller?.dispatchMediaButtonEvent(event) ?: false
@@ -78,7 +78,7 @@ internal object PlaybackMediaSession {
             val builder = MediaSession.Builder(
                 context,
                 sessionPlayer(player)
-            ).setId("pictureshow-player").setCallback(AnonymousMediaButtons)
+            ).setId("pictureshow-player").setCallback(ActivityMediaButtons(context))
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launch ->
                 builder.setSessionActivity(
                     PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
