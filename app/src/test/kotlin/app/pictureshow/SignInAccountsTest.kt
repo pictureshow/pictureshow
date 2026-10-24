@@ -423,6 +423,63 @@ class SignInAccountsTest {
     fun quickConnectAsCurrentAccountWithNewTokenLeavesNoSignInBackStack() =
         sameAccountQuickConnect(account.copy(accessToken = "replacement-token"))
 
+    @Test
+    fun passwordAsCurrentAccountWithSameTokenCompletesSignIn() = passwordCompletion(account)
+
+    @Test
+    fun passwordAsCurrentAccountWithReplacementTokenCompletesSignIn() = passwordCompletion(account.copy(accessToken = "new-credential"))
+
+    @Test
+    fun passwordThroughAddServerAsCurrentAccountCompletesSignIn() = passwordCompletion(account, addServer = true)
+
+    @Test
+    fun passwordForDifferentViewerStillBootstrapsHome() = passwordCompletion(other)
+
+    @Test
+    fun passwordAfterExpiredSessionStillBootstrapsHome() = passwordCompletion(account, expired = true)
+
+    @Test
+    fun selectingCurrentViewerReturnsToHomeWithoutChooserOnBack() {
+        chooser()
+        click("Viewer one on Screen room")
+        waitForText("Viewer one · Screen room")
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("Who’s watching?").assertDoesNotExist()
+    }
+
+    private fun passwordCompletion(authorized: Account, addServer: Boolean = false, expired: Boolean = false) {
+        authResult = ClientResult.Success(authorized)
+        if (expired) {
+            runBlocking { accounts.remember(account.copy(accessToken = "", expired = true)) }
+            homeReady.complete(Unit)
+            launch()
+        } else {
+            chooser()
+            if (addServer) {
+                click("Add a server")
+                click("Connect")
+            } else {
+                click("Sign in another user on Screen room")
+            }
+        }
+        waitForText("Sign in to Screen room")
+        compose.onNodeWithContentDescription("Username").performSemanticsAction(SemanticsActions.SetText) {
+            it(androidx.compose.ui.text.AnnotatedString(authorized.user.name))
+        }
+        compose.onNodeWithContentDescription("Password").performSemanticsAction(SemanticsActions.SetText) {
+            it(androidx.compose.ui.text.AnnotatedString("test-password"))
+        }
+        click("Sign in")
+        waitForText("${authorized.user.name} · Screen room")
+        assertEquals(authorized, accounts.snapshots.value.currentAccount)
+        assertEquals(authorized.accessToken, catalogTokens.last(), "Home must use the completed credential")
+        assertEquals(authorized.user.name to "test-password", signedIn)
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("Sign in to Screen room").assertDoesNotExist()
+        compose.onNodeWithText("Who’s watching?").assertDoesNotExist()
+        compose.onNodeWithText("Find your Jellyfin server").assertDoesNotExist()
+    }
+
     private fun sameAccountQuickConnect(authorized: Account) {
         chooser()
         click("Sign in another user on Screen room")

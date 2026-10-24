@@ -640,7 +640,9 @@ fun CatalogDetail(
             item(key = "body") {
                 Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (state.playbackPending) {
-                        if (state.error == null) Text("Saving progress…")
+                        if (state.error == null) {
+                            StatusLine(if (state.playbackReportFinished) "Loading item…" else "Saving progress…")
+                        }
                     } else if (state.loading && item == null) {
                         Text("Loading item…")
                     }

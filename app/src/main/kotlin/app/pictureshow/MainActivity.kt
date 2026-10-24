@@ -218,6 +218,38 @@ internal fun accountDestination(snapshot: AccountSnapshot): String {
     }
 }
 
+/** Complete a persisted sign-in/selection only after the installed session has its credential.
+ * Identity/expiry changes still bootstrap the graph; this also handles unchanged identities.
+ */
+@Composable
+private fun SignInCompletion(
+    completed: Boolean,
+    entryId: String,
+    nav: NavHostController,
+    snapshot: AccountSnapshot,
+    installedKey: String?,
+    installedExpired: Boolean?,
+    accounts: AccountStore
+) {
+    LaunchedEffect(completed, snapshot, installedKey, installedExpired) {
+        val saved = accounts.snapshots.value
+        if (completed &&
+            saved.currentAccount?.expired == false &&
+            installedKey == saved.currentKey &&
+            installedExpired == saved.currentAccount?.expired &&
+            snapshot.currentKey == saved.currentKey &&
+            snapshot.currentAccount?.expired == saved.currentAccount?.expired &&
+            snapshot.currentAccount?.accessToken == saved.currentAccount?.accessToken &&
+            nav.currentBackStackEntry?.id == entryId
+        ) {
+            nav.navigate("home") {
+                popUpTo(nav.graph.id) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+}
+
 @Composable
 internal fun Pictureshow(
     session: SessionViewModel = koinViewModel(),
@@ -382,19 +414,10 @@ internal fun Pictureshow(
                 }
             }
         }
-        composable("accounts") {
+        composable("accounts") { entry ->
             val vm: AccountsViewModel = koinViewModel()
             val screen by vm.state.collectAsStateWithLifecycle()
-            LaunchedEffect(screen.selected) {
-                // Selecting the current account does not change the bootstrap key. Close this
-                // transient switcher ourselves; a different account still resets the graph above.
-                if (screen.selected &&
-                    nav.currentBackStackEntry?.destination?.route == "accounts" &&
-                    nav.previousBackStackEntry?.destination?.route == "home"
-                ) {
-                    nav.popBackStack()
-                }
-            }
+            SignInCompletion(screen.selected, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
             var returnFocus by rememberSaveable { mutableStateOf<String?>(null) }
             var removeKey by rememberSaveable { mutableStateOf<String?>(null) }
             var removeServerId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -512,6 +535,7 @@ internal fun Pictureshow(
             val server = remember(entry) { Json.decodeFromString<Server>(requireNotNull(entry.arguments?.getString("server"))) }
             val vm: LoginViewModel = koinViewModel(parameters = { parametersOf(server) })
             val screen by vm.state.collectAsStateWithLifecycle()
+            SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
             LaunchedEffect(entry) { vm.prefillUsername(entry.arguments?.getString("username").orEmpty()) }
             val activity = LocalActivity.current
             DisposableEffect(vm, activity) {
@@ -570,31 +594,7 @@ internal fun Pictureshow(
             // code and secret with that entry for process restoration, never in account persistence.
             // Leaving the sign-in flow clears the owner and cancels polling.
             LaunchedEffect(vm) { vm.start() }
-            // Reauthorizing the current identity need not change currentKey or expired. Success
-            // still completes this flow, including when the server returns the same token.
-            LaunchedEffect(
-                screen.signedIn,
-                state.snapshot.currentKey,
-                state.snapshot.currentAccount?.expired,
-                state.snapshot.currentAccount?.accessToken
-            ) {
-                val saved = accounts.snapshots.value
-                // Changed identities/expiry belong to the bootstrap above. Wait until its snapshot
-                // catches up; only an unchanged identity needs this explicit completion path.
-                if (screen.signedIn &&
-                    installedKey == saved.currentKey &&
-                    installedExpired == saved.currentAccount?.expired &&
-                    state.snapshot.currentKey == saved.currentKey &&
-                    state.snapshot.currentAccount?.expired == saved.currentAccount?.expired &&
-                    state.snapshot.currentAccount?.accessToken == saved.currentAccount?.accessToken &&
-                    nav.currentBackStackEntry?.id == entry.id
-                ) {
-                    nav.navigate("home") {
-                        popUpTo(nav.graph.id) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                }
-            }
+            SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
             Page("Quick Connect · ${server.name}") {
                 Text(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
@@ -796,7 +796,7 @@ private fun Message(message: String?) {
 }
 
 @Composable
-private fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface) {
+internal fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface) {
     // Focus changes must not look like content updates to a live region. Keep the text on
     // its own semantics node; the focusable container reads its non-actionable child.
     // A very wide line can lose spatial Up/Down to a more distant narrow button.

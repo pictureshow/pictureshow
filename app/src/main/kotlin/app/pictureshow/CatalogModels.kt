@@ -237,7 +237,9 @@ data class CatalogDetailState(
     val seasons: List<MediaItem> = emptyList(),
     val selectedSeasonId: String? = null,
     val episodes: List<MediaItem> = emptyList(),
-    val playbackPending: Boolean = false
+    val playbackPending: Boolean = false,
+    // The stale-data guard outlives reporting (including exhausted failures) until a fresh read.
+    val playbackReportFinished: Boolean = false
 )
 
 class CatalogDetailViewModel(private val account: Account, private val original: MediaItem, private val session: CatalogSession) :
@@ -248,7 +250,8 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             account,
             item = initialChanges.users[original.id]?.let { original.copy(userData = it) }
                 ?: original.takeUnless { original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id) },
-            playbackPending = original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id)
+            playbackPending = original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id),
+            playbackReportFinished = original.id !in initialChanges.pendingPlayback
         )
     )
     val state = mutableState.asStateFlow()
@@ -272,7 +275,8 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                         episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
                         playbackPending = original.id in changes.pendingPlayback ||
                             session.playbackUnresolved(original.id) ||
-                            (state.playbackPending && !(refreshed && original.id in changes.users))
+                            (state.playbackPending && !(refreshed && original.id in changes.users)),
+                        playbackReportFinished = original.id !in changes.pendingPlayback
                     )
                 }
                 if (changes.revision > 0 && (refreshed || original.type in listOf("Series", "Season"))) reload()
@@ -296,7 +300,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                     val item = result.value
                     mutableState.update { it.copy(item = item) }
                     // A parent header says nothing about its episode rows or Next up. Keep the
-                    // same Saving progress guard until all of that page's authoritative reads land.
+                    // same stale-data guard until all of that page's authoritative reads land.
                     if (item.type !in listOf("Series", "Season")) playbackRead()
                     if (item.type == "Series") {
                         val next = session.call(account) { nextUp(account, item.id) }
