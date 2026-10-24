@@ -83,7 +83,7 @@ class AacHlsConfigurationTest {
         val context = RuntimeEnvironment.getApplication()
         val captured = AtomicReference<MediaCodecAdapter.Configuration>()
         val data = requireNotNull(javaClass.getResourceAsStream("/playback/$fixture")).use { it.readBytes() }
-        val codecs = if (fixture == "copied-audio-preroll.ts") "avc1.42c01e,mp4a.40.2" else "mp4a.40.2"
+        val codecs = if (fixture == "copied-audio-preroll.ts") "avc1.64000a,mp4a.40.2" else "mp4a.40.2"
         val master = """
             #EXTM3U
             #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Main",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="$channels"
