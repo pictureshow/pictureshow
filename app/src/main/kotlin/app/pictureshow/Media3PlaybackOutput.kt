@@ -42,6 +42,7 @@ internal class Media3PlaybackOutput(
     var onBuffering: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onProgress: (PlayDecision) -> Unit = {}
     var onFailure: (Boolean, PlayDecision) -> Unit = { _, _ -> }
+    var onAudioFailure: (PlayDecision, Boolean) -> Unit = { source, _ -> onFailure(false, source) }
     var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
     private var activePlayer: ExoPlayer? = null
@@ -173,6 +174,35 @@ internal class Media3PlaybackOutput(
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
         activePlayer = next
+        next.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onAudioDecoderInitialized(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long
+            ) {
+                if (activePlayer ===
+                    next
+                ) {
+                    PlaybackDiagnostics.write(decision, "audio-decoder", "name=$decoderName initMs=$initializationDurationMs")
+                }
+            }
+
+            override fun onAudioUnderrun(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                bufferSize: Int,
+                bufferSizeMs: Long,
+                elapsedSinceLastFeedMs: Long
+            ) {
+                if (activePlayer === next) {
+                    PlaybackDiagnostics.write(
+                        decision,
+                        "audio-underrun",
+                        "bytes=$bufferSize bufferMs=$bufferSizeMs sinceFeedMs=$elapsedSinceLastFeedMs bufferedMs=${next.totalBufferedDuration}"
+                    )
+                }
+            }
+        })
         val exposed = if (serverSeek) {
             TranscodeSeekPlayer(next, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
                 onSeek(target, decision)
@@ -201,6 +231,13 @@ internal class Media3PlaybackOutput(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (activePlayer !== next) return
+                if (playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_READY) {
+                    PlaybackDiagnostics.write(
+                        decision,
+                        "buffer-state",
+                        "state=$playbackState bufferedMs=${next.totalBufferedDuration} loading=${next.isLoading} positionMs=${position().milliseconds}"
+                    )
+                }
                 if (playbackState == Player.STATE_READY) {
                     val readyPosition = position()
                     val readyTargetMs = initialTargetMs
@@ -257,7 +294,25 @@ internal class Media3PlaybackOutput(
                         "player-error",
                         "code=${error.errorCode} type=${(error as? ExoPlaybackException)?.type ?: -1} retryable=$retryable positionMs=${position().milliseconds}"
                     )
-                    onFailure(retryable, decision)
+                    val refusal = generateSequence<Throwable>(error) {
+                        it.cause
+                    }.filterIsInstance<EncodedAudioOutputRefused>().firstOrNull()
+                    val changed = refusal?.let { AudioOutputFailures(context).reject(it.encoding, it.route) } == true
+                    val audioError = error.errorCode in setOf(
+                        PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+                        PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
+                    ) ||
+                        (
+                            error is ExoPlaybackException &&
+                                error.type == ExoPlaybackException.TYPE_RENDERER &&
+                                error.rendererFormat?.sampleMimeType?.startsWith("audio/") == true
+                            )
+                    if (audioError) {
+                        PlaybackDiagnostics.write(decision, "audio-recovery", "encoding=${refusal?.encoding ?: -1} rejected=$changed")
+                        onAudioFailure(decision, changed)
+                    } else {
+                        onFailure(retryable, decision)
+                    }
                 }
             }
         }.also(exposed::addListener)

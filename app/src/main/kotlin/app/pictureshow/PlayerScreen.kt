@@ -293,6 +293,7 @@ private fun PlayerItemScreen(
             output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
             output.onProgress = { session.progress(it) }
             output.onFailure = { retry, source -> session.failed(retry, source) }
+            output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
             output.onEnded = { source ->
                 if (session.ended(source)) {
                     ended = true

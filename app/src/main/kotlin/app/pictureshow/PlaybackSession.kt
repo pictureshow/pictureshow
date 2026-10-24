@@ -5,6 +5,7 @@ package app.pictureshow
 
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
+import app.pictureshow.core.playback.AudioOnlyRecovery
 import app.pictureshow.core.playback.DeviceCapabilities
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
@@ -114,6 +115,9 @@ internal class PlaybackSession(
     // Retain the viewing even if replacement negotiation fails after retiring its old stream.
     private var reportingDecision: PlayDecision? = null
     private var fallbackUsed = false
+    private var audioRecoveryRequest: PlaybackRequest? = null
+    private var audioRecoveryStage = 0
+    private var audioRecoveryCopiesVideo = false
     private var closed = false
     private var closing = false
     private var ending = false
@@ -289,11 +293,24 @@ internal class PlaybackSession(
         capture()
         val nextAudio = if (type == MediaStreamType.Audio) index else mutable.value.audioIndex
         val nextSubtitle = if (type == MediaStreamType.Subtitle) index else mutable.value.subtitleIndex
-        if (current.method != PlayMethod.Transcode && output.select(type, index)) {
+        val leavingAudioRecovery = type == MediaStreamType.Audio && index != mutable.value.audioIndex && audioRecoveryRequest != null
+        val baseline = audioRecoveryRequest
+        if (leavingAudioRecovery) {
+            requested = requireNotNull(baseline)
+            audioRecoveryRequest = null
+            audioRecoveryStage = 0
+        }
+        if (!leavingAudioRecovery && current.method != PlayMethod.Transcode && output.select(type, index)) {
             mutable.value = mutable.value.copy(audioIndex = nextAudio, subtitleIndex = nextSubtitle)
             requested = requested.copy(audioStreamIndex = nextAudio, subtitleStreamIndex = nextSubtitle)
             if (ready) gateway.progress(progressInfo())
         } else {
+            // An unsupported in-player audio choice also uses the server. Keep the original
+            // policy so the next working track can return to direct playback without an error.
+            if (type == MediaStreamType.Audio && !leavingAudioRecovery && audioRecoveryRequest == null) {
+                audioRecoveryRequest = requested
+                audioRecoveryCopiesVideo = AudioOnlyRecovery.hasDirectVideo(current)
+            }
             retireStream(releaseOutput = false)
             negotiate(
                 requested.copy(
@@ -301,8 +318,15 @@ internal class PlaybackSession(
                     mediaSourceId = current.mediaSourceId,
                     audioStreamIndex = nextAudio,
                     subtitleStreamIndex = nextSubtitle,
-                    enableDirectPlay = TranscodeSeek.required(current) && requested.enableDirectPlay,
-                    enableDirectStream = TranscodeSeek.required(current) && requested.enableDirectStream
+                    enableDirectPlay = (leavingAudioRecovery || TranscodeSeek.required(current)) && requested.enableDirectPlay,
+                    enableDirectStream = (leavingAudioRecovery || TranscodeSeek.required(current)) && requested.enableDirectStream,
+                    requireVideoStreamCopy = if (type == MediaStreamType.Audio &&
+                        !leavingAudioRecovery
+                    ) {
+                        audioRecoveryCopiesVideo
+                    } else {
+                        requested.requireVideoStreamCopy
+                    }
                 ),
                 lastPosition.paused
             )
@@ -313,6 +337,9 @@ internal class PlaybackSession(
         if (mutable.value.error != null) return@enqueue
         val current = decision ?: return@enqueue
         capture()
+        audioRecoveryRequest?.let { requested = it }
+        audioRecoveryRequest = null
+        audioRecoveryStage = 0
         retireStream(releaseOutput = false)
         negotiate(
             requested.copy(
@@ -354,33 +381,78 @@ internal class PlaybackSession(
         }
     }
 
-    fun failed(canRetryWithTranscode: Boolean, source: PlayDecision? = decision, reason: String = "player-error") = enqueue {
-        if (mutable.value.error != null || source !== decision) return@enqueue
-        val current = decision ?: return@enqueue
-        capture()
-        val retry = canRetryWithTranscode && current.method != PlayMethod.Transcode && !fallbackUsed
-        trace(if (retry) "fallback" else "failure", "reason=$reason targetMs=${lastPosition.milliseconds}")
-        if (retry) retireStream(releaseOutput = false) else finishDecision(failed = true)
-        if (retry) {
-            fallbackUsed = true
-            negotiate(
-                requested.copy(
-                    startPosition = lastPosition.milliseconds.milliseconds,
-                    mediaSourceId = current.mediaSourceId,
-                    audioStreamIndex = mutable.value.audioIndex,
-                    subtitleStreamIndex = mutable.value.subtitleIndex,
-                    enableDirectPlay = false,
-                    enableDirectStream = false,
-                    allowVideoStreamCopy = false
-                ),
-                lastPosition.paused
-            )
-        } else {
-            output.pause()
-            mutable.value =
-                mutable.value.copy(preparing = false, error = "Playback failed. The server could not provide a playable stream.")
+    private enum class AudioRecovery { Decode, Server }
+
+    fun failed(canRetryWithTranscode: Boolean, source: PlayDecision? = decision, reason: String = "player-error") =
+        handleFailure(canRetryWithTranscode, source, reason, null)
+
+    fun audioFailed(source: PlayDecision? = decision, retryLocally: Boolean = false) = handleFailure(
+        true,
+        source,
+        if (retryLocally) "audio-output-local" else "audio-output",
+        if (retryLocally) AudioRecovery.Decode else AudioRecovery.Server
+    )
+
+    private fun handleFailure(canRetryWithTranscode: Boolean, source: PlayDecision?, reason: String, audioRecovery: AudioRecovery?) =
+        enqueue {
+            if (mutable.value.error != null || source !== decision) return@enqueue
+            val current = decision ?: return@enqueue
+            capture()
+            if (audioRecovery != null) {
+                if (audioRecoveryStage < 2 && canRetryWithTranscode) {
+                    val baseline = audioRecoveryRequest ?: requested.also {
+                        audioRecoveryRequest = it
+                        audioRecoveryCopiesVideo = AudioOnlyRecovery.hasDirectVideo(current)
+                    }
+                    val local = audioRecovery == AudioRecovery.Decode && audioRecoveryStage == 0
+                    audioRecoveryStage = if (local) 1 else 2
+                    trace("fallback", "reason=$reason audioOnly=true local=$local targetMs=${lastPosition.milliseconds}")
+                    retireStream(releaseOutput = false)
+                    negotiate(
+                        baseline.copy(
+                            startPosition = lastPosition.milliseconds.milliseconds,
+                            mediaSourceId = current.mediaSourceId,
+                            audioStreamIndex = mutable.value.audioIndex,
+                            subtitleStreamIndex = mutable.value.subtitleIndex,
+                            enableDirectPlay = local && baseline.enableDirectPlay,
+                            enableDirectStream = local && baseline.enableDirectStream,
+                            allowAudioStreamCopy = local && baseline.allowAudioStreamCopy,
+                            requireVideoStreamCopy = !local && audioRecoveryCopiesVideo
+                        ),
+                        lastPosition.paused
+                    )
+                } else {
+                    trace("failure", "reason=$reason audioOnly=true targetMs=${lastPosition.milliseconds}")
+                    output.pause()
+                    mutable.value =
+                        mutable.value.copy(preparing = false, error = "Playback failed. The server could not provide a playable stream.")
+                    finishDecision(failed = true)
+                }
+                return@enqueue
+            }
+            val retry = canRetryWithTranscode && current.method != PlayMethod.Transcode && !fallbackUsed
+            trace(if (retry) "fallback" else "failure", "reason=$reason targetMs=${lastPosition.milliseconds}")
+            if (retry) retireStream(releaseOutput = false) else finishDecision(failed = true)
+            if (retry) {
+                fallbackUsed = true
+                negotiate(
+                    requested.copy(
+                        startPosition = lastPosition.milliseconds.milliseconds,
+                        mediaSourceId = current.mediaSourceId,
+                        audioStreamIndex = mutable.value.audioIndex,
+                        subtitleStreamIndex = mutable.value.subtitleIndex,
+                        enableDirectPlay = false,
+                        enableDirectStream = false,
+                        allowVideoStreamCopy = false
+                    ),
+                    lastPosition.paused
+                )
+            } else {
+                output.pause()
+                mutable.value =
+                    mutable.value.copy(preparing = false, error = "Playback failed. The server could not provide a playable stream.")
+            }
         }
-    }
 
     /** EOS is authoritative even when the server runtime is wrong. Stop must land before played. */
     fun ended(source: PlayDecision? = decision): Boolean {

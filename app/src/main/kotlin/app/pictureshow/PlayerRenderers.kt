@@ -75,12 +75,11 @@ open class PictureshowRenderersFactory internal constructor(
     }
 
     override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
-        if (passthroughEnabled) {
-            return requireNotNull(super.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams))
-        }
         // The Context-based sink ignores deprecated setAudioCapabilities. Filter its modern provider
         // instead, retaining route notifications and PCM output for both platform and extension decoders.
-        val provider = PcmAudioOutputProvider(AudioTrackAudioOutputProvider.Builder(context).build())
+        val routeProvider =
+            RecoverableAudioOutputProvider(AudioTrackAudioOutputProvider.Builder(context).build(), AudioOutputFailures(context))
+        val provider = if (passthroughEnabled) routeProvider else PcmAudioOutputProvider(routeProvider)
         return DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)

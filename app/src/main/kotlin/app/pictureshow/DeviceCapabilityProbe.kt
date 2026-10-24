@@ -78,7 +78,9 @@ class DeviceCapabilityProbe(
         } + AUDIO_MIMES.entries.distinctBy { it.value }.mapNotNull { (mime, codec) ->
             if (codec != AudioCodec.PCM && ffmpegSupport(mime)) AudioDecoder(codec, 8, hardware = false) else null
         }
-        val output = audioOutput(routeCapabilities ?: currentAudioCapabilities())
+        val reported = audioOutput(routeCapabilities ?: currentAudioCapabilities())
+        val rejected = AudioOutputFailures(context).rejected()
+        val output = reported.copy(passthrough = reported.passthrough.filterNot { AudioOutputFailures.ENCODINGS[it] in rejected }.toSet())
         return DeviceCapabilities(
             name = "Android TV",
             videoDecoders = video.map { decoder ->
@@ -118,6 +120,9 @@ class DeviceCapabilityProbe(
         close()
         receiver = AudioCapabilitiesReceiver(context, { capabilities ->
             routeCapabilities = capabilities
+            AudioOutputFailures(context).clear()
+            // Equal codec lists can hide a new physical output; raw route/setting identity is
+            // checked by the refusal store on every snapshot as well as by the sink.
             onChanged(snapshot())
         }, AudioAttributes.DEFAULT, null).also { routeCapabilities = it.register() }
     }

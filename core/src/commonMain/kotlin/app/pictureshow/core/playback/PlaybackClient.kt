@@ -29,7 +29,10 @@ data class PlaybackRequest(
     val subtitleStreamIndex: Int? = null,
     val enableDirectPlay: Boolean = true,
     val enableDirectStream: Boolean = true,
-    val allowVideoStreamCopy: Boolean = true
+    val allowVideoStreamCopy: Boolean = true,
+    val allowAudioStreamCopy: Boolean = true,
+    /** Audio recovery after this video already played directly; require copy in the stream URL too. */
+    val requireVideoStreamCopy: Boolean = false
 )
 
 /** Jellyfin ticks are 100 ns. */
@@ -66,7 +69,20 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         return when (val info = playbackInfo(account, itemId, body)) {
             is ClientResult.Failure -> info
             is ClientResult.Success -> ClientResult.Success(
-                PlayDecisions.decide(account.server, itemId, info.value, identity, account.accessToken, playback.mediaSourceId)
+                PlayDecisions.decide(
+                    account.server,
+                    itemId,
+                    info.value,
+                    identity,
+                    account.accessToken,
+                    playback.mediaSourceId
+                ).let { outcome ->
+                    if (playback.requireVideoStreamCopy && outcome is PlayOutcome.Play) {
+                        AudioOnlyRecovery.preserveVideo(outcome.decision, playback.subtitleStreamIndex)
+                    } else {
+                        outcome
+                    }
+                }
             )
         }
     }
@@ -134,7 +150,8 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                 deviceProfile = DeviceProfileBuilder.build(capabilities),
                 enableDirectPlay = playback.enableDirectPlay,
                 enableDirectStream = playback.enableDirectStream,
-                allowVideoStreamCopy = playback.allowVideoStreamCopy
+                allowVideoStreamCopy = playback.allowVideoStreamCopy,
+                allowAudioStreamCopy = playback.allowAudioStreamCopy
             )
     }
 }
