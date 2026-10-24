@@ -78,10 +78,37 @@ internal fun thisTvShareIntent(report: ThisTvReport): Intent = Intent(Intent.ACT
     putExtra(Intent.EXTRA_TEXT, report.sharedText)
 }
 
-/** Bound both long logical lines and wrapped rows so a focused diagnostic block fits on a TV. */
-internal fun diagnosticTextChunks(text: String, fontScale: Float): List<String> = text.lines().flatMap { line ->
-    if (line.isEmpty()) listOf("") else line.chunked(80)
-}.chunked(if (fontScale > 1.15f) 7 else 12).map { it.joinToString("\n") }
+/**
+ * Count word-aware rows to bound focus blocks, but let Text wrap each original line naturally.
+ * A mid-line block split retains its space. At an original line boundary, the gap between Text
+ * nodes represents that newline, matching short-line diagnostics without adding blank rows.
+ */
+internal fun diagnosticTextChunks(text: String, fontScale: Float): List<String> {
+    val rows = text.split('\n').flatMapIndexed { lineIndex, line ->
+        buildList {
+            var start = 0
+            do {
+                val limit = minOf(start + 80, line.length)
+                var end = limit
+                if (limit < line.length) {
+                    var space = limit - 1
+                    while (space >= start && line[space] != ' ') space--
+                    if (space >= start) end = space + 1
+                }
+                add(DiagnosticRow(line.substring(start, end), start == 0 && lineIndex > 0))
+                start = end
+            } while (start < line.length)
+        }
+    }
+    // Word wrapping can use three visual lines per budget row at large text.
+    return rows.chunked(if (fontScale > 1.15f) 5 else 12).map { block ->
+        block.mapIndexed { index, row ->
+            if (index > 0 && row.startsLine) "\n${row.text}" else row.text
+        }.joinToString("")
+    }
+}
+
+private data class DiagnosticRow(val text: String, val startsLine: Boolean)
 
 @Composable
 internal fun ThisTvScreen(

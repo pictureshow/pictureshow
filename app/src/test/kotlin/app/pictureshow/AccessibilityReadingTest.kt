@@ -75,6 +75,7 @@ class AccessibilityReadingTest {
             val value = focused.fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
             if (value == "Back") return text.toString()
             val bounds = focused.getUnclippedBoundsInRoot()
+            println("Focused diagnostic block bounds: $bounds")
             assertTrue(bounds.top.value >= 0f && bounds.bottom.value <= 540f, "Focused reading block is outside viewport: $bounds")
             assertTrue(bounds.bottom.value - bounds.top.value <= 488f, "Focused reading block is too tall: $bounds")
             focused.assertIsDisplayed()
@@ -89,7 +90,7 @@ class AccessibilityReadingTest {
         show(ThisTvReport("Reported capabilities", json))
         compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
-        val read = readToBack().replace("\n", "")
+        val read = readToBack()
         assertEquals(json, read, "Every part of the compact JSON must remain readable")
     }
 
@@ -111,7 +112,7 @@ class AccessibilityReadingTest {
         compose.onNodeWithText("Refresh capabilities").assertIsFocused()
         compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
-        assertEquals(json, readToBack().replace("\n", ""), "Every part must remain readable after a slow preferences read")
+        assertEquals(json, readToBack(), "Every part must remain readable after a slow preferences read")
     }
 
     @Test
@@ -136,11 +137,39 @@ class AccessibilityReadingTest {
     }
 
     @Test
+    fun reportWordsAndOriginalNewlinesRemainReadableExactlyOnce() {
+        val summary =
+            "Audio output: Media3 default route; connected outputs: HDMI. Active AudioTrack route unavailable outside playback.\n" +
+                "FFmpeg decoders present (profile-relevant audio): AAC, AC3, EAC3, TRUEHD, DTS, FLAC, ALAC, OPUS, VORBIS, MP3, MP2\n" +
+                "  3840 × 2160 at 60.0 fps; up to 120.0 fps at 1080p or below; reported decoder limits"
+        show(ThisTvReport(summary, "{}"))
+        compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        assertEquals(summary, readToBack(), "Report words, spaces and original newlines must survive reading")
+    }
+
+    @Test
+    fun compactJsonWithSpacesKeepsWordsAndWhitespaceAcrossBlocks() {
+        val json = "{\"Formats\":[" + (1..120).joinToString(", ") { "\"Whole codec name $it\"" } + "]}"
+        show(ThisTvReport("Reported capabilities", json))
+        compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        assertEquals(json, readToBack(), "Compact JSON must retain every original space")
+    }
+
+    @Test
     fun longDiagnosticParagraphCanBeReadToItsEndAtLargeText() {
         val summary = (1..100).joinToString(" ") { "Wide format $it WWWWWWWWWWWWWWWWWWWW" }
         show(ThisTvReport(summary, "{}"))
         compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        val read = readToBack().replace("\n", "")
+        val read = readToBack()
         assertEquals(summary, read, "Every part of the long summary must remain readable")
+    }
+
+    @Test
+    fun wideWordsRemainWithinTheViewportAtLargeText() {
+        val summary = (1..60).joinToString(" ") { "W".repeat(24) + it }
+        show(ThisTvReport(summary, "{}"))
+        compose.onNodeWithText("View device profile JSON").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        assertEquals(summary, readToBack())
     }
 }
