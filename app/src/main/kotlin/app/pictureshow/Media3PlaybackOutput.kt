@@ -46,6 +46,7 @@ internal class Media3PlaybackOutput(
     var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
     private var activePlayer: ExoPlayer? = null
+    private var reopenState: ReopeningPlayer? = null
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
     private var current: PlayDecision? = null
     private var saved = PlaybackPosition(0, false)
@@ -203,12 +204,14 @@ internal class Media3PlaybackOutput(
                 }
             }
         })
+        val managed = ReopeningPlayer(next)
+        reopenState = managed
         val exposed = if (serverSeek) {
-            TranscodeSeekPlayer(next, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
+            TranscodeSeekPlayer(managed, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
                 onSeek(target, decision)
             }
         } else {
-            next
+            managed
         }
         var initialReady = false
         var initialTargetMs = positionMs
@@ -250,7 +253,10 @@ internal class Media3PlaybackOutput(
                         initialReady = true
                         // Stop the loader immediately, before a zero-reset source can keep playing.
                         // stop() retains playWhenReady so recovery preserves the viewer's pause intent.
-                        if (!startPositionApplied(readyTargetMs, readyPosition.milliseconds)) next.stop()
+                        if (!startPositionApplied(readyTargetMs, readyPosition.milliseconds)) {
+                            managed.beginReopen()
+                            next.stop()
+                        }
                     }
                     onReady(decision, readyPosition, readyTargetMs)
                 }
@@ -327,13 +333,14 @@ internal class Media3PlaybackOutput(
         }
         next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
         next.playWhenReady = !paused
+        // Publish a prepared replacement: IDLE would advertise no media to external controllers.
+        next.prepare()
         val existingSession = mediaSession
         if (existingSession == null) {
             mediaSession = PlaybackMediaSession.open(context, exposed) { onStop() }
         } else {
             existingSession.replacePlayer(exposed)
         }
-        next.prepare()
     }
 
     override fun select(type: MediaStreamType, index: Int): Boolean {
@@ -365,6 +372,7 @@ internal class Media3PlaybackOutput(
 
     override fun beginSeek() {
         physicalEnd?.invalidate()
+        reopenState?.beginReopen()
         activePlayer?.stop()
     }
 
@@ -382,6 +390,7 @@ internal class Media3PlaybackOutput(
             return
         }
         val exposed = mutablePlayer.value
+        if (!closeSession) reopenState?.beginReopen()
         saved = position()
         mutablePlayer.value = null
         activePlayer = null
@@ -391,6 +400,7 @@ internal class Media3PlaybackOutput(
             mediaSession = null
         }
         active.release()
+        reopenState = null
         listener = null
     }
 }

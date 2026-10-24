@@ -131,15 +131,18 @@ internal fun PlayerScreen(
     }
 }
 
+private data class EpisodeLookup(val attempt: Int, val result: ClientResult<MediaItem?>)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PlayerItemScreen(
+internal fun PlayerItemScreen(
     account: Account,
     item: MediaItem,
     startMs: Long,
     catalog: CatalogSession,
     onNext: (MediaItem) -> Unit,
-    onExit: () -> Unit
+    onExit: () -> Unit,
+    providedOutput: Media3PlaybackOutput? = null
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -152,7 +155,7 @@ private fun PlayerItemScreen(
     val preferences: PlaybackPreferencesStore = koinInject()
     var localPreferences by remember { mutableStateOf(PlaybackPreferences()) }
     var subtitleDelayMs by remember { mutableIntStateOf(0) }
-    val output = remember { Media3PlaybackOutput(context, account.server, item.name) }
+    val output = remember { providedOutput ?: Media3PlaybackOutput(context, account.server, item.name) }
     // Final Stopped/DELETE requests must outlive navigation disposal, then this finite scope cancels itself.
     val reportScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     var probe by remember { mutableStateOf<DeviceCapabilityProbe?>(null) }
@@ -190,7 +193,10 @@ private fun PlayerItemScreen(
     val error = setupError ?: state.error
     var metadata by remember { mutableStateOf(item) }
     var segments by remember { mutableStateOf(emptyList<MediaSegment>()) }
-    var nextEpisode by remember { mutableStateOf<MediaItem?>(null) }
+    // A pending or failed optional lookup is not evidence that this is the last episode.
+    var nextLookup by remember { mutableStateOf<EpisodeLookup?>(null) }
+    var nextRetry by remember { mutableIntStateOf(0) }
+    val nextEpisode = (nextLookup?.result as? ClientResult.Success)?.value
     var extras by remember { mutableStateOf<PlaybackExtrasClient?>(null) }
     var tiles by remember { mutableStateOf<TrickplayCache?>(null) }
     var chaptersOpen by remember { mutableStateOf(false) }
@@ -296,8 +302,14 @@ private fun PlayerItemScreen(
             output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
             output.onEnded = { source ->
                 if (session.ended(source)) {
+                    PlaybackDiagnostics.write(
+                        "continuation item=${item.id} lookup=${when (val result = nextLookup?.result) {
+                            null -> "pending"
+                            is ClientResult.Failure -> "failed"
+                            is ClientResult.Success -> result.value?.id ?: "none"
+                        }} cancelled=$nextCancelled"
+                    )
                     ended = true
-                    if (nextEpisode == null || nextCancelled) finish(reason = "natural-end")
                 }
             }
             activeProbe.start { session.routeChanged() }
@@ -319,9 +331,23 @@ private fun PlayerItemScreen(
         val client = extras ?: return@LaunchedEffect
         segments = (client.segments(account, item.id) as? ClientResult.Success)?.value.orEmpty()
     }
-    LaunchedEffect(extras, metadata.seriesId) {
+    LaunchedEffect(extras, metadata.id, metadata.type, metadata.seriesId, nextRetry) {
         val client = extras ?: return@LaunchedEffect
-        nextEpisode = (client.nextEpisode(account, metadata) as? ClientResult.Success)?.value
+        nextLookup = null
+        nextLookup = EpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
+    }
+    LaunchedEffect(ended, nextLookup, nextCancelled) {
+        if (!ended) return@LaunchedEffect
+        val lookup = nextLookup
+        if (nextCancelled) {
+            finish(reason = "natural-end")
+        } else {
+            when (val result = lookup?.result) {
+                is ClientResult.Failure -> if (lookup.attempt == 0) nextRetry = 1 else finish(reason = "natural-end")
+                is ClientResult.Success -> if (result.value == null) finish(reason = "natural-end")
+                null -> Unit
+            }
+        }
     }
     LaunchedEffect(seekPreview) {
         if (seekPreview != null) {
@@ -426,6 +452,9 @@ private fun PlayerItemScreen(
         val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
         PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop))
         if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
+        if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
+            PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
+        }
         if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
             PlaybackStatus("Preparing playback…", Modifier.align(Alignment.Center))
         }
@@ -512,7 +541,10 @@ private fun PlayerItemScreen(
                         account, next, trigger != null && position >= trigger, ended,
                         paused || playback.buffering || state.preparing || !actionsVisible,
                         onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, onPlay = { finish(next) },
-                        onCancel = { nextCancelled = true }, visible = actionsVisible, compact = controls,
+                        onCancel = {
+                            PlaybackDiagnostics.write("continuation-cancel item=${item.id}")
+                            nextCancelled = true
+                        }, visible = actionsVisible, compact = controls,
                         remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null,
                         autoPlay = !accessibleControls
                     )

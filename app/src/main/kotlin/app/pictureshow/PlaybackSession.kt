@@ -567,7 +567,13 @@ internal class PlaybackSession(
                         retireStream(releaseOutput = false)
                     } else {
                         try {
-                            output.open(next, lastPosition.milliseconds, audio, subtitle, if (seeking) output.position().paused else paused)
+                            output.open(
+                                next,
+                                lastPosition.milliseconds,
+                                audio,
+                                subtitle,
+                                if (started || seeking) output.position().paused else paused
+                            )
                         } catch (cancelled: kotlinx.coroutines.CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
