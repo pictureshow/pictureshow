@@ -18,6 +18,7 @@ import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
 import app.pictureshow.core.Server
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
@@ -28,8 +29,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** The only layer that owns a decoder. Replacing a source releases the old player and its callbacks first. */
-internal class Media3PlaybackOutput(private val context: Context, private val server: Server, private val title: String? = null) :
-    PlaybackOutput {
+internal class Media3PlaybackOutput(
+    private val context: Context,
+    private val server: Server,
+    private val title: String? = null,
+    private val upstream: androidx.media3.datasource.DataSource.Factory? = null,
+    private val renderersFactory: RenderersFactory? = null
+) : PlaybackOutput {
     private val mutablePlayer = MutableStateFlow<Player?>(null)
     val player = mutablePlayer.asStateFlow()
     var onReady: (PlayDecision, PlaybackPosition, Long) -> Unit = { _, _, _ -> }
@@ -81,12 +87,21 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle < 0)
             .build()
         val serverSeek = TranscodeSeek.required(decision)
+        val videoClock = serverSeek && !TranscodeSeek.audioAlreadyEncodes(decision)
         val startMs = if (serverSeek) TranscodeSeek.startPositionMs(decision, positionMs) else 0
         val media = PlaybackMedia.item(server, decision, title, if (serverSeek) startMs else null)
         PlaybackDiagnostics.write(
             decision,
             "open",
-            "requestedMs=$positionMs serverMs=$startMs method=${decision.method} serverSeek=$serverSeek path=${media.localConfiguration?.uri?.path}"
+            "requestedMs=$positionMs serverMs=$startMs method=${decision.method} serverSeek=$serverSeek " +
+                "route=${if (videoClock) {
+                    "progressive-video-clock"
+                } else if (serverSeek) {
+                    "progressive-encoded-audio"
+                } else {
+                    "native"
+                }} " +
+                "path=${media.localConfiguration?.uri?.path}"
         )
         lateinit var next: ExoPlayer
         val endSignal = PlaybackEndSignal({ next.takeIf { activePlayer === it } }) { reason ->
@@ -103,9 +118,15 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             null
         }
         physicalEnd = detector
-        val dataSources = PlaybackMedia.dataSourceFactory(server, decision)
-        val sourceFactory = DefaultMediaSourceFactory(context).setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
-        val baseRenderers = PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled)
+        val dataSources = PlaybackMedia.dataSourceFactory(server, decision, upstream ?: PlaybackMedia.httpFactory(server, decision))
+        val extractors = if (videoClock) {
+            VideoClockExtractorsFactory { PlaybackDiagnostics.write(decision, "video-clock", it) }
+        } else {
+            DefaultExtractorsFactory()
+        }
+        val sourceFactory = DefaultMediaSourceFactory(context, extractors)
+            .setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
+        val baseRenderers = renderersFactory ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled)
         val renderers = RenderersFactory { handler, video, audio, text, metadata ->
             val created = baseRenderers.createRenderers(handler, video, audio, text, metadata)
             detector?.wrap(created, handler) ?: created

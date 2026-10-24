@@ -37,75 +37,81 @@ class TranscodeSeekAudioEligibilityTest {
     @Test
     fun negotiatedAudioMetadataCanAlreadyDescribeTheEncodedOutput() {
         // The server rewrites the selected track to stereo in PlaybackInfo after deciding to downmix.
-        assertTrue(TranscodeSeek.required(decision(reasons = listOf("VideoFramerateNotSupported", "AudioChannelsNotSupported"))))
-        assertFalse(TranscodeSeek.required(decision(reasons = listOf("AudioCodecNotSupported"))))
-        assertFalse(TranscodeSeek.required(decision(reasons = listOf("VideoFramerateNotSupported"))))
-        assertFalse(TranscodeSeek.required(decision(parameters = "AudioCodec=copy", reasons = listOf("AudioChannelsNotSupported"))))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(reasons = listOf("VideoFramerateNotSupported", "AudioChannelsNotSupported"))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(reasons = listOf("AudioCodecNotSupported"))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(reasons = listOf("VideoFramerateNotSupported"))))
+        assertFalse(
+            TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=copy", reasons = listOf("AudioChannelsNotSupported")))
+        )
     }
 
     @Test
-    fun compatibleAudioThatHlsCouldCopyKeepsTheExistingRoute() {
-        assertFalse(TranscodeSeek.required(decision()))
-        assertFalse(TranscodeSeek.required(decision(parameters = "AudioCodec=aac,ac3&MaxAudioChannels=6")))
-        assertFalse(TranscodeSeek.required(decision(parameters = "AudioCodec=ac3,AAC&MaxAudioChannels=2")))
-        assertFalse(TranscodeSeek.required(decision(parameters = "AudioCodec=aac&AllowAudioStreamCopy=true&EnableAutoStreamCopy=true")))
+    fun compatibleAudioDoesNotProveAnEncodeIsAlreadyRequired() {
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision()))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=aac,ac3&MaxAudioChannels=6")))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=ac3,AAC&MaxAudioChannels=2")))
+        assertFalse(
+            TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=aac&AllowAudioStreamCopy=true&EnableAutoStreamCopy=true"))
+        )
     }
 
     @Test
     fun explicitAlreadyDisabledAudioCopyAllowsRepairWithoutNewAudioEncoding() {
-        assertTrue(TranscodeSeek.required(decision(parameters = "AudioCodec=aac&AllowAudioStreamCopy=false")))
-        assertTrue(TranscodeSeek.required(decision(parameters = "AudioCodec=aac&EnableAutoStreamCopy=false")))
-        assertTrue(TranscodeSeek.required(decision(parameters = "AudioCodec=aac&allowaudiostreamcopy=FALSE")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=aac&AllowAudioStreamCopy=false")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=aac&EnableAutoStreamCopy=false")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=aac&allowaudiostreamcopy=FALSE")))
     }
 
     @Test
     fun incompatibleSelectedAudioCodecAlreadyRequiresEncoding() {
-        assertTrue(TranscodeSeek.required(decision(audio = listOf(audio(codec = "pcm_s16le")))))
-        assertTrue(TranscodeSeek.required(decision(audio = listOf(audio(codec = "flac")))))
-        assertFalse(TranscodeSeek.required(decision(parameters = "AudioCodec=copy")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(codec = "pcm_s16le")))))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(codec = "flac")))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=copy")))
         assertFalse(
-            TranscodeSeek.required(decision(audio = listOf(audio(channels = 6)), parameters = "AudioCodec=copy&MaxAudioChannels=2"))
+            TranscodeSeek.audioAlreadyEncodes(
+                decision(audio = listOf(audio(channels = 6)), parameters = "AudioCodec=copy&MaxAudioChannels=2")
+            )
         )
     }
 
     @Test
     fun unknownCodecTargetOrSelectedAudioDoesNotAssumeEncodingIsNecessary() {
-        assertFalse(TranscodeSeek.required(decision(audio = listOf(audio(codec = null)))))
-        assertFalse(TranscodeSeek.required(decision(audio = listOf(audio(codec = "")))))
-        assertFalse(TranscodeSeek.required(decision(parameters = "MaxAudioChannels=2")))
-        assertFalse(TranscodeSeek.required(decision(parameters = "AudioCodec=")))
-        assertFalse(TranscodeSeek.required(decision(parameters = "AudioCodec=aac&AudioStreamIndex=99")))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(codec = null)))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(codec = "")))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "MaxAudioChannels=2")))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=")))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(parameters = "AudioCodec=aac&AudioStreamIndex=99")))
     }
 
     @Test
     fun knownChannelReductionAlreadyRequiresEncodingButEqualOrUnknownChannelsDoNotProveIt() {
-        assertTrue(TranscodeSeek.required(decision(audio = listOf(audio(channels = 6)))))
-        assertFalse(TranscodeSeek.required(decision(audio = listOf(audio(channels = 2)))))
-        assertFalse(TranscodeSeek.required(decision(audio = listOf(audio(channels = null)))))
-        assertFalse(TranscodeSeek.required(decision(audio = listOf(audio(channels = 6)), parameters = "AudioCodec=aac")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(channels = 6)))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(channels = 2)))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(channels = null)))))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(audio = listOf(audio(channels = 6)), parameters = "AudioCodec=aac")))
     }
 
     @Test
     fun negotiatedChannelLimitUsesTheServersPrecedence() {
         val surround = listOf(audio(channels = 6))
-        assertTrue(TranscodeSeek.required(decision(surround, "AudioCodec=aac&TranscodingMaxAudioChannels=2")))
-        assertTrue(TranscodeSeek.required(decision(surround, "AudioCodec=aac&AudioChannels=2")))
-        assertFalse(TranscodeSeek.required(decision(surround, "AudioCodec=aac&MaxAudioChannels=8&AudioChannels=2")))
-        assertTrue(TranscodeSeek.required(decision(surround, "AudioCodec=aac&MaxAudioChannels=8&aac-audiochannels=2")))
-        assertFalse(TranscodeSeek.required(decision(surround, "AudioCodec=aac&MaxAudioChannels=2&aac-audiochannels=8")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(surround, "AudioCodec=aac&TranscodingMaxAudioChannels=2")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(surround, "AudioCodec=aac&AudioChannels=2")))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(surround, "AudioCodec=aac&MaxAudioChannels=8&AudioChannels=2")))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(surround, "AudioCodec=aac&MaxAudioChannels=8&aac-audiochannels=2")))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(surround, "AudioCodec=aac&MaxAudioChannels=2&aac-audiochannels=8")))
     }
 
     @Test
     fun selectedAudioIndexWinsOverTheDefaultAndUnselectedIncompatibleTracks() {
         val tracks = listOf(audio(index = 1, codec = "pcm_s16le"), audio(index = 2, codec = "aac"))
-        assertFalse(TranscodeSeek.required(decision(tracks, "AudioCodec=aac&AudioStreamIndex=2", defaultAudio = 1)))
-        assertTrue(TranscodeSeek.required(decision(tracks, "AudioCodec=aac&AudioStreamIndex=1", defaultAudio = 2)))
-        assertFalse(TranscodeSeek.required(decision(tracks, "AudioCodec=aac", defaultAudio = 2)))
-        assertTrue(TranscodeSeek.required(decision(tracks, "AudioCodec=aac", defaultAudio = 1)))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(tracks, "AudioCodec=aac&AudioStreamIndex=2", defaultAudio = 1)))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(tracks, "AudioCodec=aac&AudioStreamIndex=1", defaultAudio = 2)))
+        assertFalse(TranscodeSeek.audioAlreadyEncodes(decision(tracks, "AudioCodec=aac", defaultAudio = 2)))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(tracks, "AudioCodec=aac", defaultAudio = 1)))
     }
 
     @Test
     fun silentSourcesNeedNoAudioTradeoff() {
-        assertTrue(TranscodeSeek.required(decision(audio = emptyList(), defaultAudio = null)))
+        assertTrue(TranscodeSeek.audioAlreadyEncodes(decision(audio = emptyList(), defaultAudio = null)))
     }
 }

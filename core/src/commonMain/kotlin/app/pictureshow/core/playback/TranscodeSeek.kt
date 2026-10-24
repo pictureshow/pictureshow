@@ -27,12 +27,12 @@ object TranscodeSeek {
         val video = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Video } ?: return false
         val rate = video.realFrameRate ?: video.averageFrameRate ?: return false
         val cap = parameter(uri, "Framerate")?.toDoubleOrNull() ?: parameter(uri, "MaxFramerate")?.toDoubleOrNull() ?: return false
-        return rate.isFinite() && cap.isFinite() && rate > 30 && cap > 0 && cap + 0.001 < rate && audioAlreadyEncodes(decision, uri)
+        return rate.isFinite() && cap.isFinite() && rate > 30 && cap > 0 && cap + 0.001 < rate
     }
 
-    // Progressive audio copy can include packets before the seek target. Only switch transport when
-    // the negotiated output already requires audio encoding; changing copy to a lossy encode needs a viewer choice.
-    private fun audioAlreadyEncodes(decision: PlayDecision, uri: Url): Boolean {
+    /** Copy-capable streams need a video-anchored clock: copied packets can precede the seek target. */
+    fun audioAlreadyEncodes(decision: PlayDecision): Boolean {
+        val uri = runCatching { Url(decision.url) }.getOrNull() ?: return false
         val streams = decision.mediaSource.mediaStreams.filter { it.type == MediaStreamType.Audio }
         val index = parameter(uri, "AudioStreamIndex")?.toIntOrNull() ?: decision.mediaSource.defaultAudioStreamIndex
         if (streams.isEmpty() || index == -1) return true
@@ -66,14 +66,17 @@ object TranscodeSeek {
         val uri = Url(Redaction.stripApiKey(decision.url))
         return URLBuilder(uri).apply {
             encodedPath = uri.encodedPath.substringBeforeLast('/') + "/stream.ts"
-            listOf("StartTimeTicks", "Static", "CopyTimestamps", "AllowAudioStreamCopy", "SubtitleMethod").forEach { name ->
+            val encodesAudio = audioAlreadyEncodes(decision)
+            val replaced = listOf("StartTimeTicks", "Static", "CopyTimestamps", "SubtitleMethod") +
+                if (encodesAudio) listOf("AllowAudioStreamCopy") else emptyList()
+            replaced.forEach { name ->
                 parameters.names().filter { it.equals(name, true) }.forEach(parameters::remove)
             }
             parameters.append("StartTimeTicks", Ticks.fromMillis(startMs.coerceAtLeast(0)).toString())
             parameters.append("Static", "false")
             parameters.append("CopyTimestamps", "false")
-            // Eligibility already requires audio encoding; make the local-clock requirement explicit.
-            parameters.append("AllowAudioStreamCopy", "false")
+            // Preserve copy eligibility and channels. The copied route normalizes A/V at extraction.
+            if (encodesAudio) parameters.append("AllowAudioStreamCopy", "false")
             parameters.append("SubtitleMethod", parameter(uri, "SubtitleMethod") ?: "External")
         }.buildString()
     }
