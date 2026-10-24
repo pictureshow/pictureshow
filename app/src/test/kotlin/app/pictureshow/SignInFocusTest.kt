@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
@@ -250,13 +251,15 @@ class SignInFocusTest {
         compose.onNodeWithContentDescription("Username").assertIsFocused()
         key(Key.DirectionDown)
         compose.onNodeWithContentDescription("Password").assertIsFocused()
-        for (label in listOf("Sign in", "Use Quick Connect", "Guest one", "Guest two", "Back")) {
+        for (label in listOf("Sign in", "Your session ended. Sign in again.", "Use Quick Connect", "Guest one", "Guest two", "Back")) {
             key(Key.DirectionDown)
-            compose.onNodeWithText(label).assertIsFocused()
+            val node = compose.onNodeWithText(label)
+            if (label == "Your session ended. Sign in again.") node.onParent().assertIsFocused() else node.assertIsFocused()
         }
-        for (label in listOf("Guest two", "Guest one", "Use Quick Connect", "Sign in")) {
+        for (label in listOf("Guest two", "Guest one", "Use Quick Connect", "Your session ended. Sign in again.", "Sign in")) {
             key(Key.DirectionUp)
-            compose.onNodeWithText(label).assertIsFocused()
+            val node = compose.onNodeWithText(label)
+            if (label == "Your session ended. Sign in again.") node.onParent().assertIsFocused() else node.assertIsFocused()
         }
         key(Key.DirectionUp)
         compose.onNodeWithContentDescription("Password").assertIsFocused()

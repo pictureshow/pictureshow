@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -13,11 +14,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -49,9 +47,14 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isEditable
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -193,6 +196,16 @@ internal fun recoverPlaybackEntry(nav: NavHostController, item: MediaItem) {
     }
 }
 
+/** Expired sessions start directly on login; their Back still needs an account-management exit. */
+private fun leaveLogin(nav: NavHostController) {
+    if (!nav.popBackStack()) {
+        nav.navigate("accounts") {
+            popUpTo(nav.graph.id) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
+}
+
 private fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
 
 internal fun accountDestination(snapshot: AccountSnapshot): String {
@@ -310,7 +323,7 @@ internal fun Pictureshow(
             LaunchedEffect(screen.connected) {
                 screen.connected?.let {
                     vm.consumeConnected()
-                    nav.navigate(serverRoute("login", it))
+                    nav.navigate(serverRoute("login", it)) { launchSingleTop = true }
                 }
             }
             val remembered = state.snapshot.rememberedServers
@@ -320,7 +333,12 @@ internal fun Pictureshow(
                 Text("Choose a server on your network, or enter an address.")
                 remembered.forEachIndexed { index, server ->
                     val label = if (server == state.snapshot.lastServer) "Sign in to ${server.name}" else "${server.name} · remembered"
-                    Action(label, initial = index == 0 && state.snapshot.lastServer != null) { nav.navigate(serverRoute("login", server)) }
+                    Action(label, initial = index == 0 && state.snapshot.lastServer != null) {
+                        nav.navigate(serverRoute("login", server)) {
+                            launchSingleTop =
+                                true
+                        }
+                    }
                 }
                 RemoteField(
                     "Server address",
@@ -329,7 +347,10 @@ internal fun Pictureshow(
                     initial = state.snapshot.lastServer == null,
                     onDone = { vm.connect() }
                 )
-                Action(if (screen.connecting) "Connecting…" else "Connect", enabled = !screen.connecting) { vm.connect() }
+                Action(
+                    if (screen.connecting) "Connecting…" else "Connect",
+                    enabled = !screen.connecting
+                ) { vm.connect() }
                 Message(screen.error)
                 screen.discovered.forEachIndexed { index, server ->
                     Action(
@@ -338,7 +359,7 @@ internal fun Pictureshow(
                         modifier = if (index == 0) discoveryFocus.firstServer else Modifier
                     ) { vm.connect(server.address) }
                 }
-                Text(
+                StatusLine(
                     if (screen.scanning) {
                         "Looking for servers…"
                     } else if (screen.discovered.isEmpty()) {
@@ -348,7 +369,17 @@ internal fun Pictureshow(
                     }
                 )
                 Action("Search again", enabled = !screen.scanning, onClick = vm::scan)
-                if (state.snapshot.accounts.isNotEmpty()) Action("Remembered accounts") { nav.navigate("accounts") }
+                if (state.snapshot.rememberedServers.isNotEmpty()) {
+                    Action("Remembered accounts") {
+                        // Reuse the original chooser; discard this entire Add a server flow.
+                        if (!nav.popBackStack("accounts", false)) {
+                            nav.navigate("accounts") {
+                                popUpTo(nav.graph.id) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                }
             }
         }
         composable("accounts") {
@@ -364,27 +395,110 @@ internal fun Pictureshow(
                     nav.popBackStack()
                 }
             }
-            Page("Who’s watching?") {
-                val offerSignedOutServer = state.snapshot.currentAccount == null && state.snapshot.lastServer != null
-                val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
-                state.snapshot.accounts.forEach { account ->
+            var returnFocus by rememberSaveable { mutableStateOf<String?>(null) }
+            var removeKey by rememberSaveable { mutableStateOf<String?>(null) }
+            var removeServerId by rememberSaveable { mutableStateOf<String?>(null) }
+            var removeServerUrl by rememberSaveable { mutableStateOf<String?>(null) }
+            val removingAccount = state.snapshot.accounts.firstOrNull { it.key == removeKey }
+            val removingServer = state.snapshot.rememberedServers.firstOrNull { it.id == removeServerId && it.url == removeServerUrl }
+            fun cancelRemoval() {
+                removeKey = null
+                removeServerId = null
+                removeServerUrl = null
+            }
+            if (removingAccount != null || removingServer != null) {
+                BackHandler(enabled = !screen.busy) { cancelRemoval() }
+                // While committing, hardware Back must not expose controls from the parent page.
+                BackHandler(enabled = screen.busy) { }
+                val description = if (removingAccount != null) {
+                    "This removes ${removingAccount.user.name} on ${removingAccount.server.name} from this TV."
+                } else {
+                    requireNotNull(removingServer)
+                    val count = state.snapshot.accounts.count { it.server.id == removingServer.id && it.server.url == removingServer.url }
+                    if (count == 0) {
+                        "This removes ${removingServer.name} from this TV."
+                    } else {
+                        "This removes ${removingServer.name} and $count remembered " +
+                            "${if (count == 1) "account" else "accounts"} from this TV."
+                    }
+                }
+                Page(
+                    if (removingAccount != null) "Remove remembered account?" else "Remove server?",
+                    modifier = Modifier.semantics { paneTitle = description }
+                ) {
+                    Text(description)
+                    Text("Other accounts stay signed in. You can add it again later.")
+                    Message(screen.error)
+                    Action("Cancel", initial = true, enabled = !screen.busy) { cancelRemoval() }
+                    Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
+                        // The account-store publication drives navigation and dismisses this page.
+                        returnFocus = null
+                        if (removingAccount != null) {
+                            vm.removeAccount(removingAccount.key)
+                        } else {
+                            removingServer?.let(vm::removeServer)
+                        }
+                    }
+                }
+            } else {
+                Page("Who’s watching?") {
+                    val offerSignedOutServer = state.snapshot.currentAccount == null && state.snapshot.lastServer != null
+                    val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
+                    state.snapshot.accounts.forEach { account ->
+                        Action(
+                            "${account.user.name} on ${account.server.name}",
+                            initial = returnFocus == account.key ||
+                                (returnFocus == null && !offerSignedOutServer && account.key == initialAccount?.key),
+                            enabled = !screen.busy
+                        ) {
+                            if (account.expired && account.key == state.snapshot.currentKey) {
+                                returnFocus = account.key
+                                nav.navigate(serverRoute("login", account.server) + "&username=${Uri.encode(account.user.name)}") {
+                                    launchSingleTop = true
+                                }
+                            } else {
+                                vm.select(account.key)
+                            }
+                        }
+                        Action(
+                            "Remove ${account.user.name} on ${account.server.name}",
+                            initial = returnFocus == "remove:${account.key}",
+                            enabled = !screen.busy
+                        ) {
+                            returnFocus = "remove:${account.key}"
+                            removeKey = account.key
+                        }
+                    }
+                    Message(screen.error)
+                    state.snapshot.rememberedServers.forEachIndexed { index, server ->
+                        val identity = "server:${server.id}:${server.url}"
+                        Action(
+                            "Sign in another user on ${server.name}",
+                            initial = returnFocus == identity || (returnFocus == null && offerSignedOutServer && index == 0),
+                            enabled = !screen.busy
+                        ) {
+                            returnFocus = identity
+                            nav.navigate(serverRoute("login", server)) { launchSingleTop = true }
+                        }
+                        Action("Remove server ${server.name}", initial = returnFocus == "remove:$identity", enabled = !screen.busy) {
+                            returnFocus = "remove:$identity"
+                            removeServerId = server.id
+                            removeServerUrl = server.url
+                        }
+                    }
                     Action(
-                        "${account.user.name} on ${account.server.name}",
-                        initial = !offerSignedOutServer && account.key == initialAccount?.key,
+                        "Add a server",
+                        initial = returnFocus == "add" ||
+                            (returnFocus == null && state.snapshot.rememberedServers.isEmpty()),
                         enabled = !screen.busy
                     ) {
-                        vm.select(account.key)
+                        returnFocus = "add"
+                        nav.navigate("servers") { launchSingleTop = true }
                     }
                 }
-                Message(screen.error)
-                state.snapshot.rememberedServers.forEachIndexed { index, server ->
-                    Action("Sign in another user on ${server.name}", initial = offerSignedOutServer && index == 0) {
-                        nav.navigate(serverRoute("login", server))
-                    }
-                }
-                Action("Add a server", initial = state.snapshot.accounts.isEmpty()) { nav.navigate("servers") }
             }
         }
+
         composable(
             "login?server={server}&username={username}",
             arguments = listOf(
@@ -411,6 +525,7 @@ internal fun Pictureshow(
                     it.server.url == server.url &&
                     it.user.name == entry.arguments?.getString("username")
             } == true
+            BackHandler(enabled = nav.previousBackStackEntry == null) { leaveLogin(nav) }
             Page("Sign in to ${server.name}") {
                 RemoteField(
                     "Username",
@@ -421,20 +536,24 @@ internal fun Pictureshow(
                     onDone = { focusManager.moveFocus(FocusDirection.Down) }
                 )
                 RemoteField("Password", screen.password, vm::password, password = true, enabled = !screen.busy, onDone = vm::signIn)
-                Action(if (screen.busy) "Signing in…" else "Sign in", enabled = !screen.busy, onClick = vm::signIn)
+                Action(
+                    if (screen.busy) "Signing in…" else "Sign in",
+                    enabled = !screen.busy,
+                    onClick = vm::signIn
+                )
                 Message(screen.error)
                 Message(screen.notice)
-                if (sessionEnded) Text("Your session ended. Sign in again.")
-                if (screen.loading) Text("Loading sign-in options…")
+                if (sessionEnded) StatusLine("Your session ended. Sign in again.")
+                if (screen.loading) StatusLine("Loading sign-in options…")
                 if (screen.quickConnect) {
                     Action("Use Quick Connect", initial = quickFocus, enabled = !screen.busy) {
                         quickFocus = true
-                        nav.navigate(serverRoute("quick", server))
+                        nav.navigate(serverRoute("quick", server)) { launchSingleTop = true }
                     }
                 }
                 if (screen.users.isNotEmpty()) Text("Or choose a public user:")
                 screen.users.forEach { user -> Action(user.name, enabled = !screen.busy) { vm.username(user.name) } }
-                Action("Back", enabled = !screen.busy) { nav.popBackStack() }
+                Action("Back", enabled = !screen.busy) { leaveLogin(nav) }
             }
         }
         composable("quick?server={server}", arguments = listOf(navArgument("server") { type = NavType.StringType })) { entry ->
@@ -456,30 +575,33 @@ internal fun Pictureshow(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
                         "and enter this code"
                 )
-                screen.code?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.displayLarge,
-                        modifier = Modifier.semantics {
-                            contentDescription =
-                                "Quick Connect code ${it.toList().joinToString(" ")}"
-                        }
-                    )
+                screen.code?.let { code ->
+                    val focus = remember { FocusRequester() }
+                    Box(Modifier.focusRequester(focus).readableFocus()) {
+                        Text(
+                            code,
+                            style = MaterialTheme.typography.displayLarge,
+                            modifier = Modifier.semantics {
+                                contentDescription = "Quick Connect code ${code.toList().joinToString(" ")}"
+                                liveRegion = LiveRegionMode.Polite
+                            }
+                        )
+                    }
+                    LaunchedEffect(code) { focus.requestFocus() }
                 }
-                if (screen.renewed) Text("The previous code is no longer valid. Enter this new code.")
+                if (screen.renewed) StatusLine("The previous code is no longer valid. Enter this new code.")
                 if (screen.busy) {
-                    Text("Getting a code…")
-                } else if (!screen.disabled &&
-                    screen.error == null
-                ) {
-                    Text("Waiting for approval. Expired codes are renewed automatically.")
+                    StatusLine("Getting a code…")
+                } else if (!screen.disabled && screen.error == null) {
+                    StatusLine("Waiting for approval. Expired codes are renewed automatically.")
                 }
-                if (screen.disabled) Text("Quick Connect is disabled on this server. Use your username and password.")
+                if (screen.disabled) StatusLine("Quick Connect is disabled on this server. Use your username and password.")
                 Message(screen.error)
-                if (screen.error != null) Action("Try again", onClick = vm::start)
-                Action("Back", initial = true) { nav.popBackStack() }
+                if (screen.error != null) Action("Try again", initial = screen.code == null, onClick = vm::start)
+                Action("Back") { nav.popBackStack() }
             }
         }
+
         composable("home") {
             state.snapshot.currentAccount?.let { account ->
                 val profile: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
@@ -645,10 +767,20 @@ private fun Action(label: String, modifier: Modifier = Modifier, initial: Boolea
 
 @Composable
 private fun Message(message: String?) {
-    if (message != null) Text(message, color = Color(0xFFFFCCB8))
+    if (message != null) StatusLine(message, color = Color(0xFFFFCCB8))
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface) {
+    // Focus changes must not look like content updates to a live region. Keep the text on
+    // its own semantics node; the focusable container reads its non-actionable child.
+    // A very wide line can lose spatial Up/Down to a more distant narrow button.
+    // Keep status centres near the left-aligned controls, including at larger text sizes.
+    Box(Modifier.widthIn(max = 360.dp).readableFocus()) {
+        Text(message, color = color, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    }
+}
+
 @Composable
 internal fun RemoteField(
     label: String,
@@ -664,11 +796,9 @@ internal fun RemoteField(
     // Read-only until the remote's center button is pressed: a writable text field opens the keyboard as soon as it is
     // focused, and on a TV the keyboard then takes the D-pad and the first press types its highlighted key.
     var editing by remember { mutableStateOf(false) }
+    var navigationKey by remember { mutableStateOf<Key?>(null) }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    // Visibility also covers floating TV keyboards with zero bottom inset. Back may hide the IME
-    // without ending editing, so editing alone cannot decide whether arrows should navigate the page.
-    val imeVisible = WindowInsets.isImeVisible
     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label)
         BasicTextField(
@@ -694,15 +824,30 @@ internal fun RemoteField(
                 .focusRequester(focus)
                 .onFocusChanged {
                     focused = it.isFocused
-                    if (!it.isFocused) editing = false
+                    if (!it.isFocused) {
+                        editing = false
+                        navigationKey = null
+                    }
                 }
                 .onPreviewKeyEvent {
                     when {
                         !enabled -> false
-                        !imeVisible && (it.key == Key.DirectionUp || it.key == Key.DirectionDown) -> {
+                        it.key == Key.DirectionUp || it.key == Key.DirectionDown -> {
+                            // The IME gets first refusal before app dispatch. If an arrow reaches
+                            // this field, keep its focus and keyboard until release: hiding the IME
+                            // on Down lets TalkBack take the matching Up as a second navigation.
                             if (it.type == KeyEventType.KeyDown) {
-                                editing = false
-                                focusManager.moveFocus(if (it.key == Key.DirectionUp) FocusDirection.Up else FocusDirection.Down)
+                                navigationKey = it.key
+                            } else if (it.type == KeyEventType.KeyUp) {
+                                val paired = navigationKey == it.key
+                                navigationKey = null
+                                // A button can move focus here on Down. Its release belongs to
+                                // that button, not to a new navigation from this field.
+                                if (paired) {
+                                    editing = false
+                                    keyboard?.hide()
+                                    focusManager.moveFocus(if (it.key == Key.DirectionUp) FocusDirection.Up else FocusDirection.Down)
+                                }
                             }
                             true
                         }
@@ -719,7 +864,16 @@ internal fun RemoteField(
                 .border(if (focused) 3.dp else 1.dp, if (focused) Color(0xFFB8C4FF) else Color(0xFF747A8E), RoundedCornerShape(8.dp))
                 .background(Color(0xFF202635), RoundedCornerShape(8.dp))
                 .padding(16.dp)
-                .semantics { contentDescription = label }
+                .semantics {
+                    contentDescription = label
+                    // The field remains read-only for hardware focus until activated, but is editable
+                    // through accessibility. Preserve BasicTextField's password transformation.
+                    isEditable = enabled
+                    setText {
+                        if (enabled) onValue(it.text)
+                        enabled
+                    }
+                }
                 .editWithKeyboard {
                     focus.requestFocus()
                     editing = true

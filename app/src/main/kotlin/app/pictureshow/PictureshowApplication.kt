@@ -85,7 +85,7 @@ class PictureshowApplication : Application() {
                     viewModel { (server: Server, saved: androidx.lifecycle.SavedStateHandle) ->
                         QuickConnectViewModel(server, get(), get(), saved)
                     }
-                    viewModel { AccountsViewModel(get()) }
+                    viewModel { AccountsViewModel(get(), get()) }
                     viewModel { (account: Account) -> HomeViewModel(account, get(), get()) }
                     viewModel { (account: Account, session: CatalogSession) -> CatalogHomeViewModel(account, session) }
                     viewModel { (account: Account, item: app.pictureshow.core.MediaItem, session: CatalogSession) ->

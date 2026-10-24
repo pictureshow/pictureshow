@@ -27,6 +27,7 @@ internal interface WatchProvider {
 internal interface WatchDismissals {
     fun contains(key: String): Boolean
     fun add(key: String)
+    fun retainAccounts(prefixes: Set<String>) = Unit
 }
 
 /** The provider's internal identity contains neither raw account IDs nor credentials. */
@@ -73,6 +74,11 @@ internal fun watchProgram(account: Account, item: MediaItem, next: Boolean, time
 
 /** Called serially on IO. Never writes browsable; only the launcher controls that field. */
 internal class WatchNextSync(private val provider: WatchProvider, private val dismissed: WatchDismissals) {
+    /** Removed viewers have no dismissal history to preserve; delete their rows before any prefs write. */
+    fun retainSavedAccounts(prefixes: Set<String>) {
+        provider.rows().filter { row -> prefixes.none { row.key.startsWith(it) } }.forEach { provider.delete(it.id) }
+    }
+
     fun retainAccount(account: Account?) {
         val prefix = account?.let { "${watchAccountKey(it)}:" }
         provider.rows().forEach { row ->

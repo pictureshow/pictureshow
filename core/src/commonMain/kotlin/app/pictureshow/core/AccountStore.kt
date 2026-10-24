@@ -93,6 +93,20 @@ class AccountStore(private val persistence: TextPersistence) {
         )
     }
 
+    /** Forget one viewer, retaining the public server for another sign-in. */
+    suspend fun removeAccount(key: String) = signOut(key)
+
+    /** A server entry is an exact identity/address pair; other addresses stay independent. */
+    suspend fun removeServer(server: Server) = update { snapshot ->
+        val removed = snapshot.accounts.filter { it.server.id == server.id && it.server.url == server.url }.map { it.key }.toSet()
+        snapshot.copy(
+            accounts = snapshot.accounts.filterNot { it.key in removed },
+            currentKey = snapshot.currentKey.takeUnless { it in removed },
+            recentSearches = snapshot.recentSearches - removed,
+            lastServer = snapshot.lastServer?.takeUnless { it.id == server.id && it.url == server.url }
+        )
+    }
+
     suspend fun recordSearch(key: String, query: String) = update { snapshot ->
         val term = normalizeSearch(query)
         if (term.length < 2 || snapshot.accounts.none { it.key == key }) {

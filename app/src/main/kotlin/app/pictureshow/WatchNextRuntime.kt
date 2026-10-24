@@ -81,6 +81,15 @@ internal class StoredWatchDismissals(context: Context) : WatchDismissals {
     private val preferences = context.getSharedPreferences("watch_next_dismissed", Context.MODE_PRIVATE)
     override fun contains(key: String) = preferences.getBoolean(key, false)
 
+    @SuppressLint("UseKtx")
+    override fun retainAccounts(prefixes: Set<String>) {
+        val obsolete = preferences.all.keys.filter { key -> prefixes.none { key.startsWith(it) } }
+        if (obsolete.isEmpty()) return
+        val editor = preferences.edit()
+        obsolete.forEach(editor::remove)
+        check(editor.commit())
+    }
+
     // KTX edit returns Unit; this write must detect commit failure before deleting the provider row.
     @SuppressLint("UseKtx")
     override fun add(key: String) {
@@ -117,12 +126,16 @@ internal class WatchNextCoordinator(
             try {
                 accounts.load()
                 merge(
-                    accounts.snapshots.map { snapshot -> snapshot.currentAccount }.distinctUntilChanged().map { Unit },
+                    accounts.snapshots.map { snapshot -> snapshot.accounts to snapshot.currentKey }.distinctUntilChanged().map { Unit },
                     requests.receiveAsFlow()
                 ).collectLatest {
                     try {
                         val account = accounts.snapshots.value.currentAccount?.takeUnless { it.expired }
+                        // Clear removed viewers' launcher dismissal history as well as published rows.
+                        val prefixes = accounts.snapshots.value.accounts.map { "${watchAccountKey(it)}:" }.toSet()
+                        sync.retainSavedAccounts(prefixes)
                         sync.retainAccount(account)
+                        dismissals.retainAccounts(prefixes)
                         if (account == null) return@collectLatest
                         val resume = catalog.resume(account)
                         val next = catalog.nextUp(account)

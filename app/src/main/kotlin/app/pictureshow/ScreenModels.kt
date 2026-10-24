@@ -18,10 +18,12 @@ import app.pictureshow.core.ServerDiscovery
 import app.pictureshow.core.User
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val SAVE_ERROR = "Could not save accounts on this device. Please try again."
 
@@ -320,10 +322,53 @@ class QuickConnectViewModel(
 
 data class AccountsState(val busy: Boolean = false, val selected: Boolean = false, val error: String? = null)
 
-class AccountsViewModel(private val accounts: AccountStore) : ViewModel() {
+class AccountsViewModel(private val accounts: AccountStore, private val service: JellyfinService?) : ViewModel() {
+    @VisibleForTesting
+    constructor(accounts: AccountStore) : this(accounts, null)
+
     private val mutableState = MutableStateFlow(AccountsState())
     val state = mutableState.asStateFlow()
     val snapshots = accounts.snapshots
+
+    fun removeAccount(key: String) = remove(
+        targets = accounts.snapshots.value.accounts.filter { it.key == key },
+        forget = { accounts.removeAccount(key) }
+    )
+
+    fun removeServer(server: Server) = remove(
+        targets = accounts.snapshots.value.accounts.filter { it.server.id == server.id && it.server.url == server.url },
+        forget = { accounts.removeServer(server) }
+    )
+
+    private fun remove(targets: List<Account>, forget: suspend () -> Unit) {
+        if (state.value.busy) return
+        mutableState.value = AccountsState(busy = true)
+        viewModelScope.launch {
+            try {
+                // Commit locally first. Navigation may then clear this model, but reachable remote
+                // sessions must still be revoked. The HTTP client's bounded timeout applies offline.
+                withContext(NonCancellable) {
+                    forget()
+                    // The chooser is usable as soon as the local transaction commits. Remote
+                    // revocation may take time offline and must not freeze or later overwrite UI.
+                    mutableState.value = AccountsState()
+                    targets.filter { it.accessToken.isNotBlank() }.forEach { account ->
+                        try {
+                            service?.logout(account)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Offline remote revocation cannot undo local removal.
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                mutableState.value = AccountsState(error = SAVE_ERROR)
+            }
+        }
+    }
 
     fun select(key: String) {
         if (state.value.busy) return
