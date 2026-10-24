@@ -113,9 +113,13 @@ import app.pictureshow.core.progress
 import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
@@ -135,6 +139,7 @@ fun CatalogHome(
     onSearch: () -> Unit = {},
     onSettings: () -> Unit = {}
 ) {
+    val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     val rows = state.rows.filter { it.items.isNotEmpty() }
@@ -147,6 +152,60 @@ fun CatalogHome(
     var restored by remember { mutableStateOf(false) }
     val search = remember { FocusRequester() }
     var initialNavigation by remember { mutableStateOf(false) }
+    val returning = remember {
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d(
+                "CatalogFocus",
+                "home-entry saved=${selectedRow.isNotEmpty()} " +
+                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "profile") } ?: "card"} " +
+                    "rowIndex=$selectedRowIndex rows=${rows.size} loading=${state.loading}"
+            )
+        }
+        selectedRow.isNotEmpty()
+    }
+    val restoreRowIndex = rows.indexOfFirst { it.key == selectedRow }.takeIf { it >= 0 }
+        ?: selectedRowIndex.coerceIn(0, rows.lastIndex.coerceAtLeast(0))
+    val restoreRow = rows.getOrNull(restoreRowIndex)
+    val restoreItem = restoreRow?.items?.let { items ->
+        items.firstOrNull { it.id == rowSelections[restoreRow.key] }
+            ?: items[(rowPositions[restoreRow.key] ?: 0).coerceIn(0, items.lastIndex)]
+    }
+    val restoreAction = when {
+        state.busy && selectedRow in listOf("settings", "profile") -> "search"
+        selectedRow in listOf("search", "settings", "profile") -> selectedRow
+        rows.isEmpty() && !state.loading -> if (state.error != null) "retry" else "profile"
+        else -> null
+    }
+    val restoreTarget = when (restoreAction) {
+        "search" -> "Search"
+        "settings" -> "Settings"
+        "profile" -> "Switch user"
+        "retry" -> "Retry"
+        else -> restoreItem?.let(::catalogAnnouncement)
+    }
+    var openerHasInput by remember { mutableStateOf(false) }
+    val handoff = rememberCatalogFocusHandoff(returning, restoreTarget, restored && openerHasInput, initialNavigation)
+    fun target(modifier: Modifier, matches: Boolean) = modifier.catalogFocusTarget(
+        exposed = !handoff || matches,
+        inputReady = { !returning || (restored && !handoff) || initialNavigation || matches }
+    ).onFocusChanged {
+        if (matches) {
+            openerHasInput = it.isFocused
+            if (BuildConfig.DEBUG && returning) {
+                android.util.Log.d("CatalogFocus", "home-opener-focus focused=${it.isFocused} restored=$restored viewer=$initialNavigation")
+            }
+            if (returning && it.isFocused && homeLifecycle == Lifecycle.State.RESUMED) restored = true
+        }
+    }
+    fun select(rowIndex: Int, itemIndex: Int) {
+        val row = rows[rowIndex]
+        val item = row.items[itemIndex]
+        selectedRow = row.key
+        selectedRowIndex = rowIndex
+        selectedItem = item.id
+        rowSelections = rowSelections + (row.key to item.id)
+        rowPositions = rowPositions + (row.key to itemIndex)
+    }
     val profile = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
@@ -169,8 +228,12 @@ fun CatalogHome(
     val savedRow = selectedRow
     val savedItem = selectedItem
     val savedRowIndex = selectedRowIndex
-    suspend fun focusRow(rowIndex: Int, selections: Map<String, String> = rowSelections, positions: Map<String, Int> = rowPositions) {
-        if (rowIndex !in rows.indices) return
+    suspend fun focusRow(
+        rowIndex: Int,
+        selections: Map<String, String> = rowSelections,
+        positions: Map<String, Int> = rowPositions
+    ): Boolean {
+        if (rowIndex !in rows.indices) return false
         val row = rows[rowIndex]
         val itemIndex = row.items.indexOfFirst { it.id == selections[row.key] }.takeIf { it >= 0 }
             ?: (positions[row.key] ?: 0).coerceIn(0, row.items.lastIndex)
@@ -181,9 +244,35 @@ fun CatalogHome(
         } else if (list.layoutInfo.visibleItemsInfo.none { it.index == rowIndex + 1 }) {
             list.scrollToItem(rowIndex + 1)
         }
-        if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
-        withFrameNanos { }
-        requesters.getValue("${row.key}:${row.items[itemIndex].id}").requestFocus()
+        val focused = withTimeoutOrNull(1_500) {
+            snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.key == row.key } }.first { it }
+            if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
+            snapshotFlow { horizontal.layoutInfo.visibleItemsInfo.any { it.index == itemIndex } }.first { it }
+            while (true) {
+                withFrameNanos { }
+                if (withContext(Dispatchers.Main.immediate) {
+                        requesters.getValue("${row.key}:${row.items[itemIndex].id}").requestFocus()
+                    }
+                ) {
+                    return@withTimeoutOrNull true
+                }
+            }
+        } == true
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d("CatalogFocus", "home-request rowIndex=$rowIndex itemIndex=$itemIndex success=$focused")
+        }
+        if (focused) select(rowIndex, itemIndex)
+        return focused
+    }
+    suspend fun focusAction(key: String, index: Int, requester: FocusRequester): Boolean {
+        list.scrollToItem(index)
+        return withTimeoutOrNull(1_500) {
+            snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+            while (true) {
+                withFrameNanos { }
+                if (withContext(Dispatchers.Main.immediate) { requester.requestFocus() }) return@withTimeoutOrNull true
+            }
+        } == true
     }
     fun moveRow(index: Int) {
         movement?.cancel()
@@ -191,14 +280,10 @@ fun CatalogHome(
             when {
                 index in rows.indices -> focusRow(index)
                 index >= rows.size -> {
-                    list.scrollToItem(rows.size + 1)
-                    withFrameNanos { }
-                    profile.requestFocus()
+                    focusAction("profile", rows.size + 1, profile)
                 }
                 else -> {
-                    list.scrollToItem(0)
-                    withFrameNanos { }
-                    search.requestFocus()
+                    focusAction("header", 0, search)
                 }
             }
         }
@@ -212,7 +297,14 @@ fun CatalogHome(
         }
     // Back below the first shelf returns to the top of home, where it opened; Back at the top leaves the app.
     val belowTop = rows.isNotEmpty() && selectedRow.isNotEmpty() && selectedRow !in listOf("search", "settings", rows.first().key)
-    BackHandler(enabled = belowTop) { moveRow(0) }
+    val pendingReturn = returning && !restored
+    var entryBackSwallowed by remember { mutableStateOf(false) }
+    BackHandler(enabled = if (pendingReturn) !entryBackSwallowed else belowTop && homeLifecycle == Lifecycle.State.RESUMED) {
+        if (BuildConfig.DEBUG) android.util.Log.d("CatalogFocus", "home-back lifecycle=$homeLifecycle pending=$pendingReturn")
+        // One physical Back can finish after the destination it reveals has attached. Absorb
+        // one dispatch during arrival; another Back can still exit if loading never completes.
+        if (pendingReturn) entryBackSwallowed = true else moveRow(0)
+    }
     val platformBringIntoView = LocalBringIntoViewSpec.current
     val firstRowFocused by rememberUpdatedState(rows.firstOrNull()?.key == selectedRow)
     val homeBringIntoView = remember(platformBringIntoView) {
@@ -227,10 +319,25 @@ fun CatalogHome(
         }
     }
     CompositionLocalProvider(LocalBringIntoViewSpec provides homeBringIntoView) {
+        CatalogLoadingFocus(returning && !restored) {
+            initialNavigation = true
+            restored = true
+            selectedRow = "search"
+            scope.launch { focusAction("header", 0, search) }
+        }
         LazyColumn(
             state = list,
             modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").accessibilityGroup().onPreviewKeyEvent {
-                if (it.type == KeyEventType.KeyDown) initialNavigation = true
+                if (it.type == KeyEventType.KeyDown) {
+                    if (BuildConfig.DEBUG && returning) {
+                        android.util.Log.d("CatalogFocus", "home-key key=${it.key} lifecycle=$homeLifecycle restored=$restored")
+                    }
+                    // The Back that reveals this destination is not a new catalog selection.
+                    if (it.key != Key.Back && it.key != Key.Escape) {
+                        initialNavigation = true
+                        if (returning) restored = true
+                    }
+                }
                 false
             },
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
@@ -242,8 +349,11 @@ fun CatalogHome(
                     // Switch user at the bottom, away from the buttons viewers press often.
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Button(
-                            onClick = onSearch,
-                            modifier = Modifier.focusRequester(search).testTag("home:search")
+                            onClick = {
+                                selectedRow = "search"
+                                onSearch()
+                            },
+                            modifier = target(Modifier, restoreAction == "search").focusRequester(search).testTag("home:search")
                                 .onFocusChanged {
                                     // The first attached target during the first load, like the profile actions below.
                                     if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
@@ -251,37 +361,46 @@ fun CatalogHome(
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Search") }
                         Button(
-                            onClick = onSettings,
+                            onClick = {
+                                selectedRow = "settings"
+                                onSettings()
+                            },
                             enabled = !state.busy,
-                            modifier = Modifier.focusRequester(settingsFocus).testTag("home:settings")
+                            modifier = target(Modifier, restoreAction == "settings").focusRequester(settingsFocus).testTag("home:settings")
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Settings") }
                     }
-                    CatalogHeading("Pictureshow")
-                    Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
-                    if (state.loading) Text("Loading your home…")
+                    Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CatalogHeading("Pictureshow")
+                        Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
+                    }
+                    if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
                     CatalogError(
                         state.error,
                         onRetry,
-                        Modifier.focusRequester(retry).onPreviewKeyEvent {
+                        target(Modifier, restoreAction == "retry").focusRequester(retry).onPreviewKeyEvent {
                             if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
                                 moveRow(0)
                                 true
                             } else {
                                 false
                             }
-                        }
+                        },
+                        announceMessage = !handoff
                     )
                     if (!state.loading && rows.isEmpty() && state.error == null) {
-                        Text("There are no libraries or videos available for this user yet.")
+                        Text(
+                            "There are no libraries or videos available for this user yet.",
+                            modifier = Modifier.catalogFocusTarget(!handoff)
+                        )
                     }
                 }
             }
             rows.forEachIndexed { rowIndex, row ->
                 item(key = row.key) {
                     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CatalogHeading(row.title, large = false)
+                        Box(Modifier.catalogFocusTarget(!handoff)) { CatalogHeading(row.title, large = false) }
                         // Only the outer vertical list changes its pivot; shelves retain platform scrolling.
                         CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
                             LazyRow(
@@ -298,17 +417,17 @@ fun CatalogHome(
                                         item = item,
                                         account = account,
                                         wide = row.wide || item.type == "Episode",
-                                        onClick = { onOpen(item) },
-                                        modifier = Modifier.focusRequester(requesters.getValue("${row.key}:${item.id}"))
+                                        onClick = {
+                                            select(rowIndex, itemIndex)
+                                            onOpen(item)
+                                        },
+                                        modifier = target(
+                                            Modifier,
+                                            restoreAction == null && row.key == restoreRow?.key && item.id == restoreItem?.id
+                                        ).focusRequester(requesters.getValue("${row.key}:${item.id}"))
                                             .testTag("home:${row.key}:${item.id}")
                                             .onFocusChanged {
-                                                if (it.isFocused) {
-                                                    selectedRow = row.key
-                                                    selectedRowIndex = rowIndex
-                                                    selectedItem = item.id
-                                                    rowSelections = rowSelections + (row.key to item.id)
-                                                    rowPositions = rowPositions + (row.key to itemIndex)
-                                                }
+                                                if (it.isFocused && (restored || initialNavigation)) select(rowIndex, itemIndex)
                                             }.onPreviewKeyEvent {
                                                 if (it.type != KeyEventType.KeyDown) {
                                                     false
@@ -332,12 +451,26 @@ fun CatalogHome(
             item(key = "profile") {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Button(
-                        onClick = onSwitchUser,
+                        onClick = {
+                            selectedRow = "profile"
+                            onSwitchUser()
+                        },
                         enabled = !state.busy,
-                        modifier = Modifier.focusRequester(profile).testTag("home:switch-user")
+                        modifier = target(Modifier, restoreAction == "profile").focusRequester(profile).testTag("home:switch-user")
                             .onFocusChanged {
                                 // During the first load these are the only attached targets. Automatic focus is
                                 // not a saved user choice and must not outrank the first arriving catalog card.
+                                if (it.isFocused && BuildConfig.DEBUG) {
+                                    val callers = Throwable().stackTrace.filter {
+                                        it.className.startsWith("app.pictureshow") ||
+                                            it.className.contains("Accessibility") ||
+                                            it.className.contains("Focus")
+                                    }.take(24).joinToString(" <- ") { "${it.className}.${it.methodName}" }
+                                    android.util.Log.d(
+                                        "CatalogFocus",
+                                        "home-profile-focus restored=$restored viewer=$initialNavigation handoff=$handoff callers=$callers"
+                                    )
+                                }
                                 if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
                             }
                             .onPreviewKeyEvent {
@@ -352,7 +485,7 @@ fun CatalogHome(
                     Button(
                         onClick = onSignOut,
                         enabled = !state.busy,
-                        modifier = Modifier.testTag("home:sign-out").onFocusChanged {
+                        modifier = target(Modifier, false).testTag("home:sign-out").onFocusChanged {
                             if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
                         }.onPreviewKeyEvent {
                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
@@ -367,21 +500,26 @@ fun CatalogHome(
             }
         }
     }
-    LaunchedEffect(state.loading, rows.map { it.key to it.items.map(MediaItem::id) }) {
-        if (!state.loading && (!restored || rows.isNotEmpty() && savedRow.isEmpty() && savedItem.isEmpty())) {
+    LaunchedEffect(homeLifecycle, state.loading, state.busy, state.error, rows.map { it.key to it.items.map(MediaItem::id) }) {
+        // Navigation can draw Home while its outgoing detail still owns the resumed destination.
+        // Requesting focus then produces an accessibility event that TalkBack cannot use yet.
+        if (homeLifecycle != Lifecycle.State.RESUMED) return@LaunchedEffect
+        if (BuildConfig.DEBUG && returning) {
+            android.util.Log.d(
+                "CatalogFocus",
+                "home-restore-effect loading=${state.loading} rows=${rows.size} restored=$restored openerInput=$openerHasInput"
+            )
+        }
+        if ((!state.loading || restoreAction != null) && (!restored || rows.isNotEmpty() && savedRow.isEmpty() && savedItem.isEmpty())) {
             // Empty startup content can temporarily leave only profile actions attached. Keep the first
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
-            when {
-                savedRow == "search" || savedRow == "settings" -> {
-                    list.scrollToItem(0)
-                    withFrameNanos { }
-                    (if (savedRow == "settings") settingsFocus else search).requestFocus()
+            val focused = when {
+                restoreAction == "search" || restoreAction == "settings" -> {
+                    focusAction("header", 0, if (restoreAction == "settings") settingsFocus else search)
                 }
-                savedRow == "profile" -> {
-                    list.scrollToItem(rows.size + 1)
-                    withFrameNanos { }
-                    if (!initialNavigation) profile.requestFocus()
+                restoreAction == "profile" -> {
+                    if (!initialNavigation) focusAction("profile", rows.size + 1, profile) else false
                 }
                 rows.isNotEmpty() -> {
                     val rowIndex = rows.indexOfFirst { it.key == savedRow }.takeIf { it >= 0 }
@@ -389,10 +527,18 @@ fun CatalogHome(
                     if (savedItem.isNotEmpty()) rowSelections = rowSelections + (savedRow to savedItem)
                     focusRow(rowIndex, savedRowSelections, savedRowPositions)
                 }
-                state.error != null -> retry.requestFocus()
-                else -> profile.requestFocus()
+                state.error != null -> focusAction("header", 0, retry)
+                else -> focusAction("profile", rows.size + 1, profile)
             }
-            restored = true
+            restored = focused
+            if (!focused && !initialNavigation) {
+                // A disabled or detached opener must not leave the remote on the silent receiver.
+                // Release both gates, then offer the always available Search action.
+                selectedRow = "search"
+                initialNavigation = true
+                restored = true
+                focusAction("header", 0, search)
+            }
         } else if (!state.loading &&
             restored &&
             savedRow !in listOf("profile", "search", "settings") &&
@@ -404,9 +550,7 @@ fun CatalogHome(
             if (rows.isNotEmpty()) {
                 focusRow(savedRowIndex.coerceAtMost(rows.lastIndex), savedRowSelections, savedRowPositions)
             } else {
-                list.scrollToItem(rows.size + 1)
-                withFrameNanos { }
-                profile.requestFocus()
+                focusAction("profile", rows.size + 1, profile)
             }
         }
     }
@@ -471,11 +615,10 @@ fun CatalogGrid(
                 Button(
                     onClick = { onSort(state.sortBy, !state.descending) },
                     modifier = Modifier.testTag("grid:sort-order").semantics {
-                        stateDescription =
-                            if (state.descending) "Descending" else "Ascending"
+                        stateDescription = if (state.descending) "Descending" else "Ascending"
                     }
                 ) {
-                    Text(if (state.descending) "Descending ↓" else "Ascending ↑")
+                    Text(if (state.descending) "Descending ↓" else "Ascending ↑", modifier = Modifier.clearAndSetSemantics {})
                 }
             }
         }
@@ -1158,10 +1301,10 @@ private fun CatalogHeading(title: String, large: Boolean = true) {
 }
 
 @Composable
-private fun CatalogError(message: String?, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+private fun CatalogError(message: String?, onRetry: () -> Unit, modifier: Modifier = Modifier, announceMessage: Boolean = true) {
     if (message != null) {
         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(message, color = Color(0xFFFFCCB8))
+            Text(message, color = Color(0xFFFFCCB8), modifier = Modifier.catalogFocusTarget(announceMessage))
             Button(onClick = onRetry, modifier = modifier) { Text("Retry") }
         }
     }

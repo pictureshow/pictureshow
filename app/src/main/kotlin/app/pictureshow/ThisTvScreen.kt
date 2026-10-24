@@ -13,17 +13,20 @@ import android.view.Display
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -38,6 +41,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.playback.AudioCodec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** No account, client identity, device name or server information enters this capture. */
@@ -136,34 +141,76 @@ internal fun ThisTvScreen(
             error = true
         }
     }
-    Column(
-        Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
+    val list = rememberLazyListState()
+    val toggle = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    val captured = report
+    val chunks = remember(captured, showJson, fontScale) {
+        captured?.let {
+            if (showJson) {
+                diagnosticTextChunks(it.profileJson, fontScale)
+            } else {
+                it.summary.split("\n\n").flatMap { section -> diagnosticTextChunks(section, fontScale) }
+            }
+        }.orEmpty()
+    }
+    LazyColumn(
+        state = list,
+        modifier = Modifier.fillMaxSize().background(Color(0xFF10131C)),
+        contentPadding = PaddingValues(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("This TV", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
-        Text("Reported capabilities, not a playback benchmark. Shared diagnostics contain no account or server information.")
-        Button(onClick = { generation++ }, modifier = Modifier.focusRequester(first)) { Text("Refresh capabilities") }
-        report?.let { captured ->
-            Button(onClick = { context.startActivity(Intent.createChooser(thisTvShareIntent(captured), "Share This TV")) }) {
-                Text("Share diagnostics and profile JSON")
+        item(key = "title") {
+            Text("This TV", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+        }
+        item(key = "description") {
+            Text("Reported capabilities, not a playback benchmark. Shared diagnostics contain no account or server information.")
+        }
+        item(key = "refresh") {
+            Button(onClick = { generation++ }, modifier = Modifier.focusRequester(first)) { Text("Refresh capabilities") }
+        }
+        if (captured != null) {
+            item(key = "share") {
+                Button(onClick = { context.startActivity(Intent.createChooser(thisTvShareIntent(captured), "Share This TV")) }) {
+                    Text("Share diagnostics and profile JSON")
+                }
             }
-            Button(onClick = { showJson = !showJson }) { Text(if (showJson) "Hide device profile JSON" else "View device profile JSON") }
-            if (showJson) {
-                Text(
-                    "Full device profile JSON",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.semantics {
-                        heading()
+            item(key = "json-toggle") {
+                Button(onClick = {
+                    val hiding = showJson
+                    showJson = !showJson
+                    if (hiding) {
+                        scope.launch {
+                            list.scrollToItem(0)
+                            withFrameNanos { }
+                            toggle.requestFocus()
+                        }
                     }
-                )
-                diagnosticTextChunks(captured.profileJson, fontScale).forEach { Text(it, modifier = Modifier.readableFocus()) }
-            } else {
-                captured.summary.split("\n\n").flatMap { diagnosticTextChunks(it, fontScale) }
-                    .forEach { Text(it, modifier = Modifier.readableFocus()) }
+                }, modifier = Modifier.focusRequester(toggle)) {
+                    Text(if (showJson) "Hide device profile JSON" else "View device profile JSON")
+                }
             }
-        } ?: Text(if (error) "Capabilities unavailable" else "Reading device capabilities…")
-        if (error) Text("Could not read capabilities. Select Refresh to try again.")
-        Button(onClick = onBack) { Text("Back") }
+            if (showJson) {
+                item(key = "json-heading") {
+                    Text(
+                        "Full device profile JSON",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                }
+            }
+            itemsIndexed(chunks, key = { index, _ -> "${if (showJson) "json" else "summary"}:$index" }) { _, chunk ->
+                Text(chunk, modifier = Modifier.readableFocus())
+            }
+        } else {
+            item(key = "reading") { Text(if (error) "Capabilities unavailable" else "Reading device capabilities…") }
+        }
+        if (error) item(key = "error") { Text("Could not read capabilities. Select Refresh to try again.") }
+        item(key = "back") { Button(onClick = onBack) { Text("Back") } }
     }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    LaunchedEffect(Unit) {
+        // Lazy items attach during measurement, after the screen's initial composition effect.
+        snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.key == "refresh" } }.first { it }
+        withContext(Dispatchers.Main.immediate) { first.requestFocus() }
+    }
 }

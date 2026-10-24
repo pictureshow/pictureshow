@@ -37,9 +37,11 @@ internal fun thisTvReport(
                 )} fps at 1080p or below"
             )
             appendLine(
-                "  ${decoder.maxBitDepth}-bit; profiles: ${decoder.profiles.joinToString()}; level: ${decoder.maxLevel?.let {
-                    "${it.major}.${it.minor}"
-                } ?: "not reported"}"
+                buildList {
+                    add("${decoder.maxBitDepth}-bit")
+                    decoder.profiles.takeIf { it.isNotEmpty() }?.let { add("profiles: ${it.joinToString()}") }
+                    decoder.maxLevel?.let { add("level: ${it.major}.${it.minor}") }
+                }.joinToString("; ", prefix = "  ")
             )
             appendLine(
                 "  HDR: ${decoder.hdrFormats.joinToString().ifEmpty {
