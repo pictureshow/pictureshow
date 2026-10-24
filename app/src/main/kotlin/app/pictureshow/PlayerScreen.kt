@@ -264,7 +264,7 @@ private fun PlayerItemScreen(
                 output,
                 reportScope,
                 Locale.getDefault().language,
-                onFinished = { catalog.refresh() },
+                onFinished = { catalog.refresh(item.id) },
                 onCompletionPending = { catalog.playbackPending(item.id) },
                 onCleanupDone = { reportScope.cancel() }
             )
