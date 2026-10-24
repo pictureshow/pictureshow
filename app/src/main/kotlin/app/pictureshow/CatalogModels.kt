@@ -222,8 +222,13 @@ data class CatalogDetailState(
 
 class CatalogDetailViewModel(private val account: Account, private val original: MediaItem, private val session: CatalogSession) :
     ViewModel() {
+    private val initialChanges = session.changes.value
     private val mutableState = MutableStateFlow(
-        CatalogDetailState(account, original, playbackPending = original.id in session.changes.value.pendingPlayback)
+        CatalogDetailState(
+            account,
+            item = initialChanges.users[original.id]?.let { original.copy(userData = it) },
+            playbackPending = original.id in initialChanges.pendingPlayback
+        )
     )
     val state = mutableState.asStateFlow()
     private var job: Job? = null

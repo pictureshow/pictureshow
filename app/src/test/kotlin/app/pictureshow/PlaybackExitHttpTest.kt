@@ -28,6 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -67,12 +68,21 @@ class PlaybackExitHttpTest {
     @Test
     fun exhaustedStopReportsKeepWatchStatePendingUntilAnAuthoritativeReadCompletes() = exitScenario(natural = true, failReports = true)
 
+    @Test
+    fun newDetailsStartWithAcknowledgedStateBeforeTheirCollectorRuns() =
+        exitScenario(natural = true, reopenAfterCompletion = true)
+
+    @Test
+    fun reopenedDetailsWithholdCachedStateAfterExhaustedReportsBeforeTheirCollectorRuns() =
+        exitScenario(natural = true, failReports = true, reopenAfterCompletion = true)
+
     private fun exitScenario(
         natural: Boolean,
         closingForNext: Boolean = false,
         retainedDetails: Boolean = false,
         stopMarksPlayed: Boolean = false,
-        failReports: Boolean = false
+        failReports: Boolean = false,
+        reopenAfterCompletion: Boolean = false
     ) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val stop = CompletableDeferred<Unit>()
@@ -196,6 +206,23 @@ class PlaybackExitHttpTest {
             assertEquals(natural && !failReports, assertNotNull(details).state.value.item!!.userData.played)
             assertEquals(failReports, assertNotNull(details).state.value.playbackPending)
             if (natural) assertTrue(assertNotNull(details).state.value.loading, "The fresh detail response is still blocked")
+            if (reopenAfterCompletion) {
+                details?.let { model ->
+                    androidx.lifecycle.ViewModelStore().apply {
+                        put("detail", model)
+                        clear()
+                    }
+                }
+                details = CatalogDetailViewModel(account, app.pictureshow.core.MediaItem("film", type = "Movie"), catalog)
+                // Read synchronously: neither the collector nor the held HTTP item read has run.
+                val initial = assertNotNull(details).state.value
+                if (failReports) {
+                    assertNull(initial.item, "A reopened detail must withhold unconfirmed cached watch state")
+                } else {
+                    assertTrue(assertNotNull(initial.item).userData.played, "Acknowledged state must be present on the first frame")
+                }
+                runCurrent()
+            }
             detailReads.complete(Unit)
             runCurrent()
             assertEquals(natural && !failReports, assertNotNull(details).state.value.item!!.userData.played)
