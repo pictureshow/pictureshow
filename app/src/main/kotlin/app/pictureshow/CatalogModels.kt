@@ -51,7 +51,7 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         completedUsers = completedUsers + (item.id to item.userData)
     }
 
-    fun refresh() {
+    fun refresh(finishedPlaybackId: String? = null) {
         onRefresh()
         // Publish the acknowledged completion with the refresh atomically, so retained or newly
         // opened details cannot show pre-completion state while their fresh server read is pending.
@@ -59,7 +59,12 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         completedUsers = emptyMap()
         unresolvedPlayback = unresolvedPlayback - confirmed.keys
         mutableChanges.update {
-            it.copy(revision = it.revision + 1, refreshRevision = it.refreshRevision + 1, users = confirmed, pendingPlayback = emptySet())
+            it.copy(
+                revision = it.revision + 1,
+                refreshRevision = it.refreshRevision + 1,
+                users = confirmed,
+                pendingPlayback = if (finishedPlaybackId == null) it.pendingPlayback else it.pendingPlayback - finishedPlaybackId
+            )
         }
     }
 

@@ -76,13 +76,18 @@ class PlaybackExitHttpTest {
     fun reopenedDetailsWithholdCachedStateAfterExhaustedReportsBeforeTheirCollectorRuns() =
         exitScenario(natural = true, failReports = true, reopenAfterCompletion = true)
 
+    @Test
+    fun unrelatedAndGenericRefreshCannotReleaseACompletionWhoseStopIsStillPending() =
+        exitScenario(natural = true, unrelatedRefresh = true)
+
     private fun exitScenario(
         natural: Boolean,
         closingForNext: Boolean = false,
         retainedDetails: Boolean = false,
         stopMarksPlayed: Boolean = false,
         failReports: Boolean = false,
-        reopenAfterCompletion: Boolean = false
+        reopenAfterCompletion: Boolean = false,
+        unrelatedRefresh: Boolean = false
     ) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val stop = CompletableDeferred<Unit>()
@@ -167,7 +172,7 @@ class PlaybackExitHttpTest {
             Output(),
             backgroundScope,
             "en",
-            onFinished = { catalog.refresh() },
+            onFinished = { catalog.refresh("film") },
             onCompletionPending = { catalog.playbackPending("film") }
         )
         try {
@@ -195,6 +200,15 @@ class PlaybackExitHttpTest {
             assertEquals(1, exits, "Exit must not wait for a blocked server report")
             assertEquals(natural, assertNotNull(details).state.value.playbackPending)
             if (natural) assertFalse(assertNotNull(details).state.value.item!!.userData.played)
+            if (unrelatedRefresh) {
+                catalog.refresh("other")
+                runCurrent()
+                assertTrue(assertNotNull(details).state.value.playbackPending, "Another item's completion must not release this pending watch state")
+                catalog.refresh()
+                runCurrent()
+                assertTrue(assertNotNull(details).state.value.playbackPending, "A generic refresh must not release this pending watch state")
+                assertFalse(assertNotNull(details).state.value.item!!.userData.played)
+            }
             stop.complete(Unit)
             runCurrent()
             if (natural && !stopMarksPlayed && !failReports) {
