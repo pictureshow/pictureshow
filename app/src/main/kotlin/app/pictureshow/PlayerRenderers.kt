@@ -151,7 +151,7 @@ internal open class FlacBufferAudioRenderer(
     audioSink: AudioSink
 ) : MediaCodecAudioRenderer(
     context,
-    codecAdapterFactory,
+    AudioCodecDiagnostics(codecAdapterFactory),
     mediaCodecSelector,
     enableDecoderFallback,
     eventHandler,
