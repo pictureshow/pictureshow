@@ -80,3 +80,38 @@ The playback test parks the callback after OkHttp's own cancellation check and i
 real Media3 open before delivering its response, with successful and HTTP-error controls.
 Reassess these workarounds when upgrading Ktor or Media3, and remove them once each library
 itself closes every discarded response. Do not extend request lifetimes or suppress leak reports to hide the gap.
+
+## Native FD stacks on Android 11
+
+Android 11 includes `libfdtrack`, which records FD creation stacks and removes entries on close.
+Use it for a separate short probe on a debuggable app: unwinding every FD operation has substantial
+overhead. Keep it out of the ordinary long-session comparison. Start a continuous PID-filtered
+logcat capture before enabling it, and preserve FD targets before and after the scenario.
+
+On the tested 32-bit Android 11 process, these commands load the platform tracker:
+
+```sh
+PID="$(adb -s DEVICE shell pidof app.pictureshow | tr -d '\r')"
+adb -s DEVICE shell am attach-agent app.pictureshow /system/lib/libfdtrack.so
+adb -s DEVICE shell run-as app.pictureshow cat /proc/"$PID"/maps
+# Exercise the short scenario, then keep the app quiet while matching this listing and dump.
+adb -s DEVICE shell run-as app.pictureshow ls -l /proc/"$PID"/fd > PRIVATE_EVIDENCE/fd-targets.txt
+adb -s DEVICE shell "run-as app.pictureshow sh -c 'kill -s 39 $PID'"
+```
+
+Use `/system/lib64/libfdtrack.so` for a 64-bit process. The attach operation reports errors because
+this library has no JVMTI attach callback. On Android 11, ActivityThread retries with the bootstrap
+loader; the library constructor installs the hook before ART checks that callback, and ART leaves
+the library loaded on this failure. Verify its mapping and a subsequent `fdtrack dumping...` log
+header. A missing mapping or `fdtrack not installed` is a failed probe. Use the shell builtin `kill`;
+the tested image's standalone command rejects reserved signal 39. This is a platform-version-specific
+debug technique, not an app dependency. Sources: [Android 11 tracker](https://android.googlesource.com/platform/bionic/+/refs/heads/android11-release/libfdtrack/fdtrack.cpp),
+[loader retry](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android11-release/core/java/android/app/ActivityThread.java),
+and [ART agent lifetime](https://android.googlesource.com/platform/art/+/refs/heads/android11-release/runtime/ti/agent.cc).
+
+Match `fdtrack` entries to FD numbers and targets at that instant; FD numbers can be reused.
+This tracker cannot describe FDs opened before activation, numbers at or above 4096, or more than
+eight visible frames. FDs received directly through Binder are not recorded until a tracked operation
+such as `dup` occurs. A creation stack identifies an allocation site; it does not establish the current
+retainer or whether a cache is bounded. Force-stop the app after the probe to remove the hook, then
+restart for ordinary measurements. Keep raw dumps private.
