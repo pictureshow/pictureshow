@@ -66,6 +66,9 @@ internal class ServerPlaybackGateway(
 
 internal data class PlaybackPosition(val milliseconds: Long, val paused: Boolean)
 
+internal fun startPositionApplied(requestedMs: Long, appliedMs: Long): Boolean =
+    requestedMs <= 0 || kotlin.math.abs(appliedMs - requestedMs) <= 1_000
+
 internal interface PlaybackOutput {
     fun position(): PlaybackPosition
     fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean)
@@ -97,7 +100,8 @@ internal class PlaybackSession(
     /** After the last server cleanup; nothing runs in the scope after this, so its owner may cancel it. */
     private val onCleanupDone: () -> Unit = {},
     /** Published synchronously, before leaving the ended player can expose cached details. */
-    private val onCompletionPending: () -> Unit = {}
+    private val onCompletionPending: () -> Unit = {},
+    private val diagnostic: (String) -> Unit = {}
 ) {
     private val mutable = MutableStateFlow(PlaybackState())
     val state = mutable.asStateFlow()
@@ -137,8 +141,22 @@ internal class PlaybackSession(
         }
     }
 
-    fun ready(source: PlayDecision? = decision) = enqueue {
+    /** Capture readiness before queued reports or another native seek can move the output position. */
+    fun ready(
+        source: PlayDecision? = decision,
+        position: PlaybackPosition = output.position(),
+        targetMs: Long = requested.startPosition.inWholeMilliseconds
+    ) = enqueue {
         if (source !== decision || ready || decision == null || mutable.value.error != null) return@enqueue
+        val target = targetMs
+        val applied = position.milliseconds
+        // An extractor can accept seekTo and then reset an unseekable source to zero. Do not
+        // report or continue that viewing at the wrong place. Preserve the exact viewer intent.
+        if (!startPositionApplied(target, applied)) {
+            trace("start-rejected", "requestedMs=$target appliedMs=$applied reason=start-position-mismatch")
+            recoverStart(requireNotNull(source), "start-position-mismatch")
+            return@enqueue
+        }
         ready = true
         mutable.value = mutable.value.copy(preparing = false, reportError = null)
         if (started) {
@@ -167,9 +185,21 @@ internal class PlaybackSession(
                 delay(10_000)
                 if (source !== decision || generation != bufferingGeneration || closing) return@launch
                 mutable.value = mutable.value.copy(bufferingSlow = true)
+                // A sparse sync-sample index can require decoding from the beginning. Let the
+                // server perform this initial seek once instead of waiting for the terminal timer.
+                if (!ready &&
+                    requested.startPosition.inWholeMilliseconds > 0 &&
+                    source?.method != PlayMethod.Transcode &&
+                    !fallbackUsed
+                ) {
+                    enqueue {
+                        if (source === decision && !ready) recoverStart(requireNotNull(source), "initial-seek-timeout")
+                    }
+                }
                 delay(35_000)
                 if (source !== decision || generation != bufferingGeneration || closing) return@launch
                 capture()
+                trace("failure", "reason=buffering-timeout positionMs=${lastPosition.milliseconds}")
                 // Detach immediately, even while the command consumer awaits a slow report.
                 mutable.value = mutable.value.copy(
                     preparing = false,
@@ -200,9 +230,17 @@ internal class PlaybackSession(
         if (closing ||
             mutable.value.error != null ||
             source == null ||
-            (source !== decision && source !== seekSource) ||
-            !TranscodeSeek.required(source)
+            (source !== decision && source !== seekSource)
         ) {
+            return false
+        }
+        if (!TranscodeSeek.required(source)) {
+            // Native seeks stay local. A new intent during initial preparation supersedes the
+            // opening offset, so readiness/recovery must validate and preserve this new target.
+            if (!ready && source === decision) {
+                requested = requested.copy(startPosition = positionMs.coerceAtLeast(0).milliseconds)
+                lastPosition = output.position().copy(milliseconds = positionMs.coerceAtLeast(0))
+            }
             return false
         }
         pendingSeek = positionMs.coerceIn(0, requireNotNull(source.mediaSource.runTimeTicks) / 10_000)
@@ -287,11 +325,41 @@ internal class PlaybackSession(
         )
     }
 
-    fun failed(canRetryWithTranscode: Boolean, source: PlayDecision? = decision) = enqueue {
+    private suspend fun recoverStart(source: PlayDecision, reason: String) {
+        val target = requested.startPosition.inWholeMilliseconds
+        val paused = output.position().paused
+        if (source.method != PlayMethod.Transcode && !fallbackUsed) {
+            fallbackUsed = true
+            trace("fallback", "reason=$reason targetMs=$target")
+            retireStream(releaseOutput = false)
+            negotiate(
+                requested.copy(
+                    mediaSourceId = source.mediaSourceId,
+                    audioStreamIndex = mutable.value.audioIndex,
+                    subtitleStreamIndex = mutable.value.subtitleIndex,
+                    enableDirectPlay = false,
+                    enableDirectStream = false,
+                    allowVideoStreamCopy = false
+                ),
+                paused
+            )
+        } else {
+            output.pause()
+            trace("failure", "reason=$reason requestedMs=$target")
+            mutable.value = mutable.value.copy(
+                preparing = false,
+                error = "Playback failed. The server could not provide a playable stream."
+            )
+            finishDecision(failed = true)
+        }
+    }
+
+    fun failed(canRetryWithTranscode: Boolean, source: PlayDecision? = decision, reason: String = "player-error") = enqueue {
         if (mutable.value.error != null || source !== decision) return@enqueue
         val current = decision ?: return@enqueue
         capture()
         val retry = canRetryWithTranscode && current.method != PlayMethod.Transcode && !fallbackUsed
+        trace(if (retry) "fallback" else "failure", "reason=$reason targetMs=${lastPosition.milliseconds}")
         if (retry) retireStream(releaseOutput = false) else finishDecision(failed = true)
         if (retry) {
             fallbackUsed = true
@@ -315,11 +383,12 @@ internal class PlaybackSession(
     }
 
     /** EOS is authoritative even when the server runtime is wrong. Stop must land before played. */
-    fun ended(source: PlayDecision? = decision) {
-        if (closing || ending || source == null || source !== decision || mutable.value.error != null) return
+    fun ended(source: PlayDecision? = decision): Boolean {
+        if (closing || ending || source == null || source !== decision || mutable.value.error != null) return false
         ending = true
         onCompletionPending()
         capture()
+        trace("ended", "positionMs=${lastPosition.milliseconds}")
         output.release()
         ticker?.cancel()
         cancelBuffering()
@@ -337,11 +406,13 @@ internal class PlaybackSession(
             }
             ending = false
         }
+        return true
     }
 
     /** Snapshot before releasing the actual player. Final network work survives the screen's disposal. */
     fun close(afterFinished: () -> Unit = {}) {
         if (closing) return
+        trace("close", "positionMs=${output.position().milliseconds} ending=$ending")
         closing = true
         seekTimer?.cancel()
         val finalSeekTarget = pendingSeek
@@ -381,16 +452,22 @@ internal class PlaybackSession(
 
     private suspend fun negotiate(request: PlaybackRequest, paused: Boolean, openWhen: () -> Boolean = { true }) {
         requested = request
+        trace(
+            "prepare",
+            "requestedMs=${request.startPosition.inWholeMilliseconds} directPlay=${request.enableDirectPlay} directStream=${request.enableDirectStream}"
+        )
         ready = false
         lastPosition = PlaybackPosition(request.startPosition.inWholeMilliseconds, paused)
         mutable.value = mutable.value.copy(preparing = true, error = null, reportError = null)
         when (val result = gateway.prepare(request)) {
             is ClientResult.Failure -> {
+                trace("failure", "reason=negotiation-${result.error.kind}")
                 mutable.value = mutable.value.copy(preparing = false, error = result.error.message)
                 finishDecision(failed = !closing)
             }
             is ClientResult.Success -> when (val outcome = result.value) {
                 is PlayOutcome.Unplayable -> {
+                    trace("failure", "reason=no-playable-source")
                     mutable.value = mutable.value.copy(preparing = false, error = outcome.message)
                     finishDecision(failed = !closing)
                 }
@@ -428,6 +505,10 @@ internal class PlaybackSession(
                 }
             }
         }
+    }
+
+    private fun trace(event: String, fields: String) {
+        diagnostic(PlaybackDiagnostics.line(decision ?: reportingDecision, event, fields))
     }
 
     private fun progressInfo(): PlaybackProgressInfo {

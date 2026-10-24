@@ -32,7 +32,7 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
     PlaybackOutput {
     private val mutablePlayer = MutableStateFlow<Player?>(null)
     val player = mutablePlayer.asStateFlow()
-    var onReady: (PlayDecision) -> Unit = {}
+    var onReady: (PlayDecision, PlaybackPosition, Long) -> Unit = { _, _, _ -> }
     var onBuffering: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onProgress: (PlayDecision) -> Unit = {}
     var onFailure: (Boolean, PlayDecision) -> Unit = { _, _ -> }
@@ -83,10 +83,22 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         val serverSeek = TranscodeSeek.required(decision)
         val startMs = if (serverSeek) TranscodeSeek.startPositionMs(decision, positionMs) else 0
         val media = PlaybackMedia.item(server, decision, title, if (serverSeek) startMs else null)
+        PlaybackDiagnostics.write(
+            decision,
+            "open",
+            "requestedMs=$positionMs serverMs=$startMs method=${decision.method} serverSeek=$serverSeek path=${media.localConfiguration?.uri?.path}"
+        )
         lateinit var next: ExoPlayer
-        val endSignal = PlaybackEndSignal({ next.takeIf { activePlayer === it } }) { onEnded(decision) }
+        val endSignal = PlaybackEndSignal({ next.takeIf { activePlayer === it } }) { reason ->
+            PlaybackDiagnostics.write(decision, "end", "reason=$reason positionMs=${position().milliseconds}")
+            onEnded(decision)
+        }
         val detector = if (decision.method != PlayMethod.Transcode) {
-            PhysicalPlaybackEnd(requireNotNull(media.localConfiguration).uri, endSignal::ended)
+            PhysicalPlaybackEnd(
+                requireNotNull(media.localConfiguration).uri,
+                canEnd = endSignal::canEnd,
+                diagnostic = { PlaybackDiagnostics.write(decision, "source-end", it) }
+            ) { endSignal.ended("av-drained") }
         } else {
             null
         }
@@ -124,6 +136,8 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
         } else {
             next
         }
+        var initialReady = false
+        var initialTargetMs = positionMs
         listener = object : Player.Listener {
             override fun onRenderedFirstFrame() {
                 if (BuildConfig.DEBUG && activePlayer === next) {
@@ -142,7 +156,22 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (activePlayer !== next) return
-                if (playbackState == Player.STATE_READY) onReady(decision)
+                if (playbackState == Player.STATE_READY) {
+                    val readyPosition = position()
+                    val readyTargetMs = initialTargetMs
+                    PlaybackDiagnostics.write(
+                        decision,
+                        "ready",
+                        "requestedMs=$readyTargetMs appliedMs=${readyPosition.milliseconds} seekable=${next.isCurrentMediaItemSeekable} durationMs=${exposed.duration}"
+                    )
+                    if (!initialReady) {
+                        initialReady = true
+                        // Stop the loader immediately, before a zero-reset source can keep playing.
+                        // stop() retains playWhenReady so recovery preserves the viewer's pause intent.
+                        if (!startPositionApplied(readyTargetMs, readyPosition.milliseconds)) next.stop()
+                    }
+                    onReady(decision, readyPosition, readyTargetMs)
+                }
                 if (playbackState == Player.STATE_ENDED) endSignal.ended()
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -150,7 +179,13 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
             }
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                 if (activePlayer === next) {
-                    if (reason == Player.DISCONTINUITY_REASON_SEEK) detector?.invalidate()
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                        detector?.invalidate()
+                        if (!serverSeek) {
+                            initialTargetMs = newPosition.positionMs
+                            onSeek(newPosition.positionMs, decision)
+                        }
+                    }
                     onProgress(decision)
                 }
             }
@@ -172,6 +207,11 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
                     // Never display/log the exception: upstream source errors include request URLs.
                     val retryable = error is ExoPlaybackException &&
                         error.type in listOf(ExoPlaybackException.TYPE_SOURCE, ExoPlaybackException.TYPE_RENDERER)
+                    PlaybackDiagnostics.write(
+                        decision,
+                        "player-error",
+                        "code=${error.errorCode} type=${(error as? ExoPlaybackException)?.type ?: -1} retryable=$retryable positionMs=${position().milliseconds}"
+                    )
                     onFailure(retryable, decision)
                 }
             }
@@ -256,17 +296,17 @@ internal class Media3PlaybackOutput(private val context: Context, private val se
 }
 
 /** The app-thread seek mask is BUFFERING before the playback thread has reset the old renderers. */
-internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, private val onEnd: () -> Unit) {
+internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, private val onEnd: (String) -> Unit) {
     private var sent = false
-    fun ended() {
-        val player = currentPlayer() ?: return
-        if (sent ||
-            player.playerError != null ||
-            (player.playbackState != Player.STATE_READY && player.playbackState != Player.STATE_ENDED)
-        ) {
-            return
-        }
+    fun canEnd(): Boolean {
+        val player = currentPlayer() ?: return false
+        return !sent &&
+            player.playerError == null &&
+            (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_ENDED)
+    }
+    fun ended(reason: String = "media3-eos") {
+        if (!canEnd()) return
         sent = true
-        onEnd()
+        onEnd(reason)
     }
 }

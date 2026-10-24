@@ -197,7 +197,10 @@ private fun PlayerItemScreen(
     var switching by remember { mutableStateOf(false) }
     var exitRequested by remember { mutableStateOf(false) }
 
-    fun finish(next: MediaItem? = null) {
+    fun finish(next: MediaItem? = null, reason: String = "next-episode") {
+        if (!exitRequested && !switching) {
+            PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=$reason"))
+        }
         if (next == null) {
             if (exitRequested) return
             exitRequested = true
@@ -222,7 +225,7 @@ private fun PlayerItemScreen(
 
     fun handleBack() {
         when {
-            switching -> finish()
+            switching -> finish(reason = "back-during-next")
             chaptersOpen -> {
                 chaptersOpen = false
                 rootFocus.requestFocus()
@@ -235,7 +238,7 @@ private fun PlayerItemScreen(
                 controls = false
                 rootFocus.requestFocus()
             }
-            else -> finish()
+            else -> finish(reason = "back")
         }
     }
     BackHandler { handleBack() }
@@ -266,25 +269,29 @@ private fun PlayerItemScreen(
                 Locale.getDefault().language,
                 onFinished = { catalog.refresh(item.id) },
                 onCompletionPending = { catalog.playbackPending(item.id) },
-                onCleanupDone = { reportScope.cancel() }
+                onCleanupDone = { reportScope.cancel() },
+                diagnostic = PlaybackDiagnostics::write
             )
             controller = session
-            output.onStop = { finish() }
+            output.onStop = { finish(reason = "system-stop") }
             output.onSeek = { target, source -> session.seek(target, source) }
-            output.onReady = { session.ready(it) }
+            output.onReady = { source, position, target -> session.ready(source, position, target) }
             output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
             output.onProgress = { session.progress(it) }
             output.onFailure = { retry, source -> session.failed(retry, source) }
             output.onEnded = { source ->
-                session.ended(source)
-                ended = true
-                if (nextEpisode == null || nextCancelled) finish()
+                if (session.ended(source)) {
+                    ended = true
+                    if (nextEpisode == null || nextCancelled) finish(reason = "natural-end")
+                }
             }
             activeProbe.start { session.routeChanged() }
+            PlaybackDiagnostics.write("start-request item=${item.id} requestedMs=$startMs")
             session.start(startMs)
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) {
+            PlaybackDiagnostics.write("failure item=${item.id} reason=setup")
             setupError = "Could not start the player. Return to the item and try again."
         }
     }
@@ -333,6 +340,7 @@ private fun PlayerItemScreen(
     }
     DisposableEffect(Unit) {
         onDispose {
+            if (!exitRequested && !switching) PlaybackDiagnostics.write("exit-request item=${item.id} reason=dispose")
             exitRequested = true
             view.keepScreenOn = false
             probe?.close()
@@ -401,7 +409,10 @@ private fun PlayerItemScreen(
             Column(Modifier.align(Alignment.Center).widthIn(max = 720.dp).background(Color(0xEE10131C)).padding(32.dp)) {
                 Text(error)
                 state.reportError?.let { Text("Could not save progress: $it") }
-                Button(onClick = { finish() }, modifier = Modifier.focusRequester(errorFocus)) { Text("Back to details") }
+                Button(
+                    onClick = { finish(reason = "error-back") },
+                    modifier = Modifier.focusRequester(errorFocus)
+                ) { Text("Back to details") }
             }
             LaunchedEffect(error) { errorFocus.requestFocus() }
         }
@@ -445,7 +456,7 @@ private fun PlayerItemScreen(
                             seekPreview = null
                         }) { Text("Chapters") }
                     }
-                    Button(onClick = { finish() }) { Text("Stop") }
+                    Button(onClick = { finish(reason = "stop-button") }) { Text("Stop") }
                 }
                 state.reportError?.let { Text("Could not save progress: $it") }
             }

@@ -25,7 +25,12 @@ import java.util.concurrent.atomic.AtomicLong
  * final, drained A/V renderers is also a natural end. Text timestamps cannot keep a film alive.
  * Unknown-length streams retain Media3's usual end handling; a short known-length read is an error.
  */
-internal class PhysicalPlaybackEnd(private val mediaUri: Uri, private val onEnd: () -> Unit) {
+internal class PhysicalPlaybackEnd(
+    private val mediaUri: Uri,
+    private val canEnd: () -> Boolean = { true },
+    private val diagnostic: (String) -> Unit = {},
+    private val onEnd: () -> Unit
+) {
     @Volatile var bodyComplete = false
         private set
     private val generation = AtomicLong()
@@ -48,7 +53,10 @@ internal class PhysicalPlaybackEnd(private val mediaUri: Uri, private val onEnd:
                     bodyComplete = false
                     invalidate()
                 }
-                return source.open(dataSpec).also { expected = it }
+                return source.open(dataSpec).also {
+                    expected = it
+                    if (tracked) diagnostic("event=open offset=${dataSpec.position} expectedBytes=$expected")
+                }
             }
             override fun read(buffer: ByteArray, offset: Int, length: Int): Int = try {
                 source.read(buffer, offset, length).also { read ->
@@ -57,7 +65,11 @@ internal class PhysicalPlaybackEnd(private val mediaUri: Uri, private val onEnd:
                             throw EOFException("Incomplete media response")
                         }
                         if (read > 0) received += read
-                        if (expected > 0 && received == expected) bodyComplete = true
+                        if (expected > 0 && received == expected && !bodyComplete) {
+                            bodyComplete = true
+                            diagnostic("event=body-complete receivedBytes=$received")
+                        }
+                        if (read == C.RESULT_END_OF_INPUT && expected < 0) diagnostic("event=unknown-length-eof receivedBytes=$received")
                     }
                 }
             } catch (error: IOException) {
@@ -67,11 +79,25 @@ internal class PhysicalPlaybackEnd(private val mediaUri: Uri, private val onEnd:
                 }
                 throw error
             }
+            override fun close() {
+                if (tracked) diagnostic("event=close receivedBytes=$received expectedBytes=$expected complete=$bodyComplete")
+                source.close()
+            }
         }
     }
 
     fun wrap(renderers: Array<Renderer>, handler: Handler): Array<Renderer> {
+        var lastStatus: String? = null
         fun afterRender() {
+            if (bodyComplete) {
+                val status = renderers.filter {
+                    it.trackType == C.TRACK_TYPE_AUDIO || it.trackType == C.TRACK_TYPE_VIDEO
+                }.joinToString(",") { "${it.trackType}:${it.state}:${it.isCurrentStreamFinal}:${it.isEnded}" }
+                if (status != lastStatus) {
+                    lastStatus = status
+                    diagnostic("event=renderers complete=true av=$status")
+                }
+            }
             if (!bodyComplete) return
             val token = generation.get()
             if (signalled.get() == token) return
@@ -86,7 +112,17 @@ internal class PhysicalPlaybackEnd(private val mediaUri: Uri, private val onEnd:
                 if (!renderer.isCurrentStreamFinal || !renderer.isEnded) return
             }
             if (hasOutput && signalled.getAndSet(token) != token) {
-                handler.post { if (generation.get() == token && bodyComplete) onEnd() }
+                handler.post {
+                    if (generation.get() == token && bodyComplete) {
+                        if (canEnd()) {
+                            onEnd()
+                        } else {
+                            // The app thread may still mask a completed seek as BUFFERING. A
+                            // rejected delivery has not ended playback; retry once it can accept.
+                            signalled.compareAndSet(token, -1)
+                        }
+                    }
+                }
             }
         }
         return renderers.map { renderer ->
