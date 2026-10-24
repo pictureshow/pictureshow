@@ -7,6 +7,7 @@ package app.pictureshow
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import android.view.accessibility.CaptioningManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -246,7 +247,7 @@ private fun PlayerItemScreen(
             probe = activeProbe
             val clientIdentity = ClientIdentity(Build.MODEL, identity.getOrCreate(), BuildConfig.VERSION_NAME)
             val client = PlaybackClient(http, clientIdentity)
-            extras = PlaybackExtrasClient(http, clientIdentity)
+            extras = PlaybackExtrasClient(http, clientIdentity) { message -> Log.i("NextEpisode", message) }
             tiles = TrickplayCache(http, account, clientIdentity, item.id)
             val captionsEnabled = (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
             val configuration = if (captionsEnabled) {

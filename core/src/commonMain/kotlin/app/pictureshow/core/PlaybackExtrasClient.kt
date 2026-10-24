@@ -5,12 +5,13 @@ package app.pictureshow.core
 
 import io.ktor.client.HttpClient
 import io.ktor.http.URLBuilder
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /** Optional Jellyfin playback metadata, independent of playback negotiation and device profiles. */
-class PlaybackExtrasClient(client: HttpClient, identity: ClientIdentity) {
+class PlaybackExtrasClient(client: HttpClient, identity: ClientIdentity, private val diagnostic: (String) -> Unit = {}) {
     private val catalog = CatalogClient(client, identity)
 
     suspend fun item(account: Account, itemId: String): ClientResult<MediaItem> = catalog.request(
@@ -25,29 +26,44 @@ class PlaybackExtrasClient(client: HttpClient, identity: ClientIdentity) {
             is ClientResult.Failure -> result
         }
 
-    /** NextUp reflects watch state, so may still name the current item. AdjacentTo is relative to this episode. */
+    /**
+     * Ask for available episodes before the server computes adjacency. Jellyfin includes missing
+     * placeholders for API keys and users who display missing episodes; those cannot be played.
+     * Keep the server's aired order, including inserted specials and season boundaries.
+     */
     suspend fun nextEpisode(account: Account, item: MediaItem): ClientResult<MediaItem?> {
         if (item.type != "Episode" || item.seriesId.isNullOrBlank()) return ClientResult.Success(null)
-        return when (
-            val result = catalog.request<ItemPage>(
-                account,
-                "Shows/${item.seriesId.encodeURLPathPart()}/Episodes",
-                mapOf("adjacentTo" to item.id, "enableUserData" to "true", "fields" to "Overview")
-            )
-        ) {
-            is ClientResult.Failure -> result
+        val path = "Shows/${item.seriesId.encodeURLPathPart()}/Episodes"
+        val parameters = mapOf(
+            "adjacentTo" to item.id,
+            "isMissing" to "false",
+            "enableUserData" to "true",
+            "fields" to "Overview"
+        )
+        // Log only this endpoint's path/query and episode IDs. Omit the host and automatic userId.
+        val request = "$path?" + parameters.entries.joinToString("&") { (key, value) -> "$key=${value.encodeURLParameter()}" }
+        return when (val result = catalog.request<ItemPage>(account, path, parameters)) {
+            is ClientResult.Failure -> {
+                diagnostic(
+                    "nextEpisode current=${item.id.encodeURLParameter()} request=GET $request " +
+                        "returned=unavailable chosen=none error=${result.error.kind}"
+                )
+                result
+            }
             is ClientResult.Success -> {
                 val items = result.value.items
                 val index = items.indexOfFirst { it.id == item.id }
-                ClientResult.Success(
-                    if (index >=
-                        0
-                    ) {
-                        items.getOrNull(index + 1)?.takeIf { it.id != item.id && it.type == "Episode" }
-                    } else {
-                        null
-                    }
+                val next = if (index >= 0) {
+                    items.getOrNull(index + 1)?.takeIf { it.id != item.id && it.type == "Episode" }
+                } else {
+                    null
+                }
+                val returned = items.joinToString(",", "[", "]") { it.id.encodeURLParameter() }
+                diagnostic(
+                    "nextEpisode current=${item.id.encodeURLParameter()} request=GET $request " +
+                        "returned=$returned chosen=${next?.id?.encodeURLParameter() ?: "none"}"
                 )
+                ClientResult.Success(next)
             }
         }
     }
