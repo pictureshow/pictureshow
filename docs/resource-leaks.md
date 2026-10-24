@@ -16,7 +16,7 @@ python3 tools/check-resource-leaks.py --serial DEVICE --output PRIVATE_EVIDENCE/
 ```
 
 The command forces two GC/finalizer passes, waits briefly for asynchronous reporting, records the process's
-PSS/native heap, threads, FD listing and logcat, and exits nonzero if the counter is nonzero. Compare
+PSS/native heap, threads, FD listing and a bounded logcat snapshot (last 5,000 buffer lines), and exits nonzero if the counter is nonzero. Compare
 like-for-like idle screens after the player is closed; image/code caches can grow on first use.
 Use multiple checkpoints to distinguish retained resources from a warmed cache. Keep the raw
 artifacts private: platform/library logs can include server URLs or media metadata.

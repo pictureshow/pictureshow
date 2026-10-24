@@ -89,7 +89,7 @@ if threads:
 fds = adb("shell", "run-as", "app.pictureshow", "ls", f"/proc/{pid}/fd").split()
 result["file_descriptors"] = len(fds)
 (args.output / "fds.txt").write_text("\n".join(fds) + "\n")
-logcat = adb("logcat", "-d", "--pid=" + pid, "-v", "threadtime")
+logcat = adb("logcat", "-d", "--pid=" + pid, "-t", "5000", "-v", "threadtime")
 result["retained_log_violation_lines"] = len(re.findall(r"PictureshowLeaks.*VM leak violation #", logcat))
 (args.output / "logcat.txt").write_text(logcat)
 (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
