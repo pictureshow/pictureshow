@@ -2,8 +2,8 @@
 
 Debug builds install a VM StrictMode policy before application startup. It detects unclosed
 Closeables/SQLite resources, leaked registrations and leaked activities. `StrictMode` logs the
-allocating stack; `PictureshowLeaks` also logs each reported violation at error level and counts it
-on API 28+. API 23–27 retain the StrictMode log penalty. There is no thread policy, death penalty,
+available allocating stack or platform call-site description. `PictureshowLeaks` also logs each
+reported violation at error level and counts it on API 28+. API 23–27 retain the StrictMode log penalty. There is no thread policy, death penalty,
 periodic GC or background sampler. Release and deviceTest builds exclude the entire provider and
 its manifest, so viewers pay no diagnostic cost.
 
@@ -49,6 +49,14 @@ its coverage. OkHttp pool cleanup can report a collected call minutes after a ch
 logcat running through a final idle window of at least six minutes. Read stacks instead of inferring owners from `dispose`, `release` or `end`. Do not
 silence library warnings to obtain a green run. Library defects should retain their source-backed
 attribution and reproduction evidence.
+
+Some platform paths deliberately keep only a call-site string. On Android 11,
+`SurfaceControl.readFromParcel` uses `CloseGuard.openWithCallSite("release", "readFromParcel")`;
+without a test tracker that warning contains no allocating Throwable. Count it normally, but do not
+mistake its finalizer stack for the allocating caller. An isolated debugger/test probe can record the
+parcel-read stack and match the same unreleased object at finalization. Keep that instrumentation out
+of the ordinary timing comparison. Sources: [Android 11 CloseGuard](https://android.googlesource.com/platform/libcore/+/refs/heads/android11-release/dalvik/src/main/java/dalvik/system/CloseGuard.java)
+and [SurfaceControl](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android11-release/core/java/android/view/SurfaceControl.java).
 
 The ordinary JVM gate includes a wire-level replacement test: repeated playback factories must
 reuse a connection while sending each decision's own headers; overlapping replacement loaders must
