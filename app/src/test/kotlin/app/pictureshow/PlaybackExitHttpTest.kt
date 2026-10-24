@@ -69,16 +69,14 @@ class PlaybackExitHttpTest {
     fun exhaustedStopReportsKeepWatchStatePendingUntilAnAuthoritativeReadCompletes() = exitScenario(natural = true, failReports = true)
 
     @Test
-    fun newDetailsStartWithAcknowledgedStateBeforeTheirCollectorRuns() =
-        exitScenario(natural = true, reopenAfterCompletion = true)
+    fun newDetailsStartWithAcknowledgedStateBeforeTheirCollectorRuns() = exitScenario(natural = true, reopenAfterCompletion = true)
 
     @Test
     fun reopenedDetailsWithholdCachedStateAfterExhaustedReportsBeforeTheirCollectorRuns() =
         exitScenario(natural = true, failReports = true, reopenAfterCompletion = true)
 
     @Test
-    fun unrelatedAndGenericRefreshCannotReleaseACompletionWhoseStopIsStillPending() =
-        exitScenario(natural = true, unrelatedRefresh = true)
+    fun unrelatedAndGenericRefreshCannotReleaseACompletionWhoseStopIsStillPending() = exitScenario(natural = true, unrelatedRefresh = true)
 
     private fun exitScenario(
         natural: Boolean,
@@ -203,10 +201,16 @@ class PlaybackExitHttpTest {
             if (unrelatedRefresh) {
                 catalog.refresh("other")
                 runCurrent()
-                assertTrue(assertNotNull(details).state.value.playbackPending, "Another item's completion must not release this pending watch state")
+                assertTrue(
+                    assertNotNull(details).state.value.playbackPending,
+                    "Another item's completion must not release this pending watch state"
+                )
                 catalog.refresh()
                 runCurrent()
-                assertTrue(assertNotNull(details).state.value.playbackPending, "A generic refresh must not release this pending watch state")
+                assertTrue(
+                    assertNotNull(details).state.value.playbackPending,
+                    "A generic refresh must not release this pending watch state"
+                )
                 assertFalse(assertNotNull(details).state.value.item!!.userData.played)
             }
             stop.complete(Unit)
