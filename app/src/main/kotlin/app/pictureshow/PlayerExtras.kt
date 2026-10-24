@@ -29,8 +29,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -79,7 +81,8 @@ internal fun SegmentControl(
         var focused by remember(active) { mutableStateOf(false) }
         Button(
             onClick = { seek(active.endMs) },
-            modifier = Modifier.testTag("skip:${active.type}").onFocusChanged { focused = it.isFocused }
+            modifier = Modifier.testTag("skip:${active.type}").semantics { liveRegion = LiveRegionMode.Polite }
+                .onFocusChanged { focused = it.isFocused }
         ) { Text("Skip ${segmentLabel(active.type)}") }
         DisposableEffect(active) { onDispose { if (focused) restore() } }
     }

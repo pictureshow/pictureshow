@@ -54,7 +54,10 @@ class RuntimePresentationTest {
     fun launcherProgramOmitsBogusDurationWithoutChangingResumePosition() {
         val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
         val item = MediaItem(
-            "film", "Fictional sample", "Movie", runTimeTicks = 42_949_822_950_000,
+            "film",
+            "Fictional sample",
+            "Movie",
+            runTimeTicks = 42_949_822_950_000,
             userData = ItemUserData(playbackPositionTicks = 600_000_000)
         )
         val program = watchProgram(account, item, false, 1000)

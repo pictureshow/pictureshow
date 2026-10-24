@@ -627,7 +627,7 @@ fun CatalogDetail(
             item(key = "body") {
                 Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (state.playbackPending) {
-                        Text("Saving progress…")
+                        if (state.error == null) Text("Saving progress…")
                     } else if (state.loading && item == null) {
                         Text("Loading item…")
                     }
@@ -720,6 +720,11 @@ fun CatalogDetail(
     LaunchedEffect(state.loading, state.playbackPending, item?.id, state.error, sections.map { it.first to it.second.map(MediaItem::id) }) {
         if (state.playbackPending) {
             restored = false
+            if (state.error != null) {
+                list.scrollToItem(0)
+                withFrameNanos { }
+                retry.requestFocus()
+            }
             return@LaunchedEffect
         }
         if (state.loading && selectedSection != "header") restored = false

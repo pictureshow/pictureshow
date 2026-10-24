@@ -19,6 +19,11 @@ internal fun trackLanguage(language: String?): String? {
     return language
 }
 
+/** Match a complete metadata word or phrase, so "Unforced" cannot suppress "Forced". */
+private fun String.names(value: String): Boolean = contains(
+    Regex("(?i)(?<![\\p{L}\\p{N}])${Regex.escape(value)}(?![\\p{L}\\p{N}])")
+)
+
 /**
  * A track's language names it; without one the server's title or the codec/channel description carries the label,
  * and [trackNumber] keeps same-looking tracks apart. "Default" appears only when [showDefault] says it
@@ -51,20 +56,26 @@ internal fun trackLabel(stream: MediaStream, trackNumber: Int? = null, showDefau
     }
     val format = codec + channels
     val language = trackLanguage(stream.language)
-    val name = language ?: stream.title?.takeIf { it.isNotBlank() }
+    val title = stream.title?.takeIf { it.isNotBlank() }
+    val name = if (language != null && title?.names(language) == true) title else language ?: title
     if (name != null) {
         add(name)
-        if (!name.equals(format, ignoreCase = true)) add(format)
+        val titleCarriesFormat = title != null && !title.equals(name, true) && !title.equals(format, true) && title.names(format)
+        if (!name.names(format) && !titleCarriesFormat) add(format)
     } else {
         add(format)
     }
     // Keep descriptive titles (for example audio description or commentary) even when a language is present.
-    stream.title?.takeIf { language != null && it.isNotBlank() && !it.equals(name, true) && !it.equals(format, true) }?.let(::add)
+    title?.takeIf { language != null && !it.equals(name, true) && !it.equals(format, true) }?.let(::add)
     if (language == null && trackNumber != null) add("Track $trackNumber")
-    if (showDefault && stream.isDefault) add("Default")
-    if (stream.isForced) add("Forced")
-    if (stream.isHearingImpaired) add("SDH")
-    if (stream.isExternal || stream.isExternalUrl) add("External")
+    fun badge(word: String, enabled: Boolean) {
+        val alreadyNamed = title?.names(word) == true
+        if (enabled && !alreadyNamed) add(word)
+    }
+    badge("Default", showDefault && stream.isDefault)
+    badge("Forced", stream.isForced)
+    badge("SDH", stream.isHearingImpaired)
+    badge("External", stream.isExternal || stream.isExternalUrl)
 }.joinToString(" · ")
 
 /**
@@ -73,7 +84,15 @@ internal fun trackLabel(stream: MediaStream, trackNumber: Int? = null, showDefau
  */
 internal fun trackLabels(streams: List<MediaStream>): List<String> {
     val defaults = streams.count { it.isDefault }
-    return streams.mapIndexed { position, stream ->
+    val labels = streams.mapIndexed { position, stream ->
         trackLabel(stream, trackNumber = position + 1, showDefault = defaults == 1 && streams.size > 1)
     }
+    // Use menu order, never an invented language/role. Resolve collisions again in case a server title
+    // itself contains one of these suffixes. Every appended number is unique within this chooser.
+    var distinct = labels
+    while (distinct.toSet().size != distinct.size) {
+        val duplicates = distinct.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+        distinct = distinct.mapIndexed { position, label -> if (label in duplicates) "$label · Track ${position + 1}" else label }
+    }
+    return distinct
 }

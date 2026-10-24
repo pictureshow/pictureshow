@@ -11,8 +11,8 @@ import androidx.tvprovider.media.tv.TvContractCompat
 import androidx.tvprovider.media.tv.WatchNextProgram
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.imageUrl
 import app.pictureshow.core.displayRuntimeMillis
+import app.pictureshow.core.imageUrl
 import java.security.MessageDigest
 
 internal data class WatchRow(val id: Long, val key: String, val browsable: Boolean, val positionMs: Int = 0, val engagementTime: Long = 0)

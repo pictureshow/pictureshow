@@ -41,6 +41,63 @@ class PlayerRemoteKeysTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = kotlinx.coroutines.test.StandardTestDispatcher())
 
     @Test
+    fun oneCenterSkipsOnSurfaceWhileFocusedControlsKeepTheirAction() {
+        val root = FocusRequester()
+        var focused by mutableStateOf(false)
+        var skipAvailable by mutableStateOf(true)
+        var skips = 0
+        var shows = 0
+        var clicks = 0
+        var seeks = 0L
+        compose.setContent {
+            MaterialTheme {
+                Column(
+                    Modifier.focusRequester(root).onFocusChanged { focused = it.isFocused }
+                        .playerRemoteKeys(
+                            true,
+                            focused,
+                            { seeks += it },
+                            { shows++ },
+                            {},
+                            back = {},
+                            skip = if (skipAvailable) ({ skips++ }) else null
+                        )
+                        .focusable()
+                ) {
+                    Button(onClick = { clicks++ }) { Text("Pause") }
+                }
+            }
+        }
+        compose.runOnIdle { root.requestFocus() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.runOnIdle {
+            assertEquals(1, skips)
+            assertEquals(0, shows)
+        }
+        compose.onRoot().performKeyInput {
+            pressKey(Key.DirectionUp)
+            pressKey(Key.DirectionRight)
+        }
+        compose.runOnIdle {
+            assertEquals(1, shows)
+            assertEquals(10_000, seeks)
+        }
+        compose.onNodeWithText("Pause").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.runOnIdle {
+            assertEquals(1, clicks)
+            assertEquals(1, skips)
+            skipAvailable = false
+            root.requestFocus()
+        }
+        compose.onRoot().performKeyInput { pressKey(Key.Enter) }
+        compose.runOnIdle {
+            assertEquals(2, shows)
+            assertEquals(1, skips)
+        }
+    }
+
+    @Test
     fun centerOnTheSurfaceShowsControlsWithoutChangingPlayback() {
         val root = FocusRequester()
         var focused by mutableStateOf(false)

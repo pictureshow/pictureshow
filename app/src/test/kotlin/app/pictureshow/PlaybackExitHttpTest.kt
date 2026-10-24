@@ -55,20 +55,17 @@ class PlaybackExitHttpTest {
     fun ordinaryStopStillReturnsWhileItsReportIsPending() = exitScenario(natural = false)
 
     @Test
-    fun backDuringPendingNextEpisodeCompletionExitsPromptlyWithoutStartingNext() =
-        exitScenario(natural = true, closingForNext = true)
+    fun backDuringPendingNextEpisodeCompletionExitsPromptlyWithoutStartingNext() = exitScenario(natural = true, closingForNext = true)
 
     @Test
-    fun retainedDetailsUseAcknowledgedCompletionWhileThePostPlaybackReadIsBlocked() =
-        exitScenario(natural = true, retainedDetails = true)
+    fun retainedDetailsUseAcknowledgedCompletionWhileThePostPlaybackReadIsBlocked() = exitScenario(natural = true, retainedDetails = true)
 
     @Test
     fun acknowledgedAlreadyPlayedStateReachesRetainedDetailsWithoutAnotherPlayedMutation() =
         exitScenario(natural = true, retainedDetails = true, stopMarksPlayed = true)
 
     @Test
-    fun exhaustedStopReportsKeepWatchStatePendingUntilAnAuthoritativeReadCompletes() =
-        exitScenario(natural = true, failReports = true)
+    fun exhaustedStopReportsKeepWatchStatePendingUntilAnAuthoritativeReadCompletes() = exitScenario(natural = true, failReports = true)
 
     private fun exitScenario(
         natural: Boolean,
@@ -144,7 +141,9 @@ class PlaybackExitHttpTest {
         val catalog = CatalogSession(JellyfinClient(http, identity), accounts)
         val session = PlaybackSession(
             ServerPlaybackGateway(
-                PlaybackClient(http, identity), account, "film",
+                PlaybackClient(http, identity),
+                account,
+                "film",
                 { DeviceCapabilities("TV", emptyList(), DisplayCapabilities(1920, 1080, 60.0), emptyList(), AudioOutput(2)) },
                 markPlayed = {
                     val result = catalog.completePlayback(account, "film")
@@ -152,7 +151,10 @@ class PlaybackExitHttpTest {
                     result
                 }
             ),
-            Output(), backgroundScope, "en", onFinished = { catalog.refresh() },
+            Output(),
+            backgroundScope,
+            "en",
+            onFinished = { catalog.refresh() },
             onCompletionPending = { catalog.playbackPending("film") }
         )
         try {

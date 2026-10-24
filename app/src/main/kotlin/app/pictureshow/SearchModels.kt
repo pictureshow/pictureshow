@@ -37,6 +37,7 @@ data class SearchState(
     val loading: Boolean = false,
     val completed: Boolean = false,
     val allFailed: Boolean = false,
+    val someFailed: Boolean = false,
     val recent: List<String> = emptyList(),
     val storageError: String? = null
 )
@@ -71,7 +72,14 @@ class SearchViewModel(private val account: Account, private val session: Catalog
         val epoch = ++generation
         job?.cancel()
         mutableState.update {
-            it.copy(query = bounded, rows = emptyList(), loading = term.length >= 2, completed = false, allFailed = false)
+            it.copy(
+                query = bounded,
+                rows = emptyList(),
+                loading = term.length >= 2,
+                completed = false,
+                allFailed = false,
+                someFailed = false
+            )
         }
         if (term.length < 2) return
         job = viewModelScope.launch {
@@ -90,6 +98,7 @@ class SearchViewModel(private val account: Account, private val session: Catalog
                         rows = assembleSearch(results),
                         loading = false,
                         completed = true,
+                        someFailed = results.values.any { result -> result is ClientResult.Failure },
                         allFailed = results.values.all { result ->
                             result is ClientResult.Failure
                         }

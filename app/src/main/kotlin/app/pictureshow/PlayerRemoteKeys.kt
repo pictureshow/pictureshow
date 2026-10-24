@@ -12,7 +12,8 @@ import androidx.compose.ui.input.key.type
 
 /**
  * Direction keys seek only on the playback surface. OK on the surface shows the controls on Play/Pause without
- * changing playback; so do UP/DOWN. Focused controls keep normal D-pad activation/navigation.
+ * changing playback; so do UP/DOWN. A visible Ask segment overrides surface OK to skip once.
+ * Focused controls keep normal D-pad activation/navigation.
  */
 internal fun Modifier.playerRemoteKeys(
     enabled: Boolean,
@@ -20,7 +21,8 @@ internal fun Modifier.playerRemoteKeys(
     seek: (Long) -> Unit,
     showControls: () -> Unit,
     interact: () -> Unit,
-    back: () -> Unit
+    back: () -> Unit,
+    skip: (() -> Unit)? = null
 ): Modifier = onPreviewKeyEvent { event ->
     val key = event.key
     if (key == Key.Back) {
@@ -34,7 +36,10 @@ internal fun Modifier.playerRemoteKeys(
         seek(if (key == Key.DirectionLeft) -step else step)
         true
     } else if (center && rootFocused) {
-        if (event.type == KeyEventType.KeyUp) showControls()
+        if (event.type == KeyEventType.KeyUp) {
+            if (skip != null) skip() else showControls()
+            interact()
+        }
         true
     } else if (rootFocused && event.type == KeyEventType.KeyDown && (key == Key.DirectionUp || key == Key.DirectionDown)) {
         showControls()

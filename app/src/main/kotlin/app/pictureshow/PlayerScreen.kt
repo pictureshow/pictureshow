@@ -78,7 +78,9 @@ import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.MediaSegment
 import app.pictureshow.core.PlaybackExtrasClient
+import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.UserConfigurationClient
+import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.nextEpisodeTriggerMs
@@ -199,8 +201,7 @@ private fun PlayerItemScreen(
         if (next == null) {
             if (exitRequested) return
             exitRequested = true
-            controller?.close()
-            onExit()
+            finishPlayback(controller, onExit)
             return
         }
         if (switching || exitRequested) return
@@ -264,6 +265,7 @@ private fun PlayerItemScreen(
                 reportScope,
                 Locale.getDefault().language,
                 onFinished = { catalog.refresh() },
+                onCompletionPending = { catalog.playbackPending(item.id) },
                 onCleanupDone = { reportScope.cancel() }
             )
             controller = session
@@ -275,7 +277,8 @@ private fun PlayerItemScreen(
             output.onFailure = { retry, source -> session.failed(retry, source) }
             output.onEnded = { source ->
                 session.ended(source)
-                if (nextEpisode != null && !nextCancelled) ended = true else finish()
+                ended = true
+                if (nextEpisode == null || nextCancelled) finish()
             }
             activeProbe.start { session.routeChanged() }
             session.start(startMs)
@@ -357,7 +360,16 @@ private fun PlayerItemScreen(
                     if (rootFocused) focusControls = true
                 },
                 interact = { interaction++ },
-                back = ::handleBack
+                back = ::handleBack,
+                skip = activeSegment(segments, position, localPreferences.segmentModes)
+                    ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
+                    ?.let { segment ->
+                        {
+                            player?.seekTo(segment.endMs)
+                            position = segment.endMs
+                            interaction++
+                        }
+                    }
             )
             .semantics {
                 contentDescription = "Video player"
@@ -416,7 +428,7 @@ private fun PlayerItemScreen(
                     seekPreview = target
                     interaction++
                 }
-                val clock = (if (paused) "Paused  ·  " else "") + "${playerTime(position)} / ${playerTime(duration)}"
+                val clock = playerClock(position, duration, paused)
                 Text("$clock  ·  ← / → seek 10 seconds", modifier = Modifier.clearAndSetSemantics {})
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus)) {

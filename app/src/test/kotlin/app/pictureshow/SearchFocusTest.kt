@@ -218,6 +218,40 @@ class SearchFocusTest {
     }
 
     @Test
+    fun partialFailureNeverSaysNoResultsAndOffersRetryWithOrWithoutRows() {
+        var retries = 0
+        var state by mutableStateOf(SearchState(query = "cloud", completed = true, someFailed = true))
+        compose.setContent {
+            MaterialTheme {
+                SearchScreen(state, account, false, {}, {}, {}, {}, { retries++ }, {})
+            }
+        }
+        compose.onNodeWithText("No results for “cloud”").assertDoesNotExist()
+        compose.onNodeWithText("Some results could not load. Try again.").assertIsDisplayed()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("search:retry").assertIsFocused()
+        key(Key.DirectionCenter)
+        compose.runOnIdle {
+            kotlin.test.assertEquals(1, retries)
+            state = results.copy(someFailed = true)
+        }
+        compose.onNodeWithText("Some results could not load. Try again.").assertIsDisplayed()
+        compose.onNodeWithTag("search:MOVIES:movie-0").assertIsDisplayed()
+        compose.onNodeWithTag("search:retry").assertIsDisplayed()
+        compose.onNodeWithTag("search:MOVIES:movie-0").assertIsFocused()
+        key(Key.DirectionUp)
+        compose.onNodeWithTag("search:retry").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("search:MOVIES:movie-0").assertIsFocused()
+        key(Key.DirectionUp)
+        compose.onNodeWithTag("search:retry").assertIsFocused()
+        key(Key.DirectionUp)
+        compose.onNodeWithTag("search:field").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("search:retry").assertIsFocused()
+    }
+
+    @Test
     fun personRetryFocusesRecoveredFilmographyCard() {
         var state by mutableStateOf(PersonState(CatalogGridState(account, person, error = "offline"), person))
         compose.setContent {

@@ -127,9 +127,9 @@ fun SearchScreen(
         editing = false
         keyboard?.hide()
         when {
+            state.allFailed || state.someFailed -> retry.requestFocus()
             state.rows.isNotEmpty() -> scope.launch { focusRow(0) }
             normalizeSearch(state.query).isEmpty() && state.recent.isNotEmpty() -> recentFirst.requestFocus()
-            state.allFailed -> retry.requestFocus()
         }
     }
     // The IME consumes Back before the app. A floating TV IME can report zero insets,
@@ -237,13 +237,32 @@ fun SearchScreen(
             Text("Enter at least 2 characters.")
         }
         if (state.loading) Text("Searching…")
-        if (state.allFailed) {
-            Text("Could not search your library. Try again.")
-            Button(onClick = {
-                focusField()
-                focusResults = true
-                onRetry()
-            }, modifier = Modifier.focusRequester(retry).testTag("search:retry")) { Text("Retry") }
+        if (state.allFailed || state.someFailed) {
+            Text(if (state.allFailed) "Could not search your library. Try again." else "Some results could not load. Try again.")
+            Button(
+                onClick = {
+                    focusField()
+                    focusResults = true
+                    onRetry()
+                },
+                modifier = Modifier.focusRequester(retry).testTag("search:retry").onPreviewKeyEvent {
+                    if (it.type != KeyEventType.KeyDown) {
+                        false
+                    } else {
+                        when (it.key) {
+                            Key.DirectionUp -> {
+                                focusField()
+                                true
+                            }
+                            Key.DirectionDown -> {
+                                scope.launch { focusRow(0) }
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                }
+            ) { Text("Retry") }
         } else if (state.completed && state.rows.isEmpty()) {
             Text("No results for “${normalizeSearch(state.query)}”")
         }
@@ -285,7 +304,7 @@ fun SearchScreen(
                                                         if (rowIndex ==
                                                             0
                                                         ) {
-                                                            focusField()
+                                                            if (state.someFailed || state.allFailed) retry.requestFocus() else focusField()
                                                         } else {
                                                             scope.launch { focusRow(rowIndex - 1) }
                                                         }
