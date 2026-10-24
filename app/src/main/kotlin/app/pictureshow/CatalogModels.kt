@@ -34,9 +34,17 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
     private var completedUsers = emptyMap<String, ItemUserData>()
+    private var unresolvedPlayback = emptySet<String>()
 
     fun playbackPending(itemId: String) {
+        unresolvedPlayback = unresolvedPlayback + itemId
         mutableChanges.update { it.copy(pendingPlayback = it.pendingPlayback + itemId) }
+    }
+
+    internal fun playbackUnresolved(itemId: String) = itemId in unresolvedPlayback
+
+    internal fun playbackRead(itemId: String) {
+        if (itemId !in changes.value.pendingPlayback) unresolvedPlayback = unresolvedPlayback - itemId
     }
 
     internal fun playbackCompleted(item: MediaItem) {
@@ -49,6 +57,7 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         // opened details cannot show pre-completion state while their fresh server read is pending.
         val confirmed = completedUsers
         completedUsers = emptyMap()
+        unresolvedPlayback = unresolvedPlayback - confirmed.keys
         mutableChanges.update {
             it.copy(revision = it.revision + 1, refreshRevision = it.refreshRevision + 1, users = confirmed, pendingPlayback = emptySet())
         }
@@ -226,7 +235,8 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     private val mutableState = MutableStateFlow(
         CatalogDetailState(
             account,
-            item = initialChanges.users[original.id]?.let { original.copy(userData = it) },
+            item = initialChanges.users[original.id]?.let { original.copy(userData = it) }
+                ?: original.takeUnless { original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id) },
             playbackPending = original.id in initialChanges.pendingPlayback
         )
     )
@@ -272,6 +282,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                 is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
                 is ClientResult.Success -> {
                     val item = result.value
+                    session.playbackRead(item.id)
                     mutableState.update {
                         it.copy(item = item, playbackPending = original.id in session.changes.value.pendingPlayback)
                     }
