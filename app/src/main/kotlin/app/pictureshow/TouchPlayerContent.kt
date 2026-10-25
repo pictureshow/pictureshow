@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -34,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +49,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -101,6 +104,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val activity = LocalContext.current.playerActivity()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val resources = LocalResources.current
+    val density = LocalDensity.current
+    var controlsHeight by remember { mutableIntStateOf(0) }
     var controlsTop by remember { mutableStateOf<Int?>(null) }
     var actionsTop by remember { mutableStateOf<Int?>(null) }
     var playerTop by remember { mutableStateOf(0) }
@@ -133,7 +138,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             ui.scrubMs = null
         }
     }
-    Box(
+    BoxWithConstraints(
         Modifier.fillMaxSize().background(Color.Black).testTag("touch:player").onGloballyPositioned {
             playerTop = it.positionInRoot().y.toInt()
         }
@@ -162,24 +167,37 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             }
         )
 
+        // Preview is an overlay above the measured controls, never a child of their column.
+        // Loading a bitmap during a held gesture must not move the slider under the finger.
+        val sourceId = host.state.decision?.mediaSourceId
+        val info = chooseTrickplay(host.metadata, sourceId, (resources.displayMetrics.widthPixels / 4).coerceIn(160, 640))
+        val preview = ui.scrubMs ?: ui.previewMs
+        val tile = preview?.let { target -> info?.let { trickplayTile(it, target) } }
+        if (controlsVisible && tile != null && host.tiles != null && sourceId != null) {
+            val controlsSize = with(density) { controlsHeight.toDp() }
+            val imageHeight = (maxHeight - controlsSize - 40.dp).coerceIn(0.dp, 135.dp)
+            if (imageHeight > 0.dp) {
+                Box(
+                    Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = controlsSize + 8.dp)
+                        .testTag("touch:thumbnail")
+                ) {
+                    TrickplayPreview(requireNotNull(host.tiles), sourceId, tile, requireNotNull(preview), imageHeight)
+                }
+            }
+        }
+
         if (controlsVisible) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing)
-                    .onGloballyPositioned { controlsTop = it.positionInRoot().y.toInt() }
+                    .onGloballyPositioned {
+                        controlsTop = it.positionInRoot().y.toInt()
+                        controlsHeight = it.size.height
+                    }
                     .background(Color(0xE610131C)).heightIn(max = if (landscape) 260.dp else 430.dp)
                     .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(host.item.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
-                val sourceId = host.state.decision?.mediaSourceId
-                val info = chooseTrickplay(host.metadata, sourceId, (resources.displayMetrics.widthPixels / 4).coerceIn(160, 640))
-                val preview = ui.scrubMs ?: ui.previewMs
-                val tile = preview?.let { target -> info?.let { trickplayTile(it, target) } }
-                if (tile != null && host.tiles != null && sourceId != null) {
-                    Box(Modifier.testTag("touch:thumbnail")) {
-                        TrickplayPreview(requireNotNull(host.tiles), sourceId, tile, requireNotNull(preview))
-                    }
-                }
                 TouchPlayerScrubber(host.position, host.duration, ui.scrubMs, onPreview = {
                     ui.scrubMs = it
                     ui.interact()
@@ -238,7 +256,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     val trigger = nextEpisodeTriggerMs(host.duration, host.segments)
                     NextEpisodeControl(
                         account, next, trigger != null && host.position >= trigger, host.ended,
-                        playback.paused || playback.buffering || host.state.preparing || !actionsVisible,
+                        playback.paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null,
                         onFocusRemoved = {}, onPlay = { host.finish(next) }, onCancel = {
                             PlaybackDiagnostics.write("continuation-cancel item=${host.item.id}")
                             host.nextCancelled = true

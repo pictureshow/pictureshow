@@ -6,6 +6,7 @@
 package app.pictureshow
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
@@ -25,12 +26,26 @@ import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import app.pictureshow.core.Account
 import app.pictureshow.core.Chapter
+import app.pictureshow.core.ClientIdentity
+import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.MediaSegment
+import app.pictureshow.core.SegmentType
 import app.pictureshow.core.Server
+import app.pictureshow.core.TrickplayInfo
+import app.pictureshow.core.TrickplayTile
 import app.pictureshow.core.User
+import app.pictureshow.core.playback.MediaSourceInfo
+import app.pictureshow.core.playback.PlayDecision
+import app.pictureshow.core.playback.PlayMethod
 import com.google.common.util.concurrent.Futures
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import java.io.ByteArrayOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -115,6 +130,85 @@ class TouchPlayerControlsTest {
         compose.runOnIdle {
             assertTrue(host.position > 20_000)
             assertEquals(host.position, decoder.currentPosition)
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h360dp-land-xhdpi")
+    fun loadedThumbnailDoesNotMoveSliderDuringHeldDrag() {
+        launch(paused = true)
+        val info = TrickplayInfo(16, 9, 10, 6, 60, 1_000)
+        val image = ByteArrayOutputStream().also {
+            Bitmap.createBitmap(160, 54, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, it)
+        }.toByteArray()
+        val http = HttpClient(MockEngine { respond(image) })
+        val cache = TrickplayCache(http, account, ClientIdentity("Phone", "device"), "movie")
+        try {
+            // Load the actual sheet before the gesture, so the test includes bitmap layout.
+            runBlocking { checkNotNull(cache.thumbnail("source", TrickplayTile(info, 0, 0, 0))) }
+            compose.runOnIdle {
+                host.metadata = host.metadata.copy(trickplay = mapOf("source" to mapOf("16" to info)))
+                host.tiles = cache
+                host.stateSource = androidx.compose.runtime.mutableStateOf(
+                    PlaybackState(
+                        preparing = false,
+                        decision = PlayDecision(
+                            "movie",
+                            MediaSourceInfo(id = "source"),
+                            PlayMethod.DirectPlay,
+                            "https://example.test/video",
+                            emptyMap(),
+                            "session"
+                        )
+                    )
+                )
+            }
+            val before = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().boundsInRoot
+            compose.onNodeWithTag("touch:scrubber").performTouchInput {
+                down(Offset(width * 0.3f, height / 2f))
+                moveTo(Offset(width * 0.7f, height / 2f))
+            }
+            compose.onNodeWithTag("touch:thumbnail").assertIsDisplayed()
+            val during = compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().boundsInRoot
+            assertEquals(before.center.y, during.center.y, "A loaded preview must not move the track away from the held finger")
+            compose.runOnIdle { assertEquals(20_000, decoder.currentPosition) }
+            compose.onNodeWithTag("touch:scrubber").performTouchInput { up() }
+            compose.runOnIdle {
+                assertTrue(host.position > 20_000)
+                assertEquals(host.position, decoder.currentPosition)
+            }
+        } finally {
+            cache.close()
+            http.close()
+        }
+    }
+
+    @Test fun heldScrubberSuspendsAutomaticNextEpisodeCountdown() {
+        launch()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle {
+            host.position = 50_000
+            host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
+            host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
+        }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+        compose.onNodeWithTag("touch:scrubber").performTouchInput {
+            down(Offset(width * 0.8f, height / 2f))
+            moveTo(Offset(width * 0.3f, height / 2f))
+        }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.runOnIdle { assertEquals(0, exits, "Continuation must not replace the item during a held seek") }
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+        compose.onNodeWithTag("touch:scrubber").performTouchInput { up() }
+        compose.runOnIdle {
+            assertTrue(decoder.seeks.last() < 45_000, "Release commits the seek back before the outro")
+            assertEquals(host.position, decoder.seeks.last())
         }
     }
 
