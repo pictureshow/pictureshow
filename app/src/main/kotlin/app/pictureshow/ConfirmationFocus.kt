@@ -3,6 +3,8 @@
  */
 package app.pictureshow
 
+import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,19 +28,35 @@ internal fun ConfirmationFocus(target: String?, onRestored: () -> Unit = {}, con
     val host = LocalView.current
     LaunchedEffect(target, accessible) {
         if (target != null && accessible) {
-            withTimeoutOrNull(1_500) {
+            val started = SystemClock.uptimeMillis()
+            var visible = false
+            var clickable = false
+            var inputFocused = false
+            var labelMatches = false
+            val confirmed = withTimeoutOrNull(1_500) {
                 while (true) {
                     val node = host.accessibilityNodeProvider?.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
-                    val matches = node?.let {
-                        it.isVisibleToUser &&
-                            it.isClickable &&
-                            (it.text?.toString() == target || it.contentDescription?.toString()?.endsWith(target) == true)
-                    } == true
+                    visible = node?.isVisibleToUser == true
+                    clickable = node?.isClickable == true
+                    inputFocused = node?.isFocused == true
+                    labelMatches = node?.text?.toString() == target || node?.contentDescription?.toString()?.endsWith(target) == true
+                    // Compose moves a merging button's label to a virtual child. Other actions
+                    // are hidden here, so both cursors on the visible action prove arrival.
+                    val matches = node.isFocusedAction()
                     @Suppress("DEPRECATION")
                     node?.recycle()
-                    if (matches) break
+                    if (matches) return@withTimeoutOrNull true
                     withFrameNanos { }
                 }
+            }
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    "ConfirmationFocus",
+                    "phase=" + (if (target == "Cancel") "arrival" else "return") +
+                        " handoff=" + (if (confirmed == true) "acknowledged" else "timeout") +
+                        " elapsedMs=" + (SystemClock.uptimeMillis() - started) +
+                        " visible=$visible clickable=$clickable inputFocused=$inputFocused labelMatch=$labelMatches"
+                )
             }
             ready = true
         }

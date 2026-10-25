@@ -33,6 +33,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
+/** Both cursors have reached an action; valid while every other clickable target is hidden. */
+internal fun AccessibilityNodeInfo?.isFocusedAction(): Boolean = this != null && isVisibleToUser && isClickable && isFocused
+
 /** Keep an incoming catalog's opener as its first accessibility target, without hiding its pixels. */
 @Composable
 internal fun rememberCatalogFocusHandoff(returning: Boolean, target: String?, inputReady: Boolean, interacted: Boolean): Boolean {
@@ -68,7 +71,7 @@ internal fun rememberCatalogFocusHandoff(returning: Boolean, target: String?, in
                     frames++
                     // Compose puts a merging card/button's label on a virtual child. The focused
                     // actionable parent has no label; both cursors on that parent prove arrival.
-                    val matches = visible && clickable && inputFocused
+                    val matches = node.isFocusedAction()
                     @Suppress("DEPRECATION")
                     node?.recycle()
                     if (matches) return@withTimeoutOrNull true
