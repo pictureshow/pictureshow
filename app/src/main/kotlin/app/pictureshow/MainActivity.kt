@@ -263,6 +263,7 @@ internal fun Pictureshow(
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    val exitPlayback = rememberPlaybackExit(nav)
     val backStackEntry by nav.currentBackStackEntryAsState()
     var searchKeyboardRequest by remember { mutableStateOf(0) }
     val context = LocalContext.current
@@ -781,7 +782,7 @@ internal fun Pictureshow(
                 PlayerRestoration(item, onRestore = {
                     if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                 }) { onCurrentItem ->
-                    PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem) { nav.popBackStack() }
+                    PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
                 }
             }
         }
