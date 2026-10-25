@@ -76,6 +76,8 @@ internal fun TouchPictureshow(
     var accountInstalled by rememberSaveable { mutableStateOf(false) }
     var installedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var installedExpired by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    // Credentials stay in memory. Recreated navigation already belongs to the loaded account.
+    var installedToken by remember { mutableStateOf(state.snapshot.currentAccount?.accessToken) }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
     val inPlayer = route?.startsWith("player?") == true
@@ -84,15 +86,18 @@ internal fun TouchPictureshow(
         route?.startsWith("login?") != true &&
         route?.startsWith("quick?") != true &&
         !inPlayer
+    // The shell subcomposes its content; keep effects with the host so its graph exists first.
     TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }) {
-        LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired) {
+        LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired, state.snapshot.currentAccount?.accessToken) {
             val key = state.snapshot.currentKey
             val expired = state.snapshot.currentAccount?.expired
-            if (accountInstalled && installedKey == key && installedExpired == expired) return@LaunchedEffect
+            val token = state.snapshot.currentAccount?.accessToken
+            if (accountInstalled && installedKey == key && installedExpired == expired && installedToken == token) return@LaunchedEffect
             // Saved tab stacks retain their ViewModels and queries; they belong to this account.
             if (accountInstalled) nav.graph.forEach { nav.clearBackStack(it.id) }
             installedKey = key
             installedExpired = expired
+            installedToken = token
             accountInstalled = true
             val destination = accountDestination(state.snapshot)
             nav.navigate(destination) {
@@ -306,7 +311,9 @@ internal fun TouchPictureshow(
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
-                        TouchPlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                        TouchPlayerScreen(
+                            account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback
+                        )
                     }
                 }
             }

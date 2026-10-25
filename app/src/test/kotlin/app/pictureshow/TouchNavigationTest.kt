@@ -82,9 +82,12 @@ class TouchNavigationTest {
     private val server = Server("test-server", "Test server", "https://media.example.test", "12")
     private val account = Account(server, User("viewer", "Viewer"), "test-token")
     private val otherAccount = Account(server, User("other-viewer", "Other viewer"), "other-test-token")
+    private var authenticatedAccount = account
     private var approveQuickConnect = false
     private val authenticatedInput = mutableListOf<Pair<String, String>>()
     private val homeAccounts = mutableListOf<String>()
+    private val homeSessions = mutableListOf<Account>()
+    private val searchSessions = mutableListOf<Account>()
     private var persisted: String? = null
     private val accounts = AccountStore(object : TextPersistence {
         override suspend fun read() = persisted
@@ -95,11 +98,15 @@ class TouchNavigationTest {
     private val catalog = object : CatalogService by CatalogModelsTest.FakeCatalog(), SearchService {
         override suspend fun views(account: Account): ClientResult<ItemPage> {
             homeAccounts += account.key
+            homeSessions += account
             return ClientResult.Success(ItemPage())
         }
-        override suspend fun search(account: Account, query: String, kind: SearchKind) = ClientResult.Success(
-            ItemPage(if (kind == SearchKind.MOVIES) listOf(MediaItem(query, "$query result", "Movie")) else emptyList())
-        )
+        override suspend fun search(account: Account, query: String, kind: SearchKind): ClientResult<ItemPage> {
+            searchSessions += account
+            return ClientResult.Success(
+                ItemPage(if (kind == SearchKind.MOVIES) listOf(MediaItem(query, "$query result", "Movie")) else emptyList())
+            )
+        }
         override suspend fun item(account: Account, id: String) = ClientResult.Success(MediaItem(id, "$id result", "Movie"))
         override suspend fun personItems(account: Account, personId: String, startIndex: Int, limit: Int) = ClientResult.Success(ItemPage())
     }
@@ -123,7 +130,7 @@ class TouchNavigationTest {
             override suspend fun quickConnectEnabled(server: Server) = ClientResult.Success(true)
             override suspend fun authenticate(server: Server, username: String, password: String): ClientResult<Account> {
                 authenticatedInput += username to password
-                return ClientResult.Success(account)
+                return ClientResult.Success(authenticatedAccount)
             }
             override fun quickConnect(server: Server) = flow {
                 emit(QuickConnectState.Code("123456"))
@@ -374,6 +381,47 @@ class TouchNavigationTest {
         assertInput("touch:search:query", "")
         compose.onNodeWithContentDescription("private-query result").assertDoesNotExist()
         compose.onNodeWithText("private-query result").assertDoesNotExist()
+        back()
+        waitFor("What would you like to watch?")
+    }
+
+    @Test
+    fun sameUserReauthenticationClearsSavedSearchAndUsesTheReplacementCredentials() {
+        val replacement = account.copy(accessToken = "replacement-test-token", deviceId = "replacement-test-device")
+        authenticatedAccount = replacement
+        launch(signedIn = true)
+        compose.onNodeWithText("Search").performClick()
+        compose.onNodeWithTag("touch:search:query").performTextReplacement("old-session")
+        waitForCard("old-session result")
+        compose.runOnIdle { assertEquals(account, searchSessions.last()) }
+        compose.onNodeWithContentDescription("old-session result").performClick()
+        waitFor("old-session result")
+        // Settings saves Search and detail with ViewModels that captured the original Account.
+        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("Accounts").performScrollTo().performClick()
+        compose.onNodeWithText("Sign in another user on Test server").performScrollTo().performClick()
+        waitFor("Sign in to Test server")
+        compose.onNodeWithTag("touch:username").performTextReplacement("Viewer")
+        compose.onNodeWithTag("touch:password").performTextReplacement("replacement-fixture-password")
+        compose.onNodeWithText("Sign in", substring = false).performScrollTo().performClick()
+        waitFor("What would you like to watch?")
+        compose.runOnIdle {
+            assertEquals(listOf("Viewer" to "replacement-fixture-password"), authenticatedInput)
+            assertEquals(account.key, accounts.snapshots.value.currentKey)
+            assertEquals(replacement, accounts.snapshots.value.currentAccount)
+            assertEquals(replacement, homeSessions.last())
+        }
+        compose.onNodeWithText("Search").performClick()
+        assertInput("touch:search:query", "")
+        compose.onNodeWithContentDescription("old-session result").assertDoesNotExist()
+        compose.onNodeWithText("old-session result").assertDoesNotExist()
+        compose.runOnIdle { searchSessions.clear() }
+        compose.onNodeWithTag("touch:search:query").performTextReplacement("new-session")
+        waitForCard("new-session result")
+        compose.runOnIdle {
+            assertTrue(searchSessions.isNotEmpty(), "The replacement search must reach the catalog")
+            assertTrue(searchSessions.all { it == replacement }, "Every new search must use the replacement token and device")
+        }
         back()
         waitFor("What would you like to watch?")
     }
