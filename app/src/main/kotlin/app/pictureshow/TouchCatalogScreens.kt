@@ -48,7 +48,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -84,7 +83,7 @@ internal fun TouchCatalogHome(
     librariesOnly: Boolean = false
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
-    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
+    val shortWindow = isShortTouchWindow()
     val rows = state.rows.filter { it.items.isNotEmpty() && (!librariesOnly || it.library) }
     LazyColumn(
         state = rememberLazyListState(),
@@ -146,7 +145,7 @@ private fun TouchMediaGrid(
     onSort: ((String, Boolean) -> Unit)? = null,
     person: MediaItem? = null
 ) {
-    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
+    val shortWindow = isShortTouchWindow()
     val grid = rememberLazyGridState()
     val currentNearEnd by androidx.compose.runtime.rememberUpdatedState(onNearEnd)
     LazyVerticalGrid(
@@ -260,7 +259,7 @@ internal fun TouchCatalogDetail(
 ) {
     val item = state.item.takeUnless { state.playbackPending }
     val playable = touchDetailPlayItem(state)
-    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
+    val shortWindow = isShortTouchWindow()
     LazyColumn(
         state = rememberLazyListState(),
         modifier = Modifier.fillMaxSize().testTag("touch:detail"),
@@ -446,7 +445,7 @@ internal fun MediaPerson.touchPersonItem() = MediaItem(
 
 @Composable
 internal fun TouchCatalogShelf(title: String, items: List<MediaItem>, account: Account, wide: Boolean, onOpen: (MediaItem) -> Unit) {
-    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
+    val shortWindow = isShortTouchWindow()
     Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
         TouchCatalogHeading(title, Modifier.padding(horizontal = 20.dp), section = true)
         LazyRow(

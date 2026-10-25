@@ -26,7 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -48,10 +49,15 @@ internal fun TouchTheme(content: @Composable () -> Unit) {
     }
 }
 
+@Composable
+internal fun isShortTouchWindow(): Boolean = with(LocalDensity.current) {
+    LocalWindowInfo.current.containerSize.height.toDp() < 480.dp
+}
+
 /** Insets belong to the shell; this page scrolls into the remaining space above the IME. */
 @Composable
 internal fun TouchPage(title: String, onBack: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
+    val shortWindow = isShortTouchWindow()
     Box(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 720.dp).fillMaxSize().verticalScroll(rememberScrollState())

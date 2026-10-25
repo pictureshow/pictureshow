@@ -24,7 +24,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -49,7 +48,7 @@ internal fun TouchSearchScreen(
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
-    val shortInput = LocalConfiguration.current.screenHeightDp < 480 && WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val shortInput = isShortTouchWindow() && WindowInsets.ime.getBottom(LocalDensity.current) > 0
     fun finishInput() {
         keyboard?.hide()
         focus.clearFocus()
