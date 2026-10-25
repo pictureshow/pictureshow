@@ -11,12 +11,14 @@ import io.ktor.http.headersOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 
 class TouchPeopleDetailsTest {
     @Test fun fullDetailKeepsPeopleWhenTheBatchProjectionRefreshesUserData() = runTest {
         val http = HttpClient(MockEngine) {
             engine {
+                dispatcher = StandardTestDispatcher(testScheduler)
                 addHandler { request ->
                     val body = if (request.url.encodedPath.endsWith("/Items/film")) {
                         """{"Id":"film","Type":"Movie","People":[
@@ -43,7 +45,10 @@ class TouchPeopleDetailsTest {
     @Test fun missingAndNullPeopleRemainCompatibleWithOlderDetailResponses() = runTest {
         for (body in listOf("""{"Id":"person","Type":"Person"}""", """{"Id":"person","Type":"Person","People":null}""")) {
             val http = HttpClient(MockEngine) {
-                engine { addHandler { respond(body, headers = headersOf(HttpHeaders.ContentType, "application/json")) } }
+                engine {
+                    dispatcher = StandardTestDispatcher(testScheduler)
+                    addHandler { respond(body, headers = headersOf(HttpHeaders.ContentType, "application/json")) }
+                }
             }
             try {
                 val account = Account(Server("server", "Server", "https://media.example.test", "12"), User("viewer", "Viewer"), "fake")

@@ -47,6 +47,7 @@ internal fun TouchPictureshow(
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    val exitPlayback = rememberPlaybackExit(nav)
     val backStackEntry by nav.currentBackStackEntryAsState()
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
@@ -58,13 +59,15 @@ internal fun TouchPictureshow(
             }
         }
     if (state.loading) {
-        TouchPage("Pictureshow") { Text("Loading saved accounts…") }
+        TouchShell(false, null, {}) { TouchPage("Pictureshow") { Text("Loading saved accounts…") } }
         return
     }
     if (state.error != null) {
-        TouchPage("Pictureshow") {
-            TouchMessage(state.error)
-            TouchAction("Retry", onClick = session::load)
+        TouchShell(false, null, {}) {
+            TouchPage("Pictureshow") {
+                TouchMessage(state.error)
+                TouchAction("Retry", onClick = session::load)
+            }
         }
         return
     }
@@ -73,50 +76,6 @@ internal fun TouchPictureshow(
     var accountInstalled by rememberSaveable { mutableStateOf(false) }
     var installedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var installedExpired by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired) {
-        val key = state.snapshot.currentKey
-        val expired = state.snapshot.currentAccount?.expired
-        if (accountInstalled && installedKey == key && installedExpired == expired) return@LaunchedEffect
-        installedKey = key
-        installedExpired = expired
-        accountInstalled = true
-        val destination = accountDestination(state.snapshot)
-        nav.navigate(destination) {
-            popUpTo(nav.graph.id) { inclusive = true }
-            launchSingleTop = true
-        }
-    }
-    // Account bootstrap above installs the normal graph first. An entry never waits for a future login.
-    LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
-        val entry = playbackEntry ?: return@LaunchedEffect
-        val account = state.snapshot.currentAccount?.takeUnless { it.expired }
-        if (account == null) {
-            consumePlaybackEntry()
-            return@LaunchedEffect
-        }
-        when (entry) {
-            ParsedPlaybackEntry.Ignore -> Unit
-            ParsedPlaybackEntry.Invalid -> Toast.makeText(context, ENTRY_INVALID, Toast.LENGTH_SHORT).show()
-            is ParsedPlaybackEntry.Play -> when (val resolved = resolvePlaybackEntry(entry.entry, account, catalog)) {
-                ResolvedPlaybackEntry.NormalStartup -> Unit
-                ResolvedPlaybackEntry.Unavailable -> {
-                    Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
-                    nav.navigate("home") {
-                        popUpTo(nav.graph.id) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                }
-                is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
-            }
-        }
-        consumePlaybackEntry()
-    }
-    LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
-        val query = searchEntry ?: return@LaunchedEffect
-        val destination = searchIntentDestination(state.snapshot, query)
-        if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
-        consumeSearchEntry()
-    }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
     val inPlayer = route?.startsWith("player?") == true
@@ -126,6 +85,52 @@ internal fun TouchPictureshow(
         route?.startsWith("quick?") != true &&
         !inPlayer
     TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }) {
+        LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired) {
+            val key = state.snapshot.currentKey
+            val expired = state.snapshot.currentAccount?.expired
+            if (accountInstalled && installedKey == key && installedExpired == expired) return@LaunchedEffect
+            // Saved tab stacks retain their ViewModels and queries; they belong to this account.
+            if (accountInstalled) nav.graph.forEach { nav.clearBackStack(it.id) }
+            installedKey = key
+            installedExpired = expired
+            accountInstalled = true
+            val destination = accountDestination(state.snapshot)
+            nav.navigate(destination) {
+                popUpTo(nav.graph.id) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+        // Account bootstrap above installs the normal graph first. An entry never waits for a future login.
+        LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
+            val entry = playbackEntry ?: return@LaunchedEffect
+            val account = state.snapshot.currentAccount?.takeUnless { it.expired }
+            if (account == null) {
+                consumePlaybackEntry()
+                return@LaunchedEffect
+            }
+            when (entry) {
+                ParsedPlaybackEntry.Ignore -> Unit
+                ParsedPlaybackEntry.Invalid -> Toast.makeText(context, ENTRY_INVALID, Toast.LENGTH_SHORT).show()
+                is ParsedPlaybackEntry.Play -> when (val resolved = resolvePlaybackEntry(entry.entry, account, catalog)) {
+                    ResolvedPlaybackEntry.NormalStartup -> Unit
+                    ResolvedPlaybackEntry.Unavailable -> {
+                        Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
+                        nav.navigate("home") {
+                            popUpTo(nav.graph.id) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                    is ResolvedPlaybackEntry.Open -> navigatePlaybackEntry(nav, resolved)
+                }
+            }
+            consumePlaybackEntry()
+        }
+        LaunchedEffect(entrySequence, state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
+            val query = searchEntry ?: return@LaunchedEffect
+            val destination = searchIntentDestination(state.snapshot, query)
+            if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
+            consumeSearchEntry()
+        }
         NavHost(navController = nav, startDestination = "waiting") {
             composable("waiting") { TouchPage("Pictureshow") { Text("Loading…") } }
             composable("servers") {
@@ -301,9 +306,7 @@ internal fun TouchPictureshow(
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
-                        TouchPlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem) {
-                            nav.popBackStack()
-                        }
+                        TouchPlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
                     }
                 }
             }

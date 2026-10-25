@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.activity.ComponentDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowDialog
 
 /** Drive touch semantics, modal cancellation and saved state rather than checking source strings. */
 @RunWith(RobolectricTestRunner::class)
@@ -119,7 +121,10 @@ class TouchFormsTest {
         compose.onNodeWithText("Remove remembered account?").assertExists()
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithText("Remove remembered account?").assertExists()
-        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        // AlertDialog owns its own window and Back dispatcher; activity Back bypasses it.
+        compose.runOnIdle {
+            (ShadowDialog.getLatestDialog() as ComponentDialog).onBackPressedDispatcher.onBackPressed()
+        }
         compose.onNodeWithText("Remove remembered account?").assertDoesNotExist()
         compose.runOnIdle { assertEquals(0, removals) }
         compose.onNodeWithText("Remove Viewer on Fixture server").performScrollTo().performClick()
