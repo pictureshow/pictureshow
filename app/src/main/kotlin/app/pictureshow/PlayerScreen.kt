@@ -35,11 +35,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -51,8 +53,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -188,7 +193,7 @@ internal fun PlayerItemScreen(
     val chaptersFocus = remember { FocusRequester() }
     val timelineFocus = remember { FocusRequester() }
     var seekOpen by remember { mutableStateOf(false) }
-    var seekPosition by remember { mutableLongStateOf(startMs) }
+    var restoringSeekFocus by remember { mutableStateOf(false) }
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
     val error = setupError ?: state.error
     var metadata by remember { mutableStateOf(item) }
@@ -230,7 +235,6 @@ internal fun PlayerItemScreen(
         val target = ((seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
         active.seekTo(target)
         position = target
-        seekPosition = target
         seekPreview = target
         controls = true
         interaction++
@@ -245,6 +249,7 @@ internal fun PlayerItemScreen(
             }
             seekOpen -> {
                 seekOpen = false
+                restoringSeekFocus = true
                 returnFocus = timelineFocus
             }
             chooser != null -> {
@@ -365,13 +370,22 @@ internal fun PlayerItemScreen(
             seekPreview = null
         }
     }
-    LaunchedEffect(controls, focusControls, chaptersOpen, chooser) {
-        if (controls && focusControls && !chaptersOpen && chooser == null) {
+    LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, restoringSeekFocus) {
+        if (controls && focusControls && !chaptersOpen && chooser == null && !seekOpen && !restoringSeekFocus) {
             playFocus.requestFocus()
             focusControls = false
         }
     }
     LaunchedEffect(controls) { if (controls) controlsFeedback = null }
+    LaunchedEffect(error) {
+        if (error != null) {
+            restoringSeekFocus = false
+            returnFocus = null
+            seekOpen = false
+            chooser = null
+            chaptersOpen = false
+        }
+    }
     LaunchedEffect(accessibleControls) {
         if (accessibleControls) {
             controls = true
@@ -382,14 +396,22 @@ internal fun PlayerItemScreen(
         val target = returnFocus
         if (target != null && windowFocused && chooser == null && !chaptersOpen && !seekOpen) {
             androidx.compose.runtime.withFrameNanos { }
-            target.requestFocus()
+            val requested = target.requestFocus()
+            if (restoringSeekFocus && accessibleControls) {
+                val started = android.os.SystemClock.uptimeMillis()
+                val acknowledged = awaitInitialPlayerPanelFocus(view, "player:position")
+                PlaybackDiagnostics.write(
+                    "seek-return requested=$requested acknowledged=$acknowledged waitMs=${android.os.SystemClock.uptimeMillis() - started}"
+                )
+            }
+            restoringSeekFocus = false
             returnFocus = null
         }
     }
     LaunchedEffect(player) {
         while (true) {
             player?.let {
-                position = it.currentPosition.coerceAtLeast(0)
+                position = if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
                 duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
             }
             view.keepScreenOn = player?.playWhenReady == true && state.error == null
@@ -421,212 +443,263 @@ internal fun PlayerItemScreen(
         }
     }
 
-    Box(
-        Modifier.fillMaxSize().background(Color.Black)
-            .onGloballyPositioned { playerTop = it.positionInRoot().y.toInt() }
-            .focusRequester(rootFocus)
-            .onFocusChanged { rootFocused = it.isFocused }
-            .playerRemoteKeys(
-                enabled = chooser == null && !chaptersOpen && !seekOpen && error == null && !switching,
-                rootFocused = rootFocused,
-                seek = ::seek,
-                showControls = {
-                    controls = true
-                    if (rootFocused) focusControls = true
-                },
-                interact = { interaction++ },
-                back = ::handleBack,
-                skip = activeSegment(segments, position, localPreferences.segmentModes)
-                    ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
-                    ?.let { segment ->
-                        {
-                            player?.seekTo(segment.endMs)
-                            position = segment.endMs
-                            interaction++
+    PlayerSeekHost(seekOpen && error == null, player = {
+        Box(
+            Modifier.fillMaxSize().background(Color.Black).testTag("player:surface")
+                .onGloballyPositioned { playerTop = it.positionInRoot().y.toInt() }
+                .focusProperties { canFocus = !restoringSeekFocus && !seekOpen }.focusRequester(rootFocus)
+                .onFocusChanged { rootFocused = it.isFocused }
+                .playerRemoteKeys(
+                    enabled = chooser == null && !chaptersOpen && !seekOpen && error == null && !switching,
+                    rootFocused = rootFocused,
+                    seek = ::seek,
+                    showControls = {
+                        controls = true
+                        if (rootFocused) focusControls = true
+                    },
+                    interact = { interaction++ },
+                    back = ::handleBack,
+                    skip = activeSegment(segments, position, localPreferences.segmentModes)
+                        ?.takeIf { (localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
+                        ?.let { segment ->
+                            {
+                                player?.seekTo(segment.endMs)
+                                position = segment.endMs
+                                interaction++
+                            }
                         }
-                    }
-            )
-            .semantics {
-                // Back returns both input and accessibility focus here. Name that transition
-                // on the focused node; a sibling live region can be occluded by the video.
-                contentDescription = controlsFeedback ?: "Video player"
-                onClick(label = "Show controls") {
-                    controls = true
-                    focusControls = true
-                    interaction++
-                    true
-                }
-            }
-            .focusable()
-    ) {
-        ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
-        val controlsVisible = controls && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
-        val actionsVisible = chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
-        val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
-        PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop))
-        if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
-        if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
-            PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
-        }
-        if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
-            PlaybackStatus("Preparing playback…", Modifier.align(Alignment.Center))
-        }
-        if (state.bufferingSlow && error == null && !switching) {
-            Text(
-                "Still waiting for playback. You can go back and try again.",
-                modifier = Modifier.align(Alignment.Center).background(Color(0xEE10131C)).padding(24.dp)
-            )
-        }
-        if (error != null) {
-            Column(Modifier.align(Alignment.Center).widthIn(max = 720.dp).background(Color(0xEE10131C)).padding(32.dp)) {
-                Text(error)
-                state.reportError?.let { Text("Could not save progress: $it") }
-                Button(
-                    onClick = { finish(reason = "error-back") },
-                    modifier = Modifier.focusRequester(errorFocus)
-                ) { Text("Back to details") }
-            }
-            LaunchedEffect(error) { errorFocus.requestFocus() }
-        }
-        if (controlsVisible) {
-            Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged {
-                    controlsHeight = with(density) { it.height.toDp() }
-                }.onGloballyPositioned { controlsTop = it.positionInRoot().y.toInt() }.background(Color(0xE610131C)).padding(36.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                val sourceId = state.decision?.mediaSourceId
-                val info = chooseTrickplay(metadata, sourceId, (resources.displayMetrics.widthPixels / 6).coerceIn(160, 640))
-                val tile = seekPreview?.let { target -> info?.let { trickplayTile(it, target) } }
-                if (tile != null && tiles != null && sourceId != null) {
-                    TrickplayPreview(requireNotNull(tiles), sourceId, tile, requireNotNull(seekPreview))
-                }
-                Text(item.name, style = MaterialTheme.typography.headlineSmall)
-                // Capture for speech when controls open, on pause/resume, and after an explicit seek.
-                // The visual clock keeps moving; it is not a live accessibility announcement.
-                val announcedPosition = remember(paused, seekPreview, duration, ended) { position }
-                PlayerTimeline(
-                    position,
-                    announcedPosition,
-                    duration,
-                    modifier = Modifier.focusRequester(timelineFocus),
-                    paused = paused,
-                    ended = ended,
-                    onOpenSeek = {
-                        seekPosition = player?.currentPosition ?: position
-                        seekOpen = true
-                    }
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus)) {
-                        player?.togglePlayback()
-                        interaction++
+                .semantics {
+                    // Back returns both input and accessibility focus here. Name that transition
+                    // on the focused node; a sibling live region can be occluded by the video.
+                    // Once controls are visible, their surface is not another screen-reader target.
+                    // A delayed Done click can trigger TalkBack's focus recovery after the
+                    // timeline was restored. Keep the root hidden without hiding its children.
+                    if (!restoringSeekFocus && !controls) contentDescription = controlsFeedback ?: "Video player"
+                    if (!restoringSeekFocus && !controls) {
+                        onClick(label = "Show controls") {
+                            controls = true
+                            focusControls = true
+                            interaction++
+                            true
+                        }
+                    } else {
+                        hideFromAccessibility()
                     }
-                    Button(onClick = { chooser = MediaStreamType.Audio }, modifier = Modifier.focusRequester(audioFocus)) { Text("Audio") }
-                    Button(onClick = {
-                        chooser = MediaStreamType.Subtitle
-                    }, modifier = Modifier.focusRequester(subtitleFocus)) { Text("Subtitles") }
-                    if (metadata.chapters.isNotEmpty()) {
-                        Button(onClick = {
-                            chaptersOpen = true
-                            seekPreview = null
-                        }, modifier = Modifier.focusRequester(chaptersFocus)) { Text("Chapters") }
-                    }
-                    Button(onClick = { finish(reason = "stop-button") }) { Text("Stop") }
                 }
-                state.reportError?.let { Text("Could not save progress: $it") }
-            }
-        }
-        if (error == null && !switching) {
-            Column(
-                Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
-                    .onGloballyPositioned { actionsTop = it.positionInRoot().y.toInt().takeIf { _ -> it.size.height > 0 } }
-                    .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SegmentControl(segments, position, localPreferences.segmentModes, onSeek = { target ->
-                    player?.seekTo(target)
-                    position = target
-                    interaction++
-                }, onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, showButton = actionsVisible)
-                nextEpisode?.takeUnless { nextCancelled }?.let { next ->
-                    val trigger = nextEpisodeTriggerMs(duration, segments)
-                    NextEpisodeControl(
-                        account, next, trigger != null && position >= trigger, ended,
-                        paused || playback.buffering || state.preparing || !actionsVisible,
-                        onFocusRemoved = { if (actionsVisible) rootFocus.requestFocus() }, onPlay = { finish(next) },
-                        onCancel = {
-                            PlaybackDiagnostics.write("continuation-cancel item=${item.id}")
-                            nextCancelled = true
-                        }, visible = actionsVisible, compact = controls,
-                        remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null,
-                        autoPlay = !accessibleControls
+                .focusable()
+        ) {
+            ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
+            val controlsVisible =
+                controls && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
+            val actionsVisible = !restoringSeekFocus && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
+            // Removal can run after the composition that created the callback; read current state.
+            val actionReturnVisible by rememberUpdatedState(actionsVisible)
+            val actionReturnControls by rememberUpdatedState(controlsVisible)
+            val actionReturnAccessible by rememberUpdatedState(accessibleControls)
+            val restoreActionFocus: () -> Unit = {
+                if (actionReturnVisible) {
+                    val toTimeline = actionReturnControls && actionReturnAccessible
+                    if (toTimeline) restoringSeekFocus = true
+                    returnFocus = if (toTimeline) timelineFocus else rootFocus
+                    PlaybackDiagnostics.write(
+                        "action-return target=${if (toTimeline) "timeline" else "root"} " +
+                            "controls=$actionReturnControls accessible=$actionReturnAccessible"
                     )
                 }
             }
+            val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
+            PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop))
+            if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
+            if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
+                PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
+            }
+            if (state.preparing && !state.bufferingSlow && setupError == null && !switching) {
+                PlaybackStatus("Preparing playback…", Modifier.align(Alignment.Center))
+            }
+            if (state.bufferingSlow && error == null && !switching) {
+                Text(
+                    "Still waiting for playback. You can go back and try again.",
+                    modifier = Modifier.align(Alignment.Center).background(Color(0xEE10131C)).padding(24.dp)
+                )
+            }
+            if (error != null) {
+                Column(Modifier.align(Alignment.Center).widthIn(max = 720.dp).background(Color(0xEE10131C)).padding(32.dp)) {
+                    Text(error)
+                    state.reportError?.let { Text("Could not save progress: $it") }
+                    Button(
+                        onClick = { finish(reason = "error-back") },
+                        modifier = Modifier.focusRequester(errorFocus)
+                    ) { Text("Back to details") }
+                }
+                LaunchedEffect(error) { errorFocus.requestFocus() }
+            }
+            if (controlsVisible) {
+                Column(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged {
+                        controlsHeight = with(density) { it.height.toDp() }
+                    }.onGloballyPositioned {
+                        controlsTop = it.positionInRoot().y.toInt()
+                    }.semantics { isTraversalGroup = true }.background(Color(0xE610131C)).padding(36.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val sourceId = state.decision?.mediaSourceId
+                    val info = chooseTrickplay(metadata, sourceId, (resources.displayMetrics.widthPixels / 6).coerceIn(160, 640))
+                    val tile = seekPreview?.let { target -> info?.let { trickplayTile(it, target) } }
+                    if (tile != null && tiles != null && sourceId != null) {
+                        TrickplayPreview(requireNotNull(tiles), sourceId, tile, requireNotNull(seekPreview))
+                    }
+                    Text(
+                        item.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = if (restoringSeekFocus) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+                    )
+                    // Capture for speech when controls open, on pause/resume, and after an explicit seek.
+                    // The visual clock keeps moving; it is not a live accessibility announcement.
+                    val announcedPosition = remember(paused, seekPreview, duration, ended) { position }
+                    PlayerTimeline(
+                        position,
+                        announcedPosition,
+                        duration,
+                        modifier = Modifier.focusRequester(timelineFocus),
+                        paused = paused,
+                        ended = ended,
+                        onOpenSeek = {
+                            seekOpen = true
+                        }
+                    )
+                    FlowRow(
+                        modifier = if (restoringSeekFocus) {
+                            Modifier.focusProperties { canFocus = false }.clearAndSetSemantics { hideFromAccessibility() }
+                        } else {
+                            Modifier
+                        },
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus)) {
+                            player?.togglePlayback()
+                            interaction++
+                        }
+                        Button(onClick = {
+                            chooser = MediaStreamType.Audio
+                        }, modifier = Modifier.focusRequester(audioFocus)) { Text("Audio") }
+                        Button(onClick = {
+                            chooser = MediaStreamType.Subtitle
+                        }, modifier = Modifier.focusRequester(subtitleFocus)) { Text("Subtitles") }
+                        if (metadata.chapters.isNotEmpty()) {
+                            Button(onClick = {
+                                chaptersOpen = true
+                                seekPreview = null
+                            }, modifier = Modifier.focusRequester(chaptersFocus)) { Text("Chapters") }
+                        }
+                        Button(onClick = { finish(reason = "stop-button") }) {
+                            Text("Stop")
+                        }
+                    }
+                    state.reportError?.let { Text("Could not save progress: $it") }
+                }
+            }
+            if (error == null && !switching) {
+                Column(
+                    Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
+                        .onGloballyPositioned { actionsTop = it.positionInRoot().y.toInt().takeIf { _ -> it.size.height > 0 } }
+                        .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SegmentControl(segments, position, localPreferences.segmentModes, onSeek = { target ->
+                        player?.seekTo(target)
+                        position = target
+                        interaction++
+                    }, onFocusRemoved = restoreActionFocus, showButton = actionsVisible)
+                    nextEpisode?.takeUnless { nextCancelled }?.let { next ->
+                        val trigger = nextEpisodeTriggerMs(duration, segments)
+                        NextEpisodeControl(
+                            account, next, trigger != null && position >= trigger, ended,
+                            paused || playback.buffering || state.preparing || !actionsVisible,
+                            onFocusRemoved = restoreActionFocus, onPlay = { finish(next) },
+                            onCancel = {
+                                PlaybackDiagnostics.write("continuation-cancel item=${item.id}")
+                                nextCancelled = true
+                            }, visible = actionsVisible, compact = controls,
+                            remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null,
+                            autoPlay = !accessibleControls
+                        )
+                    }
+                }
+            }
+            if (chaptersOpen && error == null) {
+                PlayerPanel("Chapters", {
+                    chaptersOpen = false
+                    returnFocus = chaptersFocus
+                }, scrollable = false) {
+                    ChapterPanel(account, item.id, metadata.chapters, position) { target ->
+                        select({
+                            player?.seekTo(target)
+                            position = target
+                            interaction++
+                        }) {
+                            chaptersOpen = false
+                            returnFocus = chaptersFocus
+                        }
+                    }
+                }
+            }
+            chooser?.let { type ->
+                val streams = state.decision?.mediaSource?.mediaStreams.orEmpty().filter { it.type == type }
+                val selected = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
+                val labels = trackLabels(streams)
+                val title = if (type == MediaStreamType.Audio) "Audio" else "Subtitles"
+                PlayerPanel(title, {
+                    chooser = null
+                    returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
+                }, scrollable = false) {
+                    TrackChoices(
+                        listOf(-1 to "Off") + streams.mapIndexed { i, stream ->
+                            stream.index to labels[i]
+                        },
+                        selected,
+                        onSelect = { index ->
+                            select({
+                                controller?.select(type, index)
+                                interaction++
+                            }) {
+                                chooser = null
+                                returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
+                            }
+                        },
+                        title = title
+                    ) {
+                        if (type == MediaStreamType.Subtitle) {
+                            val burnedIn = streams.firstOrNull { it.index == selected }?.deliveryMethod ==
+                                app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode
+                            if (burnedIn) {
+                                Text("These subtitles are burned into the video. Timing and appearance cannot be changed during playback.")
+                            }
+                            SubtitleDelayControls(subtitleDelayMs, !burnedIn) {
+                                subtitleDelayMs = it
+                                output.setSubtitleDelayMs(it)
+                            }
+                        }
+                    }
+                }
+            }
         }
-        if (seekOpen && error == null) {
-            PlayerPanel("Seek", {
-                seekOpen = false
-                returnFocus = timelineFocus
-            }) {
-                SeekPanel(seekPosition, duration, ::seek) {
+    }, seek = {
+        PlayerPanel("Seek", {
+            seekOpen = false
+            restoringSeekFocus = true
+            returnFocus = timelineFocus
+        }, onHandoff = { restoringSeekFocus = true }, inActivityWindow = true) {
+            SeekPanel(position, duration, ::seek) {
+                close {
                     seekOpen = false
+                    restoringSeekFocus = true
                     returnFocus = timelineFocus
                 }
             }
         }
-        if (chaptersOpen && error == null) {
-            PlayerPanel("Chapters", {
-                chaptersOpen = false
-                returnFocus = chaptersFocus
-            }, scrollable = false) {
-                ChapterPanel(account, item.id, metadata.chapters, position) { target ->
-                    player?.seekTo(target)
-                    position = target
-                    chaptersOpen = false
-                    interaction++
-                    returnFocus = chaptersFocus
-                }
-            }
-        }
-        chooser?.let { type ->
-            val streams = state.decision?.mediaSource?.mediaStreams.orEmpty().filter { it.type == type }
-            val selected = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
-            val labels = trackLabels(streams)
-            val title = if (type == MediaStreamType.Audio) "Audio" else "Subtitles"
-            PlayerPanel(title, {
-                chooser = null
-                returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
-            }, scrollable = false) {
-                TrackChoices(
-                    listOf(-1 to "Off") + streams.mapIndexed { i, stream ->
-                        stream.index to labels[i]
-                    },
-                    selected,
-                    onSelect = { index ->
-                        controller?.select(type, index)
-                        chooser = null
-                        interaction++
-                        returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
-                    },
-                    title = title
-                ) {
-                    if (type == MediaStreamType.Subtitle) {
-                        val burnedIn = streams.firstOrNull { it.index == selected }?.deliveryMethod ==
-                            app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode
-                        if (burnedIn) {
-                            Text("These subtitles are burned into the video. Timing and appearance cannot be changed during playback.")
-                        }
-                        SubtitleDelayControls(subtitleDelayMs, !burnedIn) {
-                            subtitleDelayMs = it
-                            output.setSubtitleDelayMs(it)
-                        }
-                    }
-                }
-            }
-        }
-    }
+    })
 }
 
 internal fun playerTime(milliseconds: Long): String {

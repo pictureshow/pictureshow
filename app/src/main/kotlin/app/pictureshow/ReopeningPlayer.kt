@@ -14,7 +14,17 @@ import com.google.common.util.concurrent.ListenableFuture
 internal class ReopeningPlayer(player: Player) : ForwardingSimpleBasePlayer(player) {
     private var reopening: State? = null
 
-    override fun getState(): State = reopening ?: super.getState()
+    override fun getState(): State {
+        reopening?.let { return it }
+        val state = super.getState()
+        // A paused seek can drain a decoder. Present a held endpoint until Play, otherwise
+        // Media3's Play helper seeks to the beginning before changing playWhenReady.
+        return if (state.playbackState == Player.STATE_ENDED && !state.playWhenReady && state.playlist.isNotEmpty()) {
+            state.buildUpon().setPlaybackState(Player.STATE_READY).build()
+        } else {
+            state
+        }
+    }
 
     fun beginReopen() {
         if (reopening != null) return

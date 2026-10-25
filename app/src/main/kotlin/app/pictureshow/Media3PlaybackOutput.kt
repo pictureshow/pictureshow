@@ -295,7 +295,12 @@ internal class Media3PlaybackOutput(
                 if (playbackState == Player.STATE_ENDED) endSignal.ended()
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                if (activePlayer === next) onProgress(decision)
+                if (activePlayer === next) {
+                    onProgress(decision)
+                    // Media3 may reach ENDED after a paused seek. Play completes the held item;
+                    // the published wrapper prevents the usual Play-at-ENDED rewind.
+                    if (playWhenReady && next.playbackState == Player.STATE_ENDED) endSignal.ended()
+                }
             }
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                 if (activePlayer === next) {
@@ -406,7 +411,7 @@ internal class Media3PlaybackOutput(
         val exposed = mutablePlayer.value ?: activePlayer ?: return
         val raw = exposed.currentPosition
         val duration = exposed.duration
-        completedPosition = boundedPlaybackPosition(exposed)
+        completedPosition = PlaybackPosition(completedPlaybackPosition(raw, duration), !exposed.playWhenReady)
         PlaybackDiagnostics.write(
             decision,
             "end-position",
@@ -463,6 +468,7 @@ internal class PlaybackEndSignal(private val currentPlayer: () -> Player?, priva
         val player = currentPlayer() ?: return false
         return !sent &&
             player.playerError == null &&
+            player.playWhenReady &&
             (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_ENDED)
     }
 

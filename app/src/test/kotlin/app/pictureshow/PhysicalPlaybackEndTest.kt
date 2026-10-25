@@ -118,6 +118,7 @@ class PhysicalPlaybackEndTest {
         val player = Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { _, method, _ ->
             when (method.name) {
                 "getPlaybackState" -> state
+                "getPlayWhenReady" -> true
                 "getPlayerError" -> failure
                 else -> null
             }

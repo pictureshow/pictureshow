@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -28,6 +29,8 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import app.pictureshow.core.displayRuntimeMillis
@@ -43,13 +46,16 @@ internal fun PlayerTimeline(
     ended: Boolean = false,
     onOpenSeek: () -> Unit = {}
 ) {
+    CurrentPositionAccessibility(setOf("player:position")) {
+        spokenPlaybackPosition(if (ended) completedPlaybackPosition(positionMs, durationMs) else positionMs, durationMs)
+    }
     val accessibleControls = rememberAccessibilityEnabled()
-    val timelinePosition = playbackEndPosition(positionMs, durationMs)
+    val timelinePosition = if (ended) completedPlaybackPosition(positionMs, durationMs) else playbackEndPosition(positionMs, durationMs)
     var spokenPosition by remember(announcedPositionMs, ended) { mutableLongStateOf(if (ended) timelinePosition else announcedPositionMs) }
     val spokenTimelinePosition = playbackEndPosition(spokenPosition, durationMs)
     val total = displayRuntimeMillis(durationMs)
     val fraction = if (total != null) (timelinePosition.toFloat() / total).coerceIn(0f, 1f) else 0f
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier.fillMaxWidth().semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.fillMaxWidth().height(5.dp).background(Color.DarkGray).clearAndSetSemantics {}) {
             Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
         }
@@ -57,10 +63,12 @@ internal fun PlayerTimeline(
             // The clock's compact bounds align with the controls below; a full-width 5 dp target is
             // skipped by TV TalkBack's directional distance scoring.
             Box(
-                Modifier.focusProperties { canFocus = accessibleControls }
+                Modifier.testTag("player:position").focusProperties { canFocus = accessibleControls }
                     .onFocusChanged { if (it.isFocused) spokenPosition = timelinePosition }
                     .clickable(onClickLabel = "Seek", onClick = onOpenSeek).semantics {
                         role = Role.Button
+                        // Late screen-reader recovery after Done encounters the position before the title.
+                        traversalIndex = -1f
                         contentDescription = "Playback position"
                         onClick(label = "Seek") {
                             onOpenSeek()

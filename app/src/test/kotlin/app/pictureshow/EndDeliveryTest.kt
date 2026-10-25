@@ -35,6 +35,7 @@ class EndDeliveryTest {
         val player = Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { _, method, _ ->
             when (method.name) {
                 "getPlaybackState" -> state
+                "getPlayWhenReady" -> true
                 "getPlayerError" -> null
                 else -> null
             }

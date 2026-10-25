@@ -15,8 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -80,18 +80,26 @@ internal fun SegmentControl(
     val mode = active?.let { modes[it.type] ?: SegmentMode.Ask }
     val seek by rememberUpdatedState(onSeek)
     val restore by rememberUpdatedState(onFocusRemoved)
+    var focused by remember { mutableStateOf(false) }
+    val shown = active != null && mode == SegmentMode.Ask && showButton
+    // Capture this before apply detaches the focused node and publishes Focused=false.
+    val removedWithFocus = !shown && focused
+    SideEffect {
+        if (removedWithFocus) {
+            focused = false
+            restore()
+        }
+    }
     // Do not repeat an automatic seek while the decoder is still moving to the requested position.
     LaunchedEffect(active, mode) {
         if (active != null && mode == SegmentMode.Automatic) seek(active.endMs)
     }
     if (active != null && mode == SegmentMode.Ask && showButton) {
-        var focused by remember(active) { mutableStateOf(false) }
         Button(
             onClick = { seek(active.endMs) },
             modifier = Modifier.testTag("skip:${active.type}").semantics { liveRegion = LiveRegionMode.Polite }
                 .onFocusChanged { focused = it.isFocused }
         ) { Text("Skip ${segmentLabel(active.type)}") }
-        DisposableEffect(active) { onDispose { if (focused) restore() } }
     }
 }
 
@@ -217,7 +225,15 @@ internal fun NextEpisodeControl(
             play()
         }
     }
-    if (visible && (eligible || ended) && !cancelled && !played) {
+    val shown = visible && (eligible || ended) && !cancelled && !played
+    val removedWithFocus = !shown && focused
+    SideEffect {
+        if (removedWithFocus) {
+            focused = false
+            restore()
+        }
+    }
+    if (shown) {
         Column(
             Modifier.width(380.dp).background(Color(0xF510131C)).padding(20.dp)
                 .onFocusChanged { focused = it.hasFocus }.focusGroup(),
@@ -254,10 +270,15 @@ internal fun NextEpisodeControl(
                 }
             ) { Text("Play now", modifier = Modifier.clearAndSetSemantics {}) }
             Button(onClick = {
+                val hadFocus = focused
                 cancelled = true
                 onCancel()
+                // The caller may remove this whole card, so its SideEffect would not run.
+                if (hadFocus) {
+                    focused = false
+                    restore()
+                }
             }, modifier = Modifier.testTag("next:cancel")) { Text("Cancel next episode") }
         }
-        DisposableEffect(Unit) { onDispose { if (focused) restore() } }
     }
 }

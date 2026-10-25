@@ -173,6 +173,7 @@ class VideoStallEndTest {
         val player = Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { _, method, _ ->
             when (method.name) {
                 "getPlaybackState" -> Player.STATE_READY
+                "getPlayWhenReady" -> true
                 "getPlayerError" -> null
                 "isPlaying" -> currentlyPlaying
                 else -> null
