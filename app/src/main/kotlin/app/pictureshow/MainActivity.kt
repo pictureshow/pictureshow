@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -48,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -361,7 +363,7 @@ internal fun Pictureshow(
             val remembered = state.snapshot.rememberedServers
             val discoveryFocus =
                 rememberDiscoveryFocus(screen.discovered.firstOrNull()?.id.takeIf { state.snapshot.lastServer == null }, screen.connecting)
-            Page("Find your Jellyfin server", modifier = discoveryFocus.container) {
+            ServerDiscoveryPage(modifier = discoveryFocus.container) {
                 Text("Choose a server on your network, or enter an address.")
                 remembered.forEachIndexed { index, server ->
                     val label = if (server == state.snapshot.lastServer) "Sign in to ${server.name}" else "${server.name} · remembered"
@@ -435,6 +437,13 @@ internal fun Pictureshow(
                 }
             }
             fun cancelRemoval() {
+                // A removal attempt may clear returnFocus before persistence fails.
+                // Rebuild the exact opener from the still-present confirmation target.
+                returnFocus = when {
+                    removingAccount != null -> "remove:${removingAccount.key}"
+                    removingServer != null -> "remove:server:${removingServer.id}:${removingServer.url}"
+                    else -> returnFocus
+                }
                 returningFromRemoval = true
                 removeKey = null
                 removeServerId = null
@@ -814,6 +823,26 @@ internal fun Pictureshow(
     }
 }
 
+/** Keep the Add-server heading visible while large-text statuses and actions scroll below it. */
+@Composable
+private fun ServerDiscoveryPage(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier.fillMaxSize().background(Color(0xFF10131C)).padding(horizontal = 48.dp, vertical = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            "Find your Jellyfin server",
+            style = MaterialTheme.typography.headlineLarge,
+            modifier = Modifier.padding(horizontal = 8.dp).semantics { heading() }
+        )
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            content = content
+        )
+    }
+}
+
 @Composable
 private fun Page(title: String, modifier: Modifier = Modifier, announceTitle: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val restoring = LocalRestoringConfirmationFocus.current
@@ -841,7 +870,11 @@ private fun Action(label: String, modifier: Modifier = Modifier, initial: Boolea
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.focusRequester(focus).semantics {
+        modifier = modifier.focusRequester(focus).focusProperties {
+            // The acknowledgement predicate assumes the offered action owns both cursors.
+            // Hiding siblings from TalkBack alone still lets a fast remote key reach them.
+            canFocus = !restoring || initial
+        }.semantics {
             if (restoring && !initial) hideFromAccessibility()
         }
     ) { Text(label) }
@@ -859,11 +892,16 @@ private fun Message(message: String?) {
 
 @Composable
 internal fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface) {
+    val restoring = LocalRestoringConfirmationFocus.current
     // Focus changes must not look like content updates to a live region. Keep the text on
     // its own semantics node; the focusable container reads its non-actionable child.
     // A very wide line can lose spatial Up/Down to a more distant narrow button.
     // Keep status centres near the left-aligned controls, including at larger text sizes.
-    Box(Modifier.widthIn(max = 360.dp).readableFocus().padding(12.dp)) {
+    Box(
+        Modifier.widthIn(max = 360.dp).focusProperties { canFocus = !restoring }.then(
+            if (restoring) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+        ).readableFocus().padding(12.dp)
+    ) {
         Text(message, color = color, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
     }
 }

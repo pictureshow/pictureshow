@@ -528,6 +528,7 @@ internal fun PlayerItemScreen(
                     Text(error)
                     state.reportError?.let { Text("Could not save progress: $it") }
                     Button(
+                        scale = playerButtonScale(),
                         onClick = { finish(reason = "error-back") },
                         modifier = Modifier.focusRequester(errorFocus)
                     ) { Text("Back to details") }
@@ -564,6 +565,7 @@ internal fun PlayerItemScreen(
                         modifier = Modifier.focusRequester(timelineFocus),
                         paused = paused,
                         ended = ended,
+                        arrowsSeek = rootFocused && !restoringSeekFocus,
                         onOpenSeek = {
                             seekOpen = true
                         }
@@ -581,19 +583,19 @@ internal fun PlayerItemScreen(
                             player?.togglePlayback()
                             interaction++
                         }
-                        Button(onClick = {
+                        Button(scale = playerButtonScale(), onClick = {
                             chooser = MediaStreamType.Audio
                         }, modifier = Modifier.focusRequester(audioFocus)) { Text("Audio") }
-                        Button(onClick = {
+                        Button(scale = playerButtonScale(), onClick = {
                             chooser = MediaStreamType.Subtitle
                         }, modifier = Modifier.focusRequester(subtitleFocus)) { Text("Subtitles") }
                         if (metadata.chapters.isNotEmpty()) {
-                            Button(onClick = {
+                            Button(scale = playerButtonScale(), onClick = {
                                 chaptersOpen = true
                                 seekPreview = null
                             }, modifier = Modifier.focusRequester(chaptersFocus)) { Text("Chapters") }
                         }
-                        Button(onClick = { finish(reason = "stop-button") }) {
+                        Button(scale = playerButtonScale(), onClick = { finish(reason = "stop-button") }) {
                             Text("Stop")
                         }
                     }

@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -44,6 +45,7 @@ internal fun PlayerTimeline(
     modifier: Modifier = Modifier,
     paused: Boolean = false,
     ended: Boolean = false,
+    arrowsSeek: Boolean = false,
     onOpenSeek: () -> Unit = {}
 ) {
     CurrentPositionAccessibility(setOf("player:position")) {
@@ -84,7 +86,8 @@ internal fun PlayerTimeline(
                             }
                     }
             ) { Text(playerClock(timelinePosition, durationMs, paused), modifier = Modifier.clearAndSetSemantics {}) }
-            Text("  ·  ← / → seek 10 seconds", modifier = Modifier.clearAndSetSemantics {})
+            // Keep the clock and row geometry stable while arrows navigate a focused control.
+            Text("  ·  ← / → seek 10 seconds", modifier = Modifier.alpha(if (arrowsSeek) 1f else 0f).clearAndSetSemantics {})
         }
     }
 }

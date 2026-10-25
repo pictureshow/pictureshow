@@ -96,6 +96,7 @@ internal fun SegmentControl(
     }
     if (active != null && mode == SegmentMode.Ask && showButton) {
         Button(
+            scale = playerButtonScale(),
             onClick = { seek(active.endMs) },
             modifier = Modifier.testTag("skip:${active.type}").semantics { liveRegion = LiveRegionMode.Polite }
                 .onFocusChanged { focused = it.isFocused }
@@ -138,6 +139,7 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
         ) {
             itemsIndexed(chapters) { index, chapter ->
                 Button(
+                    scale = playerButtonScale(),
                     onClick = { onSeek(chapter.startMs) },
                     modifier = Modifier.testTag("chapter:$index").semantics {
                         selected = index == focusIndex
@@ -241,7 +243,7 @@ internal fun NextEpisodeControl(
         ) {
             val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
             Text(
-                if (autoPlay) "Next episode · $seconds" else "Next episode",
+                if (autoPlay) "Next episode · $seconds s left" else "Next episode",
                 modifier = if (autoPlay) {
                     Modifier.semantics { heading() }
                 } else {
@@ -259,6 +261,7 @@ internal fun NextEpisodeControl(
             }
             Text(next.name, color = Color.White)
             Button(
+                scale = playerButtonScale(),
                 onClick = {
                     if (!played) {
                         played = true
@@ -269,7 +272,7 @@ internal fun NextEpisodeControl(
                     contentDescription = "Play next episode, ${catalogAnnouncement(next)}"
                 }
             ) { Text("Play now", modifier = Modifier.clearAndSetSemantics {}) }
-            Button(onClick = {
+            Button(scale = playerButtonScale(), onClick = {
                 val hadFocus = focused
                 cancelled = true
                 onCancel()

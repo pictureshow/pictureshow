@@ -238,7 +238,7 @@ class PlayerExtrasTest {
             }
         }
         compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithText("Next episode · 10").assertIsDisplayed()
+        compose.onNodeWithText("Next episode · 10 s left").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(20_000)
         compose.runOnIdle {
             assertEquals(0, plays)
@@ -246,7 +246,7 @@ class PlayerExtrasTest {
         }
         compose.waitForIdle() // delivers the state change; the next frame recomposes
         compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithText("Next episode · 3").assertIsDisplayed()
+        compose.onNodeWithText("Next episode · 3 s left").assertIsDisplayed()
         compose.runOnIdle { ended = true }
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(500)

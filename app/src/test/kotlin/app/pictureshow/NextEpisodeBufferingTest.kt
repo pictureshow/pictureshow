@@ -53,7 +53,7 @@ class NextEpisodeBufferingTest {
             }
         }
         compose.mainClock.advanceTimeBy(6_000)
-        compose.onNodeWithText("Next episode · 3").assertIsDisplayed()
+        compose.onNodeWithText("Next episode · 3 s left").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(0, plays)
             player.ready(true)
@@ -61,12 +61,12 @@ class NextEpisodeBufferingTest {
         compose.mainClock.advanceTimeByFrame()
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(1_100)
-        compose.onNodeWithText("Next episode · 2").assertIsDisplayed()
+        compose.onNodeWithText("Next episode · 2 s left").assertIsDisplayed()
         compose.runOnIdle { player.ready(false) }
         compose.mainClock.advanceTimeByFrame()
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(6_000)
-        compose.onNodeWithText("Next episode · 2").assertIsDisplayed()
+        compose.onNodeWithText("Next episode · 2 s left").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(0, plays)
             player.ready(true)

@@ -282,6 +282,7 @@ internal fun TrackChoices(
         ) {
             itemsIndexed(choices, key = { _, choice -> choice.first }) { _, (index, label) ->
                 Button(
+                    scale = playerButtonScale(),
                     onClick = { onSelect(index) },
                     modifier = Modifier.testTag("track:$index").semantics {
                         selected = index == selectedIndex
@@ -359,6 +360,7 @@ internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> U
         }
     )
     Button(
+        scale = playerButtonScale(),
         onClick = { seek(-10_000) },
         modifier = Modifier.focusRequester(first).testTag("seek:back")
             .semantics { stateDescription = position }
@@ -366,11 +368,12 @@ internal fun SeekPanel(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> U
         Text("Back 10 seconds", modifier = Modifier.clearAndSetSemantics { contentDescription = "Seek. Back 10 seconds" })
     }
     Button(
+        scale = playerButtonScale(),
         onClick = { seek(10_000) },
         modifier = Modifier.testTag("seek:forward")
             .semantics { stateDescription = position }
     ) { Text("Forward 10 seconds") }
-    Button(onClick = onDismiss) { Text("Done") }
+    Button(scale = playerButtonScale(), onClick = onDismiss) { Text("Done") }
     LaunchedEffect(windowFocused) {
         if (windowFocused) {
             androidx.compose.runtime.withFrameNanos { }

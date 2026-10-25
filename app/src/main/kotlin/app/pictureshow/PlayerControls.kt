@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.media3.common.Player
 import androidx.media3.common.util.Util
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 
@@ -86,11 +87,16 @@ internal fun ControlsAutoHide(
     }
 }
 
+/** Keep player pills inside TalkBack's native outline; remote-only focus retains TV enlargement. */
+@Composable
+internal fun playerButtonScale() = ButtonDefaults.scale(focusedScale = if (rememberAccessibilityEnabled()) 1f else 1.1f)
+
 /** The label names the next action; the state names what playback is doing now. */
 @Composable
 internal fun PlaybackToggle(paused: Boolean, showPlayButton: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Button(
         onClick = onClick,
+        scale = playerButtonScale(),
         modifier = modifier.semantics {
             stateDescription = if (paused) {
                 "Paused"

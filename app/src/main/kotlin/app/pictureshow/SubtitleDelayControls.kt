@@ -51,6 +51,7 @@ internal fun SubtitleDelayControls(delayMs: Int, enabled: Boolean, onChange: (In
             }
         )
         Button(
+            scale = playerButtonScale(),
             onClick = { adjust(-100) },
             enabled = enabled && delayMs > -10_000,
             modifier = Modifier.testTag("delay:earlier").semantics {
@@ -61,6 +62,7 @@ internal fun SubtitleDelayControls(delayMs: Int, enabled: Boolean, onChange: (In
             Text("Subtitles earlier (−0.1 s)")
         }
         Button(
+            scale = playerButtonScale(),
             onClick = { adjust(100) },
             enabled = enabled && delayMs < 10_000,
             modifier = Modifier.testTag("delay:later").semantics {
@@ -71,6 +73,7 @@ internal fun SubtitleDelayControls(delayMs: Int, enabled: Boolean, onChange: (In
             Text("Subtitles later (+0.1 s)")
         }
         Button(
+            scale = playerButtonScale(),
             onClick = { onChange(0) },
             enabled = enabled,
             modifier = Modifier.testTag("delay:reset").semantics {
