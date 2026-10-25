@@ -6,6 +6,8 @@ package app.pictureshow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -45,13 +49,17 @@ internal fun TouchSearchScreen(
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
+    val shortInput = LocalConfiguration.current.screenHeightDp < 480 && WindowInsets.ime.getBottom(LocalDensity.current) > 0
     fun finishInput() {
         keyboard?.hide()
         focus.clearFocus()
     }
     Column(Modifier.fillMaxSize().imePadding().testTag("touch:search")) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TouchCatalogHeading("Search")
+        Column(
+            Modifier.padding(horizontal = 20.dp, vertical = if (shortInput) 8.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (!shortInput) TouchCatalogHeading("Search")
             OutlinedTextField(
                 value = state.query,
                 onValueChange = onQuery,

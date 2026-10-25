@@ -48,6 +48,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -83,20 +84,23 @@ internal fun TouchCatalogHome(
     librariesOnly: Boolean = false
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
+    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
     val rows = state.rows.filter { it.items.isNotEmpty() && (!librariesOnly || it.library) }
     LazyColumn(
         state = rememberLazyListState(),
         modifier = Modifier.fillMaxSize().testTag("touch:home"),
-        contentPadding = PaddingValues(vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        contentPadding = PaddingValues(vertical = if (shortWindow) 12.dp else 20.dp),
+        verticalArrangement = Arrangement.spacedBy(if (shortWindow) 16.dp else 24.dp)
     ) {
         item(key = "heading") {
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TouchCatalogHeading(if (librariesOnly) "Your libraries" else "Pictureshow")
-                Text(
-                    if (librariesOnly) "Explore your collection" else "What would you like to watch?",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (!shortWindow) {
+                    Text(
+                        if (librariesOnly) "Explore your collection" else "What would you like to watch?",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 if (state.loading) TouchCatalogLoading("Loading your library…")
                 TouchCatalogError(state.error, onRetry)
                 if (!state.loading && rows.isEmpty() && state.error == null) {
@@ -248,6 +252,7 @@ internal fun TouchCatalogDetail(
 ) {
     val item = state.item.takeUnless { state.playbackPending }
     val playable = touchDetailPlayItem(state)
+    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
     LazyColumn(
         state = rememberLazyListState(),
         modifier = Modifier.fillMaxSize().testTag("touch:detail"),
@@ -326,9 +331,14 @@ internal fun TouchCatalogDetail(
                                 }
                             }
                         }
-                        if (maxWidth >= 720.dp) {
+                        if (maxWidth >= 720.dp || shortWindow && maxWidth >= 520.dp) {
                             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                                TouchCatalogArtwork(item, state.account, false, Modifier.width(200.dp).aspectRatio(2f / 3f))
+                                TouchCatalogArtwork(
+                                    item,
+                                    state.account,
+                                    false,
+                                    Modifier.width(if (shortWindow) 140.dp else 200.dp).aspectRatio(2f / 3f)
+                                )
                                 Box(Modifier.weight(1f)) { information() }
                             }
                         } else {
@@ -428,7 +438,8 @@ internal fun MediaPerson.touchPersonItem() = MediaItem(
 
 @Composable
 internal fun TouchCatalogShelf(title: String, items: List<MediaItem>, account: Account, wide: Boolean, onOpen: (MediaItem) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
+    Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
         TouchCatalogHeading(title, Modifier.padding(horizontal = 20.dp), section = true)
         LazyRow(
             state = rememberLazyListState(),
@@ -436,7 +447,12 @@ internal fun TouchCatalogShelf(title: String, items: List<MediaItem>, account: A
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(items, key = MediaItem::id) { item ->
-                TouchCatalogCard(item, account, wide, { onOpen(item) }, Modifier.width(if (wide) 244.dp else 136.dp))
+                val width = if (shortWindow) {
+                    if (wide) 200.dp else 116.dp
+                } else {
+                    if (wide) 244.dp else 136.dp
+                }
+                TouchCatalogCard(item, account, wide, { onOpen(item) }, Modifier.width(width))
             }
         }
     }

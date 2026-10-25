@@ -312,7 +312,12 @@ internal fun TouchPictureshow(
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
                         TouchPlayerScreen(
-                            account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback
+                            account,
+                            item,
+                            entry.arguments?.getLong("start") ?: 0,
+                            catalog,
+                            onCurrentItem,
+                            onExit = exitPlayback
                         )
                     }
                 }
