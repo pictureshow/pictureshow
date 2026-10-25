@@ -169,7 +169,12 @@ private fun TouchMediaGrid(
                 }
                 if (person != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TouchCatalogArtwork(person, state.account, false, Modifier.width(112.dp).aspectRatio(2f / 3f))
+                        TouchCatalogArtwork(
+                            person,
+                            state.account,
+                            false,
+                            Modifier.width(if (shortWindow) 48.dp else 112.dp).aspectRatio(if (shortWindow) 1f else 2f / 3f)
+                        )
                         Text(
                             person.overview?.takeIf(String::isNotBlank) ?: "Titles featuring ${person.name}",
                             modifier = Modifier.weight(1f)
@@ -344,7 +349,8 @@ internal fun TouchCatalogDetail(
                                     item,
                                     state.account,
                                     false,
-                                    Modifier.width(if (shortWindow) 140.dp else 200.dp).aspectRatio(2f / 3f)
+                                    Modifier.width(if (shortWindow) 140.dp else 200.dp).aspectRatio(2f / 3f),
+                                    contentScale = ContentScale.Fit
                                 )
                                 Box(Modifier.weight(1f)) { information() }
                             }
@@ -511,7 +517,13 @@ internal fun TouchCatalogCard(item: MediaItem, account: Account, wide: Boolean, 
 }
 
 @Composable
-internal fun TouchCatalogArtwork(item: MediaItem, account: Account, wide: Boolean, modifier: Modifier = Modifier) {
+internal fun TouchCatalogArtwork(
+    item: MediaItem,
+    account: Account,
+    wide: Boolean,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop
+) {
     Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
         val url = imageUrl(account.server, item, 720, wide = wide)
         var failed by remember(url) { mutableStateOf(false) }
@@ -519,7 +531,7 @@ internal fun TouchCatalogArtwork(item: MediaItem, account: Account, wide: Boolea
             AsyncImage(
                 model = url,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { failed = false },
                 onError = { failed = true }
