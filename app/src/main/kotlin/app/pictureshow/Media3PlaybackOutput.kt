@@ -45,6 +45,7 @@ internal class Media3PlaybackOutput(
     var onAudioFailure: (PlayDecision, Boolean) -> Unit = { source, _ -> onFailure(false, source) }
     var onEnded: (PlayDecision) -> Unit = {}
     var onStop: () -> Unit = {}
+    private val fdDiagnostics = PlaybackFdDiagnostics()
     private var activePlayer: ExoPlayer? = null
     private var playback: PlaybackReleaseFence.Playback? = null
     private var reopenState: ReopeningPlayer? = null
@@ -160,6 +161,7 @@ internal class Media3PlaybackOutput(
         }
         val playbackThread = PlaybackReleaseFence.playback(context)
         playback = playbackThread
+        fdDiagnostics.opened(playbackThread::hasUnfinishedPredecessors)
         next = try {
             ExoPlayer.Builder(context, renderers)
                 .setPlaybackLooper(playbackThread.looper)

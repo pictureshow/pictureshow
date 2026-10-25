@@ -58,6 +58,10 @@ internal object PlaybackReleaseFence {
         private var waitMs = 0L
         private var boundReached = false
 
+        /** Dependencies are fixed at construction; completion timestamps are volatile. Safe for diagnostics on IO. */
+        fun hasUnfinishedPredecessors(): Boolean =
+            dependencies.any { it.finishedMs == null } || (predecessor != null && predecessor.finishedMs == null)
+
         fun abortConstruction() {
             thread.quit()
         }

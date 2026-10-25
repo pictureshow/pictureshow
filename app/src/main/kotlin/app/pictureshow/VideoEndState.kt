@@ -39,7 +39,7 @@ internal data class VideoEndSnapshot(
 }
 
 internal class EndVideoRenderer(builder: MediaCodecVideoRenderer.Builder, private val probe: VideoCodecProbe) :
-    MediaCodecVideoRenderer(builder) {
+    SoftwareSurfaceVideoRenderer(builder) {
     @Volatile var endSnapshot = VideoEndSnapshot()
         private set
     private var lastQueuedUs = C.TIME_UNSET
