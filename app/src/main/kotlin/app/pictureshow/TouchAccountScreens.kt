@@ -255,7 +255,7 @@ internal fun TouchAccounts(
                     enabled = !state.busy,
                     onClick = { if (account != null) onRemoveAccount(account.key) else server?.let(onRemoveServer) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("touch:confirm-removal")
-                ) { Text(if (account != null) "Remove account" else "Remove server") }
+                ) { Text(if (account != null) "Remove account" else "Remove server", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { dismiss() }, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }

@@ -5,8 +5,10 @@ package app.pictureshow
 
 import android.content.ActivityNotFoundException
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -44,7 +46,7 @@ internal fun TouchSettings(
     onAccounts: () -> Unit,
     onAbout: () -> Unit,
     onSupport: () -> Unit,
-    onBack: () -> Unit
+    onBack: (() -> Unit)? = null
 ) {
     val local = state.local
     val configuration = state.configuration
@@ -156,6 +158,7 @@ private fun <T> TouchChoice(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         ) {
                             RadioButton(selected = option == value, onClick = null)
+                            Spacer(Modifier.width(12.dp))
                             Text(label(option), modifier = Modifier.weight(1f))
                         }
                     }

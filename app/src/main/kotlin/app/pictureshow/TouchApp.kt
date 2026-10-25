@@ -385,9 +385,14 @@ internal fun TouchPictureshow(
                         onDispose { probe.close() }
                     }
                     TouchSettings(
-                        screen, accepted, vm::local, vm::server, vm::reload,
-                        { nav.navigate("accounts") }, { nav.navigate("about") }, { nav.navigate("supporter") },
-                        { nav.popBackStack() }
+                        screen,
+                        accepted,
+                        vm::local,
+                        vm::server,
+                        vm::reload,
+                        { nav.navigate("accounts") },
+                        { nav.navigate("about") },
+                        { nav.navigate("supporter") }
                     )
                 }
             }

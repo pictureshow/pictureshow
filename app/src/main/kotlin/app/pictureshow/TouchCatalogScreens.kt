@@ -146,20 +146,28 @@ private fun TouchMediaGrid(
     onSort: ((String, Boolean) -> Unit)? = null,
     person: MediaItem? = null
 ) {
+    val shortWindow = LocalConfiguration.current.screenHeightDp < 480
     val grid = rememberLazyGridState()
     val currentNearEnd by androidx.compose.runtime.rememberUpdatedState(onNearEnd)
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(132.dp),
+        columns = GridCells.Adaptive(if (shortWindow) 160.dp else 132.dp),
         state = grid,
         modifier = Modifier.fillMaxSize().testTag("touch:grid"),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = if (shortWindow) 12.dp else 20.dp),
+        verticalArrangement = Arrangement.spacedBy(if (shortWindow) 12.dp else 20.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TouchCatalogBack(onBack)
-                TouchCatalogHeading(state.parent.name)
+            Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
+                if (shortWindow) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TouchBack(onBack)
+                        TouchCatalogHeading(state.parent.name, Modifier.weight(1f), section = true)
+                    }
+                } else {
+                    TouchBack(onBack)
+                    TouchCatalogHeading(state.parent.name)
+                }
                 if (person != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         TouchCatalogArtwork(person, state.account, false, Modifier.width(112.dp).aspectRatio(2f / 3f))
@@ -176,7 +184,7 @@ private fun TouchMediaGrid(
             }
         }
         itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
-            TouchCatalogCard(item, state.account, false, { onOpen(item) }, Modifier.fillMaxWidth())
+            TouchCatalogCard(item, state.account, shortWindow, { onOpen(item) }, Modifier.fillMaxWidth())
         }
         if (state.loading && state.items.isNotEmpty()) {
             item(key = "progress", span = { GridItemSpan(maxLineSpan) }) { TouchCatalogLoading("Loading more titles…") }
@@ -261,7 +269,7 @@ internal fun TouchCatalogDetail(
     ) {
         item(key = "body") {
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                TouchCatalogBack(onBack)
+                TouchBack(onBack)
                 TouchCatalogError(state.error, onRetry)
                 if (state.playbackPending) {
                     TouchCatalogLoading(if (state.playbackReportFinished) "Loading item…" else "Saving progress…")
@@ -507,9 +515,18 @@ internal fun TouchCatalogCard(item: MediaItem, account: Account, wide: Boolean, 
 internal fun TouchCatalogArtwork(item: MediaItem, account: Account, wide: Boolean, modifier: Modifier = Modifier) {
     Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
         val url = imageUrl(account.server, item, 720, wide = wide)
+        var failed by remember(url) { mutableStateOf(false) }
         if (url != null) {
-            AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                onSuccess = { failed = false },
+                onError = { failed = true }
+            )
+        }
+        if (url == null || failed) {
             Text(
                 item.name.take(1).uppercase(),
                 style = MaterialTheme.typography.displayMedium,
@@ -548,9 +565,4 @@ internal fun TouchCatalogError(message: String?, onRetry: () -> Unit) {
             TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry") }
         }
     }
-}
-
-@Composable
-private fun TouchCatalogBack(onBack: () -> Unit) {
-    TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("‹ Back") }
 }
