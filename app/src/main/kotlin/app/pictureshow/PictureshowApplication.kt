@@ -98,7 +98,9 @@ class PictureshowApplication : Application() {
                 }
             )
         }
-        watchNext = WatchNextCoordinator(this, dependencyGraph.koin.get(), dependencyGraph.koin.get()).also { it.start() }
+        if (usesTvInterface(this)) {
+            watchNext = WatchNextCoordinator(this, dependencyGraph.koin.get(), dependencyGraph.koin.get()).also { it.start() }
+        }
     }
 }
 

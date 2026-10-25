@@ -15,6 +15,16 @@ data class ItemUserData(
     @SerialName("PlayedPercentage") val playedPercentage: Double? = null
 )
 
+/** A person's credit on an item; Type describes the credit, not the navigable item type. */
+@Serializable
+data class MediaPerson(
+    @SerialName("Id") val id: String = "",
+    @SerialName("Name") val name: String = "Unknown person",
+    @SerialName("Role") val role: String? = null,
+    @SerialName("Type") val type: String? = null,
+    @SerialName("PrimaryImageTag") val primaryImageTag: String? = null
+)
+
 @Serializable
 data class MediaItem(
     @SerialName("Id") val id: String,
@@ -44,6 +54,7 @@ data class MediaItem(
     @SerialName("ParentThumbImageTag") val parentThumbImageTag: String? = null,
     @SerialName("Chapters") val chapters: List<Chapter> = emptyList(),
     @SerialName("Trickplay") val trickplay: Map<String, Map<String, TrickplayInfo>> = emptyMap(),
+    @SerialName("People") val people: List<MediaPerson> = emptyList(),
     @SerialName("UserData") val userData: ItemUserData = ItemUserData()
 )
 
