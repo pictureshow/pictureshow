@@ -143,11 +143,15 @@ private fun <T> TouchChoice(
     var open by rememberSaveable { mutableStateOf(false) }
     TouchAction("$title: ${label(value)}", enabled) { open = true }
     if (open) {
+        val shortWindow = isShortTouchWindow()
         AlertDialog(
             onDismissRequest = { open = false },
             title = { Text(title) },
             text = {
                 LazyColumn {
+                    item(key = "scroll-hint") {
+                        if (shortWindow) Text("Scroll for more options", style = MaterialTheme.typography.bodySmall)
+                    }
                     items(values) { option ->
                         TextButton(
                             enabled = enabled,

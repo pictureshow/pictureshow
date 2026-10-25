@@ -19,6 +19,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
@@ -30,7 +31,7 @@ internal fun touchTabFor(route: String?): String? = when {
     route == "home" -> "home"
     route == "libraries" -> "libraries"
     route?.startsWith("search?") == true -> "search"
-    route in listOf("settings", "accounts", "about", "licenses", "supporter") -> "settings"
+    route in listOf("settings", "accounts", "about", "licenses", "supporter") || route?.startsWith("license/") == true -> "settings"
     else -> null
 }
 
@@ -68,7 +69,7 @@ internal fun TouchShell(showNavigation: Boolean, selected: String?, onTab: (Stri
                 }
             }
             Column(Modifier.weight(1f).fillMaxSize()) {
-                Box(Modifier.weight(1f).fillMaxSize()) { content() }
+                Box(Modifier.weight(1f).fillMaxSize().clipToBounds()) { content() }
                 if (navigationVisible && !rail) {
                     NavigationBar {
                         touchTabs.forEach { (route, label) ->

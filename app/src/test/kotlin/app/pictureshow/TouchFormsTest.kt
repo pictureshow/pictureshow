@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -20,6 +22,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountSnapshot
 import app.pictureshow.core.Server
@@ -190,6 +196,32 @@ class TouchFormsTest {
         compose.onNodeWithText("Open-source licenses").performScrollTo().performClick()
         compose.onNodeWithText("Fixture library 1.0 · MPL-2.0").performScrollTo().performClick()
         compose.onNodeWithText("Fixture license notice.").assertIsDisplayed()
+    }
+
+    @Test fun openingLicenseBodyKeepsSettingsSelectedInTouchNavigation() {
+        val library = LicenseEntry("fixture-library", "Fixture library", "1.0", "MPL-2.0", "Fixture license notice.")
+        compose.setContent {
+            MaterialTheme {
+                val nav = rememberNavController()
+                val entry by nav.currentBackStackEntryAsState()
+                TouchShell(showNavigation = true, selected = touchTabFor(entry?.destination?.route), onTab = {}) {
+                    NavHost(navController = nav, startDestination = "licenses") {
+                        composable("licenses") {
+                            TouchLicenses(listOf(library), { nav.navigate("license/$it") }, {})
+                        }
+                        composable("license/{index}") {
+                            TouchLicense(library) { nav.popBackStack() }
+                        }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Settings").assertIsSelected()
+        compose.onNodeWithText("Fixture library 1.0 · MPL-2.0").performScrollTo().performClick()
+        compose.onNodeWithText("Fixture license notice.").assertIsDisplayed()
+        compose.onNodeWithText("Settings").assertIsSelected()
+        compose.onNodeWithText("Home").assertIsNotSelected()
+        compose.onNodeWithText("Search").assertIsNotSelected()
     }
 
     @Test fun supporterOnlyOffersPurchaseForAnOfferAndExplainsDeviceUnavailability() {
