@@ -226,7 +226,7 @@ internal fun PlayerItemScreen(
         }
         if (switching || exitRequested) return
         switching = true
-        controller?.close { if (!exitRequested) onNext(next) } ?: onExit()
+        controller?.closeForNext({ !exitRequested }) { if (!exitRequested) onNext(next) } ?: onExit()
     }
 
     fun seek(delta: Long) {

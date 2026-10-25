@@ -122,6 +122,7 @@ internal class PlaybackSession(
     private var closing = false
     private var ending = false
     private var endReported = false
+    private var nextCompletion: Job? = null
     private var lastPosition = PlaybackPosition(0, false)
     private var ticker: Job? = null
     private var bufferingTimer: Job? = null
@@ -469,9 +470,7 @@ internal class PlaybackSession(
             if (source === decision && mutable.value.error == null) {
                 val stopped = finishDecision()
                 if (stopped) {
-                    var result = gateway.played()
-                    if (result is ClientResult.Failure) result = gateway.played()
-                    if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
+                    reportPlayed()
                 }
                 endReported = true
                 onFinished()
@@ -483,7 +482,16 @@ internal class PlaybackSession(
 
     /** Snapshot before releasing the actual player. Final network work survives the screen's disposal. */
     fun close(afterFinished: () -> Unit = {}) {
+        // Back/Stop also cancels a played request that is still waiting on the network.
+        nextCompletion?.cancel()
+        closeForNext({ false }, afterFinished)
+    }
+
+    /** A deliberate card advance completes only while navigation still intends to open the next item. */
+    fun closeForNext(shouldAdvance: () -> Boolean, afterFinished: () -> Unit) {
         if (closing) return
+        val completing = !ending && !endReported && started && mutable.value.error == null && shouldAdvance()
+        if (completing) onCompletionPending()
         trace("close", "positionMs=${output.position().milliseconds} ending=$ending")
         closing = true
         seekTimer?.cancel()
@@ -503,7 +511,14 @@ internal class PlaybackSession(
                 closed = true
                 ticker?.cancel()
                 cancelBuffering()
-                finishDecision()
+                val stopped = finishDecision()
+                // Back/Stop can cancel a switch while the final Stop request is suspended.
+                if (stopped && completing && shouldAdvance()) {
+                    val completion = owner.launch { reportPlayed() }
+                    nextCompletion = completion
+                    completion.join()
+                    nextCompletion = null
+                }
                 if (!endReported) onFinished()
                 afterFinished()
                 commands.close()
@@ -511,6 +526,12 @@ internal class PlaybackSession(
                 onCleanupDone()
             }
         }
+    }
+
+    private suspend fun reportPlayed() {
+        var result = gateway.played()
+        if (result is ClientResult.Failure) result = gateway.played()
+        if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
     }
 
     private fun enqueue(block: suspend () -> Unit) {
