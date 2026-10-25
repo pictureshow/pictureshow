@@ -17,5 +17,5 @@ internal fun TouchPlayerScreen(
     onCurrentItem: (MediaItem) -> Unit = {},
     onExit: () -> Unit
 ) {
-    PictureshowTheme { PlayerScreen(account, item, startMs, catalog, onCurrentItem, onExit) }
+    TouchPlayer(account, item, startMs, catalog, onCurrentItem, onExit)
 }
