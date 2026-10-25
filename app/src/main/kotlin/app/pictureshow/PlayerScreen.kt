@@ -6,7 +6,6 @@
 package app.pictureshow
 
 import android.content.Context
-import android.util.Log
 import android.view.accessibility.CaptioningManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,9 +61,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
@@ -75,30 +70,17 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
-import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.MediaSegment
-import app.pictureshow.core.PlaybackExtrasClient
 import app.pictureshow.core.SegmentMode
-import app.pictureshow.core.UserConfigurationClient
 import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.MediaStreamType
-import app.pictureshow.core.playback.PlaybackClient
 import app.pictureshow.core.trickplayTile
-import io.ktor.client.HttpClient
-import java.util.Locale
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
-import org.koin.compose.koinInject
 
 /** A restored route is a recovery destination, not a request to replay its original start offset. */
 @Composable
@@ -135,8 +117,6 @@ internal fun PlayerScreen(
     }
 }
 
-private data class EpisodeLookup(val attempt: Int, val result: ClientResult<MediaItem?>)
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlayerItemScreen(
@@ -148,26 +128,17 @@ internal fun PlayerItemScreen(
     onExit: () -> Unit,
     providedOutput: Media3PlaybackOutput? = null
 ) {
-    val context = LocalContext.current
+    rememberPlaybackHost(account, item, startMs, catalog, onNext, onExit, providedOutput).TvPlayerItem(account, item)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlaybackHostState.TvPlayerItem(account: Account, item: MediaItem) {
+    val error = this.error
     val resources = LocalResources.current
     val view = LocalView.current
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val accessibleControls = rememberAccessibilityEnabled()
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val http: HttpClient = koinInject()
-    val identity: DeviceIdentityStore = koinInject()
-    val preferences: PlaybackPreferencesStore = koinInject()
-    var localPreferences by remember { mutableStateOf(PlaybackPreferences()) }
-    var subtitleDelayMs by remember { mutableIntStateOf(0) }
-    val output = remember { providedOutput ?: Media3PlaybackOutput(context, account.server, item.name) }
-    // Final Stopped/DELETE requests must outlive navigation disposal, then this finite scope cancels itself.
-    val reportScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
-    var probe by remember { mutableStateOf<DeviceCapabilityProbe?>(null) }
-    var controller by remember { mutableStateOf<PlaybackSession?>(null) }
-    val emptyState = remember { MutableStateFlow(PlaybackState()) }
-    val state by (controller?.state ?: emptyState).collectAsState()
-    val player by output.player.collectAsState()
-    var setupError by remember { mutableStateOf<String?>(null) }
     var controls by remember { mutableStateOf(false) }
     var controlsFeedback by remember { mutableStateOf<String?>(null) }
     var controlsHeight by remember { mutableStateOf(240.dp) }
@@ -177,8 +148,6 @@ internal fun PlayerItemScreen(
     var playerTop by remember { mutableIntStateOf(0) }
     var chooser by remember { mutableStateOf<MediaStreamType?>(null) }
     var interaction by remember { mutableLongStateOf(0) }
-    var position by remember { mutableLongStateOf(startMs) }
-    var duration by remember { mutableLongStateOf(0) }
     val playback = rememberPlayerPlayback(player, onPause = {
         controls = true
         interaction++
@@ -195,39 +164,12 @@ internal fun PlayerItemScreen(
     var seekOpen by remember { mutableStateOf(false) }
     var restoringSeekFocus by remember { mutableStateOf(false) }
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
-    val error = setupError ?: state.error
-    var metadata by remember { mutableStateOf(item) }
-    var segments by remember { mutableStateOf(emptyList<MediaSegment>()) }
     // A pending or failed optional lookup is not evidence that this is the last episode.
-    var nextLookup by remember { mutableStateOf<EpisodeLookup?>(null) }
-    var nextRetry by remember { mutableIntStateOf(0) }
-    val nextEpisode = (nextLookup?.result as? ClientResult.Success)?.value
-    var extras by remember { mutableStateOf<PlaybackExtrasClient?>(null) }
-    var tiles by remember { mutableStateOf<TrickplayCache?>(null) }
     var chaptersOpen by remember { mutableStateOf(false) }
     var seekPreview by remember { mutableStateOf<Long?>(null) }
     var rootFocused by remember { mutableStateOf(false) }
     var focusControls by remember { mutableStateOf(false) }
     var actionsFocused by remember { mutableStateOf(false) }
-    var nextCancelled by remember { mutableStateOf(false) }
-    var ended by remember { mutableStateOf(false) }
-    var switching by remember { mutableStateOf(false) }
-    var exitRequested by remember { mutableStateOf(false) }
-
-    fun finish(next: MediaItem? = null, reason: String = "next-episode") {
-        if (!exitRequested && !switching) {
-            PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=$reason"))
-        }
-        if (next == null) {
-            if (exitRequested) return
-            exitRequested = true
-            finishPlayback(controller, onExit)
-            return
-        }
-        if (switching || exitRequested) return
-        switching = true
-        controller?.closeForNext({ !exitRequested }) { if (!exitRequested) onNext(next) } ?: onExit()
-    }
 
     fun seek(delta: Long) {
         val active = player ?: return
@@ -265,105 +207,7 @@ internal fun PlayerItemScreen(
         }
     }
     BackHandler { handleBack() }
-    LaunchedEffect(Unit) {
-        rootFocus.requestFocus()
-        try {
-            localPreferences = preferences.read()
-            output.passthroughEnabled = localPreferences.passthrough
-            val activeProbe = DeviceCapabilityProbe(context, localPreferences.deviceSettings())
-            probe = activeProbe
-            val clientIdentity =
-                ClientIdentity(
-                    deviceDisplayName(context),
-                    account.deviceId?.takeIf(String::isNotBlank) ?: identity.getOrCreate(),
-                    BuildConfig.VERSION_NAME
-                )
-            val client = PlaybackClient(http, clientIdentity)
-            extras = PlaybackExtrasClient(http, clientIdentity) { message -> Log.i("NextEpisode", message) }
-            tiles = TrickplayCache(http, account, clientIdentity, item.id)
-            val captionsEnabled = (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
-            val configuration = if (captionsEnabled) {
-                (UserConfigurationClient(http, clientIdentity).configuration(account) as? ClientResult.Success)?.value
-            } else {
-                null
-            }
-            val captionLanguage = captionSubtitleLanguage(captionsEnabled, configuration, Locale.getDefault().toLanguageTag())
-            val report = Any()
-            val session = PlaybackSession(
-                ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
-                    catalog.completePlayback(account, item.id)
-                },
-                MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
-                reportScope,
-                Locale.getDefault().language,
-                onFinished = { catalog.refresh(item.id, report) },
-                onCompletionPending = {
-                    catalog.playbackPending(item.id, report, setOfNotNull(item.seriesId, item.seasonId))
-                },
-                onCleanupDone = { reportScope.cancel() },
-                diagnostic = PlaybackDiagnostics::write
-            )
-            controller = session
-            output.onStop = { finish(reason = "system-stop") }
-            output.onSeek = { target, source -> session.seek(target, source) }
-            output.onReady = { source, position, target -> session.ready(source, position, target) }
-            output.onBuffering = { waiting, source -> session.buffering(waiting, source) }
-            output.onProgress = { session.progress(it) }
-            output.onFailure = { retry, source -> session.failed(retry, source) }
-            output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
-            output.onEnded = { source ->
-                val finalPosition = output.position().milliseconds
-                val finalDuration = output.player.value?.duration?.takeIf { it > 0 } ?: duration
-                if (session.ended(source)) {
-                    position = finalPosition
-                    duration = finalDuration
-                    PlaybackDiagnostics.write(
-                        "continuation item=${item.id} lookup=${when (val result = nextLookup?.result) {
-                            null -> "pending"
-                            is ClientResult.Failure -> "failed"
-                            is ClientResult.Success -> result.value?.id ?: "none"
-                        }} cancelled=$nextCancelled"
-                    )
-                    ended = true
-                }
-            }
-            activeProbe.start { session.routeChanged() }
-            PlaybackDiagnostics.write("start-request item=${item.id} requestedMs=$startMs")
-            session.start(startMs)
-        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            PlaybackDiagnostics.write("failure item=${item.id} reason=setup")
-            setupError = "Could not start the player. Return to the item and try again."
-        }
-    }
-    LaunchedEffect(extras) {
-        val client = extras ?: return@LaunchedEffect
-        (client.item(account, item.id) as? ClientResult.Success)?.value?.let { metadata = it }
-    }
-    LaunchedEffect(player, metadata) { player?.let { updatePlaybackMetadata(it, metadata) } }
-    LaunchedEffect(extras, item.id) {
-        val client = extras ?: return@LaunchedEffect
-        segments = (client.segments(account, item.id) as? ClientResult.Success)?.value.orEmpty()
-    }
-    LaunchedEffect(extras, metadata.id, metadata.type, metadata.seriesId, nextRetry) {
-        val client = extras ?: return@LaunchedEffect
-        nextLookup = null
-        nextLookup = EpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
-    }
-    LaunchedEffect(ended, nextLookup, nextCancelled) {
-        if (!ended) return@LaunchedEffect
-        val lookup = nextLookup
-        if (nextCancelled) {
-            finish(reason = "natural-end")
-        } else {
-            when (val result = lookup?.result) {
-                is ClientResult.Failure -> if (lookup.attempt == 0) nextRetry = 1 else finish(reason = "natural-end")
-                is ClientResult.Success -> if (result.value == null) finish(reason = "natural-end")
-                null -> Unit
-            }
-        }
-    }
+    LaunchedEffect(Unit) { rootFocus.requestFocus() }
     LaunchedEffect(seekPreview) {
         if (seekPreview != null) {
             delay(2_000)
@@ -401,53 +245,29 @@ internal fun PlayerItemScreen(
                 val started = android.os.SystemClock.uptimeMillis()
                 val acknowledged = awaitInitialPlayerPanelFocus(view, "player:position")
                 PlaybackDiagnostics.write(
-                    "seek-return requested=$requested acknowledged=$acknowledged waitMs=${android.os.SystemClock.uptimeMillis() - started}"
+                    "seek-return requested=$requested acknowledged=$acknowledged " +
+                        "waitMs=${android.os.SystemClock.uptimeMillis() - started}"
                 )
             }
             restoringSeekFocus = false
             returnFocus = null
         }
     }
-    LaunchedEffect(player) {
-        while (true) {
-            player?.let {
-                position = if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
-                duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
-            }
-            view.keepScreenOn = player?.playWhenReady == true && state.error == null
-            delay(500)
-        }
-    }
-    ControlsAutoHide(controls, accessibleControls || paused || actionsFocused || chooser != null || chaptersOpen || seekOpen, interaction) {
+    ControlsAutoHide(
+        controls,
+        accessibleControls || paused || actionsFocused || chooser != null || chaptersOpen || seekOpen,
+        interaction
+    ) {
         controls = false
         rootFocus.requestFocus()
-    }
-    DisposableEffect(lifecycle, output) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) output.pause() }
-        lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer) }
-    }
-    DisposableEffect(Unit) {
-        onDispose {
-            if (!exitRequested && !switching) PlaybackDiagnostics.write("exit-request item=${item.id} reason=dispose")
-            exitRequested = true
-            view.keepScreenOn = false
-            probe?.close()
-            tiles?.close()
-            if (controller != null) {
-                controller?.close()
-            } else {
-                output.release()
-                reportScope.cancel()
-            }
-        }
     }
 
     PlayerSeekHost(seekOpen && error == null, player = {
         Box(
             Modifier.fillMaxSize().background(Color.Black).testTag("player:surface")
                 .onGloballyPositioned { playerTop = it.positionInRoot().y.toInt() }
-                .focusProperties { canFocus = !restoringSeekFocus && !seekOpen }.focusRequester(rootFocus)
+                .focusProperties { canFocus = !restoringSeekFocus && !seekOpen }
+                .focusRequester(rootFocus)
                 .onFocusChanged { rootFocused = it.isFocused }
                 .playerRemoteKeys(
                     enabled = chooser == null && !chaptersOpen && !seekOpen && error == null && !switching,
@@ -492,7 +312,8 @@ internal fun PlayerItemScreen(
             ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
             val controlsVisible =
                 controls && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
-            val actionsVisible = !restoringSeekFocus && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
+            val actionsVisible =
+                !restoringSeekFocus && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
             // Removal can run after the composition that created the callback; read current state.
             val actionReturnVisible by rememberUpdatedState(actionsVisible)
             val actionReturnControls by rememberUpdatedState(controlsVisible)
@@ -508,7 +329,8 @@ internal fun PlayerItemScreen(
                     )
                 }
             }
-            val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
+            val overlayTop =
+                listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
             PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop))
             if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
             if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
@@ -604,7 +426,8 @@ internal fun PlayerItemScreen(
             }
             if (error == null && !switching) {
                 Column(
-                    Modifier.align(Alignment.BottomEnd).padding(end = 36.dp, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
+                    Modifier.align(Alignment.BottomEnd)
+                        .padding(end = 36.dp, bottom = if (controls) controlsHeight + 16.dp else 36.dp)
                         .onGloballyPositioned { actionsTop = it.positionInRoot().y.toInt().takeIf { _ -> it.size.height > 0 } }
                         .onFocusChanged { actionsFocused = it.hasFocus }.focusGroup(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -624,7 +447,13 @@ internal fun PlayerItemScreen(
                                 PlaybackDiagnostics.write("continuation-cancel item=${item.id}")
                                 nextCancelled = true
                             }, visible = actionsVisible, compact = controls,
-                            remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null,
+                            remainingMs = if (creditsStartMs(duration, segments) ==
+                                null
+                            ) {
+                                (duration - position).coerceAtLeast(0)
+                            } else {
+                                null
+                            },
                             autoPlay = !accessibleControls
                         )
                     }
@@ -673,10 +502,14 @@ internal fun PlayerItemScreen(
                         title = title
                     ) {
                         if (type == MediaStreamType.Subtitle) {
-                            val burnedIn = streams.firstOrNull { it.index == selected }?.deliveryMethod ==
-                                app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode
+                            val burnedIn =
+                                streams.firstOrNull { it.index == selected }?.deliveryMethod ==
+                                    app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode
                             if (burnedIn) {
-                                Text("These subtitles are burned into the video. Timing and appearance cannot be changed during playback.")
+                                Text(
+                                    "These subtitles are burned into the video. " +
+                                        "Timing and appearance cannot be changed during playback."
+                                )
                             }
                             SubtitleDelayControls(subtitleDelayMs, !burnedIn) {
                                 subtitleDelayMs = it
