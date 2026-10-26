@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -61,6 +62,7 @@ internal fun Context.playerActivity(): Activity? = when (this) {
 private fun TouchPlayerWindow() {
     val activity = LocalContext.current.playerActivity()
     val configuration = LocalConfiguration.current
+    val containerSize = LocalWindowInfo.current.containerSize
     DisposableEffect(activity) {
         val window = activity?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
@@ -100,8 +102,7 @@ private fun TouchPlayerWindow() {
     LaunchedEffect(
         activity,
         configuration.orientation,
-        configuration.screenWidthDp,
-        configuration.screenHeightDp,
+        containerSize,
         configuration.densityDpi
     ) {
         androidx.compose.runtime.withFrameNanos { }
