@@ -8,6 +8,7 @@ package app.pictureshow
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -175,13 +177,18 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         val tile = preview?.let { target -> info?.let { trickplayTile(it, target) } }
         if (controlsVisible && tile != null && host.tiles != null && sourceId != null) {
             val controlsSize = with(density) { controlsHeight.toDp() }
-            val imageHeight = (maxHeight - controlsSize - 40.dp).coerceIn(0.dp, 135.dp)
+            val imageHeight = (maxHeight - controlsSize - 56.dp).coerceIn(0.dp, 135.dp)
             if (imageHeight > 0.dp) {
-                Box(
+                Surface(
                     Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = controlsSize + 8.dp)
-                        .testTag("touch:thumbnail")
+                        .testTag("touch:thumbnail"),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
-                    TrickplayPreview(requireNotNull(host.tiles), sourceId, tile, requireNotNull(preview), imageHeight)
+                    Box(Modifier.padding(4.dp)) {
+                        TrickplayPreview(requireNotNull(host.tiles), sourceId, tile, requireNotNull(preview), imageHeight)
+                    }
                 }
             }
         }

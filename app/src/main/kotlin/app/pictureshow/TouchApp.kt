@@ -87,7 +87,7 @@ internal fun TouchPictureshow(
         route?.startsWith("quick?") != true &&
         !inPlayer
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
-    TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }) {
+    TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer) {
         LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired, state.snapshot.currentAccount?.accessToken) {
             val key = state.snapshot.currentKey
             val expired = state.snapshot.currentAccount?.expired

@@ -51,8 +51,16 @@ internal fun selectTouchTab(nav: NavHostController, tab: String) {
 
 /** Chrome is absent from playback and sign-in. Insets are applied once, outside scrollable screens. */
 @Composable
-internal fun TouchShell(showNavigation: Boolean, selected: String?, onTab: (String) -> Unit, content: @Composable () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+internal fun TouchShell(
+    showNavigation: Boolean,
+    selected: String?,
+    onTab: (String) -> Unit,
+    fullscreen: Boolean = false,
+    content: @Composable () -> Unit
+) {
+    // Playback owns its control insets; the video itself fills the window behind cutouts.
+    val viewport = if (fullscreen) Modifier.fillMaxSize() else Modifier.fillMaxSize().safeDrawingPadding()
+    BoxWithConstraints(viewport) {
         val rail = maxWidth >= 600.dp
         val navigationVisible = showNavigation && WindowInsets.ime.getBottom(LocalDensity.current) == 0
         Row(Modifier.fillMaxSize()) {

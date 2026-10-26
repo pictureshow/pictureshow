@@ -9,6 +9,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.view.ViewTreeObserver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +19,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -58,6 +60,7 @@ internal fun Context.playerActivity(): Activity? = when (this) {
 @Composable
 private fun TouchPlayerWindow() {
     val activity = LocalContext.current.playerActivity()
+    val configuration = LocalConfiguration.current
     DisposableEffect(activity) {
         val window = activity?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
@@ -69,11 +72,39 @@ private fun TouchPlayerWindow() {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
         controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller?.hide(WindowInsetsCompat.Type.systemBars())
+        // Dialogs and background/foreground transitions can reveal bars on the same activity.
+        val focusListener = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            if (focused) controller?.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        window?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener(focusListener)
         onDispose {
+            window?.decorView?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focusListener)
             if (orientation != null) activity?.requestedOrientation = orientation
             if (behavior != null) controller?.systemBarsBehavior = behavior
-            if (statusVisible) controller?.show(WindowInsetsCompat.Type.statusBars())
-            if (navigationVisible) controller?.show(WindowInsetsCompat.Type.navigationBars())
+            if (statusVisible) {
+                controller?.show(
+                    WindowInsetsCompat.Type.statusBars()
+                )
+            } else {
+                controller?.hide(WindowInsetsCompat.Type.statusBars())
+            }
+            if (navigationVisible) {
+                controller?.show(
+                    WindowInsetsCompat.Type.navigationBars()
+                )
+            } else {
+                controller?.hide(WindowInsetsCompat.Type.navigationBars())
+            }
         }
+    }
+    LaunchedEffect(
+        activity,
+        configuration.orientation,
+        configuration.screenWidthDp,
+        configuration.screenHeightDp,
+        configuration.densityDpi
+    ) {
+        androidx.compose.runtime.withFrameNanos { }
+        activity?.window?.let { WindowCompat.getInsetsController(it, it.decorView).hide(WindowInsetsCompat.Type.systemBars()) }
     }
 }
