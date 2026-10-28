@@ -368,7 +368,20 @@ internal class Media3PlaybackOutput(
         } else {
             media
         }
-        next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
+        if (decision.method == PlayMethod.Transcode &&
+            !serverSeek &&
+            androidx.media3.common.util.Util.inferContentTypeForUriAndMimeType(
+                requireNotNull(media.localConfiguration).uri,
+                media.localConfiguration?.mimeType
+            ) == C.CONTENT_TYPE_HLS
+        ) {
+            val hls = HlsPreparationSource.create(media, dataSources) { requestedUs, prepareUs ->
+                PlaybackDiagnostics.write(decision, "hls-bootstrap", "requestedUs=$requestedUs prepareUs=$prepareUs")
+            }
+            next.setMediaSource(hls, positionMs)
+        } else {
+            next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
+        }
         next.playWhenReady = !paused
         // Publish a prepared replacement: IDLE would advertise no media to external controllers.
         gated.hold()
