@@ -30,8 +30,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -48,6 +50,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -65,6 +68,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -84,6 +88,7 @@ import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -489,7 +494,7 @@ internal fun Pictureshow(
                                 enabled = !screen.busy,
                                 modifier = Modifier.semantics {
                                     contentDescription =
-                                        "$question $description Other accounts stay signed in. You can add it again later. Cancel"
+                                        "$question $description Other accounts stay signed in. You can add it again later."
                                 }
                             ) { cancelRemoval() }
                             Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
@@ -654,20 +659,7 @@ internal fun Pictureshow(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
                         "and enter this code"
                 )
-                screen.code?.let { code ->
-                    val focus = remember { FocusRequester() }
-                    Box(Modifier.focusRequester(focus).readableFocus()) {
-                        Text(
-                            code,
-                            style = MaterialTheme.typography.displayLarge,
-                            modifier = Modifier.semantics {
-                                contentDescription = "Quick Connect code ${code.toList().joinToString(" ")}"
-                                liveRegion = LiveRegionMode.Polite
-                            }
-                        )
-                    }
-                    LaunchedEffect(code) { focus.requestFocus() }
-                }
+                screen.code?.let { code -> QuickConnectCode(code) }
                 if (screen.renewed) StatusLine("The previous code is no longer valid. Enter this new code.")
                 if (screen.busy) {
                     StatusLine("Getting a code…")
@@ -892,6 +884,55 @@ private fun Message(message: String?) {
 }
 
 @Composable
+internal fun QuickConnectCode(code: String, announce: ((String) -> Unit)? = null) {
+    val accessible = rememberAccessibilityEnabled()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val host = LocalView.current
+    val announcer by rememberUpdatedState(announce)
+    val focus = remember { FocusRequester() }
+    var canFocus by remember { mutableStateOf(false) }
+    var published by remember { mutableStateOf(false) }
+    var ready by remember { mutableStateOf(false) }
+    val label = "Quick Connect code ${code.toList().joinToString(" ")}"
+    Text(
+        code,
+        style = MaterialTheme.typography.displayLarge,
+        modifier = Modifier.focusRequester(focus).focusProperties { this.canFocus = canFocus && !accessible }.then(
+            if (published) Modifier else Modifier.clearAndSetSemantics { hideFromAccessibility() }
+        ).readableFocus().semantics { contentDescription = label }
+    )
+    LaunchedEffect(lifecycle) {
+        do {
+            published = false
+            lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+            canFocus = true
+            withFrameNanos { }
+            // With a screen reader, retain its existing target and announce separately.
+            // A programmatic input-focus event can arrive late and repeat that speech.
+            // Without a reader, give the remote its normal code target while hidden.
+            if (!accessible) focus.requestFocus()
+            published = true
+            repeat(2) { withFrameNanos { } }
+        } while (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        ready = true
+    }
+    LaunchedEffect(label, ready, lifecycle) {
+        if (ready) {
+            lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+            val deliver = announcer
+            if (deliver != null) {
+                deliver(label)
+            } else {
+                // A bounded announcement handles arrival and renewal without moving either
+                // cursor. Live-region delivery is unreliable for this focused TV code label.
+                @Suppress("DEPRECATION")
+                host.announceForAccessibility(label)
+            }
+        }
+    }
+}
+
+@Composable
 internal fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface) {
     val restoring = LocalRestoringConfirmationFocus.current
     // Focus changes must not look like content updates to a live region. Keep the text on
@@ -925,10 +966,10 @@ internal fun RemoteField(
     val navigation = remember { RemoteFieldNavigation() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // The field supplies this label in both traversal directions. A second accessible
-        // text node makes TV TalkBack stop on it only when approaching from below.
-        Text(label, modifier = Modifier.semantics { hideFromAccessibility() })
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // The field supplies this label in both traversal directions. Clear the caption
+        // text too: TalkBack counts hidden text when deciding whether a group is a stop.
+        Text(label, modifier = Modifier.clearAndSetSemantics {})
         BasicTextField(
             value = value,
             onValueChange = onValue,
