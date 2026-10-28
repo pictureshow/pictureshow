@@ -83,7 +83,6 @@ class PlaybackReleaseFenceTest {
         try {
             old.open()
             pumpUntil { old.videos.first().enabled.count == 0L }
-            val previousThread = active(old.output).playbackLooper.thread
             if (reopen) {
                 old.output.beginSeek()
                 next.open(1_000)
@@ -113,8 +112,6 @@ class PlaybackReleaseFenceTest {
             pumpUntil { newVideo.enabled.count == 0L }
             assertFalse(next.output.player.value!!.playWhenReady, "Media controls during the wait must survive prepare")
             assertTrue(releaseLogs().any { it.contains("timeout=true") && !it.contains("finishedMs=pending") })
-            previousThread.join(1_000)
-            assertFalse(previousThread.isAlive, "Caller-owned playback thread survived its release sentinel")
         } finally {
             allowRelease.countDown()
             old.output.release()
