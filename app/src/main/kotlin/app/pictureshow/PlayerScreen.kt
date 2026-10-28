@@ -205,7 +205,10 @@ internal fun PlayerItemScreen(
     var extras by remember { mutableStateOf<PlaybackExtrasClient?>(null) }
     var tiles by remember { mutableStateOf<TrickplayCache?>(null) }
     var chaptersOpen by remember { mutableStateOf(false) }
-    var seekPreview by remember { mutableStateOf<Long?>(null) }
+    var seekPreview by remember(player) { mutableStateOf<Long?>(null) }
+    // Native HLS replacements can exist before their manifest advertises seeking.
+    // Keep the intent beyond the short-lived preview, scoped to this player.
+    var pendingSeek by remember(player) { mutableStateOf<Long?>(null) }
     var rootFocused by remember { mutableStateOf(false) }
     var focusControls by remember { mutableStateOf(false) }
     var actionsFocused by remember { mutableStateOf(false) }
@@ -229,15 +232,39 @@ internal fun PlayerItemScreen(
         controller?.closeForNext({ !exitRequested }) { if (!exitRequested) onNext(next) } ?: onExit()
     }
 
-    fun seek(delta: Long) {
+    fun applyPendingSeek() {
         val active = player ?: return
+        val requested = pendingSeek ?: return
+        if (!active.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) return
         val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
-        val target = ((seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
+        val target = requested.coerceIn(0, limit)
+        // Clear before seekTo: its synchronous callbacks can update available commands.
+        pendingSeek = null
         active.seekTo(target)
         position = target
         seekPreview = target
+    }
+
+    fun seek(delta: Long) {
+        val active = player ?: return
+        val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
+        val target = ((pendingSeek ?: seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
+        pendingSeek = target
+        position = target
+        seekPreview = target
+        applyPendingSeek()
         controls = true
         interaction++
+    }
+
+    DisposableEffect(player) {
+        val active = player
+        val listener = object : Player.Listener {
+            override fun onAvailableCommandsChanged(availableCommands: Player.Commands) = applyPendingSeek()
+        }
+        active?.addListener(listener)
+        applyPendingSeek()
+        onDispose { active?.removeListener(listener) }
     }
 
     fun handleBack() {
