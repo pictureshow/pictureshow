@@ -721,6 +721,9 @@ fun CatalogDetail(
     var commandNotice by remember { mutableStateOf<String?>(null) }
     var pendingExpired by remember { mutableStateOf(false) }
     var expiryReported by remember { mutableStateOf(false) }
+    var mutationDataReady by remember {
+        mutableStateOf(!state.loading && !state.playbackPending && state.error == null && state.item != null)
+    }
     // Report acknowledgement can precede this model's authoritative read. Keep its
     // existing header live until loading and item readiness agree on the fresh state.
     val playbackWaiting = state.playbackPending ||
@@ -746,6 +749,14 @@ fun CatalogDetail(
         headerInputTarget != null &&
         state.error == null
     SideEffect {
+        // A write error can be retried against the last fresh item; a failed playback
+        // reload cannot. Loading invalidates this marker until an error-free read lands.
+        if (state.loading || playbackWaiting) {
+            mutationDataReady = false
+        } else if (state.error == null && state.item != null) {
+            mutationDataReady = true
+            if (commandNotice == "Changes will be available when loading finishes.") commandNotice = null
+        }
         if (state.playbackPending && state.error == null && !pendingFailed) playbackReturn = true
         if (playbackWaiting) {
             playbackLayout = true
@@ -797,17 +808,30 @@ fun CatalogDetail(
     // serialize them here so a following intent cannot be silently dropped by the VM.
     // This composition owns the consumer, so navigation cancels any work not yet started.
     var commandGeneration by remember { mutableIntStateOf(0) }
-    val freshCommands = remember { kotlinx.coroutines.channels.Channel<Pair<Int, () -> Unit>>(32) }
+    var readyQueuedTargets by remember { mutableStateOf(emptySet<String>()) }
+    val freshCommands = remember { kotlinx.coroutines.channels.Channel<DetailCommand>(32) }
     val latestError by rememberUpdatedState(state.error)
     val latestLifecycle by rememberUpdatedState(lifecycleState)
+    val latestMutationReady by rememberUpdatedState(mutationDataReady && !state.loading && !playbackWaiting && state.item != null)
     LaunchedEffect(Unit) {
-        for ((generation, command) in freshCommands) {
+        for ((generation, mutationTarget, command) in freshCommands) {
             androidx.compose.runtime.snapshotFlow {
                 generation != commandGeneration ||
-                    latestError != null ||
-                    (latestPlaybackReady && !latestBusy && latestLifecycle == Lifecycle.State.RESUMED)
+                    (latestError != null && (mutationTarget == null || !latestMutationReady)) ||
+                    (
+                        (if (mutationTarget != null) latestMutationReady else latestPlaybackReady) &&
+                            !latestBusy &&
+                            latestLifecycle == Lifecycle.State.RESUMED
+                        )
             }.first { it }
-            if (generation == commandGeneration && latestError == null) command()
+            if (generation == commandGeneration) {
+                if (latestError == null || (mutationTarget != null && latestMutationReady)) {
+                    command()
+                } else {
+                    commandNotice = "The request could not be saved. Reload the item and try again."
+                }
+                mutationTarget?.let { readyQueuedTargets = readyQueuedTargets - it }
+            }
             // Give optimistic busy/loading state a composition before taking another command.
             repeat(2) { withFrameNanos { } }
         }
@@ -817,7 +841,7 @@ fun CatalogDetail(
         val generation = commandGeneration
         val accepted = !pendingExpired &&
             queuePendingAction?.invoke {
-                if (generation == commandGeneration && freshCommands.trySend(generation to command).isFailure) {
+                if (generation == commandGeneration && freshCommands.trySend(DetailCommand(generation, null, command)).isFailure) {
                     commandNotice = "The request could not be saved. Try again."
                 }
             } == true
@@ -828,11 +852,43 @@ fun CatalogDetail(
         }
         return accepted
     }
+
+    // Returning controls keep focus while an accepted mutation is busy. A fresh press
+    // joins the same ordered consumer with the desired state its current label offers.
+    fun queueReadyMutation(watched: Boolean) {
+        if (!mutationDataReady) {
+            commandNotice = if (state.error != null) {
+                "Reload the item before changing it."
+            } else {
+                "Changes will be available when loading finishes."
+            }
+            return
+        }
+        val offered = state.item ?: return
+        val target = if (watched) "played" else "favorite"
+        if (target in readyQueuedTargets) return
+        val desired = if (watched) !offered.isWatched else !offered.userData.isFavorite
+        val generation = commandGeneration
+        val command: () -> Unit = {
+            val fresh = latestItem
+            if (fresh != null) {
+                if (watched && !fresh.isEmptyContainer && fresh.isWatched != desired) latestOnPlayed()
+                if (!watched && fresh.userData.isFavorite != desired) latestOnFavorite()
+            }
+        }
+        if (freshCommands.trySend(DetailCommand(generation, target, command)).isFailure) {
+            commandNotice = "The request could not be saved. Try again."
+        } else {
+            readyQueuedTargets = readyQueuedTargets + target
+            commandNotice = null
+        }
+    }
     var playQueued by remember { mutableStateOf<String?>(null) }
     var pendingQueuedTargets by remember { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(playbackWaiting) {
         if (playbackWaiting) {
             commandGeneration++
+            readyQueuedTargets = emptySet()
             waitHadRequest = false
             commandNotice = null
             pendingExpired = false
@@ -853,6 +909,7 @@ fun CatalogDetail(
         // Invalidate even commands already handed to this composition's ready-state gate.
         // Standalone consumers without an owner getter use the same local request budget.
         commandGeneration++
+        readyQueuedTargets = emptySet()
         expiryReported = true
         pendingExpired = true
         commandNotice = if (latestHasRequest) {
@@ -882,6 +939,16 @@ fun CatalogDetail(
     LaunchedEffect(commandNotice) {
         if (commandNotice != null) {
             delay(6_000)
+            commandNotice = null
+        }
+    }
+    LaunchedEffect(state.error) {
+        if (state.error == null &&
+            commandNotice in setOf(
+                "The request could not be saved. Reload the item and try again.",
+                "Reload the item before changing it."
+            )
+        ) {
             commandNotice = null
         }
     }
@@ -1196,10 +1263,22 @@ fun CatalogDetail(
                             val container = item.type in listOf("Series", "Season")
                             if (hasActions && container && (!playbackWaiting || pendingEnabled)) {
                                 DetailActions(
-                                    item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay,
+                                    item, playItem, state.busy, initial,
+                                    if (playbackLayout) {
+                                        { queueReadyMutation(true) }
+                                    } else {
+                                        onPlayed
+                                    },
+                                    if (playbackLayout) {
+                                        { queueReadyMutation(false) }
+                                    } else {
+                                        onFavorite
+                                    },
+                                    onPlay,
                                     playedFocus, favoriteFocus, pendingActions, ::headerFocus,
                                     stableLayout =
                                     playbackLayout || playbackWaiting,
+                                    readyQueuedTargets = readyQueuedTargets,
                                     fromStartFocus = fromStartFocus
                                 ) {
                                     if (trackSelection) selectedSection = "header"
@@ -1209,10 +1288,22 @@ fun CatalogDetail(
                             if (headerItem.genres.isNotEmpty()) Text(headerItem.genres.joinToString(" · "), color = CatalogMuted)
                             if (hasActions && !container && (!playbackWaiting || pendingEnabled)) {
                                 DetailActions(
-                                    item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay,
+                                    item, playItem, state.busy, initial,
+                                    if (playbackLayout) {
+                                        { queueReadyMutation(true) }
+                                    } else {
+                                        onPlayed
+                                    },
+                                    if (playbackLayout) {
+                                        { queueReadyMutation(false) }
+                                    } else {
+                                        onFavorite
+                                    },
+                                    onPlay,
                                     playedFocus, favoriteFocus, pendingActions, ::headerFocus,
                                     stableLayout =
                                     playbackLayout || playbackWaiting,
+                                    readyQueuedTargets = readyQueuedTargets,
                                     fromStartFocus = fromStartFocus
                                 ) {
                                     if (trackSelection) selectedSection = "header"
@@ -1252,7 +1343,7 @@ fun CatalogDetail(
                     }
                     // An overlay has no layout footprint: status publication, changed wording and
                     // removal cannot move the hero or the reader's selected action underneath it.
-                    if ((playbackWaiting || commandNotice != null) && state.error == null) {
+                    if (commandNotice != null || (playbackWaiting && state.error == null)) {
                         val status = commandNotice ?: if (state.playbackReportFinished) "Loading item…" else "Saving progress…"
                         Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
                             if (pendingEnabled && commandNotice == null) {
@@ -1374,8 +1465,8 @@ fun CatalogDetail(
             }
             val headerValid = when (headerInputTarget) {
                 "primary", "from-start" -> playItem != null
-                "played" -> !state.busy && item?.isEmptyContainer == false
-                "favorite" -> !state.busy && item != null
+                "played" -> (playbackLayout || !state.busy) && item?.isEmptyContainer == false
+                "favorite" -> (playbackLayout || !state.busy) && item != null
                 else -> false
             }
             if (state.error == null &&
@@ -1442,11 +1533,11 @@ fun CatalogDetail(
                         headerTarget = "from-start"
                         fromStartFocus
                     }
-                    pendingHeaderTarget == "played" && !state.busy && item?.isEmptyContainer == false -> {
+                    pendingHeaderTarget == "played" && (playbackLayout || !state.busy) && item?.isEmptyContainer == false -> {
                         headerTarget = "played"
                         playedFocus
                     }
-                    pendingHeaderTarget == "favorite" && !state.busy -> {
+                    pendingHeaderTarget == "favorite" && (playbackLayout || !state.busy) -> {
                         headerTarget = "favorite"
                         favoriteFocus
                     }
@@ -1508,6 +1599,8 @@ private fun Modifier.detailFocusDiagnostic(target: String): Modifier = onFocusCh
     if (BuildConfig.DEBUG && it.isFocused) PlaybackDiagnostics.write("detail-focus target=$target")
 }
 
+private data class DetailCommand(val generation: Int, val mutationTarget: String?, val action: () -> Unit)
+
 private data class PendingDetailActions(
     val playLabel: String,
     val fromStartLabel: String,
@@ -1534,6 +1627,7 @@ private fun DetailActions(
     pending: PendingDetailActions? = null,
     onHeaderFocus: (String, Boolean) -> Unit = { _, _ -> },
     stableLayout: Boolean = false,
+    readyQueuedTargets: Set<String> = emptySet(),
     fromStartFocus: FocusRequester? = null,
     onFocus: () -> Unit
 ) {
@@ -1648,7 +1742,7 @@ private fun DetailActions(
                 val click = pending?.onPlayed ?: onPlayed
                 Button(
                     onClick = click,
-                    enabled = pending != null || (!busy && !item.isEmptyContainer),
+                    enabled = pending != null || (!item.isEmptyContainer && (stableLayout || !busy)),
                     modifier = (
                         if (pending == null &&
                             playItem == null &&
@@ -1664,7 +1758,17 @@ private fun DetailActions(
                             toggleableState = ToggleableState(item.isWatched)
                             stateDescription = if (item.isWatched) "Watched" else "Unwatched"
                         }
-                ) { Text(pending?.playedLabel ?: if (item.isWatched) "Mark unwatched" else "Mark watched") }
+                ) {
+                    Text(
+                        pending?.playedLabel ?: if ("played" in readyQueuedTargets) {
+                            "Watched change requested"
+                        } else if (item.isWatched) {
+                            "Mark unwatched"
+                        } else {
+                            "Mark watched"
+                        }
+                    )
+                }
             }
         }
         key("favorite") {
@@ -1672,7 +1776,7 @@ private fun DetailActions(
                 val click = pending?.onFavorite ?: onFavorite
                 Button(
                     onClick = click,
-                    enabled = pending != null || !busy,
+                    enabled = pending != null || stableLayout || !busy,
                     modifier = (
                         if (pending == null &&
                             playItem == null &&
@@ -1688,7 +1792,17 @@ private fun DetailActions(
                             toggleableState = ToggleableState(item.userData.isFavorite)
                             stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite"
                         }
-                ) { Text(pending?.favoriteLabel ?: if (item.userData.isFavorite) "Unfavorite" else "Favorite") }
+                ) {
+                    Text(
+                        pending?.favoriteLabel ?: if ("favorite" in readyQueuedTargets) {
+                            "Favorite change requested"
+                        } else if (item.userData.isFavorite) {
+                            "Unfavorite"
+                        } else {
+                            "Favorite"
+                        }
+                    )
+                }
             }
         }
         if (stableLayout) {
