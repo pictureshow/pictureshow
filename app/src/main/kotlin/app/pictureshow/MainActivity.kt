@@ -1,5 +1,6 @@
 package app.pictureshow
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -96,6 +97,26 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 class MainActivity : ComponentActivity() {
+    internal val playbackExitHandoff = PlaybackExitHandoff()
+
+    // Activity's framework callback is inherited through the restricted AndroidX core base.
+    @SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            playbackExitHandoff.input(event.keyCode)
+        }
+        if (event.action == android.view.KeyEvent.ACTION_DOWN || event.action == android.view.KeyEvent.ACTION_UP) {
+            val copy = android.view.KeyEvent(event)
+            if (playbackExitHandoff.defer(copy.keyCode, copy.action == android.view.KeyEvent.ACTION_DOWN, copy.repeatCount) {
+                    dispatchKeyEvent(copy)
+                }
+            ) {
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     private var playbackEntry by mutableStateOf<ParsedPlaybackEntry?>(null)
     private var searchEntry by mutableStateOf<String?>(null)
     private var entrySequence by mutableStateOf(0L)
@@ -268,7 +289,8 @@ internal fun Pictureshow(
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
-    val exitPlayback = rememberPlaybackExit(nav)
+    val exitHandoff = (LocalActivity.current as? MainActivity)?.playbackExitHandoff
+    val exitPlayback = rememberPlaybackExit(nav, exitHandoff)
     val backStackEntry by nav.currentBackStackEntryAsState()
     var searchKeyboardRequest by remember { mutableStateOf(0) }
     val context = LocalContext.current
@@ -808,7 +830,12 @@ internal fun Pictureshow(
                         vm::played,
                         vm::favorite,
                         vm::reload,
-                        onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) }
+                        onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) },
+                        onFocusRestored = { target, focused -> exitHandoff?.finish(entry.id, target, focused) },
+                        onPendingAction = { action -> exitHandoff?.accessibleSelect(entry.id, action) ?: false },
+                        onPendingFocus = { exitHandoff?.accessibleFocus(entry.id) },
+                        onPendingControlsReady = { exitHandoff?.live(entry.id, it) },
+                        origin = item
                     )
                 }
             }
