@@ -47,6 +47,17 @@ import org.robolectric.annotation.LooperMode
 class CatalogDetailHandoffTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun anOrdinaryDetailDoesNotAnnounceAnUnrelatedRequestDeadline() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("film", "Invented film", "Movie")
+        compose.setContent {
+            PictureshowTheme { CatalogDetail(CatalogDetailState(account, item, loading = false), {}, {}, {}, {}, {}) }
+        }
+        compose.mainClock.advanceTimeBy(31_000)
+        compose.onNodeWithText("The request expired. Try again when the item loads.").assertDoesNotExist()
+        compose.onNodeWithTag("detail:play").assertIsDisplayed()
+    }
+
     @Test fun completionWaitsForTheFreshTargetAndItsActualFocusRequest() {
         val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
         val item = MediaItem("film", "Invented film", "Movie")
@@ -810,5 +821,339 @@ class CatalogDetailHandoffTest {
             compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
             compose.onNodeWithText("Play requested").assertExists()
         }
+    }
+
+    @Test fun pendingStatusChangesNeverMoveTheMovieHeader() = assertStableStatus("Movie")
+
+    @Test fun pendingStatusChangesNeverMoveTheSeriesHeader() = assertStableStatus("Series")
+
+    @Test fun pendingStatusChangesNeverMoveTheSeasonHeader() = assertStableStatus("Season")
+
+    @Test fun pendingHeaderStaysFixedWhenFreshMetadataArrivesWithLargerText() = assertStableStatus("Season", 1.3f)
+
+    private fun assertStableStatus(type: String, fontScale: Float = 1f) {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val origin = MediaItem("item", "Invented item", type, childCount = 1)
+        val episode = MediaItem("episode", "Invented episode", "Episode")
+        val state = mutableStateOf(CatalogDetailState(account, null, loading = true, playbackPending = true))
+        compose.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale)
+            ) {
+                PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, onPendingAction = { true }, origin = origin) }
+            }
+        }
+        fun bounds() =
+            listOf("detail:hero", "detail:play-pending", "detail:played-pending", "detail:favorite-pending", "detail:from-start-pending")
+                .map { compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
+        val saving = bounds()
+        if (fontScale > 1f) {
+            compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+            compose.onNodeWithTag("detail:favorite-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+            assertEquals(saving, bounds(), "Requested labels must not reflow at larger font scale")
+        }
+        compose.runOnIdle { state.value = state.value.copy(playbackReportFinished = true) }
+        assertEquals(saving, bounds(), "Saving to loading must not move the header")
+        compose.runOnIdle { state.value = state.value.copy(playbackPending = false) }
+        assertEquals(saving, bounds(), "Report acknowledgement must not move the header")
+        compose.runOnIdle {
+            state.value =
+                state.value.copy(
+                    item = origin.copy(
+                        productionYear = 2026,
+                        overview = "Newly returned metadata",
+                        genres = listOf("Invented genre"),
+                        userData = app.pictureshow.core.ItemUserData(playbackPositionTicks = 123_000_000)
+                    ),
+                    loading = false,
+                    nextUp = listOf(episode),
+                    episodes = listOf(episode)
+                )
+        }
+        val fresh = listOf("detail:hero", "detail:play", "detail:played", "detail:favorite", "detail:from-start")
+            .map { compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
+        assertEquals(saving, fresh, "Freshness must not remove space above the hero and actions")
+        compose.onNodeWithText("Newly returned metadata").assertExists()
+        compose.onNodeWithText("Invented genre").assertExists()
+    }
+
+    @Test fun aPendingPageWithoutAPlayerExitKeepsItsPlayPromise() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val origin = MediaItem("season", "Invented season", "Season", childCount = 1)
+        val fresh =
+            MediaItem(
+                "episode",
+                "Invented episode",
+                "Episode",
+                userData = app.pictureshow.core.ItemUserData(playbackPositionTicks = 123_000_000)
+            )
+        val state = mutableStateOf(CatalogDetailState(account, null, loading = true, playbackPending = true))
+        val handoff = PlaybackExitHandoff({ 0L }, {})
+        handoff.destinationChanged("entry")
+        val plays = mutableListOf<Pair<MediaItem, Boolean>>()
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    state.value, {}, {}, {}, {}, {}, origin = origin,
+                    onPlay = { item, resume -> plays += item to resume },
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onPendingControlsReady = { handoff.live("entry", it) },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Play requested").assertExists()
+        compose.runOnIdle {
+            state.value =
+                state.value.copy(item = origin, episodes = listOf(fresh), loading = false, playbackPending = false)
+        }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.runOnIdle { assertEquals(listOf(fresh to true), plays) }
+    }
+
+    @Test fun aPendingHomeOpenKeepsItsWatchedPromise() = assertHomeMutation("played", false)
+
+    @Test fun aPendingHomeOpenKeepsItsFavoritePromise() = assertHomeMutation("favorite", false)
+
+    @Test fun aPendingHomeOpenDoesNotUndoFreshWatchedState() = assertHomeMutation("played", true)
+
+    @Test fun aPendingHomeOpenDoesNotUndoFreshFavoriteState() = assertHomeMutation("favorite", true)
+
+    @Test fun leavingAPendingHomeOpenCancelsItsAcceptedPlay() = assertHomeMutation("play", false, leave = true)
+
+    private fun assertHomeMutation(target: String, alreadyApplied: Boolean, leave: Boolean = false) {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("season", "Invented season", "Season", childCount = 1)
+        val episode = MediaItem("episode", "Invented episode", "Episode")
+        val state = mutableStateOf(CatalogDetailState(account, null, loading = true, playbackPending = true))
+        val handoff = PlaybackExitHandoff({ 0L }, {})
+        handoff.destinationChanged("entry")
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    state.value, {}, {}, { calls += "played" }, { calls += "favorite" }, {},
+                    origin = item, onPlay = { _, _ -> calls += "play" },
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onPendingControlsReady = { handoff.live("entry", it) },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
+                )
+            }
+        }
+        repeat(2) { compose.onNodeWithTag("detail:$target-pending").performSemanticsAction(SemanticsActions.OnClick) { it() } }
+        compose.onNodeWithText(
+            when (target) {
+                "played" -> "Watched change requested"
+                "favorite" -> "Favorite change requested"
+                else -> "Play requested"
+            }
+        ).assertExists()
+        compose.runOnIdle {
+            assertTrue(calls.isEmpty())
+            if (leave) handoff.destinationChanged("home")
+            state.value =
+                state.value.copy(
+                    item = item.copy(userData = app.pictureshow.core.ItemUserData(played = alreadyApplied, isFavorite = alreadyApplied)),
+                    episodes = listOf(episode),
+                    playbackPending = false,
+                    loading = false
+                )
+        }
+        compose.onNodeWithTag("detail:play").assertExists()
+        compose.runOnIdle { assertEquals(if (alreadyApplied || leave) emptyList() else listOf(target), calls) }
+    }
+
+    @Test fun acceptedWatchedAndFavoriteWaitForEachMutationInOrder() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = true, playbackPending = true))
+        val handoff = PlaybackExitHandoff({ 0L }, {})
+        handoff.begin("entry")
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    state.value,
+                    {},
+                    {},
+                    {
+                        calls += "played"
+                        state.value = state.value.copy(busy = true)
+                    },
+                    { calls += "favorite" },
+                    {},
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("detail:favorite-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false) }
+        compose.onNodeWithTag("detail:play").assertExists()
+        compose.runOnIdle { assertEquals(listOf("played"), calls, "Second mutation must wait for busy to clear") }
+        compose.runOnIdle { state.value = state.value.copy(busy = false) }
+        compose.mainClock.advanceTimeBy(100)
+        compose.runOnIdle { assertEquals(listOf("played", "favorite"), calls) }
+    }
+
+    @Test fun pendingMediaThenRightThenSelectKeepsItsOriginalCommandOrder() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = true, playbackPending = true))
+        val handoff = PlaybackExitHandoff({ 0L }, {})
+        handoff.begin("entry")
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    state.value, {}, {}, { calls += "played" }, {}, {}, onPlay = { _, _ -> calls += "play" },
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onPendingControlsReady = { handoff.live("entry", it) },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
+                )
+            }
+        }
+        compose.onRoot().performKeyInput {
+            pressKey(Key.MediaPlayPause)
+            pressKey(Key.DirectionRight)
+            pressKey(Key.DirectionCenter)
+        }
+        compose.runOnIdle {
+            assertTrue(calls.isEmpty())
+            state.value = state.value.copy(loading = false, playbackPending = false)
+        }
+        compose.mainClock.advanceTimeBy(100)
+        compose.runOnIdle { assertEquals(listOf("play", "played"), calls) }
+    }
+
+    @Test fun aRequestedContainerPlayReportsWhenFreshEpisodesAreUnavailable() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("season", "Invented season", "Season", childCount = 1)
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = true, playbackPending = true))
+        val handoff = PlaybackExitHandoff({ 0L }, {})
+        handoff.begin("entry")
+        var plays = 0
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    state.value, {}, {}, {}, {}, {}, onPlay = { _, _ -> plays++ },
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false, item = item.copy(childCount = 0)) }
+        compose.onNodeWithText("No playable episodes are available.").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, plays) }
+    }
+
+    @Test fun pendingPlayFromStartUsesFreshDataButNeverItsSavedResumePosition() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("film", "Invented film", "Movie")
+        val fresh = item.copy(userData = app.pictureshow.core.ItemUserData(playbackPositionTicks = 123_000_000))
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = true, playbackPending = true))
+        val handoff = PlaybackExitHandoff({ 0L }, {})
+        handoff.begin("entry")
+        val plays = mutableListOf<Pair<MediaItem, Boolean>>()
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    state.value, {}, {}, {}, {}, {}, onPlay = { playable, resume -> plays += playable to resume },
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:from-start-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { state.value = state.value.copy(item = fresh, loading = false, playbackPending = false) }
+        compose.mainClock.advanceTimeBy(100)
+        compose.runOnIdle { assertEquals(listOf(fresh to false), plays) }
+    }
+
+    @Test fun anExpiredPendingSelectKeepsItsFocusAndActionBoundsWithHonestLabels() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("film", "Invented film", "Movie")
+        var time = 0L
+        val handoff = PlaybackExitHandoff({ time }, {})
+        handoff.begin("entry")
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    CatalogDetailState(account, item, loading = true, playbackPending = true),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onPendingControlsReady = { handoff.live("entry", it) }
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:play-pending").assertIsFocused()
+        val before = listOf("play", "played", "favorite", "from-start").map {
+            compose.onNodeWithTag("detail:$it-pending").fetchSemanticsNode().boundsInRoot
+        }
+        time = 30_000L
+        compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Play unavailable").assertExists()
+        compose.onNodeWithTag("detail:play-pending").assertIsFocused()
+        val after = listOf("play", "played", "favorite", "from-start").map {
+            compose.onNodeWithTag("detail:$it-pending").fetchSemanticsNode().boundsInRoot
+        }
+        assertEquals(before, after)
+        compose.onNodeWithText("The request expired. Try again when the item loads.").assertExists()
+    }
+
+    @Test fun aPassivePendingDeadlineDoesNotInventAViewerRequest() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("film", "Invented film", "Movie")
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    CatalogDetailState(account, item, loading = true, playbackPending = true),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    onPendingAction = { true }
+                )
+            }
+        }
+        compose.mainClock.advanceTimeBy(31_000)
+        compose.onNodeWithText("Actions will be available when the item loads.").assertExists()
+        compose.onNodeWithText("Play unavailable").assertExists()
+        compose.onNodeWithText("The request expired. Try again when the item loads.").assertDoesNotExist()
+    }
+
+    @Test fun anAcceptedPendingPlayThatExpiresShowsAReasonOnFreshArrival() {
+        val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = true, playbackPending = true))
+        var time = 0L
+        val handoff = PlaybackExitHandoff({ time }, {})
+        handoff.begin("entry")
+        var plays = 0
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    state.value, {}, {}, {}, {}, {}, onPlay = { _, _ -> plays++ },
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Play requested").assertExists()
+        time = 31_000L
+        compose.mainClock.advanceTimeBy(31_000)
+        compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false) }
+        compose.onNodeWithText("The request expired. Try again when the item loads.").assertExists()
+        compose.runOnIdle { assertEquals(0, plays) }
     }
 }

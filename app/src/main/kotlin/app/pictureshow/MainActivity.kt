@@ -834,7 +834,11 @@ internal fun Pictureshow(
                         onFocusRestored = { target, focused -> exitHandoff?.finish(entry.id, target, focused) },
                         onPendingAction = { action -> exitHandoff?.accessibleSelect(entry.id, action) ?: false },
                         onPendingFocus = { exitHandoff?.accessibleFocus(entry.id) },
+                        onPendingQueueNeeded = {
+                            if (nav.currentBackStackEntry?.id == entry.id) exitHandoff?.prepare(entry.id)
+                        },
                         onPendingControlsReady = { exitHandoff?.live(entry.id, it) },
+                        onPendingQueueExpired = { exitHandoff?.expired(entry.id) == true },
                         origin = item
                     )
                 }

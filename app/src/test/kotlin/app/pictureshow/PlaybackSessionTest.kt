@@ -485,4 +485,70 @@ class PlaybackSessionTest {
         session.close()
         runCurrent()
     }
+
+    @Test fun everyCloseMarksProgressPendingBeforeNavigationAndReportCompletion() = runTest {
+        for (failure in listOf(false, true)) {
+            val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(decision())) }
+            val events = mutableListOf<String>()
+            val session = PlaybackSession(
+                gateway,
+                Output(),
+                backgroundScope,
+                "en",
+                onCompletionPending = { events += "pending" },
+                onFinished = { events += "fresh" }
+            )
+            session.start(0)
+            runCurrent()
+            session.ready()
+            runCurrent()
+            if (failure) {
+                session.failed(false)
+                runCurrent()
+            }
+            gateway.stopGate = CompletableDeferred()
+            finishPlayback(session) { events += "navigation" }
+            assertEquals(listOf("pending", "navigation"), events, "Back/system/failure close must synchronously guard stale progress")
+            gateway.stopGate!!.complete(Unit)
+            runCurrent()
+            assertEquals(listOf("pending", "navigation", "fresh"), events)
+        }
+    }
+
+    @Test fun closeBeforeSetupFinishesAlwaysReleasesItsPendingGuard() = runTest {
+        val events = mutableListOf<String>()
+        val session = PlaybackSession(
+            Gateway(),
+            Output(),
+            backgroundScope,
+            "en",
+            onCompletionPending = { events += "pending" },
+            onFinished = { events += "fresh" }
+        )
+        session.close()
+        assertEquals(listOf("pending"), events)
+        runCurrent()
+        assertEquals(listOf("pending", "fresh"), events)
+    }
+
+    @Test fun reentrantDisposalCannotArmOrFinishTheSameExitTwice() = runTest {
+        var pending = 0
+        var finished = 0
+        lateinit var session: PlaybackSession
+        session = PlaybackSession(
+            Gateway(),
+            Output(),
+            backgroundScope,
+            "en",
+            onCompletionPending = {
+                pending++
+                session.close()
+            },
+            onFinished = { finished++ }
+        )
+        session.close()
+        runCurrent()
+        assertEquals(1, pending)
+        assertEquals(1, finished)
+    }
 }
