@@ -72,6 +72,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -1636,6 +1637,23 @@ private fun DetailActions(
     var focused by remember { mutableStateOf(false) }
     var scrolling by remember { mutableStateOf<Job?>(null) }
     val focusMargin = with(LocalDensity.current) { 8.dp.toPx() }
+    val childBringIntoViews = remember {
+        listOf("primary", "played", "favorite", "from-start").associateWith { BringIntoViewRequester() }
+    }
+    val focusedChildren = remember { mutableSetOf<String>() }
+    fun revealFocusedBounds(coordinates: LayoutCoordinates, requester: BringIntoViewRequester) {
+        if (scrolling?.isActive == true) return
+        val top = coordinates.positionInRoot().y
+        val bottom = top + coordinates.size.height
+        val viewport = coordinates.findRootCoordinates().size.height
+        if (top < focusMargin || bottom > viewport - focusMargin) {
+            scrolling = scope.launch {
+                requester.bringIntoView(
+                    Rect(-focusMargin, -focusMargin, coordinates.size.width + focusMargin, coordinates.size.height + focusMargin)
+                )
+            }
+        }
+    }
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1643,20 +1661,11 @@ private fun DetailActions(
             focused = it.hasFocus
             if (it.hasFocus) onFocus()
         }.onGloballyPositioned { coordinates ->
-            // Metadata can arrive after focus, moving the same action below the viewport without
-            // another focus event. Recheck its un-clipped position after layout in that case.
-            if (focused && scrolling?.isActive != true) {
-                val top = coordinates.positionInRoot().y
-                val bottom = top + coordinates.size.height
-                val viewport = coordinates.findRootCoordinates().size.height
-                if (top < focusMargin || bottom > viewport - focusMargin) {
-                    scrolling = scope.launch {
-                        bringIntoView.bringIntoView(
-                            Rect(-focusMargin, -focusMargin, coordinates.size.width + focusMargin, coordinates.size.height + focusMargin)
-                        )
-                    }
-                }
-            }
+            // Ordinary headers may gain metadata after focus. Returning headers freeze it and
+            // reserve slots, so check their focused child instead: an unfocused second row must
+            // not scroll an already-visible primary upward. Child checks also cover later errors
+            // or label wrapping that move the focused button without another focus event.
+            if (!stableLayout && focused) revealFocusedBounds(coordinates, bringIntoView)
         }.focusProperties {
             // Let the parent route a shelf exit to its remembered card, after spatial navigation
             // has exhausted the wrapped action rows. Programmatic requests remain unrestricted.
@@ -1667,43 +1676,50 @@ private fun DetailActions(
     ) {
         val position = playItem?.userData?.playbackPositionTicks ?: 0
         val suffix = if (pending != null) "-pending" else ""
-        fun actionModifier(target: String, tag: String, click: () -> Unit): Modifier = Modifier
-            .then(
-                if (stableLayout) {
-                    Modifier.width(
-                        if (target in
-                            listOf("primary", "from-start")
-                        ) {
-                            200.dp
-                        } else {
-                            260.dp
-                        }
-                    ).heightIn(min = 72.dp)
-                } else {
-                    Modifier
+
+        fun actionModifier(target: String, tag: String, click: () -> Unit): Modifier {
+            val childBringIntoView = childBringIntoViews.getValue(target)
+            return Modifier
+                .then(
+                    if (stableLayout) {
+                        Modifier.bringIntoViewRequester(childBringIntoView).onGloballyPositioned { coordinates ->
+                            if (target in focusedChildren) revealFocusedBounds(coordinates, childBringIntoView)
+                        }.width(
+                            if (target in
+                                listOf("primary", "from-start")
+                            ) {
+                                200.dp
+                            } else {
+                                260.dp
+                            }
+                        ).heightIn(min = 72.dp)
+                    } else {
+                        Modifier
+                    }
+                )
+                .onFocusChanged {
+                    if (it.isFocused) focusedChildren.add(target) else focusedChildren.remove(target)
+                    onHeaderFocus(target, it.isFocused)
+                    if (BuildConfig.DEBUG && it.isFocused) PlaybackDiagnostics.write("detail-focus target=$target")
+                }.testTag("detail:$tag$suffix").onPreviewKeyEvent {
+                    // Handle pending Select at DOWN, before a fresh callback can replace it.
+                    // Activity's handoff owns the matching UP/repeats, even across completion.
+                    if (pending != null &&
+                        it.type == KeyEventType.KeyDown &&
+                        it.nativeKeyEvent.repeatCount == 0 &&
+                        it.nativeKeyEvent.keyCode in listOf(
+                            android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                            android.view.KeyEvent.KEYCODE_ENTER,
+                            android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                        )
+                    ) {
+                        click()
+                        true
+                    } else {
+                        false
+                    }
                 }
-            )
-            .onFocusChanged {
-                onHeaderFocus(target, it.isFocused)
-                if (BuildConfig.DEBUG && it.isFocused) PlaybackDiagnostics.write("detail-focus target=$target")
-            }.testTag("detail:$tag$suffix").onPreviewKeyEvent {
-                // Handle pending Select at DOWN, before a fresh callback can replace it.
-                // Activity's handoff owns the matching UP/repeats, even across completion.
-                if (pending != null &&
-                    it.type == KeyEventType.KeyDown &&
-                    it.nativeKeyEvent.repeatCount == 0 &&
-                    it.nativeKeyEvent.keyCode in listOf(
-                        android.view.KeyEvent.KEYCODE_DPAD_CENTER,
-                        android.view.KeyEvent.KEYCODE_ENTER,
-                        android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
-                    )
-                ) {
-                    click()
-                    true
-                } else {
-                    false
-                }
-            }
+        }
         // TV Material raises the focused surface. Stable parents keep native traversal order
         // and node identities unchanged as pending labels become authoritative actions.
         key("primary") {
