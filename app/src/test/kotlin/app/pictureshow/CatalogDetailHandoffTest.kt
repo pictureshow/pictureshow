@@ -807,7 +807,7 @@ class CatalogDetailHandoffTest {
         compose.onNodeWithText("Retry").assertIsFocused()
         compose.onNodeWithText("Retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:play-pending").assertDoesNotExist()
-        compose.onNodeWithText(if (stillPending) "Saving progress…" else "Loading item…").assertIsDisplayed()
+        compose.onNodeWithText("Retrying…").assertIsFocused().assertIsDisplayed()
         compose.runOnIdle {
             state.value = state.value.copy(item = item, loading = false, playbackPending = false)
         }
@@ -1100,13 +1100,14 @@ class CatalogDetailHandoffTest {
         }
         time = 30_000L
         compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("Play unavailable").assertExists()
-        compose.onNodeWithTag("detail:play-pending").assertIsFocused()
+        compose.onNodeWithText("Retry").assertIsFocused()
+        // Error recovery supersedes the expired offers. The header stays published;
+        // focus intentionally moves from the old primary to the real Retry control.
         val after = listOf("play", "played", "favorite", "from-start").map {
-            compose.onNodeWithTag("detail:$it-pending").fetchSemanticsNode().boundsInRoot
+            compose.onNodeWithTag("detail:$it").fetchSemanticsNode().boundsInRoot
         }
-        assertEquals(before, after)
-        compose.onNodeWithText("The request expired. Try again when the item loads.").assertExists()
+        assertEquals(before.drop(1), after.drop(1))
+        compose.onNodeWithText("The server has not finished loading. Retry to reload the item.").assertExists()
     }
 
     @Test fun aPassivePendingDeadlineDoesNotInventAViewerRequest() {
@@ -1126,8 +1127,8 @@ class CatalogDetailHandoffTest {
             }
         }
         compose.mainClock.advanceTimeBy(31_000)
-        compose.onNodeWithText("Actions will be available when the item loads.").assertExists()
-        compose.onNodeWithText("Play unavailable").assertExists()
+        compose.onNodeWithText("The server has not finished loading. Retry to reload the item.").assertExists()
+        compose.onNodeWithText("Retry").assertIsFocused()
         compose.onNodeWithText("The request expired. Try again when the item loads.").assertDoesNotExist()
     }
 
@@ -1153,7 +1154,7 @@ class CatalogDetailHandoffTest {
         time = 31_000L
         compose.mainClock.advanceTimeBy(31_000)
         compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false) }
-        compose.onNodeWithText("The request expired. Try again when the item loads.").assertExists()
+        compose.onNodeWithTag("detail:play").assertIsFocused()
         compose.runOnIdle { assertEquals(0, plays) }
     }
 }

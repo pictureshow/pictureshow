@@ -102,7 +102,7 @@ class CatalogDetailBusyFocusTest {
         compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.mainClock.advanceTimeBy(100)
         compose.runOnIdle { assertEquals(emptyList(), calls) }
-        compose.onNodeWithText("Reload the item before changing it.").assertExists()
+        compose.onNodeWithText("Retry").assertIsFocused()
         compose.runOnIdle { state.value = state.value.copy(loading = true, playbackPending = true, error = null) }
         compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false) }
         compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.OnClick) { it() }

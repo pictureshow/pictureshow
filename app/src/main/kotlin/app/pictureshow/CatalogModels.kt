@@ -351,7 +351,10 @@ data class CatalogDetailState(
     val episodes: List<MediaItem> = emptyList(),
     val playbackPending: Boolean = false,
     // The stale-data guard outlives reporting (including exhausted failures) until a fresh read.
-    val playbackReportFinished: Boolean = false
+    val playbackReportFinished: Boolean = false,
+    // Failure category and attempt identity survive StateFlow coalescing a fast loading frame.
+    val readFailed: Boolean = false,
+    val readAttempt: Long = 0
 )
 
 class CatalogDetailViewModel(private val account: Account, private val original: MediaItem, private val session: CatalogSession) :
@@ -405,13 +408,13 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         seasonJob?.cancel()
         seasonGeneration++
         job = viewModelScope.launch {
-            mutableState.update { it.copy(loading = !retainRows, error = null) }
+            mutableState.update { it.copy(loading = !retainRows, error = null, readAttempt = it.readAttempt + 1) }
             val result = session.call(account) { item(account, original.id) }
             // A canceled RESUMED request must not overwrite the post-report refresh, even when
             // its transport finishes cancellation in a non-cancellable cleanup block.
             currentCoroutineContext().ensureActive()
             when (result) {
-                is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
+                is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message, readFailed = true) }
                 is ClientResult.Success -> {
                     val item = result.value
                     mutableState.update { it.copy(item = item) }
@@ -427,7 +430,8 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                             it.copy(
                                 nextUp = (next as? ClientResult.Success)?.value?.items.orEmpty(),
                                 seasons = (seasons as? ClientResult.Success)?.value?.items.orEmpty(),
-                                error = listOf(next, seasons).filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message
+                                error = listOf(next, seasons).filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message,
+                                readFailed = listOf(next, seasons).any { result -> result is ClientResult.Failure }
                             )
                         }
                         val selected = state.value.seasons.firstOrNull { it.id == state.value.selectedSeasonId }
@@ -466,13 +470,13 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         seasonJob = viewModelScope.launch {
             val seriesId = if (original.type == "Series") original.id else season.seriesId
             if (seriesId == null) {
-                mutableState.update { it.copy(loading = false, error = "This season has no series information.") }
+                mutableState.update { it.copy(loading = false, error = "This season has no series information.", readFailed = true) }
                 return@launch
             }
             val result = session.call(account) { episodes(account, seriesId, season.id) }
             if (generation != seasonGeneration) return@launch
             when (result) {
-                is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message) }
+                is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message, readFailed = true) }
                 is ClientResult.Success -> {
                     mutableState.update { it.copy(loading = false, episodes = result.value.items) }
                     if (state.value.error == null) playbackRead()
@@ -483,7 +487,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
 
     private fun playbackRead() {
         session.playbackRead(original.id)
-        mutableState.update { it.copy(playbackPending = original.id in session.changes.value.pendingPlayback) }
+        mutableState.update { it.copy(playbackPending = original.id in session.changes.value.pendingPlayback, readFailed = false) }
     }
 
     fun played() = mutate(true)

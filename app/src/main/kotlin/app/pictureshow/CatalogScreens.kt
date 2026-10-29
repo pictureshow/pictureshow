@@ -80,11 +80,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
@@ -722,6 +724,9 @@ fun CatalogDetail(
     var commandNotice by remember { mutableStateOf<String?>(null) }
     var pendingExpired by remember { mutableStateOf(false) }
     var expiryReported by remember { mutableStateOf(false) }
+    var recoveryMessage by remember { mutableStateOf<String?>(null) }
+    var retryWorking by remember { mutableStateOf(false) }
+    var recoveryFocusOwned by remember { mutableStateOf(false) }
     var mutationDataReady by remember {
         mutableStateOf(!state.loading && !state.playbackPending && state.error == null && state.item != null)
     }
@@ -743,16 +748,31 @@ fun CatalogDetail(
     val readerMovement = remember { PlaybackReaderMovement() }
     val reportLive by rememberUpdatedState(onPendingControlsReady)
     DisposableEffect(Unit) { onDispose { reportLive(false) } }
-    val pendingControlsLive = playbackWaiting &&
+    // A failed authoritative read (unlike a failed write) cannot expose stale commands.
+    // The action budget ends in this same recovery state, before the transport timer fires.
+    val readFailure = state.readFailed || (state.error != null && !mutationDataReady)
+    val readSettled = !state.loading && !state.playbackPending && state.error == null && !state.readFailed
+    // Derive settlement in this composition: an effect with the previous recovery value
+    // must not re-arm pendingFailed after the successful read's SideEffect clears it.
+    val recoveryActive = !readSettled && (recoveryMessage != null || readFailure || (pendingExpired && playbackWaiting))
+    val pendingControlsLive = !recoveryActive &&
+        playbackWaiting &&
         lifecycleState == Lifecycle.State.RESUMED &&
         pendingSemanticsRevealed &&
         pendingFocusRestored &&
         headerInputTarget != null &&
         state.error == null
     SideEffect {
+        if (readFailure && state.error != null) recoveryMessage = state.error
+        if (readSettled) {
+            if (pendingExpired) commandNotice = null
+            recoveryMessage = null
+            pendingExpired = false
+            pendingFailed = false
+        }
         // A write error can be retried against the last fresh item; a failed playback
         // reload cannot. Loading invalidates this marker until an error-free read lands.
-        if (state.loading || playbackWaiting) {
+        if (state.loading || playbackWaiting || state.readFailed) {
             mutationDataReady = false
         } else if (state.error == null && state.item != null) {
             mutationDataReady = true
@@ -763,7 +783,7 @@ fun CatalogDetail(
             playbackLayout = true
             if (playbackHeader == null) playbackHeader = state.item ?: origin
         }
-        if (playbackWaiting && !pendingFailed && state.error == null && lifecycleState == Lifecycle.State.RESUMED) {
+        if (playbackWaiting && !recoveryActive && !pendingFailed && state.error == null && lifecycleState == Lifecycle.State.RESUMED) {
             onPendingQueueNeeded()
         }
         reportLive(pendingControlsLive)
@@ -774,7 +794,7 @@ fun CatalogDetail(
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
     var rowSelections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
-    val item = state.item ?: origin.takeIf { playbackWaiting }
+    val item = state.item ?: origin.takeIf { playbackWaiting || recoveryActive }
     // Route cards can have less metadata than the authoritative item. During a return,
     // keep the published presentation; only fresh command data may change underneath it.
     val headerItem = playbackHeader ?: item
@@ -797,7 +817,7 @@ fun CatalogDetail(
         "Season" -> state.episodes.isNotEmpty() || pendingItem?.isEmptyContainer == false
         else -> false
     }
-    val latestPlaybackReady by rememberUpdatedState(!state.loading && !playbackWaiting && state.error == null)
+    val latestPlaybackReady by rememberUpdatedState(!recoveryActive && !state.loading && !playbackWaiting && state.error == null)
     val latestPlayItem by rememberUpdatedState(playItem)
     val latestOnPlay by rememberUpdatedState(onPlay)
     val latestItem by rememberUpdatedState(state.item)
@@ -813,7 +833,9 @@ fun CatalogDetail(
     val freshCommands = remember { kotlinx.coroutines.channels.Channel<DetailCommand>(32) }
     val latestError by rememberUpdatedState(state.error)
     val latestLifecycle by rememberUpdatedState(lifecycleState)
-    val latestMutationReady by rememberUpdatedState(mutationDataReady && !state.loading && !playbackWaiting && state.item != null)
+    val latestMutationReady by rememberUpdatedState(
+        !recoveryActive && !state.readFailed && mutationDataReady && !state.loading && !playbackWaiting && state.item != null
+    )
     LaunchedEffect(Unit) {
         for ((generation, mutationTarget, command) in freshCommands) {
             androidx.compose.runtime.snapshotFlow {
@@ -913,6 +935,7 @@ fun CatalogDetail(
         readyQueuedTargets = emptySet()
         expiryReported = true
         pendingExpired = true
+        recoveryMessage = "The server has not finished loading. Retry to reload the item."
         commandNotice = if (latestHasRequest) {
             "The request expired. Try again when the item loads."
         } else {
@@ -920,7 +943,7 @@ fun CatalogDetail(
         }
     }
     SideEffect {
-        if (!expiryReported && onPendingQueueExpired?.invoke() == true) expirePending()
+        if (playbackWaiting && !expiryReported && onPendingQueueExpired?.invoke() == true) expirePending()
     }
     LaunchedEffect(playbackWaiting) {
         if (playbackWaiting) {
@@ -936,6 +959,9 @@ fun CatalogDetail(
                 delay(250)
             }
         }
+    }
+    LaunchedEffect(state.loading, state.error, state.readAttempt) {
+        if (!state.loading || state.error != null) retryWorking = false
     }
     LaunchedEffect(commandNotice) {
         if (commandNotice != null) {
@@ -961,7 +987,8 @@ fun CatalogDetail(
             reportPendingFocus()
         }
     }
-    val pendingEnabled = playbackWaiting && !pendingFailed && state.error == null && pendingCanPlay && queuePendingAction != null
+    val pendingEnabled =
+        !recoveryActive && playbackWaiting && !pendingFailed && state.error == null && pendingCanPlay && queuePendingAction != null
     val pendingActions = if (pendingEnabled) {
         PendingDetailActions(
             playLabel = when {
@@ -1168,7 +1195,8 @@ fun CatalogDetail(
                 .then(
                     if (lifecycleState != Lifecycle.State.RESUMED ||
                         (
-                            state.error == null &&
+                            !recoveryActive &&
+                                state.error == null &&
                                 (
                                     (playItem != null && !semanticsRevealed && !pendingSemanticsRevealed) ||
                                         (pendingEnabled && !pendingSemanticsRevealed)
@@ -1194,7 +1222,12 @@ fun CatalogDetail(
                     if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && pendingActions != null) {
                         if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) pendingActions.onPlay()
                         true
-                    } else if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && !state.loading && playItem != null) {
+                    } else if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) &&
+                        !recoveryActive &&
+                        state.error == null &&
+                        !state.loading &&
+                        playItem != null
+                    ) {
                         if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
                             onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
                         }
@@ -1202,7 +1235,8 @@ fun CatalogDetail(
                     } else if (it.type == KeyEventType.KeyDown &&
                         it.key in listOf(Key.DirectionUp, Key.DirectionDown) &&
                         hasActions &&
-                        !playbackWaiting
+                        !playbackWaiting &&
+                        !recoveryActive
                     ) {
                         val index = sections.indexOfFirst { section -> section.first == selectedSection }
                         val target = index + if (it.key == Key.DirectionUp) -1 else 1
@@ -1227,7 +1261,6 @@ fun CatalogDetail(
                 Box(Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
-                        CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
                         if (item != null && headerItem != null) {
                             val backdrop = if (headerItem.backdropImageTags.isNotEmpty() ||
                                 headerItem.parentBackdropImageTags.isNotEmpty()
@@ -1262,7 +1295,7 @@ fun CatalogDetail(
                             )
                             if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
                             val container = item.type in listOf("Series", "Season")
-                            if (hasActions && container && (!playbackWaiting || pendingEnabled)) {
+                            if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive)) {
                                 DetailActions(
                                     item, playItem, state.busy, initial,
                                     if (playbackLayout) {
@@ -1280,14 +1313,15 @@ fun CatalogDetail(
                                     stableLayout =
                                     playbackLayout || playbackWaiting,
                                     readyQueuedTargets = readyQueuedTargets,
-                                    fromStartFocus = fromStartFocus
+                                    fromStartFocus = fromStartFocus,
+                                    blocked = recoveryActive
                                 ) {
                                     if (trackSelection) selectedSection = "header"
                                 }
                             }
                             headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
                             if (headerItem.genres.isNotEmpty()) Text(headerItem.genres.joinToString(" · "), color = CatalogMuted)
-                            if (hasActions && !container && (!playbackWaiting || pendingEnabled)) {
+                            if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive)) {
                                 DetailActions(
                                     item, playItem, state.busy, initial,
                                     if (playbackLayout) {
@@ -1305,7 +1339,8 @@ fun CatalogDetail(
                                     stableLayout =
                                     playbackLayout || playbackWaiting,
                                     readyQueuedTargets = readyQueuedTargets,
-                                    fromStartFocus = fromStartFocus
+                                    fromStartFocus = fromStartFocus,
+                                    blocked = recoveryActive
                                 ) {
                                     if (trackSelection) selectedSection = "header"
                                 }
@@ -1344,7 +1379,39 @@ fun CatalogDetail(
                     }
                     // An overlay has no layout footprint: status publication, changed wording and
                     // removal cannot move the hero or the reader's selected action underneath it.
-                    if (commandNotice != null || (playbackWaiting && state.error == null)) {
+                    if (recoveryActive || state.error != null) {
+                        Column(
+                            Modifier.align(Alignment.TopEnd).width(420.dp).background(CatalogBackground).padding(12.dp)
+                                .accessibilityGroup(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (recoveryActive) {
+                                Button(
+                                    onClick = {
+                                        // Retain one real focus target while this request is in flight.
+                                        // Repeated Select never cancels/restarts the working retry.
+                                        if (!retryWorking) {
+                                            retryWorking = true
+                                            onRetry()
+                                        }
+                                    },
+                                    modifier = Modifier.width(200.dp).heightIn(min = 72.dp).focusRequester(retry)
+                                        .testTag("detail:retry").detailFocusDiagnostic("retry").semantics {
+                                            if (retryWorking) stateDescription = "Loading item. Please wait."
+                                        }
+                                ) { Text(if (retryWorking) "Retrying…" else "Retry") }
+                                Text(
+                                    (recoveryMessage ?: state.error ?: "The server has not finished loading. Retry to reload the item.") +
+                                        if (waitHadRequest && pendingExpired) " The previous request expired and will not run." else "",
+                                    color = Color(0xFFFFCCB8),
+                                    modifier = Modifier.testTag("detail:read-error").semantics { liveRegion = LiveRegionMode.Polite }
+                                )
+                            } else {
+                                CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
+                                commandNotice?.let { StatusLine(it) }
+                            }
+                        }
+                    } else if (commandNotice != null || (playbackWaiting && state.error == null)) {
                         val status = commandNotice ?: if (state.playbackReportFinished) "Loading item…" else "Saving progress…"
                         Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
                             if (pendingEnabled && commandNotice == null) {
@@ -1400,6 +1467,7 @@ fun CatalogDetail(
         onPendingAction != null,
         item?.id,
         state.error,
+        recoveryActive,
         sections.map {
             it.first to
                 it.second.map(MediaItem::id)
@@ -1414,6 +1482,29 @@ fun CatalogDetail(
             readerMovement.reset()
             pendingFocusRestored = false
             return@LaunchedEffect
+        }
+        if (recoveryActive) {
+            commandGeneration++
+            readyQueuedTargets = emptySet()
+            pendingFailed = true
+            pendingSemanticsRevealed = false
+            readerMovement.reset()
+            pendingFocusRestored = false
+            playbackReturn = false
+            semanticsRevealed = true
+            restored = false
+            list.scrollToItem(0)
+            repeat(2) { withFrameNanos { } }
+            restored = retry.requestFocus()
+            recoveryFocusOwned = true
+            reportFocus("retry", restored)
+            return@LaunchedEffect
+        }
+        if (recoveryFocusOwned) {
+            pendingFailed = false
+            // Retry's node leaves only after the authoritative data is ready.
+            restored = false
+            recoveryFocusOwned = false
         }
         if (playbackWaiting) {
             restored = false
@@ -1630,6 +1721,7 @@ private fun DetailActions(
     stableLayout: Boolean = false,
     readyQueuedTargets: Set<String> = emptySet(),
     fromStartFocus: FocusRequester? = null,
+    blocked: Boolean = false,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
@@ -1704,7 +1796,8 @@ private fun DetailActions(
                 }.testTag("detail:$tag$suffix").onPreviewKeyEvent {
                     // Handle pending Select at DOWN, before a fresh callback can replace it.
                     // Activity's handoff owns the matching UP/repeats, even across completion.
-                    if (pending != null &&
+                    if (!blocked &&
+                        pending != null &&
                         it.type == KeyEventType.KeyDown &&
                         it.nativeKeyEvent.repeatCount == 0 &&
                         it.nativeKeyEvent.keyCode in listOf(
@@ -1729,8 +1822,8 @@ private fun DetailActions(
                     Unit
                 }
                 Button(
-                    onClick = click,
-                    enabled = pending != null || playItem != null,
+                    onClick = { if (!blocked) click() },
+                    enabled = !blocked && (pending != null || playItem != null),
                     modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
                         .then(actionModifier("primary", "play", click))
                         .then(
@@ -1747,7 +1840,8 @@ private fun DetailActions(
             key("from-start") {
                 Box {
                     Button(
-                        onClick = { playItem?.let { onPlay(it, false) } },
+                        onClick = { if (!blocked) playItem?.let { onPlay(it, false) } },
+                        enabled = !blocked,
                         modifier = Modifier.detailFocusDiagnostic("from-start")
                     ) { Text("Play from start") }
                 }
@@ -1757,8 +1851,8 @@ private fun DetailActions(
             Box {
                 val click = pending?.onPlayed ?: onPlayed
                 Button(
-                    onClick = click,
-                    enabled = pending != null || (!item.isEmptyContainer && (stableLayout || !busy)),
+                    onClick = { if (!blocked) click() },
+                    enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
                     modifier = (
                         if (pending == null &&
                             playItem == null &&
@@ -1791,8 +1885,8 @@ private fun DetailActions(
             Box {
                 val click = pending?.onFavorite ?: onFavorite
                 Button(
-                    onClick = click,
-                    enabled = pending != null || stableLayout || !busy,
+                    onClick = { if (!blocked) click() },
+                    enabled = !blocked && (pending != null || stableLayout || !busy),
                     modifier = (
                         if (pending == null &&
                             playItem == null &&
@@ -1829,8 +1923,8 @@ private fun DetailActions(
                         Unit
                     }
                     Button(
-                        onClick = click,
-                        enabled = pending != null || playItem != null,
+                        onClick = { if (!blocked) click() },
+                        enabled = !blocked && (pending != null || playItem != null),
                         modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                             .then(actionModifier("from-start", "from-start", click))
                     ) { Text(pending?.fromStartLabel ?: "Play from start") }
