@@ -673,4 +673,170 @@ class CatalogDetailReadRecoveryTest {
         compose.mainClock.advanceTimeBy(100)
         compose.runOnIdle { assertEquals(0, mutations) }
     }
+
+    @Test fun successfulRetryClearsTheOldErrorWhileThePlaybackReportIsStillPending() {
+        val item = MediaItem("episode", "Invented episode", "Episode")
+        val service = CatalogModelsTest.FakeCatalog().apply {
+            detail = ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Old timed out read"))
+        }
+        val accounts = AccountStore(object : TextPersistence {
+            override suspend fun read(): String? = null
+            override suspend fun write(value: String) {}
+        })
+        val session = CatalogSession(service, accounts)
+        val report = Any()
+        session.playbackPending(item.id, report)
+        lateinit var vm: CatalogDetailViewModel
+        var plays = 0
+        var mutations = 0
+        compose.runOnUiThread {
+            vm = CatalogDetailViewModel(account, item, session)
+            compose.activity.viewModelStore.put("pending-report-retry", vm)
+        }
+        compose.setContent {
+            val state by vm.state.collectAsState()
+            PictureshowTheme {
+                CatalogDetail(
+                    state, {}, {}, { mutations++ }, { mutations++ }, vm::reload,
+                    onPlay = { _, _ -> plays++ }, onPendingAction = { false }, origin = item
+                )
+            }
+        }
+        compose.onNodeWithText("Retry").assertIsFocused()
+        compose.runOnIdle { service.detail = ClientResult.Success(item) }
+        compose.onNodeWithText("Retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        advanceFrames(12)
+        compose.onNodeWithText("Retry").assertDoesNotExist()
+        compose.onNodeWithText("Old timed out read").assertDoesNotExist()
+        compose.onNodeWithText("Item loaded. Saving progress…").assertExists()
+        compose.runOnIdle { assertTrue(vm.state.value.playbackPending) }
+        compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle {
+            assertEquals(0, plays)
+            assertEquals(0, mutations)
+        }
+        compose.runOnIdle { session.refresh(item.id, report) }
+        advanceFrames(12)
+        compose.onNodeWithText("Retry").assertDoesNotExist()
+        compose.onNodeWithTag("detail:play").assertIsFocused().assertIsEnabled()
+        compose.runOnIdle { assertTrue(!vm.state.value.playbackPending) }
+    }
+
+    @Test fun naturalEndSeasonRetryReturnsFocusToPlayAfterCompletionChangesWatchedState() {
+        val season = MediaItem("season", "Invented season", "Season", seriesId = "series", childCount = 1)
+        val episode = MediaItem("episode", "Invented episode", "Episode")
+        val state = mutableStateOf(CatalogDetailState(account, season, loading = true, playbackPending = true, episodes = listOf(episode)))
+        compose.setContent {
+            PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, onPendingAction = { true }, origin = season) }
+        }
+        compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.runOnIdle {
+            state.value = state.value.copy(loading = false, readFailed = true, error = "Timed out")
+        }
+        compose.onNodeWithText("Retry").assertIsFocused()
+        compose.onNodeWithText("Retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle {
+            state.value = state.value.copy(
+                item = season.copy(userData = season.userData.copy(played = true)),
+                loading = false,
+                readFailed = false,
+                error = null,
+                playbackPending = false
+            )
+        }
+        advanceFrames(12)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithText("Mark unwatched").assertExists()
+    }
+
+    @Test fun aDisabledSeasonActionKeepsItsPublishedLabelUntilTheFreshRead() {
+        val season = MediaItem("season", "Invented season", "Season", seriesId = "series", childCount = 1)
+        val episode = MediaItem("episode", "Invented episode", "Episode")
+        val state = mutableStateOf(CatalogDetailState(account, season, loading = true, playbackPending = true, episodes = listOf(episode)))
+        compose.setContent {
+            PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, onPendingAction = { true }, origin = season) }
+        }
+        compose.onNodeWithText("Mark watched when ready").assertExists()
+        compose.runOnIdle {
+            state.value = state.value.copy(
+                item = season.copy(userData = season.userData.copy(played = true)),
+                loading = false,
+                readFailed = true,
+                error = "Episodes unavailable"
+            )
+        }
+        compose.onNodeWithText("Mark watched").assertExists()
+        compose.onNodeWithText("Mark unwatched").assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(playbackPending = false, readFailed = false, error = null) }
+        advanceFrames(12)
+        compose.onNodeWithText("Mark unwatched").assertExists()
+    }
+
+    @Test fun aMovieRetrySaysLoadingItemRatherThanLoadingEpisodes() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        compose.setContent { PictureshowTheme { CatalogDetail(CatalogDetailState(account, item), {}, {}, {}, {}, {}) } }
+        compose.onNodeWithText("Loading item…", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Loading episodes…", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun anExpiredQueuedActionCannotReturnThroughASuccessfulReadWhileReportingIsPending() {
+        val item = MediaItem("episode", "Invented episode", "Episode")
+        val first = kotlinx.coroutines.CompletableDeferred<ClientResult<MediaItem>>()
+        val service = CatalogModelsTest.FakeCatalog().apply { detailBlock = { first.await() } }
+        val accounts = AccountStore(object : TextPersistence {
+            override suspend fun read(): String? = null
+            override suspend fun write(value: String) {}
+        })
+        val session = CatalogSession(service, accounts)
+        val report = Any()
+        session.playbackPending(item.id, report)
+        var now = 0L
+        var mutations = 0
+        val handoff = PlaybackExitHandoff({ now }, {})
+        handoff.begin("entry")
+        lateinit var vm: CatalogDetailViewModel
+        compose.runOnUiThread {
+            vm = CatalogDetailViewModel(account, item, session)
+            compose.activity.viewModelStore.put("expired-pending-retry", vm)
+        }
+        compose.setContent {
+            val state by vm.state.collectAsState()
+            PictureshowTheme {
+                CatalogDetail(
+                    state, {}, {}, { mutations++ }, {}, vm::reload,
+                    onPendingAction = { handoff.accessibleSelect("entry", it) },
+                    onPendingQueueExpired = { handoff.expired("entry") },
+                    onFocusRestored = { target, focused -> handoff.finish("entry", target, focused) }, origin = item
+                )
+            }
+        }
+        compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Watched change requested").assertExists()
+        compose.runOnIdle {
+            now = 30_001
+            first.complete(ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Timed out")))
+        }
+        compose.onNodeWithText("Retry").assertIsFocused()
+        compose.runOnIdle {
+            service.detailBlock = null
+            service.detail = ClientResult.Success(item)
+        }
+        compose.onNodeWithText("Retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        advanceFrames(12)
+        compose.onNodeWithText("Retry").assertDoesNotExist()
+        compose.onNodeWithTag("detail:play-pending").assertIsFocused()
+        compose.onNodeWithText("Watched change requested").assertDoesNotExist()
+        compose.onNodeWithText("Mark watched when ready").assertDoesNotExist()
+        compose.onNodeWithText("Watched unavailable").assertExists()
+        compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("The request expired. Try again when the item loads.").assertExists()
+        compose.runOnIdle {
+            assertEquals(0, mutations)
+            session.refresh(item.id, report)
+        }
+        advanceFrames(12)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.runOnIdle { assertEquals(0, mutations) }
+    }
 }

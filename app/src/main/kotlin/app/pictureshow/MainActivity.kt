@@ -819,7 +819,7 @@ internal fun Pictureshow(
                     val screen by vm.state.collectAsStateWithLifecycle()
                     LaunchedEffect(entry) {
                         entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                            vm.reload()
+                            vm.resumed()
                             awaitCancellation()
                         }
                     }

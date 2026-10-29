@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
+import app.pictureshow.core.ApiTimeouts
 import app.pictureshow.core.BrowseQuery
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.ClientResult
@@ -18,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -354,6 +356,8 @@ data class CatalogDetailState(
     val playbackReportFinished: Boolean = false,
     // Failure category and attempt identity survive StateFlow coalescing a fast loading frame.
     val readFailed: Boolean = false,
+    // An authoritative read may succeed before the playback report finishes.
+    val readSucceeded: Boolean = false,
     val readAttempt: Long = 0
 )
 
@@ -374,9 +378,11 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     private var action: Job? = null
     private var seasonJob: Job? = null
     private var seasonGeneration = 0
+    private var retryDeadline: Job? = null
+    private var parentReadPending = false
 
     init {
-        reload()
+        reload(retainRows = false)
         viewModelScope.launch {
             var refreshRevision = 0L
             session.changes.collect { changes ->
@@ -391,7 +397,9 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                         playbackPending = original.id in changes.pendingPlayback ||
                             session.playbackUnresolved(original.id) ||
                             (state.playbackPending && !(refreshed && original.id in changes.users)),
-                        playbackReportFinished = original.id !in changes.pendingPlayback
+                        playbackReportFinished = original.id !in changes.pendingPlayback,
+                        readSucceeded = state.readSucceeded &&
+                            !(original.id in changes.pendingPlayback && !state.playbackPending)
                     )
                 }
                 if (changes.revision > 0 && (refreshed || original.type in CONTAINER_TYPES)) {
@@ -401,22 +409,69 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         }
     }
 
-    fun reload() = reload(retainRows = false)
+    fun reload() {
+        // This belongs to the viewer's request, not to any individual transport job.
+        // A post-report refresh must replace stale reads without extending this budget.
+        retryDeadline?.cancel()
+        retryDeadline = viewModelScope.launch {
+            delay(ApiTimeouts.REQUEST_MILLIS)
+            retryDeadline = null
+            job?.cancel()
+            seasonJob?.cancel()
+            seasonGeneration++
+            parentReadPending = false
+            mutableState.update {
+                it.copy(
+                    loading = false,
+                    error = "The server took too long to respond. Try again.",
+                    readFailed = true,
+                    readSucceeded = false
+                )
+            }
+        }
+        reload(retainRows = false)
+    }
+
+    // Lifecycle reads replace stale work but inherit any viewer-owned Retry deadline.
+    fun resumed() = reload(retainRows = false)
+
+    private fun readFinished() {
+        retryDeadline?.cancel()
+        retryDeadline = null
+    }
+
+    private fun readFailure(message: String) {
+        if (!parentReadPending) readFinished()
+        mutableState.update { it.copy(loading = false, error = message, readFailed = true, readSucceeded = false) }
+    }
 
     private fun reload(retainRows: Boolean) {
         job?.cancel()
         seasonJob?.cancel()
         seasonGeneration++
+        parentReadPending = true
         job = viewModelScope.launch {
-            mutableState.update { it.copy(loading = !retainRows, error = null, readAttempt = it.readAttempt + 1) }
+            mutableState.update {
+                it.copy(
+                    loading = !retainRows || retryDeadline != null,
+                    error = null,
+                    readSucceeded = false,
+                    readAttempt =
+                    it.readAttempt + 1
+                )
+            }
             val result = session.call(account) { item(account, original.id) }
             // A canceled RESUMED request must not overwrite the post-report refresh, even when
             // its transport finishes cancellation in a non-cancellable cleanup block.
             currentCoroutineContext().ensureActive()
             when (result) {
-                is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message, readFailed = true) }
+                is ClientResult.Failure -> {
+                    parentReadPending = false
+                    readFailure(result.error.message)
+                }
                 is ClientResult.Success -> {
                     val item = result.value
+                    if (item.type != "Series") parentReadPending = false
                     mutableState.update { it.copy(item = item) }
                     // A parent header says nothing about its episode rows or Next up. Keep the
                     // same stale-data guard until all of that page's authoritative reads land.
@@ -426,6 +481,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                         currentCoroutineContext().ensureActive()
                         val seasons = session.call(account) { seasons(account, item.id) }
                         currentCoroutineContext().ensureActive()
+                        parentReadPending = false
                         mutableState.update {
                             it.copy(
                                 nextUp = (next as? ClientResult.Success)?.value?.items.orEmpty(),
@@ -442,7 +498,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                             loadSeason(selected, preserveError = true, retainRows = retainRows)
                         } else {
                             mutableState.update { it.copy(loading = false) }
-                            if (state.value.error == null) playbackRead()
+                            if (state.value.error == null) playbackRead() else readFinished()
                         }
                     } else if (item.type == "Season") {
                         loadSeason(item, preserveError = false, retainRows = retainRows)
@@ -463,31 +519,39 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             it.copy(
                 selectedSeasonId = season.id,
                 episodes = if (retainRows && it.selectedSeasonId == season.id) it.episodes else emptyList(),
-                loading = !retainRows,
-                error = if (preserveError) it.error else null
+                loading = !retainRows || retryDeadline != null,
+                error = if (preserveError) it.error else null,
+                readSucceeded = false
             )
         }
         seasonJob = viewModelScope.launch {
             val seriesId = if (original.type == "Series") original.id else season.seriesId
             if (seriesId == null) {
-                mutableState.update { it.copy(loading = false, error = "This season has no series information.", readFailed = true) }
+                readFailure("This season has no series information.")
                 return@launch
             }
             val result = session.call(account) { episodes(account, seriesId, season.id) }
             if (generation != seasonGeneration) return@launch
             when (result) {
-                is ClientResult.Failure -> mutableState.update { it.copy(loading = false, error = result.error.message, readFailed = true) }
+                is ClientResult.Failure -> readFailure(result.error.message)
                 is ClientResult.Success -> {
-                    mutableState.update { it.copy(loading = false, episodes = result.value.items) }
-                    if (state.value.error == null) playbackRead()
+                    mutableState.update { it.copy(loading = parentReadPending, episodes = result.value.items) }
+                    // A viewer selection may finish before the Series header/Next up reads.
+                    // Only the complete authoritative page can settle Retry and release guards.
+                    if (!parentReadPending) {
+                        if (state.value.error == null) playbackRead() else readFinished()
+                    }
                 }
             }
         }
     }
 
     private fun playbackRead() {
+        readFinished()
         session.playbackRead(original.id)
-        mutableState.update { it.copy(playbackPending = original.id in session.changes.value.pendingPlayback, readFailed = false) }
+        mutableState.update {
+            it.copy(playbackPending = original.id in session.changes.value.pendingPlayback, readFailed = false, readSucceeded = true)
+        }
     }
 
     fun played() = mutate(true)
