@@ -84,7 +84,8 @@ internal class HlsPreparationSource(source: MediaSource, private val onBootstrap
             val hls = HlsPreparationSource(
                 HlsMediaSource.Factory(
                     typedDataSources(dataSources, mediaDataSources)
-                ).setAllowChunklessPreparation(false).createMediaSource(item),
+                ).setLoadErrorHandlingPolicy(NativeHlsLoadErrorPolicy())
+                    .setAllowChunklessPreparation(false).createMediaSource(item),
                 onBootstrap
             )
             val parsers = DefaultSubtitleParserFactory()
