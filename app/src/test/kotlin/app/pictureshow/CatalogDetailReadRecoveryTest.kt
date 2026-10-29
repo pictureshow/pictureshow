@@ -3,19 +3,41 @@
  */
 package app.pictureshow
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Application
+import android.content.Context
+import android.view.View
+import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityNodeProvider
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.ClientError
@@ -27,10 +49,12 @@ import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
@@ -40,6 +64,433 @@ import org.robolectric.annotation.LooperMode
 class CatalogDetailReadRecoveryTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
+
+    private fun advanceFrames(count: Int) {
+        repeat(count) {
+            compose.mainClock.advanceTimeByFrame()
+            // In the paused Robolectric looper a clock tick alone does not finish
+            // Android layout/publication. Observe each actual frame before the next.
+            compose.waitForIdle()
+        }
+    }
+
+    private fun awaitFreshRetryPublication() {
+        repeat(8) {
+            advanceFrames(1)
+            val fresh = compose.onAllNodes(hasTestTag("detail:play") and isEnabled()).fetchSemanticsNodes()
+            val retiring = compose.onAllNodes(hasTestTag("detail:retry")).fetchSemanticsNodes()
+            if (fresh.isNotEmpty() && retiring.isNotEmpty()) return
+        }
+        error("Fresh enabled actions must publish while the old Retry is still present")
+    }
+
+    @Test fun freshReadTransfersFocusWithoutAnInvisibleParkingFrame() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Server unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, {
+                    state.value = state.value.copy(loading = true, error = null)
+                }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        repeat(8) { frame ->
+            advanceFrames(1)
+            compose.waitForIdle()
+            val focusedRetry = compose.onAllNodes(hasTestTag("detail:retry") and isFocused()).fetchSemanticsNodes()
+            val focusedPlay = compose.onAllNodes(hasTestTag("detail:play") and isFocused()).fetchSemanticsNodes()
+            assertTrue(
+                focusedRetry.isNotEmpty() || focusedPlay.isNotEmpty(),
+                "Fresh frame $frame must keep a visible recovery or fresh command focused"
+            )
+        }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun aFreshHandoffKeepsThePublishedReasonAndRejectsAnotherRetry() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val reason = "The server is unavailable. The previous request expired and will not run."
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = reason))
+        var retries = 0
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, {
+                    retries++
+                    state.value = state.value.copy(loading = true, error = null)
+                }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        awaitFreshRetryPublication()
+        compose.onNodeWithText(reason).assertExists()
+        compose.onNodeWithText("Retrying…").assertExists()
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { assertEquals(1, retries) }
+        advanceFrames(12)
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.mainClock.autoAdvance = true
+        // The snapshot must not re-arm recovery on an unrelated subsequent load.
+        compose.runOnIdle { state.value = state.value.copy(loading = true) }
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+    }
+
+    @Test fun aSelectHeldAcrossFreshRecoveryCannotStartPlayback() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        var retries = 0
+        var plays = 0
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, {
+                    retries++
+                    state.value = state.value.copy(loading = true, error = null)
+                }, onPlay = { _, _ -> plays++ }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+        compose.onRoot().performKeyInput { keyDown(Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals(1, retries) }
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onRoot().performKeyInput { keyUp(Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals(0, plays) }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals(1, plays) }
+    }
+
+    @Test fun aViewersFreshControlChoiceDuringHandoffIsNotStolenBack() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        awaitFreshRetryPublication()
+        compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
+        advanceFrames(12)
+        compose.onNodeWithTag("detail:played").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun recoveryReturnsToTheVisibleHeaderInsteadOfScrollingToAnOldShelf() {
+        val item = MediaItem("series", "Invented series", "Series", childCount = 1)
+        val episode = MediaItem("episode", "Invented episode", "Episode")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, episodes = listOf(episode)))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:episodes:episode").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithTag("detail:episodes:episode").assertIsFocused()
+        compose.runOnIdle { state.value = state.value.copy(error = "Read unavailable", readFailed = true) }
+        compose.onNodeWithTag("detail:retry").assertIsFocused().assertIsDisplayed()
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { state.value = state.value.copy(loading = false, readFailed = false) }
+        compose.onNodeWithTag("detail:play").assertIsDisplayed().assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+    }
+
+    @Test fun anEmptyContainerRecoversToItsAvailableFavoriteAction() {
+        val item = MediaItem("series", "Empty series", "Series", childCount = 0)
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        compose.onNodeWithTag("detail:favorite").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.onNodeWithTag("detail:play")
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+    }
+
+    @Test fun aLifecyclePauseDuringHandoffStillPublishesAndFocusesTheFreshTargetOnResume() {
+        val owner = object : LifecycleOwner {
+            val registry = LifecycleRegistry(this)
+            override val lifecycle: Lifecycle = registry
+        }
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                PictureshowTheme {
+                    CatalogDetail(state.value, {
+                    }, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+                }
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        awaitFreshRetryPublication()
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.STARTED }
+        advanceFrames(1)
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
+        advanceFrames(18)
+        compose.onNodeWithTag("detail:play").assertIsDisplayed().assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun aSelectWithoutItsOldReleaseDoesNotBlockTheFirstRetryAfterResume() {
+        val owner = object : LifecycleOwner {
+            val registry = LifecycleRegistry(this)
+            override val lifecycle: Lifecycle = registry
+        }
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        var retries = 0
+        compose.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                PictureshowTheme {
+                    CatalogDetail(state.value, {}, {}, {}, {}, {
+                        retries++
+                        state.value = state.value.copy(loading = true, error = null)
+                    }, origin = item)
+                }
+            }
+        }
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+        fun send(action: Int) = compose.runOnIdle {
+            compose.activity.dispatchKeyEvent(android.view.KeyEvent(action, android.view.KeyEvent.KEYCODE_DPAD_CENTER))
+        }
+        send(android.view.KeyEvent.ACTION_DOWN)
+        compose.runOnIdle { assertEquals(1, retries) }
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.STARTED }
+        compose.waitForIdle()
+        compose.runOnIdle { state.value = state.value.copy(loading = false, error = "Still unavailable") }
+        compose.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+        send(android.view.KeyEvent.ACTION_DOWN)
+        send(android.view.KeyEvent.ACTION_UP)
+        compose.runOnIdle { assertEquals(2, retries) }
+    }
+
+    @Test fun aNewReadDuringHandoffKeepsRetryUntilTheNewReadSettles() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        awaitFreshRetryPublication()
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+        compose.runOnIdle { state.value = state.value.copy(loading = true) }
+        advanceFrames(6)
+        compose.onNodeWithText("Retrying…").assertIsFocused().assertIsDisplayed()
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        advanceFrames(12)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun aViewerMayLeaveRetryWhileASecondReadIsHeld() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        awaitFreshRetryPublication()
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+        compose.runOnIdle { state.value = state.value.copy(loading = true) }
+        advanceFrames(6)
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+        compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
+        advanceFrames(12)
+        compose.onNodeWithTag("detail:played").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.runOnIdle { assertTrue(state.value.loading) }
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun readerTextIsNotAnAcknowledgementOfFreshInputFocus() {
+        val host = object : View(compose.activity) {
+            override fun getAccessibilityNodeProvider() = object : AccessibilityNodeProvider() {
+                override fun findFocus(focus: Int): AccessibilityNodeInfo = AccessibilityNodeInfo.obtain().apply {
+                    className = "android.widget.TextView"
+                    isVisibleToUser = true
+                    isAccessibilityFocused = true
+                }
+            }
+        }
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            CompositionLocalProvider(LocalView provides host) {
+                PictureshowTheme {
+                    CatalogDetail(state.value, {
+                    }, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+                }
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+    }
+
+    @Test fun anEnabledNonReaderServiceDoesNotRetainTheOldErrorForTheReaderTimeout() {
+        val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        compose.runOnUiThread { shadowOf(manager).setEnabled(true) }
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        advanceFrames(12)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun aSpokenReaderKeepsRetryUntilItsFocusAcknowledgesTheFreshAction() = readerAcknowledgement(true)
+
+    @Test fun aSpokenReaderWithoutAnAcknowledgementCannotLeaveRetryStuck() = readerAcknowledgement(false)
+
+    @Test fun aSecondReadAfterInputFocusStillFinishesTheReaderHandoff() = readerAcknowledgement(true, secondRead = true)
+
+    @Suppress("DEPRECATION")
+    private fun readerAcknowledgement(acknowledge: Boolean, secondRead: Boolean = false) {
+        val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        compose.runOnUiThread {
+            shadowOf(manager).setEnabled(true)
+            shadowOf(manager).setEnabledAccessibilityServiceList(
+                listOf(
+                    AccessibilityServiceInfo().apply {
+                        feedbackType = AccessibilityServiceInfo.FEEDBACK_SPOKEN
+                    }
+                )
+            )
+        }
+        var readerOnAction = false
+        val host = object : View(compose.activity) {
+            override fun getAccessibilityNodeProvider() = object : AccessibilityNodeProvider() {
+                override fun findFocus(focus: Int): AccessibilityNodeInfo = AccessibilityNodeInfo.obtain().apply {
+                    className = if (readerOnAction) "android.widget.Button" else "android.widget.TextView"
+                    isVisibleToUser = true
+                    isAccessibilityFocused = true
+                    isClickable = readerOnAction
+                    isFocused = readerOnAction
+                }
+            }
+        }
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            CompositionLocalProvider(LocalView provides host) {
+                PictureshowTheme {
+                    CatalogDetail(state.value, {
+                    }, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+                }
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        advanceFrames(8)
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithText("Retrying…").assertIsDisplayed()
+        if (secondRead) {
+            compose.runOnIdle { state.value = state.value.copy(loading = true) }
+            advanceFrames(8)
+            compose.onNodeWithTag("detail:play").assertIsFocused()
+            compose.onNodeWithText("Retrying…").assertIsDisplayed()
+        }
+        if (acknowledge) {
+            compose.runOnIdle { readerOnAction = true }
+            advanceFrames(4)
+        } else {
+            advanceFrames(110)
+        }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun aWriteFailureDuringHandoffLeavesTheNormalWriteRetryUsable() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Read unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) }, origin = item)
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { state.value = state.value.copy(loading = false) }
+        awaitFreshRetryPublication()
+        compose.runOnIdle { state.value = state.value.copy(error = "Write unavailable") }
+        advanceFrames(18)
+        compose.onNodeWithText("Write unavailable").assertExists()
+        compose.onNodeWithText("Retry").assertIsFocused().assertIsEnabled()
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.onNodeWithText("Retrying…").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun aDetachedFreshTargetCannotLeaveTheRecoveryOverlayStuck() {
+        val item = MediaItem("film", "Invented film", "Movie")
+        val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state.value, {}, {}, {}, {}, { state.value = state.value.copy(loading = true, error = null) })
+            }
+        }
+        compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Retrying…").assertIsFocused()
+        compose.runOnIdle { state.value = state.value.copy(item = null, loading = false) }
+        compose.onNodeWithTag("detail:retry").assertDoesNotExist()
+        compose.onNodeWithText("Unavailable").assertDoesNotExist()
+    }
 
     @Test fun movieReturnDoesNotMoveAcrossReadFailureHeldRetryAndFresh() = recovery("Movie", true)
 

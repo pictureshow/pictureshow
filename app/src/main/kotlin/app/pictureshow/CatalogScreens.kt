@@ -727,6 +727,11 @@ fun CatalogDetail(
     var recoveryMessage by remember { mutableStateOf<String?>(null) }
     var retryWorking by remember { mutableStateOf(false) }
     var recoveryFocusOwned by remember { mutableStateOf(false) }
+    var recoveryTarget by remember { mutableStateOf<String?>(null) }
+    var recoveryTargetInputRevision by remember { mutableIntStateOf(-1) }
+    var recoveryHandoffMessage by remember { mutableStateOf<String?>(null) }
+    var retryFocused by remember { mutableStateOf(false) }
+    var recoverySelectKey by remember { mutableStateOf<Key?>(null) }
     var mutationDataReady by remember {
         mutableStateOf(!state.loading && !state.playbackPending && state.error == null && state.item != null)
     }
@@ -734,7 +739,6 @@ fun CatalogDetail(
     // existing header live until loading and item readiness agree on the fresh state.
     val playbackWaiting = state.playbackPending ||
         (playbackReturn && state.error == null && state.loading)
-    PlaybackExitFocusEvents((playbackReturn || playbackWaiting) && !restored)
     var semanticsRevealed by remember { mutableStateOf(false) }
     var pendingSemanticsRevealed by remember { mutableStateOf(false) }
     var pendingFocusRestored by remember { mutableStateOf(false) }
@@ -747,7 +751,12 @@ fun CatalogDetail(
     var pendingViewerMoved by remember { mutableStateOf(false) }
     val readerMovement = remember { PlaybackReaderMovement() }
     val reportLive by rememberUpdatedState(onPendingControlsReady)
-    DisposableEffect(Unit) { onDispose { reportLive(false) } }
+    DisposableEffect(Unit) {
+        onDispose {
+            reportLive(false)
+            recoverySelectKey = null
+        }
+    }
     // A failed authoritative read (unlike a failed write) cannot expose stale commands.
     // The action budget ends in this same recovery state, before the transport timer fires.
     val readFailure = state.readFailed || (state.error != null && !mutationDataReady)
@@ -755,6 +764,11 @@ fun CatalogDetail(
     // Derive settlement in this composition: an effect with the previous recovery value
     // must not re-arm pendingFailed after the successful read's SideEffect clears it.
     val recoveryActive = !readSettled && (recoveryMessage != null || readFailure || (pendingExpired && playbackWaiting))
+    // A second refresh may start while focus is being acknowledged. Retain the
+    // same recovery node until that read settles too; readiness still uses the model.
+    val recoveryHandoff = !recoveryActive && recoveryFocusOwned && state.error == null && !state.readFailed
+    val showRecovery = recoveryActive || recoveryHandoff
+    PlaybackExitFocusEvents(((playbackReturn || playbackWaiting) && !restored) || recoveryHandoff)
     val pendingControlsLive = !recoveryActive &&
         playbackWaiting &&
         lifecycleState == Lifecycle.State.RESUMED &&
@@ -763,6 +777,7 @@ fun CatalogDetail(
         headerInputTarget != null &&
         state.error == null
     SideEffect {
+        if (!showRecovery) retryFocused = false
         if (readFailure && state.error != null) recoveryMessage = state.error
         if (readSettled) {
             if (pendingExpired) commandNotice = null
@@ -860,6 +875,19 @@ fun CatalogDetail(
         }
     }
     var waitHadRequest by remember { mutableStateOf(false) }
+    val recoveryReason = (recoveryMessage ?: state.error ?: "The server has not finished loading. Retry to reload the item.") +
+        if (waitHadRequest && pendingExpired) " The previous request expired and will not run." else ""
+    SideEffect {
+        // Snapshot the whole published reason, including an expired intent. Settlement
+        // clears the recovery model immediately; that must not announce a different error.
+        if (recoveryActive) recoveryHandoffMessage = recoveryReason
+    }
+    fun requestReadRetry() {
+        if (!retryWorking && !recoveryHandoff) {
+            retryWorking = true
+            onRetry()
+        }
+    }
     fun queueFresh(command: () -> Unit): Boolean {
         val generation = commandGeneration
         val accepted = !pendingExpired &&
@@ -1208,6 +1236,25 @@ fun CatalogDetail(
                         Modifier
                     }
                 ).accessibilityGroup().onPreviewKeyEvent {
+                    if (it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) {
+                        // Own the complete Select gesture that started on Retry. Moving
+                        // input focus must not deliver its repeats/UP to the fresh Play.
+                        if (it.type == KeyEventType.KeyDown &&
+                            it.nativeKeyEvent.repeatCount == 0 &&
+                            !(retryFocused && showRecovery)
+                        ) {
+                            recoverySelectKey = null
+                        }
+                        if ((retryFocused && showRecovery) || recoverySelectKey == it.key) {
+                            if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0 && recoverySelectKey == null) {
+                                recoverySelectKey = it.key
+                                requestReadRetry()
+                            } else if (it.type == KeyEventType.KeyUp && recoverySelectKey == it.key) {
+                                recoverySelectKey = null
+                            }
+                            return@onPreviewKeyEvent true
+                        }
+                    }
                     if (it.type == KeyEventType.KeyDown) {
                         focusInputRevision++
                         if (!playbackWaiting) commandNotice = null
@@ -1379,30 +1426,23 @@ fun CatalogDetail(
                     }
                     // An overlay has no layout footprint: status publication, changed wording and
                     // removal cannot move the hero or the reader's selected action underneath it.
-                    if (recoveryActive || state.error != null) {
+                    if (showRecovery || state.error != null) {
                         Column(
                             Modifier.align(Alignment.TopEnd).width(420.dp).background(CatalogBackground).padding(12.dp)
                                 .accessibilityGroup(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            if (recoveryActive) {
+                            if (showRecovery) {
                                 Button(
-                                    onClick = {
-                                        // Retain one real focus target while this request is in flight.
-                                        // Repeated Select never cancels/restarts the working retry.
-                                        if (!retryWorking) {
-                                            retryWorking = true
-                                            onRetry()
-                                        }
-                                    },
+                                    onClick = ::requestReadRetry,
                                     modifier = Modifier.width(200.dp).heightIn(min = 72.dp).focusRequester(retry)
-                                        .testTag("detail:retry").detailFocusDiagnostic("retry").semantics {
-                                            if (retryWorking) stateDescription = "Loading item. Please wait."
+                                        .testTag("detail:retry").onFocusChanged { retryFocused = it.isFocused }
+                                        .detailFocusDiagnostic("retry").semantics {
+                                            if (retryWorking || recoveryHandoff) stateDescription = "Loading item. Please wait."
                                         }
-                                ) { Text(if (retryWorking) "Retrying…" else "Retry") }
+                                ) { Text(if (retryWorking || recoveryHandoff) "Retrying…" else "Retry") }
                                 Text(
-                                    (recoveryMessage ?: state.error ?: "The server has not finished loading. Retry to reload the item.") +
-                                        if (waitHadRequest && pendingExpired) " The previous request expired and will not run." else "",
+                                    if (recoveryHandoff) recoveryHandoffMessage ?: recoveryReason else recoveryReason,
                                     color = Color(0xFFFFCCB8),
                                     modifier = Modifier.testTag("detail:read-error").semantics { liveRegion = LiveRegionMode.Polite }
                                 )
@@ -1481,9 +1521,12 @@ fun CatalogDetail(
             pendingSemanticsRevealed = false
             readerMovement.reset()
             pendingFocusRestored = false
+            recoverySelectKey = null
             return@LaunchedEffect
         }
         if (recoveryActive) {
+            recoveryTarget = null
+            selectedSection = "header"
             commandGeneration++
             readyQueuedTargets = emptySet()
             pendingFailed = true
@@ -1496,15 +1539,69 @@ fun CatalogDetail(
             list.scrollToItem(0)
             repeat(2) { withFrameNanos { } }
             restored = retry.requestFocus()
-            recoveryFocusOwned = true
+            recoveryFocusOwned = restored
             reportFocus("retry", restored)
             return@LaunchedEffect
         }
         if (recoveryFocusOwned) {
             pendingFailed = false
-            // Retry's node leaves only after the authoritative data is ready.
-            restored = false
+            if (state.error == null && !state.readFailed) {
+                // Retry remains a real visible target while the fresh actions publish.
+                // Do not park focus or scroll back to a previously selected shelf here.
+                semanticsRevealed = true
+                restored = true
+                fun freshControlHasFocus() = !retryFocused &&
+                    (headerInputTarget != null || playbackContentFocused(focusHost) == true)
+                if (!readSettled && !freshControlHasFocus()) {
+                    // A viewer can leave Retry after this second read has begun.
+                    // Observe that choice without waiting for another model emission.
+                    snapshotFlow { freshControlHasFocus() }.first { it }
+                }
+                repeat(2) { withFrameNanos { } }
+                val freshControlFocused = freshControlHasFocus()
+                if (!readSettled && !freshControlFocused) return@LaunchedEffect
+                val targetAlreadyOwned = recoveryTarget != null && recoveryTargetInputRevision == focusInputRevision && freshControlFocused
+                val viewerChoseControl = freshControlFocused && !targetAlreadyOwned
+                val focused = freshControlFocused || runCatching { initial.requestFocus() }.getOrDefault(false)
+                if (focused) {
+                    if (!freshControlFocused) {
+                        selectedSection = "header"
+                        recoveryTarget = when {
+                            playItem != null -> "primary"
+                            item?.isEmptyContainer == true -> "favorite"
+                            else -> "played"
+                        }
+                        recoveryTargetInputRevision = focusInputRevision
+                    }
+                    // Input focus must leave Retry even if the reader selected text:
+                    // the error text disappears with this overlay. Static text alone
+                    // cannot acknowledge that the new action has become selectable.
+                    repeat(2) { withFrameNanos { } }
+                    awaitPlaybackReaderInputFocus(focusHost)
+                    recoveryFocusOwned = false
+                    restored = true
+                    playbackReturn = false
+                    pendingHeaderTarget = "primary"
+                    pendingViewerMoved = false
+                    reportFocus(
+                        if (viewerChoseControl ||
+                            recoveryTargetInputRevision != focusInputRevision
+                        ) {
+                            "viewer"
+                        } else {
+                            recoveryTarget ?: "viewer"
+                        },
+                        true
+                    )
+                    recoveryTarget = null
+                    return@LaunchedEffect
+                }
+            }
+            // A detached target or an intervening write error must release the overlay
+            // and use the normal restore in this same effect; no key change is needed.
             recoveryFocusOwned = false
+            recoveryTarget = null
+            restored = false
         }
         if (playbackWaiting) {
             restored = false

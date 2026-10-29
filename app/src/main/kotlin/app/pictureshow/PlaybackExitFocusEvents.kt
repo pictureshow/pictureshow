@@ -12,11 +12,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.accessibility.AccessibilityNodeProviderCompat
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Keep the host's empty focus record from preceding the actual virtual control's focus. */
 @Composable
@@ -130,4 +132,20 @@ internal fun playbackReaderTarget(host: View): PlaybackReaderTarget {
     } finally {
         node.recycle()
     }
+}
+
+/** Keep the departing reader node alive through Compose's accessibility dispatch. */
+internal suspend fun awaitPlaybackReaderInputFocus(host: View): Boolean {
+    val manager = host.context.getSystemService(
+        android.content.Context.ACCESSIBILITY_SERVICE
+    ) as? android.view.accessibility.AccessibilityManager
+    if (manager?.isEnabled != true ||
+        manager.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_SPOKEN).isEmpty()
+    ) {
+        return true
+    }
+    return withTimeoutOrNull(1_500L) {
+        while (playbackReaderTarget(host) != PlaybackReaderTarget.ACTION) withFrameNanos { }
+        true
+    } ?: false
 }
