@@ -76,7 +76,7 @@ internal class PlaybackLoadDiagnostics(
         val load = take(loadEventInfo, mediaLoadData)
         account(loadEventInfo, load)
         errors++
-        event("error", loadEventInfo, load, errorClass(error), wasCanceled)
+        event("error", loadEventInfo, load, errorClass(error), wasCanceled, httpStatus(error))
         if (wasCanceled) loads.remove(loadEventInfo.loadTaskId)
     }
 
@@ -140,7 +140,7 @@ internal class PlaybackLoadDiagnostics(
         load.bytes = info.bytesLoaded
     }
 
-    private fun event(kind: String, info: LoadEventInfo, load: Load, error: String, cancelled: Boolean) {
+    private fun event(kind: String, info: LoadEventInfo, load: Load, error: String, cancelled: Boolean, httpStatus: Int = -1) {
         // A failing origin may return errors immediately; keep those storms out of logd too.
         if (emitted >= 10) {
             suppressed++
@@ -151,9 +151,13 @@ internal class PlaybackLoadDiagnostics(
             "load event=$kind dataType=${load.dataType} trackType=${load.trackType} " +
                 "bytes=${info.bytesLoaded} durationMs=${info.loadDurationMs} " +
                 "throughputKbps=${throughput(info.bytesLoaded, info.loadDurationMs)} " +
-                "errorClass=$error retryCount=${load.retry} cancelled=$cancelled"
+                "errorClass=$error httpStatus=$httpStatus retryCount=${load.retry} cancelled=$cancelled"
         )
     }
+
+    private fun httpStatus(error: IOException): Int = generateSequence<Throwable>(error) { it.cause }.take(8)
+        .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+        .firstOrNull()?.responseCode ?: -1
 
     private fun errorClass(error: IOException): String {
         val causes = generateSequence<Throwable>(error) { it.cause }.take(8).toList()

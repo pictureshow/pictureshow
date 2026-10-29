@@ -46,15 +46,40 @@ class PlaybackLoadDiagnosticsTest {
         log.summary()
         assertEquals(
             listOf(
-                "load event=error dataType=1 trackType=2 bytes=188 durationMs=8000 throughputKbps=0 errorClass=SocketTimeoutException retryCount=0 cancelled=false",
-                "load event=retry dataType=1 trackType=2 bytes=188 durationMs=8000 throughputKbps=0 errorClass=none retryCount=1 cancelled=false",
-                "load event=slow dataType=1 trackType=2 bytes=4000 durationMs=8500 throughputKbps=3 errorClass=none retryCount=1 cancelled=false",
-                "load event=cancel dataType=1 trackType=2 bytes=100 durationMs=500 throughputKbps=1 errorClass=none retryCount=0 cancelled=true",
+                "load event=error dataType=1 trackType=2 bytes=188 durationMs=8000 throughputKbps=0 errorClass=SocketTimeoutException httpStatus=-1 retryCount=0 cancelled=false",
+                "load event=retry dataType=1 trackType=2 bytes=188 durationMs=8000 throughputKbps=0 errorClass=none httpStatus=-1 retryCount=1 cancelled=false",
+                "load event=slow dataType=1 trackType=2 bytes=4000 durationMs=8500 throughputKbps=3 errorClass=none httpStatus=-1 retryCount=1 cancelled=false",
+                "load event=cancel dataType=1 trackType=2 bytes=100 durationMs=500 throughputKbps=1 errorClass=none httpStatus=-1 retryCount=0 cancelled=true",
                 "load-summary dataType=-1 trackType=-1 bytes=4100 durationMs=10000 throughputKbps=3 completed=1 errors=1 retries=1 cancellations=1 wireBytes=0 idleMs=-1 inFlight=0 oldestMs=0 suppressed=0 final=false"
             ),
             lines
         )
         assertTrue(lines.none { it.contains("private") || it.contains("secret") })
+    }
+
+    @Test
+    fun delayedHttpResponseRecordsOnlyStatusDurationAndRetryMetadata() {
+        val lines = mutableListOf<String>()
+        val log = PlaybackLoadDiagnostics(lines::add) { 0 }
+        val response = androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException(
+            404,
+            "private response",
+            null,
+            mapOf("Private-Header" to listOf("secret")),
+            spec,
+            "secret".toByteArray()
+        )
+        log.onLoadStarted(time, info(1), media, 0)
+        log.onLoadError(time, info(1, 7_360), media, IOException("private URL", response), false)
+        log.onLoadStarted(time, info(1, 7_360), media, 1)
+        assertEquals(
+            "load event=error dataType=1 trackType=2 bytes=0 durationMs=7360 throughputKbps=0 " +
+                "errorClass=InvalidResponseCodeException httpStatus=404 retryCount=0 cancelled=false",
+            lines.first()
+        )
+        assertTrue(lines.last().contains("event=retry"))
+        assertTrue(lines.last().contains("retryCount=1"))
+        assertTrue(lines.none { it.contains("private", true) || it.contains("secret") })
     }
 
     @Test

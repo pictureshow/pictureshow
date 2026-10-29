@@ -62,6 +62,18 @@ internal class HlsPreparationSource(source: MediaSource, private val onBootstrap
     }
 
     companion object {
+        internal fun typedDataSources(
+            general: DataSource.Factory,
+            media: DataSource.Factory
+        ): androidx.media3.exoplayer.hls.HlsDataSourceFactory = androidx.media3.exoplayer.hls.HlsDataSourceFactory { type ->
+            // Playlists can wait for encoder startup; subtitles use their ordinary source.
+            if (type == androidx.media3.common.C.DATA_TYPE_MEDIA || type == androidx.media3.common.C.DATA_TYPE_MEDIA_INITIALIZATION) {
+                media.createDataSource()
+            } else {
+                general.createDataSource()
+            }
+        }
+
         fun create(
             item: MediaItem,
             dataSources: DataSource.Factory,
@@ -71,16 +83,7 @@ internal class HlsPreparationSource(source: MediaSource, private val onBootstrap
             // Chunkless preparation would finish before the bootstrap segment supplies formats.
             val hls = HlsPreparationSource(
                 HlsMediaSource.Factory(
-                    androidx.media3.exoplayer.hls.HlsDataSourceFactory { type ->
-                        // Playlists can wait for encoder startup; subtitles use their ordinary source.
-                        if (type == androidx.media3.common.C.DATA_TYPE_MEDIA ||
-                            type == androidx.media3.common.C.DATA_TYPE_MEDIA_INITIALIZATION
-                        ) {
-                            mediaDataSources.createDataSource()
-                        } else {
-                            dataSources.createDataSource()
-                        }
-                    }
+                    typedDataSources(dataSources, mediaDataSources)
                 ).setAllowChunklessPreparation(false).createMediaSource(item),
                 onBootstrap
             )
