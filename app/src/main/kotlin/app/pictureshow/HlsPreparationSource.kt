@@ -62,10 +62,26 @@ internal class HlsPreparationSource(source: MediaSource, private val onBootstrap
     }
 
     companion object {
-        fun create(item: MediaItem, dataSources: DataSource.Factory, onBootstrap: (Long, Long) -> Unit): MediaSource {
+        fun create(
+            item: MediaItem,
+            dataSources: DataSource.Factory,
+            mediaDataSources: DataSource.Factory = dataSources,
+            onBootstrap: (Long, Long) -> Unit
+        ): MediaSource {
             // Chunkless preparation would finish before the bootstrap segment supplies formats.
             val hls = HlsPreparationSource(
-                HlsMediaSource.Factory(dataSources).setAllowChunklessPreparation(false).createMediaSource(item),
+                HlsMediaSource.Factory(
+                    androidx.media3.exoplayer.hls.HlsDataSourceFactory { type ->
+                        // Playlists can wait for encoder startup; subtitles use their ordinary source.
+                        if (type == androidx.media3.common.C.DATA_TYPE_MEDIA ||
+                            type == androidx.media3.common.C.DATA_TYPE_MEDIA_INITIALIZATION
+                        ) {
+                            mediaDataSources.createDataSource()
+                        } else {
+                            dataSources.createDataSource()
+                        }
+                    }
+                ).setAllowChunklessPreparation(false).createMediaSource(item),
                 onBootstrap
             )
             val parsers = DefaultSubtitleParserFactory()

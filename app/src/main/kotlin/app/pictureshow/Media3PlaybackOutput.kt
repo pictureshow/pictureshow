@@ -47,6 +47,14 @@ internal class Media3PlaybackOutput(
     var onStop: () -> Unit = {}
     private val fdDiagnostics = PlaybackFdDiagnostics()
     private var activePlayer: ExoPlayer? = null
+    private var loadDiagnostics: PlaybackLoadDiagnostics? = null
+    private val loadHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val loadSummary = object : Runnable {
+        override fun run() {
+            loadDiagnostics?.summary()
+            if (loadDiagnostics != null) loadHandler.postDelayed(this, 10_000)
+        }
+    }
     private var playback: PlaybackReleaseFence.Playback? = null
     private var reopenState: ReopeningPlayer? = null
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
@@ -144,7 +152,16 @@ internal class Media3PlaybackOutput(
             null
         }
         physicalEnd = detector
-        val dataSources = PlaybackMedia.dataSourceFactory(server, decision, upstream ?: PlaybackMedia.httpFactory(server, decision))
+        val loads = PlaybackLoadDiagnostics()
+        loadDiagnostics = loads
+        val sourceData = PlaybackMedia.dataSourceFactory(
+            server,
+            decision,
+            upstream ?: PlaybackMedia.httpFactory(server, decision, nativeHlsMedia = false)
+        )
+        val dataSources = androidx.media3.datasource.DataSource.Factory {
+            sourceData.createDataSource().also { it.addTransferListener(loads) }
+        }
         val extractors = if (videoClock) {
             VideoClockExtractorsFactory { PlaybackDiagnostics.write(decision, "video-clock", it) }
         } else {
@@ -188,6 +205,8 @@ internal class Media3PlaybackOutput(
         }
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
+        next.addAnalyticsListener(loads)
+        loadHandler.postDelayed(loadSummary, 10_000)
         next.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
             private var firstVideoDecoder = true
             override fun onVideoDecoderInitialized(
@@ -375,7 +394,11 @@ internal class Media3PlaybackOutput(
                 media.localConfiguration?.mimeType
             ) == C.CONTENT_TYPE_HLS
         ) {
-            val hls = HlsPreparationSource.create(media, dataSources) { requestedUs, prepareUs ->
+            val segmentData = PlaybackMedia.dataSourceFactory(server, decision, upstream ?: PlaybackMedia.httpFactory(server, decision))
+            val segments = androidx.media3.datasource.DataSource.Factory {
+                segmentData.createDataSource().also { it.addTransferListener(loads) }
+            }
+            val hls = HlsPreparationSource.create(media, dataSources, segments) { requestedUs, prepareUs ->
                 PlaybackDiagnostics.write(decision, "hls-bootstrap", "requestedUs=$requestedUs prepareUs=$prepareUs")
             }
             next.setMediaSource(hls, positionMs)
@@ -446,6 +469,9 @@ internal class Media3PlaybackOutput(
     override fun release() = releasePlayer(closeSession = true)
 
     private fun releasePlayer(closeSession: Boolean) {
+        loadHandler.removeCallbacks(loadSummary)
+        loadDiagnostics?.summary(final = true)
+        loadDiagnostics = null
         physicalEnd?.invalidate()
         physicalEnd = null
         val active = activePlayer
