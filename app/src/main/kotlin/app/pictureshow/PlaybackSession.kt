@@ -491,9 +491,12 @@ internal class PlaybackSession(
     fun closeForNext(shouldAdvance: () -> Boolean, afterFinished: () -> Unit) {
         if (closing) return
         val completing = !ending && !endReported && started && mutable.value.error == null && shouldAdvance()
-        if (completing) onCompletionPending()
-        trace("close", "positionMs=${output.position().milliseconds} ending=$ending")
         closing = true
+        // Every final report can change resume/watch state, even Back, system Stop,
+        // setup failure and disposal. Arm synchronously before navigation can expose detail.
+        // EOS already armed this report and may have finished it before close.
+        if (!ending && !endReported) onCompletionPending()
+        trace("close", "positionMs=${output.position().milliseconds} ending=$ending")
         seekTimer?.cancel()
         val finalSeekTarget = pendingSeek
         pendingSeek = null

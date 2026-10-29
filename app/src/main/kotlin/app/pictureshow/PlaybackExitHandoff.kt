@@ -28,6 +28,9 @@ internal class PlaybackExitHandoff(
 
     private var pending: Pending? = null
     private var destinationRevision = 0L
+    private var destinationOwner: String? = null
+    private var preparedOwner: String? = null
+    private var expiredOwner: String? = null
 
     // A live pending button handles Select DOWN itself. Its UP must never click a fresh handler.
     private val liveSelectPressed = mutableSetOf<Int>()
@@ -35,23 +38,43 @@ internal class PlaybackExitHandoff(
     fun begin(owner: String) {
         abandon("superseded")
         destinationRevision++
+        preparedOwner = owner
+        expiredOwner = null
         pending = Pending(owner, now())
     }
 
+    /** A pending detail opened from Home needs the same destination-owned queue as a return. */
+    fun prepare(owner: String) {
+        if (destinationOwner == owner && pending == null && preparedOwner != owner) begin(owner)
+    }
+
+    /** Retain the outcome through finish so an accepted request never expires silently. */
+    fun expired(owner: String): Boolean {
+        pending?.takeIf { it.owner == owner }?.let {
+            if (now() - it.started >= ApiTimeouts.REQUEST_MILLIS) closeQueue(it, "deadline")
+        }
+        return expiredOwner == owner
+    }
+
     fun live(owner: String, active: Boolean) {
+        if (active) prepare(owner)
         val current = pending?.takeIf { it.owner == owner } ?: return
         current.live = active
         if (now() - current.started >= ApiTimeouts.REQUEST_MILLIS) closeQueue(current, "deadline")
         if (!active || current.queueClosed) return
         // Earlier moves must reach the newly available row before a later live Select.
-        // Media reports and guarded commands still wait for authoritative fresh data.
-        val reports = current.deferred.filter { it.keyCode in liveActions }
+        // Raw reports retain their order, including media; the pending controls turn
+        // Select/media into guarded commands that still wait for authoritative fresh data.
+        val reports = current.deferred.filter { it.keyCode != null }
         current.deferred.removeAll(reports.toSet())
-        current.pressed.removeAll(liveActions)
+        current.pressed.removeAll(remoteActions)
+        var delivered = 0
         for (report in reports) {
             if (pending !== current) break
             report.deliver()
+            delivered++
         }
+        if (delivered > 0) write("exit-input phase=replayed stage=pending reports=$delivered")
     }
 
     fun input(keyCode: Int, accessibility: Boolean = false) {
@@ -85,13 +108,16 @@ internal class PlaybackExitHandoff(
         if (down && repeat == 0) input(keyCode)
         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode !in remoteActions) return false
         if (now() - current.started >= ApiTimeouts.REQUEST_MILLIS) closeQueue(current, "deadline")
-        if (current.queueClosed) return true
-        if (current.live && keyCode in liveActions && keyCode !in current.pressed) {
+        if (current.live && keyCode in remoteActions && keyCode !in current.pressed) {
             if (down && keyCode in selectActions) {
                 if (repeat > 0) return true
                 liveSelectPressed += keyCode
             }
             return false
+        }
+        if (current.queueClosed) {
+            if (down && keyCode in selectActions) liveSelectPressed += keyCode
+            return true
         }
         // Holding a remote button expresses one pending move, not a burst after loading.
         if (down && repeat > 0) return keyCode in current.pressed
@@ -139,7 +165,10 @@ internal class PlaybackExitHandoff(
         if (now() - current.started >= ApiTimeouts.REQUEST_MILLIS) closeQueue(current, "deadline")
         val revision = destinationRevision
         val safeTarget =
-            target.takeIf { it in setOf("primary", "retry", "next", "seasons", "episodes", "played", "favorite", "viewer", "none") }
+            target.takeIf {
+                it in
+                    setOf("primary", "retry", "next", "seasons", "episodes", "played", "favorite", "from-start", "viewer", "none")
+            }
                 ?: "other"
         write(
             "exit-handoff phase=complete elapsedMs=${now() - current.started} target=$safeTarget focused=$focused " +
@@ -148,14 +177,33 @@ internal class PlaybackExitHandoff(
         )
         if (focused) {
             // Replayed OK/Play can navigate. Remaining reports must not reach the next page.
+            var reports = 0
+            var unoffered = 0
             for (deliver in current.deferred) {
                 if (destinationRevision != revision) break
+                if (deliver.keyCode != null && deliver.keyCode !in directionActions) {
+                    // Raw Select/media must first reach an offered pending control in live().
+                    // A status-only/failed arrival never promised a late ordinary action.
+                    unoffered++
+                    if (deliver.keyCode in selectActions && deliver.keyCode in current.pressed) {
+                        liveSelectPressed += deliver.keyCode
+                    }
+                    continue
+                }
                 deliver.deliver()
+                if (deliver.keyCode != null) reports++
             }
+            // target above describes arrival. A later line makes post-arrival raw replay
+            // explicit; detail-focus diagnostics show the target each delivered move reaches.
+            if (reports > 0) write("exit-input phase=replayed stage=fresh reports=$reports")
+            if (unoffered > 0) write("exit-input phase=dropped reason=unoffered reports=$unoffered")
         }
     }
 
     fun destinationChanged(owner: String?) {
+        if (destinationOwner != owner && pending?.owner != owner) preparedOwner = null
+        destinationOwner = owner
+        if (expiredOwner != owner) expiredOwner = null
         destinationRevision++
         if (pending?.owner != owner) abandon("left")
     }
@@ -163,8 +211,10 @@ internal class PlaybackExitHandoff(
     private fun closeQueue(current: Pending, reason: String) {
         if (current.queueClosed) return
         current.queueClosed = true
+        expiredOwner = current.owner
         write("exit-input phase=dropped reason=$reason reports=${current.deferred.size}")
         current.deferred.clear()
+        liveSelectPressed += current.pressed.intersect(selectActions)
         current.pressed.clear()
     }
 
@@ -173,7 +223,7 @@ internal class PlaybackExitHandoff(
         KeyEvent.KEYCODE_ENTER,
         KeyEvent.KEYCODE_NUMPAD_ENTER
     )
-    private val liveActions = selectActions + setOf(
+    private val directionActions = setOf(
         KeyEvent.KEYCODE_DPAD_UP,
         KeyEvent.KEYCODE_DPAD_DOWN,
         KeyEvent.KEYCODE_DPAD_LEFT,
@@ -189,6 +239,7 @@ internal class PlaybackExitHandoff(
 
     private fun abandon(reason: String) {
         val current = pending ?: return
+        liveSelectPressed += current.pressed.intersect(selectActions)
         pending = null
         write(
             "exit-handoff phase=abandoned elapsedMs=${now() - current.started} reason=$reason " +
