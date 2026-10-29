@@ -34,9 +34,9 @@ class NativeHlsLoadErrorPolicyTest {
     private val spec = DataSpec(Uri.parse("https://example.test/segment.ts"))
 
     @Test
-    fun onlyNativeMediaAndInitializationLeaveTheRetryableDeadlineToTheSession() {
-        assertEquals(Int.MAX_VALUE, native.getMinimumLoadableRetryCount(C.DATA_TYPE_MEDIA))
-        assertEquals(Int.MAX_VALUE, native.getMinimumLoadableRetryCount(C.DATA_TYPE_MEDIA_INITIALIZATION))
+    fun onlyNativeMediaAndInitializationGetFourRetries() {
+        assertEquals(4, native.getMinimumLoadableRetryCount(C.DATA_TYPE_MEDIA))
+        assertEquals(4, native.getMinimumLoadableRetryCount(C.DATA_TYPE_MEDIA_INITIALIZATION))
         for (type in listOf(
             C.DATA_TYPE_MANIFEST,
             C.DATA_TYPE_DRM,

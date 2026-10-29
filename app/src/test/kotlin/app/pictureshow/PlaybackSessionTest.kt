@@ -149,6 +149,27 @@ class PlaybackSessionTest {
     }
 
     @Test
+    fun nativeTranscodeBufferingReleasesOutputAtFortyFiveSeconds() = runTest {
+        val chosen = decision(method = PlayMethod.Transcode)
+        val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(chosen)) }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.buffering(true, chosen)
+        runCurrent()
+        advanceTimeBy(44_999)
+        runCurrent()
+        assertFalse(output.released)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(output.released)
+        assertFalse("played" in gateway.events)
+        session.close()
+        runCurrent()
+    }
+
+    @Test
     fun stopBackErrorsAndGiveUpNeverMarkPlayedAndStaleEndCannotFinishReplacement() = runTest {
         for (exit in listOf("stop", "back", "error", "give-up", "stale")) {
             val chosen = decision()

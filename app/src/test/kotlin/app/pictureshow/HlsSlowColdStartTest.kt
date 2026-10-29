@@ -46,6 +46,15 @@ import org.robolectric.annotation.LooperMode
 class HlsSlowColdStartTest {
     @Test
     fun aMediaSegmentAvailableAtFortySecondsBecomesReadyWithoutAFatalLoaderError() {
+        checkColdStart(40, expectReady = true)
+    }
+
+    @Test
+    fun aPausedPermanentlyUnavailableMediaLoadStillHasAFiniteRetryBound() {
+        checkColdStart(60, expectReady = false)
+    }
+
+    private fun checkColdStart(availableSeconds: Long, expectReady: Boolean) {
         val segment = requireNotNull(javaClass.getResourceAsStream("/playback/copied-audio-preroll.ts")).use { it.readBytes() }
         val firstRequest = AtomicLong()
         val attempts = AtomicInteger()
@@ -63,7 +72,7 @@ class HlsSlowColdStartTest {
                     else -> {
                         attempts.incrementAndGet()
                         firstRequest.compareAndSet(0, System.nanoTime())
-                        val remaining = firstRequest.get() + TimeUnit.SECONDS.toNanos(40) - System.nanoTime()
+                        val remaining = firstRequest.get() + TimeUnit.SECONDS.toNanos(availableSeconds) - System.nanoTime()
                         if (remaining > 0) TimeUnit.NANOSECONDS.sleep(remaining)
                         segment
                     }
@@ -91,7 +100,7 @@ class HlsSlowColdStartTest {
         try {
             output.open(decision, 0, 0, -1, true)
             val player = requireNotNull(output.player.value)
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(47)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(52)
             var previous = System.nanoTime()
             while (player.playbackState != Player.STATE_READY && player.playerError == null && System.nanoTime() < deadline) {
                 Thread.sleep(10)
@@ -100,14 +109,17 @@ class HlsSlowColdStartTest {
                 previous = now
             }
             val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - firstRequest.get())
-            assertNull(player.playerError, "Fatal before late segment became available: attempts=${attempts.get()} elapsedMs=$elapsedMs")
-            assertEquals(
-                Player.STATE_READY,
-                player.playbackState,
-                "Late segment never completed; attempts=${attempts.get()} elapsedMs=$elapsedMs"
-            )
-            assertTrue(elapsedMs in 40_000..44_999, "Expected completion inside session window, elapsedMs=$elapsedMs")
-            assertTrue(attempts.get() >= 5, "Test must cross four 8-second timeouts, attempts=${attempts.get()}")
+            if (expectReady) {
+                assertNull(player.playerError, "Fatal before late segment: attempts=${attempts.get()} elapsedMs=$elapsedMs")
+                assertEquals(Player.STATE_READY, player.playbackState, "Late segment never completed; elapsedMs=$elapsedMs")
+                assertTrue(elapsedMs in 40_000..44_999, "Expected completion inside session window, elapsedMs=$elapsedMs")
+                assertEquals(5, attempts.get(), "Test must cross four 8-second timeouts")
+            } else {
+                // open(paused=true) has no PlaybackSession timer: Loader must still stop by itself.
+                assertTrue(player.playerError != null, "Paused load retried without a finite bound; elapsedMs=$elapsedMs")
+                assertTrue(elapsedMs in 45_000..50_999, "Expected fifth idle error near 46 seconds, elapsedMs=$elapsedMs")
+                assertEquals(5, attempts.get())
+            }
         } finally {
             output.release()
             shadowOf(Looper.getMainLooper()).idle()
