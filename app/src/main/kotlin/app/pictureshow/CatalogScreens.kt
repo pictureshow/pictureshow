@@ -760,7 +760,10 @@ fun CatalogDetail(
     // A failed authoritative read (unlike a failed write) cannot expose stale commands.
     // The action budget ends in this same recovery state, before the transport timer fires.
     val readFailure = state.readFailed || (state.error != null && !mutationDataReady)
-    val readSettled = !state.loading && !state.playbackPending && state.error == null && !state.readFailed
+    val readSettled = !state.loading &&
+        state.error == null &&
+        !state.readFailed &&
+        (!state.playbackPending || state.readSucceeded)
     // Derive settlement in this composition: an effect with the previous recovery value
     // must not re-arm pendingFailed after the successful read's SideEffect clears it.
     val recoveryActive = !readSettled && (recoveryMessage != null || readFailure || (pendingExpired && playbackWaiting))
@@ -780,7 +783,7 @@ fun CatalogDetail(
         if (!showRecovery) retryFocused = false
         if (readFailure && state.error != null) recoveryMessage = state.error
         if (readSettled) {
-            if (pendingExpired) commandNotice = null
+            if (pendingExpired && recoveryMessage != null) commandNotice = null
             recoveryMessage = null
             pendingExpired = false
             pendingFailed = false
@@ -891,6 +894,7 @@ fun CatalogDetail(
     fun queueFresh(command: () -> Unit): Boolean {
         val generation = commandGeneration
         val accepted = !pendingExpired &&
+            !expiryReported &&
             queuePendingAction?.invoke {
                 if (generation == commandGeneration && freshCommands.trySend(DetailCommand(generation, null, command)).isFailure) {
                     commandNotice = "The request could not be saved. Try again."
@@ -962,6 +966,8 @@ fun CatalogDetail(
         commandGeneration++
         readyQueuedTargets = emptySet()
         expiryReported = true
+        playQueued = null
+        pendingQueuedTargets = emptySet()
         pendingExpired = true
         recoveryMessage = "The server has not finished loading. Retry to reload the item."
         commandNotice = if (latestHasRequest) {
@@ -1020,18 +1026,18 @@ fun CatalogDetail(
     val pendingActions = if (pendingEnabled) {
         PendingDetailActions(
             playLabel = when {
-                pendingExpired -> "Play unavailable"
+                pendingExpired || expiryReported -> "Play unavailable"
                 playQueued == "resume" -> "Play requested"
                 playQueued == "start" -> "Start already requested"
                 else -> "Play when ready"
             },
             fromStartLabel = when {
-                pendingExpired -> "Start unavailable"
+                pendingExpired || expiryReported -> "Start unavailable"
                 playQueued == "start" -> "Start requested"
                 playQueued == "resume" -> "Play already requested"
                 else -> "Play from start when ready"
             },
-            playedLabel = if (pendingExpired) {
+            playedLabel = if (pendingExpired || expiryReported) {
                 "Watched unavailable"
             } else if ("played" in pendingQueuedTargets) {
                 "Watched change requested"
@@ -1040,7 +1046,7 @@ fun CatalogDetail(
             } else {
                 "Mark watched when ready"
             },
-            favoriteLabel = if (pendingExpired) {
+            favoriteLabel = if (pendingExpired || expiryReported) {
                 "Favorite unavailable"
             } else if ("favorite" in pendingQueuedTargets) {
                 "Favorite change requested"
@@ -1344,7 +1350,7 @@ fun CatalogDetail(
                             val container = item.type in listOf("Series", "Season")
                             if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive)) {
                                 DetailActions(
-                                    item, playItem, state.busy, initial,
+                                    if (recoveryActive) headerItem else item, playItem, state.busy, initial,
                                     if (playbackLayout) {
                                         { queueReadyMutation(true) }
                                     } else {
@@ -1370,7 +1376,7 @@ fun CatalogDetail(
                             if (headerItem.genres.isNotEmpty()) Text(headerItem.genres.joinToString(" · "), color = CatalogMuted)
                             if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive)) {
                                 DetailActions(
-                                    item, playItem, state.busy, initial,
+                                    if (recoveryActive) headerItem else item, playItem, state.busy, initial,
                                     if (playbackLayout) {
                                         { queueReadyMutation(true) }
                                     } else {
@@ -1421,7 +1427,19 @@ fun CatalogDetail(
                                     additions.forEach { Text(it) }
                                 }
                             }
-                            if (state.loading && !playbackWaiting) Text("Loading episodes…")
+                            if (state.loading &&
+                                !playbackWaiting
+                            ) {
+                                Text(
+                                    if (item.type in
+                                        listOf("Series", "Season")
+                                    ) {
+                                        "Loading episodes…"
+                                    } else {
+                                        "Loading item…"
+                                    }
+                                )
+                            }
                         }
                     }
                     // An overlay has no layout footprint: status publication, changed wording and
@@ -1452,9 +1470,13 @@ fun CatalogDetail(
                             }
                         }
                     } else if (commandNotice != null || (playbackWaiting && state.error == null)) {
-                        val status = commandNotice ?: if (state.playbackReportFinished) "Loading item…" else "Saving progress…"
+                        val status = commandNotice ?: when {
+                            state.readSucceeded && !state.loading && !state.playbackReportFinished -> "Item loaded. Saving progress…"
+                            state.playbackReportFinished -> "Loading item…"
+                            else -> "Saving progress…"
+                        }
                         Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
-                            if (pendingEnabled && commandNotice == null) {
+                            if (pendingEnabled && commandNotice == null && !state.readSucceeded) {
                                 Text(status, modifier = Modifier.clearAndSetSemantics {})
                             } else {
                                 StatusLine(status)
@@ -1504,6 +1526,7 @@ fun CatalogDetail(
         state.loading,
         playbackWaiting,
         pendingCanPlay,
+        pendingEnabled,
         onPendingAction != null,
         item?.id,
         state.error,
@@ -1546,9 +1569,15 @@ fun CatalogDetail(
         if (recoveryFocusOwned) {
             pendingFailed = false
             if (state.error == null && !state.readFailed) {
+                // Clearing the error publishes pending controls in the next composition.
+                // Do not focus the temporary disabled fallback underneath their slot.
+                if (playbackWaiting && pendingCanPlay && queuePendingAction != null && !pendingEnabled) return@LaunchedEffect
                 // Retry remains a real visible target while the fresh actions publish.
                 // Do not park focus or scroll back to a previously selected shelf here.
                 semanticsRevealed = true
+                // A successful read can publish guarded pending controls before reporting
+                // finishes. Reveal that same target before the reader acknowledges focus.
+                if (pendingEnabled) pendingSemanticsRevealed = true
                 restored = true
                 fun freshControlHasFocus() = !retryFocused &&
                     (headerInputTarget != null || playbackContentFocused(focusHost) == true)
@@ -1567,7 +1596,7 @@ fun CatalogDetail(
                     if (!freshControlFocused) {
                         selectedSection = "header"
                         recoveryTarget = when {
-                            playItem != null -> "primary"
+                            playItem != null || pendingEnabled -> "primary"
                             item?.isEmptyContainer == true -> "favorite"
                             else -> "played"
                         }
@@ -1579,6 +1608,7 @@ fun CatalogDetail(
                     repeat(2) { withFrameNanos { } }
                     awaitPlaybackReaderInputFocus(focusHost)
                     recoveryFocusOwned = false
+                    pendingFocusRestored = playbackWaiting
                     restored = true
                     playbackReturn = false
                     pendingHeaderTarget = "primary"
