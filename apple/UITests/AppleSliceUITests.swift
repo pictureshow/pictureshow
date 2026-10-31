@@ -563,13 +563,29 @@ final class AppleSliceUITests: XCTestCase {
     private func selectTouchTrack(type: String, index: String) {
         openTouchTrackPanel()
         let choice = app.buttons["\(type)-\(index)"]
-        reveal(choice); activate(choice)
+        reveal(choice)
+        waitForEnabled(choice, description: "\(type) track \(index)")
+        activate(choice)
         if type == "audio" {
             XCTAssertTrue(app.staticTexts["Audio and subtitles"].waitForNonExistence(timeout: 10), "Selecting audio should immediately dismiss the track sheet")
         } else {
             XCTAssertTrue(app.staticTexts["Audio and subtitles"].waitForNonExistence(timeout: 10), "Selecting subtitles should immediately dismiss the track sheet")
         }
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "\(type)-")).firstMatch.waitForNonExistence(timeout: 10), "Selected \(type) rows should leave the sheet when the choice commits")
+        openTouchTrackPanel()
+        let settledChoice = app.buttons["\(type)-\(index)"]
+        reveal(settledChoice)
+        waitForEnabled(settledChoice, description: "settled \(type) track \(index)")
+        XCTAssertEqual(settledChoice.value as? String, "Selected", "The requested \(type) track should be active after replacement settles")
+        activate(app.buttons["playerOptionsDone"])
+    }
+    private func waitForEnabled(_ element: XCUIElement, description: String) {
+        let deadline = ProcessInfo.processInfo.systemUptime + 30
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if element.exists, element.isEnabled { return }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTAssertTrue(element.exists && element.isEnabled, "Timed out waiting for \(description) to settle and enable")
     }
     #endif
     #if os(tvOS)
