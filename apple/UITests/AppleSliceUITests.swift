@@ -328,6 +328,7 @@ final class AppleSliceUITests: XCTestCase {
         // Menu on the native player is the advertised stop/back action. Verify the app returns
         // to detail, and avoid inferring success from remote-event delivery alone.
         leaveNativeTVPlayer(returningTo: play)
+        XCTAssertTrue(play.hasFocus, "Native AVKit Menu should return focus to the original detail Play action")
         #endif
     }
     /// Crosses a Jellyfin episode boundary through the native contextual action, so the
