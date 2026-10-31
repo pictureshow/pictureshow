@@ -9,7 +9,7 @@ docker run --rm --cpus=2 --memory=2g \
   -v "$web_source:/source:ro" -v "$web_media:/tmp/pictureshow-web-media:ro" \
   mcr.microsoft.com/playwright:v1.62.1-noble sh -ec '
     mkdir /work; cd /work
-    cp -R /source/core /source/src /source/tests /source/*.json /source/*.ts /source/index.html .
+    cp -R /source/public /source/core /source/src /source/tests /source/*.json /source/*.ts /source/index.html .
     npm ci --ignore-scripts
     npx playwright install firefox
     npx playwright test --project=firefox

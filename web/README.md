@@ -1,6 +1,6 @@
 # Pictureshow Web
 
-A static React/TypeScript Jellyfin viewer. The `@pictureshow/core` package in `core/` ports the Kotlin slice's address discovery, authorization, version checks, catalog/detail resume projection, formatting, playback negotiation and reports. Native browser adapters supply codec probes, storage, focus navigation and media playback. No server component, Pictureshow account, administrator credential or hosted media relay is required.
+A static React/TypeScript Jellyfin viewer with TV, desktop keyboard/pointer and phone touch layouts. The `@pictureshow/core` package in `core/` ports the needed Kotlin policies for addresses, authorization, version checks, catalog/detail freshness and resume projection, settings, track labels, segments, continuation, playback negotiation and reports. Native browser adapters supply codec probes, storage, focus navigation and media playback. No server component, Pictureshow account, administrator credential or hosted media relay is required.
 
 ## Run and build
 
@@ -12,7 +12,7 @@ npm run dev
 npm run build
 ```
 
-`dist/` contains only static HTML, CSS and JavaScript. Assets use relative paths, including the lazy HLS chunk. Serve the whole directory at the host root or a trailing-slash `/pictureshow/` location. No history fallback is required: navigation is in memory, so refresh returns to Home after validating the current browser-session sign-in. Nothing is deployed by these commands.
+`dist/` contains static HTML, CSS, JavaScript and bundled license data. Assets use relative paths, including the lazy HLS chunk. Serve the whole directory at the host root or a trailing-slash `/pictureshow/` location. No history fallback is required: navigation keeps the same static URL while browser Back/Forward and safe per-account catalog restoration retain route, opener and scroll state. Reload validates the saved viewer before restoring a catalog route; an active player is never serialized. Nothing is deployed by these commands.
 
 The user enters the API's own server URL independently of the app location, including any Jellyfin BaseUrl. A server installed under `/jellyfin` should be entered as `https://media.example/jellyfin`; media paths returned by Jellyfin retain that base path. Serving `/pictureshow/` does not itself enable Jellyfin to serve arbitrary files: the owner must configure their static server or reverse proxy, preserving `/web/` for administration.
 
@@ -24,13 +24,13 @@ The user enters the API's own server URL independently of the app location, incl
 
 API calls use the viewer's Authorization header, omit ambient cookies and reject redirects. Native `<video src>` cannot set custom headers, so direct files and native HLS use canonical `ApiKey` query authentication with the **viewer login token**. Every URL is checked against the selected server origin first, and token aliases supplied in a returned URL are replaced. MSE requests also validate each manifest/segment/key URL and reject redirects through the fetch loader. Images and text subtitles are fetched with viewer authentication and rendered as short-lived Blob URLs. Required third-party media headers are rejected rather than falsely claiming native playback can send them.
 
-Viewer tokens are held in `sessionStorage`; passwords are not saved. The install's device ID lives in `localStorage`. Sign out revokes the viewer session. Native media query tokens are visible in the browser's network panel and can reach the owner's access logs; configure the proxy to redact sensitive query parameters. `Referrer-Policy: no-referrer` is set in the document, and fetches explicitly omit referrers. Native media redirects and nested native HLS requests are controlled by the browser and trusted owner server: this client cannot independently validate those redirects. Never print raw accounts, PlaybackInfo DTOs or playback URLs to diagnostics; use `redactUrl`.
+Saved viewer tokens and account-scoped device IDs are held in this origin's `localStorage` so sign-ins survive browser restarts; passwords are not saved. Browser extensions and scripts with access to this origin can read saved sign-ins. Use a dedicated trusted app origin and sign out/remove accounts to forget them. Short-lived Quick Connect state and navigation drafts use `sessionStorage`. Sign out revokes the viewer session. Native media query tokens are visible in the browser's network panel and can reach the owner's access logs; configure the proxy to redact sensitive query parameters. `Referrer-Policy: no-referrer` is set in the document, and fetches explicitly omit referrers. Native media redirects and nested native HLS requests are controlled by the browser and trusted owner server: this client cannot independently validate those redirects. Never print raw accounts, PlaybackInfo DTOs or playback URLs to diagnostics; use `redactUrl`.
 
 ## Playback and controls
 
-Known container and codec support is independently checked with `canPlayType` before direct play. Unsupported containers, non-default embedded audio choices and conservative capability limits use Jellyfin HLS. Safari/WebKit uses native HLS when available; other supported engines use hls.js/MSE. The server receives a browser-specific device profile, never the Android device's decoder claims. A playback failure offers an explicit HLS retry. The browser may require a second Play gesture after asynchronous negotiation. A direct file that emits a media error or never starts within eight seconds automatically retries once through server HLS; a MIME probe is evidence of likely support, not a guarantee that a particular file is valid.
+Known container and codec support is independently checked with `canPlayType` before direct play. Unsupported containers, non-default embedded audio choices and conservative capability limits use Jellyfin HLS. Safari/WebKit uses native HLS when available; other supported engines use hls.js/MSE. The server receives a browser-specific device profile, never the Android device's decoder claims. A playback failure offers an explicit HLS retry; startup and rebuffer stalls have a 45-second failure deadline. The browser may require a second Play gesture after asynchronous negotiation. A direct file that emits a media error or never starts within eight seconds automatically retries once through server HLS; a MIME probe is evidence of likely support, not a guarantee that a particular file is valid.
 
-Start is reported after the media element actually starts playing. Progress reports run every ten seconds and on pause/resume. Back waits for stop reporting before refreshing detail state. Replacing audio/subtitle streams stops only that session's encoding, preserves the content position and renegotiates. Direct seeking uses the file's byte ranges; HLS seeking renegotiates at the requested content position and keeps report/subtitle offsets in the original timeline. Subtitle Off uses index -1. Text subtitles are requested as WebVTT; bitmap subtitles request server burn-in. A pagehide stop uses keepalive as a best effort; browser/process termination and network outages cannot guarantee delivery.
+Start is reported after the media element actually starts playing. Progress reports run every ten seconds and on pause/resume. Back immediately shows the stable detail screen while final reporting settles, then reads fresh server state before queued actions proceed. Failed final reports retain the exact viewing snapshot for explicit Retry. Replacing audio/subtitle streams stops only that session's encoding, preserves the content position and renegotiates. Direct seeking uses the file's byte ranges; HLS seeking renegotiates at the requested content position and keeps report/subtitle offsets in the original timeline. Subtitle Off uses index -1. Text subtitles are requested as WebVTT; bitmap subtitles request server burn-in. A pagehide stop uses keepalive as a best effort; browser/process termination and network outages cannot guarantee delivery.
 
 Keyboard and TV D-pad:
 
@@ -38,11 +38,11 @@ Keyboard and TV D-pad:
 - In text fields, Left/Right edit the text and Up/Down move to other controls.
 - In native select fields, Up/Down select values and Left/Right move to other controls.
 - In sliders, Left/Right adjust values and Up/Down move between controls.
-- On the video, Enter/Space toggles playback and Left/Right seeks ten seconds; Up/Down returns to controls.
-- Escape goes Back. Backspace goes Back outside text/select editing. Tab/Shift+Tab also work.
+- On the video, Enter reveals and focuses transport; Space and media keys control playback. Left/Right composes ten-second seeks; Up/Down reveals controls.
+- Escape goes Back. In the player, Back closes a sheet, then hides controls, then exits. Backspace goes Back outside text/select editing. Tab/Shift+Tab also work.
 - Back restores the initiating item or play button after asynchronous data refresh.
 
-Screens use landmarks, headings, labeled forms, native buttons/selects/sliders, lists, status/error announcements and visible focus. Artwork is decorative because the item name is already text. Reduced motion and system font scaling are retained. Automated accessibility checks supplement, rather than replace, a human screen-reader pass.
+Screens use landmarks, headings, labeled forms, native buttons/selects/sliders, lists, status/error announcements and visible focus. Artwork is decorative because the item name is already text. Reduced motion and system font scaling are retained. The screen-reader/manual-continuation setting defaults on because browsers cannot detect assistive technology reliably. Automated accessibility checks supplement a human screen-reader pass, which remains separately qualified in the parity ledger.
 
 ## Verification
 
@@ -51,12 +51,13 @@ npm test
 npm run build
 npx playwright install chromium webkit firefox
 npm run test:e2e
-# Run shared vectors after spec/ is integrated, or point at its worktree:
+npm run test:vectors
+# Optional override for another contract checkout:
 PICTURESHOW_SPEC=/path/to/spec npm run test:vectors
 ```
 
 E2E fixture media is generated locally by `ffmpeg` from test signals. Tests use actual MP4 and HLS media bytes, password and Quick Connect flows, movie/series/season/episode navigation, keyboard-only activation, resume, session reports, audio/subtitle negotiation and focus restoration. No live credentials are required. The browser tests run serially with no retries. `PW_REUSE_SERVER=1` explicitly allows reuse of an already-running local dev server.
 
-The vector runner currently covers the operations this slice has ported: address, authorization, sameOrigin, resolve, stripApiKey, ticks, reports and resume-start (47 vectors at the initial parity-spec revision). The remaining Android hardware profile/compatibility vectors are not browser decoder claims; full settings, queueing, segments, search, multi-account management and player extras remain outside this vertical slice. Web-specific vectors should cover MIME capability refusals, query-token replacement, redirect rejection, native/MSE timelines, stream-switch report ordering and delayed focus restoration. Core tests document the matching Kotlin test families.
+The vector runner recursively discovers the repository’s own `spec/vectors/` by default (or `PICTURESHOW_SPEC`). It covers all operations, including isolated Android reference profiles evaluated against hypothetical inputs. These profile fixtures do not grant the runtime browser Android decoder support. The full Android-implemented feature ledger, browser-specific limits and verification evidence are in [PARITY.md](PARITY.md). Settings inventory entries that Android does not implement remain outside scope. Native platform integrations such as broadcast discovery, launcher Watch Next, encoded passthrough, Android system-caption preference detection and Google Play purchases are not claimed by this browser app.
 
 On a host whose Firefox audio backend stalls, `npm run test:firefox:linux` runs the same suite in a temporary Linux Playwright container capped at two CPUs and 2 GB. It changes no host audio settings and removes the container afterward. This is an additional browser qualification route; a Linux pass does not establish host hardware audio output.

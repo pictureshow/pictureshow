@@ -20,7 +20,8 @@ export function spatialKey(e: KeyboardEvent, back: () => void) {
             (e.key === "ArrowLeft" || e.key === "ArrowRight"))
     )
         return;
-    const nodes = [...document.querySelectorAll<HTMLElement>(focusable)].filter(
+    const scope = document.querySelector("dialog[open]") ?? document;
+    const nodes = [...scope.querySelectorAll<HTMLElement>(focusable)].filter(
         (n) => n.getClientRects().length && !n.closest("[inert]"),
     );
     if (!active || !nodes.includes(active)) {
