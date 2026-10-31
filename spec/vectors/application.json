@@ -2248,6 +2248,23 @@
       },
       "expected": 4,
       "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "next.credits-at-zero",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 60000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 0,
+            "EndTicks": 600000000
+          }
+        ]
+      },
+      "expected": 0,
+      "source": "web/core/src/parity.test.ts; zero is a valid credits boundary"
     }
   ]
 }

@@ -637,6 +637,14 @@
         "nanoseconds": -123456789
       },
       "expected": -1234567
+    },
+    {
+      "id": "ticks-browser-reopen-boundary",
+      "operation": "ticks",
+      "input": {
+        "nanoseconds": 20118449000
+      },
+      "expected": 201184490
     }
   ]
 }

@@ -4,6 +4,8 @@
 import { describe, it, expect } from "vitest";
 import {
     authenticatedMediaRequest,
+    progressReport,
+    ticks,
     addressCandidates,
     authorization,
     supportedVersion,
@@ -295,4 +297,52 @@ it("MSE HLS retains byte ranges supplied in a Headers instance", () => {
         'Token="viewer-token"',
     );
     expect(request.redirect).toBe("error");
+});
+
+it("detail uses authoritative container counts and refuses failed freshness projection", async () => {
+    const { client } = fake([
+        {
+            Id: "s",
+            Name: "Show",
+            Type: "Series",
+            ChildCount: 3,
+            RecursiveItemCount: 8,
+            UserData: { Played: true },
+        },
+        {
+            Items: [
+                {
+                    Id: "s",
+                    Name: "Show",
+                    Type: "Series",
+                    ChildCount: 0,
+                    RecursiveItemCount: 0,
+                    UserData: { Played: false },
+                },
+            ],
+        },
+    ]);
+    const d = await client.detail("s");
+    expect(d.ChildCount).toBe(0);
+    expect(d.RecursiveItemCount).toBe(0);
+    expect(d.UserData?.Played).toBe(false);
+    const stale = fake([movie, { Items: [] }]).client;
+    await expect(stale.detail("movie")).rejects.toMatchObject({
+        kind: "NOT_FOUND",
+    });
+});
+it("muted audio is reported honestly without changing the stop payload", () => {
+    const d = {
+        itemId: "movie",
+        source,
+        method: "DirectPlay" as const,
+        url: "",
+    };
+    expect(progressReport(d, 1, false, 1, -1, true, true).IsMuted).toBe(true);
+});
+
+it("pending seeks retain an exact ten-second tick delta at fractional browser-clock boundaries", () => {
+    const start = 10.118449;
+    expect(ticks(start + 10 + 10 - 10) - ticks(start)).toBe(100_000_000);
+    expect(ticks(-0.00000015)).toBe(-1);
 });

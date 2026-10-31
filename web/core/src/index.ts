@@ -53,7 +53,11 @@ export type Item = {
         PlaybackPositionTicks?: number;
         PlayedPercentage?: number;
         Played?: boolean;
+        IsFavorite?: boolean;
+        UnplayedItemCount?: number;
     };
+    ChildCount?: number;
+    RecursiveItemCount?: number;
     MediaSources?: Source[];
 };
 export type Page = { Items: Item[] };
@@ -272,7 +276,9 @@ export async function fetchMedia(account: Account, path: string) {
         );
     return r;
 }
-export const ticks = (seconds: number) => Math.trunc(seconds * 10_000_000);
+// Normalize the browser clock to integral nanoseconds before protocol truncation.
+export const ticks = (seconds: number) =>
+    Math.trunc(Math.round(seconds * 1_000_000_000) / 100);
 export function resumeLabel(t: number) {
     const s = Math.floor(Math.max(0, t) / 1e7);
     return (
@@ -411,7 +417,7 @@ export function canDirect(source: Source, probe: Probe, audioIndex?: number) {
         `${mime}; codecs="${[videoCodecs[v.Codec], a?.Codec ? audioCodecs[a.Codec] : undefined].filter(Boolean).join(",")}"`,
     );
 }
-export function browserProfile(probe: Probe) {
+export function browserProfile(probe: Probe, bitrate = 200_000_000) {
     const video = Object.entries(videoCodecs)
         .filter(([, v]) => probe(`video/mp4; codecs="${v}"`))
         .map(([k]) => k);
@@ -420,7 +426,7 @@ export function browserProfile(probe: Probe) {
         .map(([k]) => k);
     return {
         Name: "Pictureshow Web",
-        MaxStreamingBitrate: 40_000_000,
+        MaxStreamingBitrate: bitrate,
         DirectPlayProfiles: [],
         TranscodingProfiles: [
             {
@@ -587,18 +593,17 @@ export class Jellyfin {
     }
     async detail(id: string) {
         const d = await this.catalog<Item>("Items/" + encode(id));
-        try {
-            const b = await this.catalog<Page>("Items?ids=" + encode(id));
-            const i = b.Items?.find((i) => i.Id === id);
-            if (i) d.UserData = i.UserData;
-        } catch (e) {
-            if (
-                !(e instanceof ClientError) ||
-                e.kind === "EXPIRED" ||
-                !["Movie", "Episode", "Video"].includes(d.Type)
-            )
-                throw e;
-        }
+        const b = await this.catalog<Page>("Items?ids=" + encode(id));
+        const i = b.Items?.find((i) => i.Id === id);
+        if (!i)
+            throw new ClientError(
+                "NOT_FOUND",
+                "This item is no longer available. Go Back or Retry.",
+            );
+        d.UserData = i.UserData;
+        if (i.ChildCount !== undefined) d.ChildCount = i.ChildCount;
+        if (i.RecursiveItemCount !== undefined)
+            d.RecursiveItemCount = i.RecursiveItemCount;
         return d;
     }
     async home() {
@@ -626,18 +631,34 @@ export class Jellyfin {
         probe: Probe,
         position: number,
         audio?: number,
-        subtitle = -1,
+        subtitle?: number,
         forceHls = false,
+        bitrateMbps: number | null = null,
     ): Promise<Decision> {
+        const bitrate = [4, 10, 20, 40, 80, 120].includes(bitrateMbps ?? 0)
+            ? bitrateMbps! * 1_000_000
+            : 200_000_000;
         const metadata = item.MediaSources?.[0];
+        const chosenSubtitle = subtitle ?? metadata?.DefaultSubtitleStreamIndex;
+        const subtitleStream = metadata?.MediaStreams?.find(
+            (s) => s.Type === "Subtitle" && s.Index === chosenSubtitle,
+        );
+        const encodedSubtitle =
+            !!subtitleStream &&
+            !["srt", "subrip", "vtt", "webvtt"].includes(
+                subtitleStream.Codec?.toLowerCase() ?? "",
+            );
         const direct =
-            !forceHls && !!metadata && canDirect(metadata, probe, audio);
+            !forceHls &&
+            !encodedSubtitle &&
+            !!metadata &&
+            canDirect(metadata, probe, audio);
         const body = {
             UserId: this.account!.user.Id,
             StartTimeTicks: ticks(position),
             AudioStreamIndex: audio,
             SubtitleStreamIndex: subtitle,
-            MaxStreamingBitrate: 40_000_000,
+            MaxStreamingBitrate: bitrate,
             MaxAudioChannels: 2,
             EnableDirectPlay: direct,
             EnableDirectStream: false,
@@ -645,7 +666,7 @@ export class Jellyfin {
             AllowVideoStreamCopy: true,
             AllowAudioStreamCopy: true,
             DeviceProfile: {
-                ...browserProfile(probe),
+                ...browserProfile(probe, bitrate),
                 DirectPlayProfiles: direct
                     ? [
                           {
@@ -723,6 +744,7 @@ export class Jellyfin {
         subtitle = -1,
         failed = false,
         keepalive = false,
+        muted = false,
     ) {
         return this.request<void>(
             "Sessions/Playing" +
@@ -739,6 +761,8 @@ export class Jellyfin {
                       paused,
                       audio ?? decision.source.DefaultAudioStreamIndex,
                       subtitle,
+                      true,
+                      muted,
                   ),
             "POST",
             keepalive,
@@ -804,12 +828,13 @@ export function progressReport(
     audio?: number | null,
     subtitle?: number | null,
     canSeek = true,
+    muted = false,
 ) {
     return {
         ...reportBase(d, seconds),
         PlayMethod: d.method,
         IsPaused: paused,
-        IsMuted: false,
+        IsMuted: muted,
         CanSeek: canSeek,
         RepeatMode: "RepeatNone",
         PlaybackOrder: "Default",
