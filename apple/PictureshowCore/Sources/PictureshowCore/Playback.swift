@@ -44,6 +44,10 @@ public struct MediaSource: Codable, Equatable, Sendable, CustomStringConvertible
     public var container: String?
     public var name: String?
     public var eTag: String?
+    public var liveStreamId: String?
+    public var isInfiniteStream: Bool = false
+    public var transcodingSubProtocol: String?
+    public var transcodingContainer: String?
     public var runTimeTicks: Int64?
     public var supportsDirectPlay: Bool
     public var supportsDirectStream: Bool
@@ -58,13 +62,17 @@ public struct MediaSource: Codable, Equatable, Sendable, CustomStringConvertible
         self.supportsDirectStream = supportsDirectStream; self.transcodingUrl = transcodingUrl
         supportsTranscoding = false; mediaStreams = []; requiredHttpHeaders = [:]
     }
-    enum CodingKeys: String, CodingKey { case id = "Id", container = "Container", name = "Name", eTag = "ETag", runTimeTicks = "RunTimeTicks", supportsDirectPlay = "SupportsDirectPlay", supportsDirectStream = "SupportsDirectStream", supportsTranscoding = "SupportsTranscoding", transcodingUrl = "TranscodingUrl", mediaStreams = "MediaStreams", requiredHttpHeaders = "RequiredHttpHeaders", defaultAudioStreamIndex = "DefaultAudioStreamIndex", defaultSubtitleStreamIndex = "DefaultSubtitleStreamIndex" }
+    enum CodingKeys: String, CodingKey { case id = "Id", container = "Container", name = "Name", eTag = "ETag", runTimeTicks = "RunTimeTicks", liveStreamId = "LiveStreamId", isInfiniteStream = "IsInfiniteStream", transcodingSubProtocol = "TranscodingSubProtocol", transcodingContainer = "TranscodingContainer", supportsDirectPlay = "SupportsDirectPlay", supportsDirectStream = "SupportsDirectStream", supportsTranscoding = "SupportsTranscoding", transcodingUrl = "TranscodingUrl", mediaStreams = "MediaStreams", requiredHttpHeaders = "RequiredHttpHeaders", defaultAudioStreamIndex = "DefaultAudioStreamIndex", defaultSubtitleStreamIndex = "DefaultSubtitleStreamIndex" }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(String.self, forKey: .id)
         container = try c.decodeIfPresent(String.self, forKey: .container)
         name = try c.decodeIfPresent(String.self, forKey: .name)
         eTag = try c.decodeIfPresent(String.self, forKey: .eTag)
+        liveStreamId = try c.decodeIfPresent(String.self, forKey: .liveStreamId)
+        isInfiniteStream = try c.decodeIfPresent(Bool.self, forKey: .isInfiniteStream) ?? false
+        transcodingSubProtocol = try c.decodeIfPresent(String.self, forKey: .transcodingSubProtocol)
+        transcodingContainer = try c.decodeIfPresent(String.self, forKey: .transcodingContainer)
         runTimeTicks = try c.decodeIfPresent(Int64.self, forKey: .runTimeTicks)
         supportsDirectPlay = try c.decodeIfPresent(Bool.self, forKey: .supportsDirectPlay) ?? false
         supportsDirectStream = try c.decodeIfPresent(Bool.self, forKey: .supportsDirectStream) ?? false
@@ -164,7 +172,7 @@ public enum PlayDecisions {
 /// Conservative AVFoundation profile: unsupported containers/codecs negotiate server HLS.
 /// No Android decoder, passthrough or software-FFmpeg claims apply to Apple devices.
 public enum AppleProfile {
-    public static func json(supportsHEVC: Bool = false) -> [String:Any] {
+    public static func json(supportsHEVC: Bool = false, maxStreamingBitrate: Int = 200_000_000) -> [String:Any] {
         func condition(_ name: String, _ property: String, _ value: String) -> [String:Any] {
             ["Condition": name, "Property": property, "Value": value, "IsRequired": false]
         }
@@ -185,7 +193,7 @@ public enum AppleProfile {
         // Positive subtitle selections still explicitly negotiate server burn-in.
         let embedded = [["Format": "mov_text", "Method": "Embed", "Container": "mp4,m4v,mov"]]
         let subtitles = embedded + ["srt", "ass", "ssa", "sub", "pgssub", "dvdsub", "vtt", "webvtt"].map { ["Format": $0, "Method": "Encode"] }
-        return ["Name": "Pictureshow Apple", "MaxStreamingBitrate": 120_000_000, "MaxStaticBitrate": 120_000_000,
+        return ["Name": "Pictureshow Apple", "MaxStreamingBitrate": maxStreamingBitrate, "MaxStaticBitrate": maxStreamingBitrate,
                 "DirectPlayProfiles": [direct], "TranscodingProfiles": [transcode], "CodecProfiles": [h264, hevc, audio], "SubtitleProfiles": subtitles]
     }
 }
