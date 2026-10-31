@@ -283,13 +283,19 @@ import MediaAccessibility
             nextLookupPending = false
         }
     }
-    private func physicalEnd() async {
+    func physicalEnd(readerRequiresManual: Bool? = nil) async {
         guard !closed, !switching, !pauseIntent, pendingSeekTicks == nil else { return }
+        let manualContinuation = readerRequiresManual ?? UIAccessibility.isVoiceOverRunning
         if item.type == "Episode", !continuationCancelled {
             if nextLookupPending { status = "Finding next episode…"; await extrasTask?.value }
             if nextLookupFailed { status = "Finding next episode…"; do { nextItem = try await client.nextEpisode(account: account, item: item); nextLookupFailed = false } catch { extrasError = "Could not find the next episode." } }
-            if nextItem != nil, !UIAccessibility.isVoiceOverRunning { await advance(); return }
-            if nextItem != nil { nextCountdown = 0; pauseIntent = true; isPaused = true; return }
+            if nextItem != nil, !manualContinuation { await advance(); return }
+            if nextItem != nil {
+                // Reader mode changes continuation, not whether a genuine EOS
+                // completed this item. Retain completion errors for detail Retry.
+                _ = await completeIfNeeded()
+                nextCountdown = 0; pauseIntent = true; isPaused = true; return
+            }
         }
         _ = await completeIfNeeded(); await stop()
     }

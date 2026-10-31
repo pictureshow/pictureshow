@@ -64,6 +64,22 @@ private final class ViewingProtocol: URLProtocol {
         XCTAssertNil(body["MediaSourceId"], "A previous source ID would bind negotiation to the wrong item")
         await session.stop()
     }
+    /// Screen-reader users choose when to continue, while a real physical end
+    /// still completes the finished episode. Manual Next must not complete twice.
+    func testReaderPhysicalEndCompletesOnceBeforeManualContinuation() async throws {
+        try await setupViewing()
+        await session.physicalEnd(readerRequiresManual: true)
+        XCTAssertEqual(session.item.id, "first")
+        XCTAssertEqual(session.nextCountdown, 0)
+        XCTAssertTrue(session.isPaused)
+        XCTAssertNil(session.reportError)
+        XCTAssertEqual(ViewingProtocol.requests.filter { $0.url!.path.hasSuffix("UserPlayedItems/first") && $0.httpMethod == "POST" }.count, 1)
+        XCTAssertFalse(ViewingProtocol.requests.contains { $0.url!.path.contains("/next/PlaybackInfo") })
+        await session.advance()
+        XCTAssertEqual(session.item.id, "next")
+        XCTAssertEqual(ViewingProtocol.requests.filter { $0.url!.path.hasSuffix("UserPlayedItems/first") && $0.httpMethod == "POST" }.count, 1)
+        await session.stop()
+    }
     /// A failed watched-state write cannot be erased by a successful Stop or silently open the
     /// next episode. The final-detail Retry repeats the same desired Played=true intent.
     func testFailedCompletionBlocksNextAndRemainsRetryableAfterStop() async throws {
