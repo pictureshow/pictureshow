@@ -46,6 +46,7 @@ public struct PlaybackPreferences: Codable, Equatable, Sendable {
     public var subtitleBackground: SubtitleBackground
     public var segmentModes: [SegmentType:SegmentMode]
     public var maxStreamingBitrate: Int { bitrateMbps.map { $0 * 1_000_000 } ?? 200_000_000 }
+    public static func validateBitrate(_ value: Int?) throws { guard bitrates.contains(value) else { throw ClientError.invalidResponse } }
     public init(bitrateMbps: Int? = nil, passthrough: Bool = true, subtitleSize: SubtitleSize = .system, subtitleBackground: SubtitleBackground = .system, segmentModes: [SegmentType:SegmentMode] = [:]) {
         self.bitrateMbps = Self.bitrates.contains(bitrateMbps) ? bitrateMbps : nil
         self.passthrough = passthrough; self.subtitleSize = subtitleSize; self.subtitleBackground = subtitleBackground

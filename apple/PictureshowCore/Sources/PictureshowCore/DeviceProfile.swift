@@ -27,7 +27,12 @@ public struct VideoDecoder: Decodable, Sendable {
 public struct DisplayCapabilities: Decodable, Sendable { public var maxWidth:Int; public var maxHeight:Int; public var maxRefreshRate:Double; public var hdrFormats:[String]? }
 public struct AudioDecoder: Decodable, Sendable { public var codec:String; public var maxChannels:Int; public var hardware:Bool? }
 public struct AudioOutput: Decodable, Sendable { public var pcmChannels:Int; public var passthrough:[String]? }
-public struct DeviceSettings: Decodable, Sendable { public var maxStreamingBitrate:Int?; public var passthroughEnabled:Bool? }
+public struct DeviceSettings: Decodable, Sendable {
+    public var maxStreamingBitrate:Int?; public var passthroughEnabled:Bool?
+    enum CodingKeys: String,CodingKey { case maxStreamingBitrate,passthroughEnabled }
+    public static func validateBitrate(_ value:Int)throws->Int { guard value>0 else { throw ClientError.invalidResponse };return value }
+    public init(from decoder:Decoder)throws { let c=try decoder.container(keyedBy:CodingKeys.self);maxStreamingBitrate=try c.decodeIfPresent(Int.self,forKey:.maxStreamingBitrate).map(Self.validateBitrate);passthroughEnabled=try c.decodeIfPresent(Bool.self,forKey:.passthroughEnabled) }
+}
 
 /// Exact reference demuxer policy used by the shared capability vectors. The Apple runtime uses AppleProfile,
 /// since AVFoundation must never inherit Media3's Matroska/bitmap-subtitle/FFmpeg claims.
