@@ -596,9 +596,15 @@ final class AppleSliceUITests: XCTestCase {
     /// this also avoids relying on a transient toolbar item after AVKit hides its controls.
     private func openTouchTrackPanel() {
         let tracks = app.buttons["playerTracks"]
-        if !tracks.exists {
-            let options = app.buttons["playerOptions"]
-            reveal(options); activate(options)
+        if !tracks.waitForExistence(timeout: 20) {
+            capture("Player action strip missing")
+            let closeVisible = app.buttons["closePlayer"].exists
+            let methodVisible = app.staticTexts["playbackMethod"].exists
+            let positionVisible = app.staticTexts["playbackPosition"].exists
+            let optionsVisible = app.buttons["playerOptions"].exists
+            print("F1_AX missing_player_tracks=true close=\(closeVisible) method=\(methodVisible) position=\(positionVisible) options=\(optionsVisible)")
+            XCTFail("The always-visible iOS action strip should expose playerTracks after AVKit presentation settles")
+            return
         }
         reveal(tracks); activate(tracks)
         XCTAssertTrue(app.buttons["playerOptionsDone"].waitForExistence(timeout: 10))
