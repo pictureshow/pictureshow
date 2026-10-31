@@ -6,53 +6,56 @@ import PictureshowCore
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
     var open: (MediaItem) -> Void
-    @FocusState private var focus: String?
-    @State private var lastFocus: String?
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 32) {
-                if model.loading { ProgressView("Loading your library…") }
-                if let error = model.homeError {
-                    Text(error).foregroundStyle(.orange)
-                    Button("Retry") { Task { await model.loadHome() } }
-                }
-                if !model.loading && model.rows.isEmpty && model.homeError == nil { Text("Your server has no videos yet.").foregroundStyle(Theme.muted) }
-                ForEach(model.rows) { row in
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text(row.title).modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader).padding(.horizontal, Theme.gutter)
-                        ScrollView(.horizontal) {
-                            LazyHStack(alignment: .top, spacing: 20) {
-                                ForEach(row.items) { item in
-                                    let key = "\(row.id):\(item.id)"
-                                    Button {
-                                        lastFocus = key
-                                        open(item)
-                                    } label: { CatalogCard(item: item, wide: row.wide || row.library) }
-                                    .buttonStyle(PosterButtonStyle())
-                                    .focused($focus, equals: key)
-                                    .accessibilityLabel(item.accessibleTitle)
-                                    .accessibilityValue(item.progress > 0 ? "\(Int(item.progress * 100)) percent watched" : "")
-                                    .accessibilityIdentifier("item-\(item.id)")
-                                }
-                            }.padding(.horizontal, Theme.gutter).padding(.vertical, 14)
-                        }
-                        .scrollClipDisabled()
-                        .televisionFocusSection()
-                    }
-                }
+                if let account = model.account { Text("\(account.username) · \(account.server.name)").foregroundStyle(Theme.muted).padding(.horizontal, Theme.gutter) }
+                if model.loading { ProgressView("Loading your library…").padding(.horizontal, Theme.gutter) }
+                if let error = model.homeError { ErrorNotice(error: error) { Task { await model.loadHome() } }.padding(.horizontal, Theme.gutter) }
+                if !model.loading && model.rows.isEmpty && model.homeError == nil { Text("Your server has no videos yet.").foregroundStyle(Theme.muted).padding(.horizontal, Theme.gutter) }
+                ForEach(model.rows) { row in CatalogShelf(title: row.title, items: row.items, wide: row.wide || row.library, open: open) }
+                HStack { NavigationLink("Switch user", value: AppRoute.accounts).accessibilityIdentifier("openAccounts"); Button("Sign out") { Task { await model.signOut() } }.accessibilityIdentifier("signOut") }.buttonStyle(.bordered).padding(Theme.gutter)
             }.padding(.vertical, 24)
         }
-        .background(Theme.background.ignoresSafeArea())
-        .navigationTitle("Pictureshow")
+        .background(Theme.background.ignoresSafeArea()).navigationTitle("Pictureshow")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Sign out", systemImage: "person.crop.circle.badge.xmark") { Task { await model.signOut() } }.accessibilityIdentifier("signOut")
+            ToolbarItemGroup(placement: .primaryAction) {
+                NavigationLink(value: AppRoute.search) { Label("Search", systemImage: "magnifyingglass") }.accessibilityIdentifier("openSearch")
+                NavigationLink(value: AppRoute.settings) { Label("Settings", systemImage: "gearshape") }.accessibilityIdentifier("openSettings")
             }
         }
-        .onAppear { focus = lastFocus }
-        .onChange(of: model.rows.map(\.id)) { _, _ in
-            if focus == nil, let row = model.rows.first, let item = row.items.first {
-                focus = "\(row.id):\(item.id)"
+        .refreshable { await model.loadHome() }
+    }
+}
+
+struct ErrorNotice: View {
+    let error: String
+    var retry: () -> Void
+    var body: some View { VStack(alignment: .leading, spacing: 12) { Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true); Button("Retry", action: retry).buttonStyle(.bordered).accessibilityIdentifier("retry") } }
+}
+
+struct CatalogShelf: View {
+    let title: String
+    let items: [MediaItem]
+    var wide = false
+    var open: (MediaItem) -> Void
+    @FocusState private var focused: String?
+    @State private var opener: String?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title).modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader).padding(.horizontal, Theme.gutter)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 20) {
+                        ForEach(items) { item in
+                            Button { opener = item.id; open(item) } label: { CatalogCard(item: item, wide: wide) }
+                                .buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id)
+                                .accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
+                        }
+                    }.padding(.horizontal, Theme.gutter).padding(.vertical, 14)
+                }.scrollClipDisabled().televisionFocusSection()
+                    .onAppear { if let opener { proxy.scrollTo(opener, anchor: .center); focused = opener } }
+                    .onChange(of: focused) { _, value in if let value { withAnimation { proxy.scrollTo(value, anchor: .center) } } }
             }
         }
     }
@@ -63,35 +66,31 @@ struct CatalogCard: View {
     var wide = false
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Artwork(item: item, wide: wide)
-                .frame(width: wide ? Theme.wideCardWidth : Theme.cardWidth, height: wide ? Theme.wideCardWidth * 9 / 16 : Theme.cardWidth * 1.5)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(alignment: .bottom) { if item.progress > 0 { ProgressView(value: item.progress).tint(Theme.accent).padding(.horizontal, 8).padding(.bottom, 8) } }
+            Artwork(item: item, wide: wide).frame(width: wide ? Theme.wideCardWidth : Theme.cardWidth, height: wide ? Theme.wideCardWidth * 9 / 16 : Theme.cardWidth * 1.5).clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(alignment: .bottom) { if item.progress > 0 { ProgressView(value: item.progress).tint(Theme.accent).padding(8) } }
             Text(item.name).modifier(TokenFont(DesignTokens.labelSize, weight: .medium)).lineLimit(2).multilineTextAlignment(.leading)
-            if item.type == "Episode" { Text([item.seriesName, item.episodeLabel].compactMap { $0 }.joined(separator: " · ")).modifier(TokenFont(DesignTokens.captionSize)).foregroundStyle(Theme.muted).lineLimit(1) }
-        }
-        .frame(width: wide ? Theme.wideCardWidth : Theme.cardWidth, alignment: .leading)
-        .accessibilityElement(children: .ignore)
+            Text(item.cardSubtitle).modifier(TokenFont(DesignTokens.captionSize)).foregroundStyle(Theme.muted).lineLimit(2)
+            HStack { if item.isWatched { Label("Watched", systemImage: "checkmark.circle.fill") }; if item.userData.isFavorite { Image(systemName: "heart.fill") }; if let count = item.userData.unplayedItemCount, count > 0 { Text("\(count) unplayed") } }.font(.caption).foregroundStyle(Theme.accent)
+        }.frame(width: wide ? Theme.wideCardWidth : Theme.cardWidth, alignment: .leading).accessibilityElement(children: .ignore)
     }
 }
 
 struct PosterButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        PosterButton(configuration: configuration)
-    }
+    func makeBody(configuration: Configuration) -> some View { PosterButton(configuration: configuration) }
     private struct PosterButton: View {
         let configuration: ButtonStyleConfiguration
         @Environment(\.isFocused) private var focused
+        @Environment(\.accessibilityReduceMotion) private var reducedMotion
+        @Environment(\.accessibilityVoiceOverEnabled) private var reader
         var body: some View {
             configuration.label.padding(5).contentShape(Rectangle())
                 .background(focused ? Theme.surface : Color.clear, in: RoundedRectangle(cornerRadius: 16))
                 .overlay { RoundedRectangle(cornerRadius: 16).stroke(focused ? Theme.accent : .clear, lineWidth: 3) }
-                .scaleEffect(configuration.isPressed ? 0.97 : focused ? 1.035 : 1)
-                .animation(.easeOut(duration: 0.15), value: focused)
+                .scaleEffect(reader || reducedMotion ? 1 : configuration.isPressed ? 0.97 : focused ? 1.035 : 1)
+                .animation(reducedMotion ? nil : .easeOut(duration: 0.15), value: focused)
         }
     }
 }
-
 struct Artwork: View {
     @EnvironmentObject private var model: AppModel
     let item: MediaItem
@@ -128,161 +127,13 @@ actor ArtworkCache {
     }
 }
 
-struct DetailView: View {
-    @EnvironmentObject private var model: AppModel
-    let id: String
-    var open: (MediaItem) -> Void
-    @State private var item: MediaItem?
-    @State private var children: [MediaItem] = []
-    @State private var error: String?
-    @State private var loading = true
-    @State private var audio: Int?
-    @State private var subtitle: Int? = -1
-    @State private var selectedSeason: String?
-    @State private var episodes: [MediaItem] = []
-    @State private var childLoading = false
-    @FocusState private var focused: String?
-    @State private var returnFocus = "play"
-    @State private var playTask: Task<Void, Never>?
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if loading { ProgressView("Loading details…") }
-                    if let error { Text(error).foregroundStyle(.orange); Button("Retry") { Task { await load() } } }
-                    if let item {
-                        hero(item)
-                        if item.type == "Series" {
-                            Text("Seasons").modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
-                            ScrollView(.horizontal) {
-                                HStack(spacing: 18) {
-                                    ForEach(children) { season in
-                                        Button(season.name) {
-                                            selectedSeason = season.id; returnFocus = "season-\(season.id)"
-                                            Task { await loadEpisodes(item, seasonID: season.id) }
-                                        }
-                                        .buttonStyle(.bordered).tint(selectedSeason == season.id ? Theme.accent : Theme.muted)
-                                        .accessibilityValue(selectedSeason == season.id ? "Selected" : "")
-                                        .accessibilityIdentifier("season-\(season.id)").focused($focused, equals: "season-\(season.id)")
-                                    }
-                                }.padding(.vertical, 8)
-                            }
-                            if childLoading { ProgressView("Loading episodes…") }
-                            itemList(episodes, title: "Episodes")
-                        } else if item.isFolder || item.type == "Season" { itemList(children, title: item.type == "Season" ? "Episodes" : "Titles") }
-                    }
-                }
-                .padding(Theme.gutter)
-            }
-            .background(Theme.background.ignoresSafeArea())
-            .task(id: id) { await load() }
-            .onAppear { focused = returnFocus }
-            .onDisappear { playTask?.cancel() }
-            .onChange(of: model.refreshID) { _, _ in
-                Task { await load(refresh: true); proxy.scrollTo(returnFocus, anchor: .center); focused = returnFocus }
-            }
-        }
-        .navigationTitle(item?.name ?? "Details")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-    }
-    private func hero(_ item: MediaItem) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Artwork(item: item, wide: true).frame(maxWidth: .infinity).frame(height: heroHeight).clipShape(RoundedRectangle(cornerRadius: 18))
-            Text(item.name).modifier(TokenFont(DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("detailTitle")
-            Text(metadata(item)).foregroundStyle(Theme.muted)
-            if let overview = item.overview, !overview.isEmpty { Text(overview).modifier(TokenFont(DesignTokens.bodySize)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true) }
-            if ["Movie", "Episode", "Video"].contains(item.type) {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 16) {
-                        Button(item.userData.playbackPositionTicks > 0 ? Catalog.resumeLabel(item.userData.playbackPositionTicks) : "Play", systemImage: "play.fill") {
-                            returnFocus = "play"
-                            playTask = Task { await model.play(item, resume: true, audio: audio, subtitle: subtitle) }
-                        }.buttonStyle(.borderedProminent).disabled(model.preparing).focused($focused, equals: "play").id("play").accessibilityIdentifier("play")
-                        if item.userData.playbackPositionTicks > 0 {
-                            Button("Start over") { returnFocus = "startOver"; playTask = Task { await model.play(item, resume: false, audio: audio, subtitle: subtitle) } }
-                                .buttonStyle(.bordered).disabled(model.preparing).focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver")
-                        }
-                        if model.preparing { ProgressView("Preparing…") }
-                    }
-                    let streams = item.mediaSources.first?.mediaStreams ?? []
-                    if !streams.filter({ $0.type == "Audio" }).isEmpty {
-                        Picker("Audio", selection: $audio) {
-                            Text("Server default").tag(Optional<Int>.none)
-                            ForEach(streams.filter { $0.type == "Audio" }) { stream in Text(stream.label).tag(Optional(stream.index)) }
-                        }.accessibilityIdentifier("audioChoice")
-                    }
-                    Picker("Subtitles", selection: $subtitle) {
-                        Text("Off").tag(Optional(-1))
-                        ForEach(streams.filter { $0.type == "Subtitle" }) { stream in Text(stream.label).tag(Optional(stream.index)) }
-                    }.accessibilityIdentifier("subtitleChoice")
-                }
-            }
-        }
-    }
-    private var heroHeight: CGFloat {
-        #if os(tvOS)
-        300
-        #else
-        220
-        #endif
-    }
-    private func metadata(_ item: MediaItem) -> String {
-        [item.type == "Episode" ? item.episodeLabel : nil, item.productionYear.map(String.init), item.officialRating, Catalog.runtimeLabel(item.runTimeTicks), item.genres.first].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-    private func itemList(_ items: [MediaItem], title: String) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title).modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
-            if items.isEmpty && !loading && !childLoading { Text("No \(title.lowercased()) available.").foregroundStyle(Theme.muted) }
-            ForEach(items) { child in
-                Button { returnFocus = "child-\(child.id)"; open(child) } label: {
-                    HStack(spacing: 18) {
-                        Artwork(item: child, wide: true).frame(width: 120, height: 70).clipShape(RoundedRectangle(cornerRadius: 8))
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(child.name).modifier(TokenFont(DesignTokens.labelSize, weight: .medium))
-                            if child.type == "Episode" { Text(child.episodeLabel).modifier(TokenFont(DesignTokens.captionSize)).foregroundStyle(Theme.muted) }
-                            if child.progress > 0 { ProgressView(value: child.progress) }
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                    }.padding(12).background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
-                }.buttonStyle(PosterButtonStyle()).accessibilityLabel(child.accessibleTitle)
-                    .accessibilityIdentifier("item-\(child.id)").focused($focused, equals: "child-\(child.id)").id("child-\(child.id)")
-            }
-        }
-    }
-    private func load(refresh: Bool = false) async {
-        guard let account = model.account else { return }
-        if !refresh { loading = true }; error = nil
-        defer { loading = false }
-        do {
-            let loaded = try await model.client.item(account: account, id: id)
-            item = loaded
-            if loaded.type == "Series" {
-                children = try await model.client.seasons(account: account, seriesID: loaded.id)
-                if selectedSeason == nil { selectedSeason = children.first?.id }
-                if let selectedSeason { await loadEpisodes(loaded, seasonID: selectedSeason) }
-            } else if loaded.type == "Season", let series = loaded.seriesId {
-                children = try await model.client.episodes(account: account, seriesID: series, seasonID: loaded.id)
-            } else if loaded.isFolder { children = try await model.client.browse(account: account, parentID: loaded.id) }
-            if loaded.type == "Series" && returnFocus == "play", let first = children.first { returnFocus = "season-\(first.id)" }
-            else if loaded.isFolder && returnFocus == "play", let first = children.first { returnFocus = "child-\(first.id)" }
-            focused = returnFocus
-        } catch { self.error = error.localizedDescription }
-    }
-    private func loadEpisodes(_ item: MediaItem, seasonID: String) async {
-        guard let account = model.account else { return }
-        childLoading = true
-        defer { childLoading = false }
-        do { let result = try await model.client.episodes(account: account, seriesID: item.id, seasonID: seasonID); if selectedSeason == seasonID { episodes = result } }
-        catch { self.error = error.localizedDescription }
-    }
-}
 
 extension MediaItem {
+    var isPlayable: Bool { ["Movie", "Episode", "Video"].contains(type) }
+    var isCatalogContainer: Bool { ["CollectionFolder", "Folder", "BoxSet", "Playlist"].contains(type) || (isFolder && !["Series", "Season"].contains(type)) }
+    var cardSubtitle: String { type == "Episode" ? [seriesName, episodeLabel].compactMap { $0 }.joined(separator: " · ") : productionYear.map(String.init) ?? "" }
     var accessibleTitle: String {
-        [type == "Episode" ? seriesName : nil, type == "Episode" ? episodeLabel : nil, name, isWatched ? "Watched" : nil].compactMap { $0 }.joined(separator: ", ")
+        [type == "Episode" ? seriesName : nil, type == "Episode" ? episodeLabel : nil, name, productionYear.map(String.init), isWatched ? "Watched" : nil, userData.isFavorite ? "Favorite" : nil, progress > 0 ? "\(Int(progress * 100)) percent watched" : nil, userData.unplayedItemCount.flatMap { $0 > 0 ? "\($0) unplayed" : nil }].compactMap { $0 }.joined(separator: ", ")
     }
 }
 
@@ -294,4 +145,77 @@ extension View {
         self
         #endif
     }
+}
+
+struct LibrariesView: View {
+    @EnvironmentObject private var model: AppModel
+    var open: (MediaItem) -> Void
+    var body: some View {
+        ScrollView { VStack(alignment: .leading) { if let row = model.rows.first(where: { $0.library }) { CatalogShelf(title: "Your libraries", items: row.items, wide: true, open: open) } else if model.loading { ProgressView("Loading libraries…") } else { Text("No libraries available."); Button("Refresh") { Task { await model.loadHome() } } } }.padding(.vertical, 24) }.navigationTitle("Libraries").background(Theme.background.ignoresSafeArea())
+    }
+}
+
+@MainActor final class PagedCatalog: ObservableObject {
+    @Published var items: [MediaItem] = []
+    @Published var total = 0
+    @Published var loading = false
+    @Published var error: String?
+    var generation = UUID()
+    var next = 0
+    func load(model: AppModel, parent: String, person: Bool = false, sort: String = "SortName", descending: Bool = false, reset: Bool = false) async {
+        guard let account = model.account else { return }
+        if reset { generation = UUID(); items = []; next = 0; total = 0; loading = false }
+        guard !loading else { return }
+        let request = generation; let start = next; loading = true; error = nil
+        defer { if request == generation { loading = false } }
+        do {
+            let result: ItemPage
+            if person { result = try await model.client.personItems(account: account, personID: parent, startIndex: start, limit: 60) }
+            else { result = try await model.client.browsePage(account: account, parentID: parent, startIndex: start, limit: 60, sortBy: sort, descending: descending) }
+            guard request == generation, model.account?.localKey == account.localKey else { return }
+            var ids = Set(items.map(\.id)); items += result.items.filter { ids.insert($0.id).inserted }; total = result.totalRecordCount
+            next = start + result.items.count
+        } catch is CancellationError { } catch { guard request == generation else { return }; model.handle(error, account: account); self.error = error.localizedDescription }
+    }
+}
+
+struct LibraryView: View {
+    @EnvironmentObject private var model: AppModel
+    let id: String
+    let name: String
+    var person = false
+    var open: (MediaItem) -> Void
+    @StateObject private var page = PagedCatalog()
+    @State private var sort = "SortName"
+    @State private var descending = false
+    @FocusState private var focused: String?
+    @State private var opener: String?
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if !person { HStack {
+                        Picker("Sort by", selection: $sort) { Text("Title").tag("SortName"); Text("Date added").tag("DateCreated"); Text("Release date").tag("PremiereDate") }.accessibilityIdentifier("librarySort")
+                        Button(descending ? "Descending" : "Ascending", systemImage: descending ? "arrow.down" : "arrow.up") { descending.toggle() }.buttonStyle(.bordered).accessibilityIdentifier("sortDirection")
+                    } }
+                    if let error = page.error { ErrorNotice(error: error) { Task { await load() } } }
+                    if page.items.isEmpty && !page.loading && page.error == nil { Text("No titles are available.").foregroundStyle(Theme.muted); Button("Refresh") { Task { await load(reset: true) } } }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.cardWidth + 12), spacing: 22)], alignment: .leading, spacing: 28) {
+                        ForEach(page.items) { item in
+                            Button { opener = item.id; open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
+                                .onAppear { if item.id == page.items.suffix(8).first?.id, page.next < page.total { Task { await load() } } }
+                        }
+                    }
+                    if page.loading { ProgressView("Loading titles…") }
+                    if page.next < page.total && !page.loading { Button("Load more") { Task { await load() } } }
+                }.padding(Theme.gutter)
+            }.background(Theme.background.ignoresSafeArea()).navigationTitle(name)
+                .task(id: id) { if page.items.isEmpty { await load(reset: true) } }
+                .onChange(of: sort) { _, _ in Task { await load(reset: true) } }
+                .onChange(of: descending) { _, _ in Task { await load(reset: true) } }
+                .onAppear { if let opener { proxy.scrollTo(opener, anchor: .center); focused = opener } }
+                .onChange(of: focused) { _, value in if let value { withAnimation { proxy.scrollTo(value, anchor: .center) } } }
+        }
+    }
+    private func load(reset: Bool = false) async { await page.load(model: model, parent: id, person: person, sort: sort, descending: descending, reset: reset) }
 }
