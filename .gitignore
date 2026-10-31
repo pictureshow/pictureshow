@@ -11,7 +11,8 @@
 
 /build-logic/.gradle/
 
-# Apple local builds and per-user Xcode state
+# Apple local builds, simulator pilot configuration and per-user Xcode state
+/.remote-build/
 **/.build/
 **/.swiftpm/
 **/xcuserdata/

@@ -8,8 +8,8 @@ class AddressCandidatesTest {
     @Test
     fun ipWithoutSchemeTriesHttpsAndHttpWithStandardAndJellyfinPorts() {
         assertEquals(
-            listOf("https://10.0.0.5", "https://10.0.0.5:8920", "http://10.0.0.5", "http://10.0.0.5:8096"),
-            AddressCandidates.build("10.0.0.5")
+            listOf("https://192.0.2.5", "https://192.0.2.5:8920", "http://192.0.2.5", "http://192.0.2.5:8096"),
+            AddressCandidates.build("192.0.2.5")
         )
     }
 
