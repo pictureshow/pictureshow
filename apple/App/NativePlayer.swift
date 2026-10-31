@@ -23,13 +23,13 @@ struct PlayerScreen: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if let orientationError { Text(orientationError).font(.caption).padding(8) }
                 if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
-                    Button("Skip \(segment.type.rawValue)") { session.skip() }.buttonStyle(.borderedProminent).padding(8)
+                    Button("Skip \(segment.type.rawValue)") { session.skip() }.buttonStyle(ProminentActionStyle()).padding(8)
                 }
                 if let next = session.nextItem, session.nextCountdown != nil {
                     HStack {
                         Button("Play next: \(next.name)") { Task { await session.advance() } }
                         Button("Cancel next episode") { session.cancelContinuation() }
-                    }.buttonStyle(.borderedProminent).padding(8)
+                    }.buttonStyle(ProminentActionStyle()).padding(8)
                 }
                 Text(session.item.name).font(.subheadline.weight(.medium)).lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)

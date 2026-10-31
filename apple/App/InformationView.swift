@@ -29,7 +29,7 @@ private struct AboutView: View {
             Text("Copyright © Legitimate LLC")
             Text("Source: https://github.com/pictureshow/pictureshow").selectableReading()
             Text("Privacy: https://pictureshow.app/privacy/").selectableReading()
-            NavigationLink("Open-source licenses", value: AppRoute.information("licenses")).buttonStyle(.borderedProminent).accessibilityIdentifier("openLicenses")
+            NavigationLink("Open-source licenses", value: AppRoute.information("licenses")).buttonStyle(ProminentActionStyle()).accessibilityIdentifier("openLicenses")
         }
     }
 }
@@ -41,7 +41,7 @@ private struct LicenseTextView: View {
         guard let url = Bundle.main.url(forResource: "MPL-2.0", withExtension: "txt") else { return "The bundled license could not be loaded. Reinstall this build; the complete license is also in the Pictureshow source repository." }
         return (try? String(contentsOf: url, encoding: .utf8)) ?? "The bundled license could not be read."
     }
-    var body: some View { ReadingPage(title: "Mozilla Public License 2.0") { Text("Mozilla Public License 2.0").font(.title).accessibilityAddTraits(.isHeader).accessibilityIdentifier("licenseTitle"); ReadingChunks(text: text) } }
+    var body: some View { ReadingPage(title: "MPL-2.0") { Text("Mozilla Public License 2.0").font(.title).accessibilityAddTraits(.isHeader).accessibilityIdentifier("licenseTitle"); ReadingChunks(text: text) } }
 }
 private struct SupporterView: View {
     var body: some View {
@@ -61,8 +61,7 @@ private struct DiagnosticsView: View {
     @FocusState private var refreshFocused: Bool
     var body: some View {
         ReadingPage(title: "This device") {
-            Text("This device").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
-            Button("Refresh", action: refresh).buttonStyle(.borderedProminent).focused($refreshFocused).accessibilityIdentifier("refreshDiagnostics")
+            Button("Refresh", action: refresh).buttonStyle(ProminentActionStyle()).focused($refreshFocused).accessibilityIdentifier("refreshDiagnostics")
             ForEach(Array(report.enumerated()), id: \.offset) { _, block in ReadingChunks(text: block) }
             Button(showProfile ? "Hide device profile JSON" : "View device profile JSON") { showProfile.toggle() }.buttonStyle(.bordered).accessibilityIdentifier("toggleProfile")
             if showProfile { ReadingChunks(text: profile) }
@@ -85,12 +84,27 @@ struct ReadingPage<Content: View>: View {
 }
 struct ReadingChunks: View {
     let text: String
-    private var blocks: [String] {
-        var blocks: [String] = []; var current = ""
-        for word in text.split(whereSeparator: \.isWhitespace) { if current.count + word.count > 700 { blocks.append(current); current = "" }; current += (current.isEmpty ? "" : " ") + word }
-        if !current.isEmpty { blocks.append(current) }; return blocks
+    /// Preserve every character, including license paragraphs and JSON indentation.
+    /// Prefer paragraph boundaries; long paragraphs split only at whitespace.
+    static func blocks(_ text: String, maxCharacters: Int = 700) -> [String] {
+        var remaining = text[...]
+        var result: [String] = []
+        let limit = max(1, maxCharacters)
+        while remaining.count > limit {
+            let end = remaining.index(remaining.startIndex, offsetBy: limit)
+            let prefix = remaining[..<end]
+            let cut: String.Index
+            if let paragraph = prefix.range(of: "\n\n", options: .backwards) { cut = paragraph.upperBound }
+            else if let space = prefix.lastIndex(where: \.isWhitespace) { cut = remaining.index(after: space) }
+            else if let space = remaining[end...].firstIndex(where: \.isWhitespace) { cut = remaining.index(after: space) }
+            else { break } // A single long word stays intact.
+            result.append(String(remaining[..<cut])); remaining = remaining[cut...]
+        }
+        if !remaining.isEmpty { result.append(String(remaining)) }
+        return result
     }
-    var body: some View { LazyVStack(alignment: .leading, spacing: 18) { ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in Text(block).fixedSize(horizontal: false, vertical: true).selectableReading().readingFocusable() } } }
+    var body: some View { LazyVStack(alignment: .leading, spacing: 0) { ForEach(Array(Self.blocks(text).enumerated()), id: \.offset) { _, block in Text(block).fixedSize(horizontal: false, vertical: true).selectableReading().readingFocusable() } } }
+
 }
 extension View {
     @ViewBuilder func selectableReading() -> some View {

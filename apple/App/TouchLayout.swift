@@ -21,3 +21,11 @@ extension View {
         #endif
     }
 }
+
+/// Retain native pressed/focus/disabled behavior with readable ink on the shared
+/// light lavender accent. Setting this inside the style affects button labels only.
+struct ProminentActionStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(configuration).buttonStyle(.borderedProminent).foregroundStyle(Theme.background)
+    }
+}

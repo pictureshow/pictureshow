@@ -104,6 +104,16 @@ private final class InertViewingPlayer: AVPlayer {
         XCTAssertNil(session.reportError)
         XCTAssertEqual(ViewingProtocol.requests.filter { $0.url!.path.hasSuffix("UserPlayedItems/first") }.count, 2)
     }
+    func testReadingChunksRetainLicenseFormattingAndJSONIndentation() {
+        let text = "License\n=======\n\n1. Definitions\n--------------\n\n1.1. Café and 👩🏽‍💻.\n\n" + String(repeating: "A clause with words and  spaces. ", count: 80) + "\n\n{\n  \"Profile\": [\n    1, 2\n  ]\n}\n"
+        let blocks = ReadingChunks.blocks(text, maxCharacters: 80)
+        XCTAssertGreaterThan(blocks.count, 2)
+        XCTAssertEqual(blocks.joined(), text, "Reading pagination must not lose paragraphs, whitespace, Unicode or JSON indentation")
+        XCTAssertTrue(blocks.contains { $0.contains("License\n=======\n\n") })
+        XCTAssertTrue(ReadingChunks.blocks("").isEmpty)
+        let longWord = String(repeating: "x", count: 900)
+        XCTAssertEqual(ReadingChunks.blocks(longWord), [longWord], "Do not split an unbroken identifier or loop forever")
+    }
     private func requestBody(_ request: URLRequest) throws -> [String:Any] {
         var data = request.httpBody ?? Data()
         if let stream = request.httpBodyStream {

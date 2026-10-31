@@ -43,12 +43,13 @@ struct CatalogShelf: View {
     let title: String
     let items: [MediaItem]
     var wide = false
+    var horizontalInset: CGFloat = Theme.gutter
     var open: (MediaItem) -> Void
     @FocusState private var focused: String?
     @State private var opener: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(title).modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader).padding(.horizontal, Theme.gutter)
+            Text(title).modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader).padding(.horizontal, horizontalInset)
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 20) {
@@ -57,7 +58,7 @@ struct CatalogShelf: View {
                                 .buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id)
                                 .accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
                         }
-                    }.padding(.horizontal, Theme.gutter).padding(.vertical, 14)
+                    }.padding(.horizontal, horizontalInset).padding(.vertical, 14)
                 }.scrollClipDisabled().televisionFocusSection()
                     .onAppear { if opener == nil { opener = UserDefaults.standard.string(forKey: memoryKey) }; if let opener, items.contains(where: { $0.id == opener }) { proxy.scrollTo(opener, anchor: .center); focused = opener } }
                     .onChange(of: focused) { _, value in if let value { withAnimation { proxy.scrollTo(value, anchor: .center) } } }

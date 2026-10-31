@@ -143,7 +143,7 @@ private struct SignInForm: View {
             #if os(iOS)
             .textFieldStyle(.roundedBorder)
             #endif
-            .buttonStyle(.borderedProminent).frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
+            .buttonStyle(ProminentActionStyle()).frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
         }
         .background(Theme.background.ignoresSafeArea())
         .task {
