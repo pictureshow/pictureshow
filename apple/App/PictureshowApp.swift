@@ -50,6 +50,7 @@ struct AccountSnapshot: Codable {
     @Published var player: PlaybackSession?
     private var activePlayback: PlaybackSession?
     private var dismissingPlayback: PlaybackSession?
+    private var pendingPlaybackSave: PlaybackSession?
     @Published var playbackError: String?
     @Published var preparing = false
     @Published var playbackSaving = false
@@ -91,7 +92,7 @@ struct AccountSnapshot: Codable {
         changed.servers.removeAll { $0.url == incoming.server.url }; changed.servers.append(incoming.server)
         changed.selected = incoming.localKey
         try AccountVault.saveSnapshot(changed)
-        snapshot = changed; accountGeneration += 1; account = incoming
+        snapshot = changed; accountGeneration += 1; pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = incoming
         authenticatedClient = makeClient(incoming.deviceID)
         signInFlow.clear(); rows = []; homeError = nil; showSignIn = false; signInServer = nil; signInUsername = ""; sessionEnded = false
     }
@@ -99,7 +100,7 @@ struct AccountSnapshot: Codable {
         if saved.accessToken.isEmpty { beginSignIn(server: saved.server, username: saved.username); return }
         do { var changed = snapshot; changed.selected = saved.localKey; try AccountVault.saveSnapshot(changed); snapshot = changed }
         catch { storageError = error.localizedDescription; return }
-        accountGeneration += 1; homeGeneration += 1; account = saved; authenticatedClient = makeClient(saved.deviceID)
+        accountGeneration += 1; homeGeneration += 1; pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = saved; authenticatedClient = makeClient(saved.deviceID)
         rows = []; homeError = nil; showSignIn = false; refreshID = UUID(); await loadHome()
     }
     func signOut() async {
@@ -110,6 +111,7 @@ struct AccountSnapshot: Codable {
         } catch { storageError = error.localizedDescription; return }
         let oldClient = client
         accountGeneration += 1; homeGeneration += 1
+        pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil
         account = nil; rows = []; homeError = nil; loading = false; sessionEnded = false; showSignIn = false
         try? await oldClient.logout(account: oldAccount)
     }
@@ -171,9 +173,18 @@ struct AccountSnapshot: Codable {
         Task {
             await session.stop()
             guard accountGeneration == accountVersion else { return }
-            playbackSaveError = session.reportError; playbackSaving = false; refreshID = UUID()
+            playbackSaveError = session.reportError; pendingPlaybackSave = session.reportError == nil ? nil : session; playbackSaving = false; refreshID = UUID()
             await loadHome()
         }
+    }
+    func retryPlaybackSave() async {
+        guard let session = pendingPlaybackSave, !playbackSaving else { return }
+        let version = accountGeneration; playbackSaving = true
+        await session.retrySaving()
+        guard version == accountGeneration else { return }
+        playbackSaveError = session.reportError
+        if session.reportError == nil { pendingPlaybackSave = nil }
+        playbackSaving = false; refreshID = UUID(); await loadHome()
     }
     func openPlaybackURL(_ url: URL) async {
         guard url.scheme == "pictureshow" else { return }

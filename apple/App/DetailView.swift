@@ -160,7 +160,7 @@ struct DetailView: View {
                     } else if state.reading { ProgressView("Loading item…") }
                     if let error = state.readError { Text(error).foregroundStyle(.orange); Button(state.reading ? "Retrying…" : "Retry") { state.refresh(id: id, model: model, deliberate: true) }.disabled(state.reading).buttonStyle(.borderedProminent).focused($focused, equals: "detailRetry").id("detailRetry").accessibilityIdentifier("detailRetry") }
                     if let error = state.writeError { Text(error).foregroundStyle(.orange); Button("Retry change") { state.retryWrite(model: model) }.buttonStyle(.bordered) }
-                    if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange) }
+                    if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange); Button(model.playbackSaving ? "Saving progress…" : "Retry saving progress") { Task { await model.retryPlaybackSave() } }.disabled(model.playbackSaving).buttonStyle(.bordered).accessibilityIdentifier("retryProgress") }
                     if let notice = state.notice { Text(notice).foregroundStyle(Theme.muted) }
                 }.padding(Theme.gutter)
             }
