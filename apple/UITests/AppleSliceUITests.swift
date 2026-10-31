@@ -224,7 +224,7 @@ final class AppleSliceUITests: XCTestCase {
         openTouchTrackPanel()
         XCTAssertEqual(app.buttons["subtitle-\(subtitle)"].value as? String, "Selected")
         capture("Audio and subtitle selection")
-        activate(app.buttons["Done"])
+        activate(app.buttons["playerOptionsDone"])
         #endif
         XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 30))
         XCTAssertEqual(app.staticTexts["playbackMethod"].label, "Server HLS")
@@ -444,7 +444,7 @@ final class AppleSliceUITests: XCTestCase {
             let subtitleChoice = app.buttons["subtitle-\(subtitle)"]
             XCTAssertEqual(subtitleChoice.value as? String, "Selected")
             capture("Explicit audio and subtitle choices")
-            activate(app.buttons["Done"])
+            activate(app.buttons["playerOptionsDone"])
             expectation(for: NSPredicate(format: "label == %@", "Server HLS"), evaluatedWith: method)
             waitForExpectations(timeout: 30)
             let beforeChange = seconds(position.label)
@@ -558,7 +558,7 @@ final class AppleSliceUITests: XCTestCase {
             reveal(options); activate(options)
         }
         reveal(tracks); activate(tracks)
-        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["playerOptionsDone"].waitForExistence(timeout: 10))
     }
     private func selectTouchTrack(type: String, index: String) {
         openTouchTrackPanel()
