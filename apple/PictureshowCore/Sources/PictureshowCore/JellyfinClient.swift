@@ -119,12 +119,11 @@ public final class JellyfinClient: @unchecked Sendable {
     public func item(account: Account, id: String) async throws -> MediaItem {
         var detail = try decoder.decode(MediaItem.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(id))"))
         guard ["Movie", "Episode", "Video", "Series", "Season", "BoxSet", "Playlist", "Folder", "CollectionFolder"].contains(detail.type) else { return detail }
-        do {
-            let projected = try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "ids", value: id)]))
-            if let item = projected.items.first(where: { $0.id == id }) { detail.userData = item.userData }
-        } catch {
-            if error as? ClientError == .invalidCredentials || !["Movie", "Episode", "Video"].contains(detail.type) { throw error }
-        }
+        // The batch projection is required even for playable titles: Jellyfin 12 can return
+        // ambiguous primary UserData. A failed projection must keep freshness-sensitive actions
+        // behind Retry rather than publish stale resume/watched state as a successful detail.
+        let projected = try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "ids", value: id)]))
+        if let item = projected.items.first(where: { $0.id == id }) { detail.userData = item.userData }
         return detail
     }
     public func browse(account: Account, parentID: String, startIndex: Int = 0, limit: Int = 60) async throws -> [MediaItem] {
