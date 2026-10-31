@@ -5,11 +5,13 @@ import AVKit
 import PictureshowCore
 import PictureshowTransport
 import OSLog
+import MediaAccessibility
 
+/// A viewing owns reports. Decoder replacements own encoders, never another viewing Start/Stop.
 @MainActor final class PlaybackSession: ObservableObject, Identifiable {
     let id = UUID()
     let player = AVPlayer()
-    let item: MediaItem
+    @Published private(set) var item: MediaItem
     @Published private(set) var decision: PlayDecision?
     @Published private(set) var status = "Preparing playback…"
     @Published private(set) var error: String?
@@ -18,429 +20,371 @@ import OSLog
     @Published private(set) var changingTracks = false
     @Published private(set) var isPaused = false
     @Published private(set) var waitingForVideo = true
+    @Published private(set) var chapters: [Chapter] = []
+    @Published private(set) var skipSegment: MediaSegment?
+    @Published private(set) var nextItem: MediaItem?
+    @Published private(set) var nextCountdown: Int?
+    @Published private(set) var extrasError: String?
+    @Published var panelOpen = false
+    @Published var controlsVisible = false
+    @Published private(set) var subtitleDelayMs = 0
     private let client: JellyfinClient
     private let account: Account
-    private var relay: PlaybackRelay?
-    private var observation: NSKeyValueObservation?
+    let preferences: PlaybackPreferences
+    private var statusObservation: NSKeyValueObservation?
+    private var controlObservation: NSKeyValueObservation?
     private var timeObservation: Any?
     private var endedObservation: NSObjectProtocol?
     private var selectionObservation: NSObjectProtocol?
-    private var loop: Task<Void, Never>?
     private var startTask: Task<Void, Never>?
-    private var selectionTask: Task<Void, Never>?
+    private var extrasTask: Task<Void, Never>?
+    private var timeoutTask: Task<Void, Never>?
+    private var reportTail: Task<Void, Never>?
+    private var viewingID = UUID()
     private var started = false
     private var timelineReady = false
     private var stopped = false
     private var fallbackUsed = false
     private var closed = false
     private var generation = 0
-    private var terminalCloseTask: Task<Void, Never>?
-    private var streamStopTask: Task<Void, Never>?
+    private var closeTask: Task<Void, Never>?
+    private var pauseIntent = false
+    private var pendingSeekTicks: Int64?
+    private var segments: [MediaSegment] = []
+    private var extrasItem: MediaItem?
+    private var imageCache: [URL: UIImage] = [:]
+    private var skipped = Set<String>()
+    private var continuationCancelled = false
+    private var nextLookupFailed = false
+    private var nextLookupPending = true
+    private var switching = false
+    private var completionCommitted = false
+    private var lastReportTime = Date.distantPast
+    private var lastTickTime = Date()
+    private var countdownElapsed: Double = 0
+    private var lastSeekTime = Date.distantPast
+    private var stalledSince: Date?
+    private var lastObservedTicks: Int64 = 0
 
-    init(client: JellyfinClient, account: Account, item: MediaItem) {
-        self.client = client; self.account = account; self.item = item
+    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init()) {
+        self.client = client; self.account = account; self.item = item; self.preferences = preferences
+        player.allowsExternalPlayback = true
+        player.appliesMediaSelectionCriteriaAutomatically = false
     }
     func prepare(startTicks: Int64, audio: Int?, subtitle: Int?, forceHLS: Bool = false) async throws {
         guard !closed else { throw CancellationError() }
-        waitingForVideo = true
-        let expectedGeneration = generation
-        #if os(iOS) || os(tvOS)
+        let version = generation
+        waitingForVideo = true; timelineReady = false; stopped = false; error = nil
+        status = "Preparing playback…"
         try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try AVAudioSession.sharedInstance().setActive(true)
-        #endif
-        let next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks, audioIndex: audio, subtitleIndex: subtitle, forceTranscode: forceHLS || audio != nil, mediaSourceID: item.mediaSources.first?.id)
-        #if DEBUG
-        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Negotiated \(next.method.rawValue, privacy: .public), forceHLS=\(forceHLS), audio=\(audio ?? -999), subtitle=\(subtitle ?? -999), reasons=\(next.transcodeReasons.joined(separator: ","), privacy: .public)")
-        #endif
-        let relay = PlaybackRelay(server: account.server.url, headers: next.headers)
-        do {
-            try await relay.start()
-            guard !closed, generation == expectedGeneration else { throw CancellationError() }
-        } catch {
-            relay.stop()
-            try? await client.stopEncoding(account: account, decision: next)
-            throw error
+        var selectedSubtitle = subtitle
+        if subtitle == nil, MACaptionAppearanceGetDisplayType(.user) == .alwaysOn,
+           let configuration = try? await client.configuration(account: account),
+           let language = Captions.language(enabled: true, configuration: configuration, deviceLanguage: Locale.preferredLanguages.first ?? "") {
+            if let source = decision?.source ?? item.mediaSources.first { selectedSubtitle = Captions.index(source: source, preferredLanguage: language) }
         }
-        let url = try relay.url(for: next.url)
-        self.relay = relay; decision = next; positionTicks = startTicks; started = false; timelineReady = false; stopped = false
+        let next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
+            audioIndex: audio, subtitleIndex: selectedSubtitle, forceTranscode: forceHLS || audio != nil,
+            mediaSourceID: decision?.source.id ?? item.mediaSources.first?.id, preferences: preferences)
+        guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
+        let url: URL
+        do { url = try ServerPlaybackURL.make(decisionURL: next.url, server: account.server.url,
+                                             token: account.accessToken, requiredHeaders: next.headers) }
+        catch { try? await client.stopEncoding(account: account, decision: next); throw error }
+        decision = next; positionTicks = startTicks
         status = next.method == .directPlay ? "Direct play" : next.method == .directStream ? "Direct stream" : "Server HLS"
+        player.isMuted = audio == -1
         let avItem = AVPlayerItem(url: url)
-        player.appliesMediaSelectionCriteriaAutomatically = false
-        observation = avItem.observe(\.status, options: [.new]) { [weak self] observed, _ in
+        var textAttributes: [String: Any] = [:]
+        if let scale = preferences.subtitleSize.scale { textAttributes[kCMTextMarkupAttribute_RelativeFontSize as String] = scale * 100 }
+        if preferences.subtitleBackground != .system {
+            textAttributes[kCMTextMarkupAttribute_BackgroundColorARGB as String] = preferences.subtitleBackground == .box ? [0.8, 0, 0, 0] : [0, 0, 0, 0]
+            textAttributes[kCMTextMarkupAttribute_CharacterEdgeStyle as String] = preferences.subtitleBackground == .shadow ? kCMTextMarkupCharacterEdgeStyle_DropShadow : kCMTextMarkupCharacterEdgeStyle_None
+        }
+        if !textAttributes.isEmpty, let rule = AVTextStyleRule(textMarkupAttributes: textAttributes) { avItem.textStyleRules = [rule] }
+        let title = AVMutableMetadataItem(); title.identifier = .commonIdentifierTitle; title.value = item.name as NSString; title.extendedLanguageTag = "und"
+        let description = AVMutableMetadataItem(); description.identifier = .commonIdentifierDescription; description.value = (item.overview ?? item.seriesName ?? "") as NSString; description.extendedLanguageTag = "und"
+        avItem.externalMetadata = [title, description]
+        statusObservation = avItem.observe(\.status, options: [.new]) { [weak self] observed, _ in
             Task { @MainActor in
-                guard let self, self.player.currentItem === observed, !self.stopped else { return }
-                if observed.status == .readyToPlay { self.ready() }
+                guard let self, self.player.currentItem === observed, self.generation == version, !self.closed else { return }
+                if observed.status == .readyToPlay { self.ready(version: version) }
                 else if observed.status == .failed { await self.failed() }
             }
         }
+        controlObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] observed, _ in
+            Task { @MainActor in
+                guard let self, self.timelineReady, !self.changingTracks, !self.closed else { return }
+                if observed.timeControlStatus != .waitingToPlayAtSpecifiedRate {
+                    self.pauseIntent = observed.timeControlStatus == .paused
+                    self.isPaused = self.pauseIntent
+                    self.enqueueProgress()
+                }
+            }
+        }
         endedObservation = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: avItem, queue: .main) { [weak self] _ in
-            Task { @MainActor in await self?.stop() }
+            Task { @MainActor in await self?.physicalEnd() }
         }
         selectionObservation = NotificationCenter.default.addObserver(forName: AVPlayerItem.mediaSelectionDidChangeNotification, object: avItem, queue: .main) { [weak self] _ in
             Task { @MainActor in await self?.recordNativeSelection(avItem) }
         }
         player.replaceCurrentItem(with: avItem)
-        timeObservation = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 600), queue: .main) { [weak self] time in
-            Task { @MainActor in
-                guard let self, !self.stopped, self.timelineReady, let decision = self.decision else { return }
-                self.positionTicks = decision.serverPositionTicks(playerSeconds: time.seconds)
-            }
+        timeObservation = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
         }
+        timeoutTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(12)) } catch { return }
+            guard let self, !self.timelineReady, self.generation == version, !self.closed else { return }
+            self.status = "Still waiting for playback. You can go back and try again."
+            do { try await Task.sleep(for: .seconds(33)) } catch { return }
+            guard !self.timelineReady, self.generation == version, !self.closed else { return }
+            self.error = "Playback took too long. Go back to details and try again."
+            await self.stop()
+        }
+        if extrasTask == nil { loadExtras() }
     }
-    private func ready() {
-        guard !started, !stopped, let decision else { return }
-        #if DEBUG
-        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Ready to play, seek=\(decision.initialSeekSeconds)")
-        #endif
-        started = true
-        startTask = Task {
-            if decision.initialSeekSeconds > 0 {
-                let didSeek = await player.seek(to: CMTime(seconds: decision.initialSeekSeconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                guard didSeek else {
-                    error = "The saved position could not be loaded. Try again."
-                    waitingForVideo = false
-                    return
-                }
+    private func ready(version: Int) {
+        guard !timelineReady, startTask == nil, !closed, let decision else { return }
+        startTask = Task { [weak self] in
+            guard let self else { return }
+            let target = self.pendingSeekTicks ?? decision.startTicks
+            if target > 0 {
+                let success = await self.player.seek(to: CMTime(seconds: Ticks.seconds(target), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+                guard success else { self.error = "The saved position could not be loaded. Try again."; self.waitingForVideo = false; return }
             }
-            guard !Task.isCancelled, !stopped else { return }
+            guard !Task.isCancelled, !self.closed, self.generation == version else { return }
             if decision.subtitleIndex == -1, decision.method != .transcode,
-               decision.source.mediaStreams.contains(where: { $0.type == "Subtitle" && !$0.isExternal }),
-               let group = try? await player.currentItem?.asset.loadMediaSelectionGroup(for: .legible) {
-                player.currentItem?.select(nil, in: group)
-            }
-            #if DEBUG
-            Logger(subsystem: "app.pictureshow", category: "Playback").notice("Initial subtitle selection applied")
-            #endif
-            guard !Task.isCancelled, !stopped else { return }
-            timelineReady = true
-            player.play()
-            isPaused = false
-            waitingForVideo = false
-            if let item = player.currentItem {
-                selectionTask = Task { [weak self] in if let self { await self.recordNativeSelection(item) } }
-            }
-            #if DEBUG
-            Logger(subsystem: "app.pictureshow", category: "Playback").notice("Playback requested, controlStatus=\(self.player.timeControlStatus.rawValue)")
-            #endif
-            do { try await client.reportStart(account: account, decision: self.decision ?? decision, positionTicks: positionTicks) }
-            catch { reportError = "The server could not record playback. Resume may be unavailable." }
-            guard !Task.isCancelled, !stopped else { return }
-            loop = Task {
-                while !Task.isCancelled && !stopped {
-                    do { try await Task.sleep(for: .seconds(5)) } catch { break }
-                    guard !Task.isCancelled, !stopped else { break }
-                    await reportProgress()
-                }
-            }
+               let group = try? await self.player.currentItem?.asset.loadMediaSelectionGroup(for: .legible) { self.player.currentItem?.select(nil, in: group) }
+            self.pendingSeekTicks = nil; self.timelineReady = true; self.waitingForVideo = false
+            self.timeoutTask?.cancel(); self.timeoutTask = nil
+            self.isPaused = self.pauseIntent
+            if self.pauseIntent { self.player.pause() } else { self.player.play() }
+            self.lastTickTime = Date(); self.lastObservedTicks = target; self.stalledSince = nil
+            if !self.started {
+                self.started = true
+                self.enqueueReport(decision: decision, kind: "start", ticks: target, paused: self.pauseIntent)
+            } else { self.enqueueProgress() }
+            await self.recordNativeSelection(self.player.currentItem)
+            self.installChapterMarkers()
         }
     }
     func togglePlayback() {
-        guard timelineReady, !stopped else { return }
-        isPaused = player.timeControlStatus != .paused
-        if isPaused { player.pause() } else { player.play() }
+        guard !closed else { return }
+        pauseIntent.toggle(); isPaused = pauseIntent
+        if timelineReady { if pauseIntent { player.pause() } else { player.play() } }
+        enqueueProgress()
     }
-    func seek(by seconds: Double) {
-        guard timelineReady, !stopped else { return }
-        let duration = player.currentItem?.duration.seconds ?? .infinity
-        let end = duration.isFinite ? max(0, duration - 0.1) : .infinity
-        let target = min(end, max(0, player.currentTime().seconds + seconds))
-        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-    }
-    /// Native AVKit menus can select embedded tracks without another server request. Report
-    /// only an unambiguous server index; AVFoundation can omit tracks, so ordinal mapping lies.
-    private func recordNativeSelection(_ avItem: AVPlayerItem) async {
-        guard timelineReady, !stopped, player.currentItem === avItem,
-              var updated = decision, updated.method != .transcode else { return }
-        do {
-            if let group = try await avItem.asset.loadMediaSelectionGroup(for: .audible) {
-                updated.audioIndex = nativeIndex(avItem.currentMediaSelection.selectedMediaOption(in: group), type: "Audio", streams: updated.source.mediaStreams)
-            } else { updated.audioIndex = nil }
-        } catch { updated.audioIndex = nil }
-        do {
-            if let group = try await avItem.asset.loadMediaSelectionGroup(for: .legible), let option = avItem.currentMediaSelection.selectedMediaOption(in: group) {
-                updated.subtitleIndex = nativeIndex(option, type: "Subtitle", streams: updated.source.mediaStreams)
-            } else { updated.subtitleIndex = -1 }
-        } catch { updated.subtitleIndex = nil }
-        guard !stopped, player.currentItem === avItem else { return }
-        decision = updated
-        #if DEBUG
-        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native selection metadata loaded")
-        #endif
-    }
-    private func nativeIndex(_ option: AVMediaSelectionOption?, type: String, streams: [MediaStream]) -> Int? {
-        guard let option else { return nil }
-        var candidates = streams.filter { $0.type == type && !$0.isExternal }
-        if let language = option.extendedLanguageTag ?? option.locale?.language.languageCode?.identifier {
-            func normalized(_ value: String) -> String {
-                let base = value.lowercased().split(separator: "-").first.map(String.init) ?? value
-                return ["eng":"en", "spa":"es", "fra":"fr", "fre":"fr", "deu":"de", "ger":"de", "ita":"it", "jpn":"ja", "zho":"zh", "chi":"zh", "por":"pt", "kor":"ko", "rus":"ru" ][base] ?? base
-            }
-            if normalized(language) != "und" {
-                candidates = candidates.filter { $0.language == nil || $0.language == "und" || $0.language.map(normalized) == normalized(language) }
+    func nativeSeekBegan(_ seconds: Double) { lastSeekTime = Date(); countdownElapsed = 0 }
+    func backgrounded() { pauseIntent = true; isPaused = true; player.pause(); enqueueProgress() }
+    func seek(by seconds: Double) { seek(toTicks: Ticks.adding(pendingSeekTicks ?? currentTicks, Ticks.from(seconds: seconds))) }
+    func seek(toTicks ticks: Int64) {
+        guard !closed else { return }
+        let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
+        let target = min(upper, max(0, ticks)); pendingSeekTicks = target; lastSeekTime = Date()
+        countdownElapsed = 0
+        guard timelineReady else { positionTicks = target; return }
+        let wasPaused = pauseIntent
+        player.seek(to: CMTime(seconds: Ticks.seconds(target), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] success in
+            Task { @MainActor in
+                guard let self, !self.closed, success else { return }
+                self.pendingSeekTicks = nil; self.positionTicks = target
+                if wasPaused { self.player.pause(); self.pauseIntent = true; self.isPaused = true }
+                self.enqueueProgress()
             }
         }
-        if candidates.count == 1 { return candidates[0].index }
-        let name = option.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let titled = candidates.filter { stream in
-            [stream.title, stream.displayTitle].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.contains(name)
-        }
-        if titled.count == 1 { return titled[0].index }
-        return nil
     }
-    private func reportProgress() async {
-        guard timelineReady, !stopped, let decision else { return }
-        do {
-            try await client.reportProgress(account: account, decision: decision, positionTicks: currentTicks, paused: player.timeControlStatus == .paused)
-            reportError = nil
-        } catch { reportError = "The server could not save progress. Check your connection." }
+    var durationSeconds: Double? {
+        let duration = player.currentItem?.duration.seconds ?? .nan
+        return duration.isFinite && duration > 0 && duration <= 86400 ? duration : nil
+    }
+    var subtitleTimingAvailable: Bool { false }
+    var subtitleTimingExplanation: String {
+        decision?.method == .transcode && (decision?.subtitleIndex ?? -1) >= 0
+        ? "These subtitles are burned into the video by the server. Timing and appearance cannot be changed."
+        : "AVKit uses the system caption renderer. Per-viewing subtitle timing is not exposed by Apple's public player API."
     }
     private var currentTicks: Int64 {
-        guard let decision, timelineReady else { return positionTicks }
-        let value = player.currentTime().seconds
-        return value.isFinite ? max(0, decision.serverPositionTicks(playerSeconds: value)) : positionTicks
+        guard timelineReady else { return pendingSeekTicks ?? positionTicks }
+        let seconds = player.currentTime().seconds
+        return seconds.isFinite ? max(0, Ticks.from(seconds: seconds)) : positionTicks
     }
-    /// Closing the presentation is terminal, even while a replacement is negotiating.
+    private func tick() {
+        guard timelineReady, !closed else { return }
+        positionTicks = currentTicks
+        let now = Date(), elapsed = min(1, now.timeIntervalSince(lastTickTime)); lastTickTime = now
+        let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        if !pauseIntent && (waiting || lastObservedTicks == positionTicks) {
+            if stalledSince == nil { stalledSince = now }
+            if now.timeIntervalSince(stalledSince!) > 12 { status = "Still waiting for playback. You can go back and try again." }
+            if now.timeIntervalSince(stalledSince!) > 45 { Task { await failed() }; stalledSince = nil }
+        } else { stalledSince = nil }
+        lastObservedTicks = positionTicks
+        if now.timeIntervalSince(lastReportTime) >= 5 { enqueueProgress(); lastReportTime = now }
+        let modes = preferences.segmentModes
+        skipSegment = PlaybackExtras.activeSegment(segments, positionMs: positionTicks / 10_000, modes: modes)
+        if let segment = skipSegment, modes[segment.type] == .automatic, !pauseIntent, !waiting,
+           !skipped.contains(segment.id) { skipped.insert(segment.id); seek(toTicks: segment.endTicks); skipSegment = nil }
+        guard let duration = durationSeconds, nextItem != nil, !continuationCancelled,
+              let trigger = PlaybackExtras.nextTrigger(durationMs: Int64(duration * 1000), segments: segments),
+              positionTicks / 10_000 >= trigger else { nextCountdown = nil; return }
+        let credits = PlaybackExtras.creditsStart(durationMs: Int64(duration * 1000), segments: segments) != nil
+        if credits && !pauseIntent && !waiting && !panelOpen && !controlsVisible && now.timeIntervalSince(lastSeekTime) > 2 && !UIAccessibility.isVoiceOverRunning {
+            countdownElapsed += elapsed
+            nextCountdown = max(0, 10 - Int(countdownElapsed))
+            if countdownElapsed >= 10 { Task { await advance() } }
+        } else { nextCountdown = credits ? max(0, 10 - Int(countdownElapsed)) : max(0, Int(duration - Ticks.seconds(positionTicks))) }
+    }
+    func skip() { guard let segment = skipSegment else { return }; skipped.insert(segment.id); seek(toTicks: segment.endTicks); skipSegment = nil }
+    func cancelContinuation() { continuationCancelled = true; nextCountdown = nil }
+    private func loadExtras() {
+        let item = item
+        extrasTask = Task { [weak self] in
+            guard let self else { return }
+            do { let full = try await client.playbackExtras(account: account, itemID: item.id); guard !closed, self.item.id == item.id else { return }; chapters = full.chapters; extrasItem = full; installChapterMarkers() }
+            catch { extrasError = "Chapter metadata unavailable. Playback remains available." }
+            do { let values = try await client.segments(account: account, itemID: item.id); guard !closed, self.item.id == item.id else { return }; segments = values }
+            catch { extrasError = "Skip markers unavailable. Playback remains available." }
+            do { let value = try await client.nextEpisode(account: account, item: item); guard !closed, self.item.id == item.id else { return }; nextItem = value; nextLookupFailed = false }
+            catch { nextLookupFailed = true; extrasError = "Next episode unavailable. It will be retried at the end." }
+            nextLookupPending = false
+        }
+    }
+    private func physicalEnd() async {
+        guard !closed, !switching, !pauseIntent, Date().timeIntervalSince(lastSeekTime) > 0.8 else { return }
+        if item.type == "Episode", !continuationCancelled {
+            if nextLookupPending { status = "Finding next episode…"; await extrasTask?.value }
+            if nextLookupFailed { status = "Finding next episode…"; do { nextItem = try await client.nextEpisode(account: account, item: item); nextLookupFailed = false } catch { extrasError = "Could not find the next episode." } }
+            if nextItem != nil, !UIAccessibility.isVoiceOverRunning { await advance(); return }
+            if nextItem != nil { nextCountdown = 0; pauseIntent = true; isPaused = true; return }
+        }
+        await completeIfNeeded(); await stop()
+    }
+    private func completeIfNeeded() async {
+        guard !completionCommitted else { return }; completionCommitted = true
+        if let duration = durationSeconds { positionTicks = PlaybackEndPosition.completed(currentTicks / 10_000, durationMs: Int64(duration * 1000)) * 10_000 }
+        do { _ = try await client.played(account: account, itemID: item.id, value: true) }
+        catch { reportError = "The server could not mark this title watched." }
+    }
+    func advance() async {
+        guard !switching, !closed, let next = nextItem else { return }
+        switching = true; await completeIfNeeded(); await finishViewing()
+        guard !closed else { switching = false; return }
+        item = next; viewingID = UUID(); started = false; stopped = false; completionCommitted = false; fallbackUsed = false
+        continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
+        segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
+        do { try await prepare(startTicks: 0, audio: nil, subtitle: nil) } catch { self.error = "Could not start the next episode. Go back and try again." }
+        switching = false
+    }
+    private func enqueueReport(decision: PlayDecision, kind: String, ticks: Int64, paused: Bool) {
+        #if DEBUG
+        Logger(subsystem: "app.pictureshow", category: "Reports").notice("Queued report kind=\(kind, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public) ticks=\(ticks) paused=\(paused)")
+        #endif
+        let previous = reportTail
+        reportTail = Task { [self] in
+            await previous?.value
+            do {
+                if kind == "start" { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused) }
+                else if kind == "stop" { try await client.reportStopped(account: account, decision: decision, positionTicks: ticks, failed: error != nil) }
+                else { try await client.reportProgress(account: account, decision: decision, positionTicks: ticks, paused: paused) }
+                #if DEBUG
+                Logger(subsystem: "app.pictureshow", category: "Reports").notice("Accepted report kind=\(kind, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public) ticks=\(ticks)")
+                #endif
+                reportError = nil
+            } catch { reportError = "The server could not save progress. Resume may be unavailable. Check your connection." }
+        }
+    }
+    private func enqueueProgress() { if started, !stopped, let decision { enqueueReport(decision: decision, kind: "progress", ticks: currentTicks, paused: pauseIntent) } }
     func beginClosing() {
-        guard !closed else { return }
-        closed = true
-        generation += 1
-        player.pause()
-        terminalCloseTask = Task { await stopStream() }
+        guard !closed else { return }; closed = true; generation += 1; player.pause()
+        closeTask = Task { [self] in await finishViewing() }
     }
-    func stop() async {
-        beginClosing()
-        await terminalCloseTask?.value
-    }
-    private func stopStream() async {
-        if let streamStopTask { await streamStopTask.value; return }
-        guard !stopped else { return }
-        positionTicks = currentTicks; stopped = true
-        waitingForVideo = false
-        player.pause()
-        let progressTask = loop
-        let startingTask = startTask
-        progressTask?.cancel(); startingTask?.cancel()
-        loop = nil; startTask = nil
-        selectionTask?.cancel(); selectionTask = nil
-        observation = nil
+    func stop() async { beginClosing(); await closeTask?.value }
+    private func releaseStream() async {
+        positionTicks = currentTicks; generation += 1; timelineReady = false
+        timeoutTask?.cancel(); timeoutTask = nil
+        startTask?.cancel(); await startTask?.value; startTask = nil
+        statusObservation = nil; controlObservation = nil
         if let timeObservation { player.removeTimeObserver(timeObservation); self.timeObservation = nil }
         if let endedObservation { NotificationCenter.default.removeObserver(endedObservation); self.endedObservation = nil }
         if let selectionObservation { NotificationCenter.default.removeObserver(selectionObservation); self.selectionObservation = nil }
-        player.replaceCurrentItem(with: nil)
-        relay?.stop(); relay = nil
-        let lastDecision = decision
-        let lastPosition = positionTicks
-        let didStart = started
-        let task = Task { @MainActor in
-            await progressTask?.value
-            await startingTask?.value
-            if let decision = lastDecision {
-                if didStart {
-                    do { try await client.reportStopped(account: account, decision: decision, positionTicks: lastPosition, failed: error != nil) }
-                    catch { reportError = "The server could not save the stop position. Resume may be unavailable." }
-                }
-                try? await client.stopEncoding(account: account, decision: decision)
-            }
-        }
-        streamStopTask = task
-        await task.value
-        streamStopTask = nil
-        status = "Stopped"
+        player.pause(); player.replaceCurrentItem(with: nil)
+        if let decision { try? await client.stopEncoding(account: account, decision: decision) }
+    }
+    private func finishViewing() async {
+        guard !stopped else { return }; positionTicks = currentTicks; stopped = true
+        extrasTask?.cancel(); timeoutTask?.cancel()
+        let last = decision
+        await releaseStream()
+        if started, let last { enqueueReport(decision: last, kind: "stop", ticks: positionTicks, paused: true) }
+        await reportTail?.value; status = "Stopped"; waitingForVideo = false
     }
     func changeTracks(audio: Int?, subtitle: Int?) async {
-        guard !changingTracks, !closed else { return }
-        generation += 1
-        let expectedGeneration = generation
-        changingTracks = true
-        let position = currentTicks
-        await stopStream()
-        guard !closed, generation == expectedGeneration else { changingTracks = false; return }
-        error = nil
+        guard !changingTracks, !closed else { return }; changingTracks = true
+        let position = currentTicks, paused = pauseIntent
+        enqueueProgress(); await reportTail?.value; await releaseStream()
+        guard !closed else { changingTracks = false; return }
+        pauseIntent = paused; pendingSeekTicks = position
         do { try await prepare(startTicks: position, audio: audio, subtitle: subtitle, forceHLS: true) }
-        catch { self.error = error.localizedDescription }
+        catch { self.error = "Could not apply the selected tracks. Go back and try again." }
         changingTracks = false
     }
     private func failed() async {
-        #if DEBUG
+        guard !changingTracks, !closed else { return }
         let failure = player.currentItem?.error as NSError?
-        Logger(subsystem: "app.pictureshow", category: "Playback").error("AVPlayer failed domain=\(failure?.domain ?? "unknown", privacy: .public), code=\(failure?.code ?? 0)")
-        var underlying = failure?.userInfo[NSUnderlyingErrorKey] as? NSError
-        for _ in 0..<8 {
-            guard let next = underlying else { break }
-            Logger(subsystem: "app.pictureshow", category: "Playback").error("Underlying media error domain=\(next.domain, privacy: .public), code=\(next.code)")
-            underlying = next.userInfo[NSUnderlyingErrorKey] as? NSError
-        }
-        for event in player.currentItem?.errorLog()?.events ?? [] {
-            Logger(subsystem: "app.pictureshow", category: "Playback").error("Media request error domain=\(event.errorDomain, privacy: .public), code=\(event.errorStatusCode)")
-        }
-        #endif
-        guard !fallbackUsed, decision?.method != .transcode else { error = "Playback failed. Check the server and try again."; await stop(); return }
+        Logger(subsystem: "app.pictureshow", category: "Playback").error("Native playback failure domain=\(failure?.domain ?? "unknown", privacy: .public) code=\(failure?.code ?? 0)")
+        if let underlying = failure?.userInfo[NSUnderlyingErrorKey] as? NSError { Logger(subsystem: "app.pictureshow", category: "Playback").error("Underlying domain=\(underlying.domain, privacy: .public) code=\(underlying.code)") }
+        guard !fallbackUsed else { error = "Playback failed. Go back to details and try again."; await stop(); return }
         fallbackUsed = true
-        generation += 1
-        let expectedGeneration = generation
-        let position = currentTicks
-        let audio = decision?.audioIndex
-        let subtitle = decision?.subtitleIndex
-        await stopStream()
-        guard !closed, generation == expectedGeneration else { return }
-        do { try await prepare(startTicks: position, audio: audio, subtitle: subtitle, forceHLS: true) }
-        catch { self.error = error.localizedDescription }
+        await changeTracks(audio: decision?.audioIndex, subtitle: decision?.subtitleIndex)
     }
-}
-
-struct PlayerScreen: View {
-    @ObservedObject var session: PlaybackSession
-    var close: () async -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var showingTracks = false
-    @State private var selectedAudio: Int?
-    @State private var selectedSubtitle: Int? = -1
-    @FocusState private var controlFocus: String?
-    var body: some View {
-        ZStack(alignment: .top) {
-            #if os(tvOS)
-            Color.black.ignoresSafeArea()
-            #else
-            NativePlayer(session: session, close: finish).ignoresSafeArea()
-            #endif
-            VStack {
-                HStack(spacing: 24) {
-                    Button("Back to details", systemImage: "chevron.left") { finish() }.accessibilityIdentifier("closePlayer").focused($controlFocus, equals: "back")
-                    Spacer()
-                    Button("Audio and subtitles", systemImage: "captions.bubble") { showingTracks = true }.accessibilityIdentifier("playerTracks").focused($controlFocus, equals: "tracks")
-                }.buttonStyle(PlayerControlStyle()).padding().background(.black.opacity(0.65)).televisionFocusSection()
-                #if os(tvOS)
-                // Burned-in captions belong to the video image. Keep the persistent
-                // transport outside its bounds instead of dimming cues with chrome.
-                ZStack {
-                    TelevisionVideo(player: session.player)
-                    if session.waitingForVideo || session.player.timeControlStatus == .waitingToPlayAtSpecifiedRate {
-                        ProgressView("Loading video…").tint(Theme.accent).allowsHitTesting(false)
-                    }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                #else
-                Spacer()
-                #endif
-                if let error = session.error { Text(error).foregroundStyle(.orange).padding().background(.black) }
-                if let reportError = session.reportError { Text(reportError).font(.caption).padding().background(.black) }
-                #if os(tvOS)
-                HStack(spacing: 36) {
-                    Button("Back 10 seconds", systemImage: "gobackward.10") { session.seek(by: -10) }.accessibilityIdentifier("seekBackward").focused($controlFocus, equals: "seekBackward")
-                    Button(session.isPaused ? "Play" : "Pause", systemImage: session.isPaused ? "play.fill" : "pause.fill") { session.togglePlayback() }.accessibilityIdentifier("togglePlayback").focused($controlFocus, equals: "togglePlayback")
-                    Button("Forward 10 seconds", systemImage: "goforward.10") { session.seek(by: 10) }.accessibilityIdentifier("seekForward").focused($controlFocus, equals: "seekForward")
-                }.buttonStyle(PlayerControlStyle()).padding().frame(maxWidth: .infinity).background(.black.opacity(0.65)).focusSection()
-                #endif
-                HStack {
-                    Text(session.item.name)
-                    Spacer()
-                    Text(session.status).accessibilityIdentifier("playbackMethod")
-                    Text(Catalog.resumeLabel(session.positionTicks).replacingOccurrences(of: "Resume from ", with: "")).monospacedDigit().accessibilityIdentifier("playbackPosition")
-                }.font(.caption).foregroundStyle(.white).padding().background(.black.opacity(0.65))
+    private func recordNativeSelection(_ avItem: AVPlayerItem?) async {
+        guard let avItem, player.currentItem === avItem, timelineReady, !closed, var value = decision, value.method != .transcode else { return }
+        for type in ["Audio", "Subtitle"] {
+            if type == "Audio", player.isMuted, value.audioIndex == -1 { continue }
+            let characteristic: AVMediaCharacteristic = type == "Audio" ? .audible : .legible
+            guard let group = try? await avItem.asset.loadMediaSelectionGroup(for: characteristic) else { continue }
+            let option = avItem.currentMediaSelection.selectedMediaOption(in: group)
+            let candidates = value.source.mediaStreams.filter { stream in
+                guard stream.type == type, !stream.isExternal else { return false }
+                let language = PlaybackSelection.language(option?.extendedLanguageTag ?? option?.locale?.language.languageCode?.identifier)
+                return language == nil || PlaybackSelection.language(stream.language) == language
             }
+            let title = option?.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let titled = candidates.filter { stream in [stream.title, stream.displayTitle].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.contains(title ?? "") }
+            let index = option == nil ? -1 : candidates.count == 1 ? candidates[0].index : titled.count == 1 ? titled[0].index : nil
+            if type == "Audio" { value.audioIndex = index } else { value.subtitleIndex = index }
         }
-        .background(.black)
-        .onAppear { controlFocus = "back" }
-        .onDisappear { Task { await session.stop() } }
+        guard player.currentItem === avItem, !closed else { return }; decision = value
+    }
+    func chapterImage(index: Int) async -> UIImage? {
+        guard chapters.indices.contains(index), let tag = chapters[index].imageTag,
+              let url = client.chapterImageURL(account: account, itemID: item.id, index: index, tag: tag) else { return nil }
+        return await image(url)
+    }
+    func seekPreview(ticks: Int64) async -> UIImage? {
+        guard let item = extrasItem, let source = decision?.source.id,
+              let info = PlaybackExtras.chooseTrickplay(item: item, mediaSourceID: source, preferredWidth: 320),
+              let tile = PlaybackExtras.trickplayTile(info, positionMs: ticks / 10_000),
+              let url = client.trickplaySheetURL(account: account, itemID: item.id, mediaSourceID: source, width: info.width, sheet: tile.sheet),
+              let sheet = await image(url), let cg = sheet.cgImage,
+              let crop = cg.cropping(to: CGRect(x: tile.column * info.width, y: tile.row * info.height, width: info.width, height: info.height)) else { return nil }
+        return UIImage(cgImage: crop)
+    }
+    private func image(_ url: URL) async -> UIImage? {
+        if let cached = imageCache[url] { return cached }
+        guard let data = try? await client.imageData(account: account, url: url), let image = UIImage(data: data) else { return nil }
+        if imageCache.count >= 3 { imageCache.removeAll() }
+        imageCache[url] = image; return image
+    }
+    private func installChapterMarkers() {
         #if os(tvOS)
-        .onExitCommand { finish() }
-        .onPlayPauseCommand { session.togglePlayback() }
-        #endif
-        .sheet(isPresented: $showingTracks) {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(spacing: 20) {
-                    Text("Audio and subtitles").modifier(TokenFont(DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    Button("Cancel") { showingTracks = false }.buttonStyle(PlayerControlStyle()).accessibilityIdentifier("cancelTracks")
-                }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Audio").modifier(TokenFont(DesignTokens.bodySize, weight: .semibold)).accessibilityAddTraits(.isHeader)
-                        trackChoice("Server default", selected: selectedAudio == nil, identifier: "audio-default") { selectedAudio = nil }
-                        ForEach(session.decision?.source.mediaStreams.filter { $0.type == "Audio" } ?? []) { stream in
-                            trackChoice(stream.label, selected: selectedAudio == stream.index, identifier: "audio-track-\(stream.index)") { selectedAudio = stream.index }
-                        }
-                        Text("Subtitles").modifier(TokenFont(DesignTokens.bodySize, weight: .semibold)).accessibilityAddTraits(.isHeader).padding(.top, 12)
-                        trackChoice("Off", selected: selectedSubtitle == -1, identifier: "subtitle-off") { selectedSubtitle = -1 }
-                        ForEach(session.decision?.source.mediaStreams.filter { $0.type == "Subtitle" } ?? []) { stream in
-                            trackChoice(stream.label, selected: selectedSubtitle == stream.index, identifier: "subtitle-track-\(stream.index)") { selectedSubtitle = stream.index }
-                        }
-                    }.padding(6)
-                }
-                Button("Apply tracks") {
-                        showingTracks = false
-                        Task { await session.changeTracks(audio: selectedAudio, subtitle: selectedSubtitle) }
-                }.buttonStyle(PlayerControlStyle()).accessibilityIdentifier("applyTracks")
-            }
-            .padding(24).frame(maxWidth: 800, maxHeight: 800).background(Theme.background)
-            #if os(tvOS)
-            .onExitCommand { showingTracks = false }
-            #endif
-            .onAppear { selectedAudio = session.decision?.audioIndex; selectedSubtitle = session.decision?.subtitleIndex ?? -1 }
+        let groups = chapters.enumerated().map { index, chapter in
+            let title = AVMutableMetadataItem(); title.identifier = .commonIdentifierTitle
+            title.value = (chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name) as NSString; title.extendedLanguageTag = "und"
+            return AVTimedMetadataGroup(items: [title], timeRange: CMTimeRange(start: CMTime(seconds: Double(chapter.startMs) / 1000, preferredTimescale: 600), duration: CMTime(seconds: 1, preferredTimescale: 600)))
         }
-    }
-    private func trackChoice(_ title: String, selected: Bool, identifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }
-        }.buttonStyle(PlayerControlStyle()).accessibilityValue(selected ? "Selected" : "").accessibilityIdentifier(identifier)
-    }
-    private func finish() { session.beginClosing(); Task { await close(); dismiss() } }
-}
-
-struct PlayerControlStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View { Control(configuration: configuration) }
-    private struct Control: View {
-        let configuration: ButtonStyleConfiguration
-        @Environment(\.isFocused) private var focused
-        var body: some View {
-            configuration.label.labelStyle(.titleAndIcon)
-                .modifier(TokenFont(DesignTokens.bodySize, weight: .semibold))
-                .foregroundStyle(focused ? Theme.background : Color.white)
-                .padding(.horizontal, 18).padding(.vertical, 14)
-                .background(focused ? Theme.accent : Theme.surface, in: RoundedRectangle(cornerRadius: 12))
-                .overlay { RoundedRectangle(cornerRadius: 12).stroke(focused ? Theme.accent : Theme.muted.opacity(0.6), lineWidth: focused ? 3 : 1) }
-                .scaleEffect(configuration.isPressed ? 0.97 : 1)
-        }
-    }
-}
-
-#if os(tvOS)
-/// A passive video surface leaves remote focus in SwiftUI's transport controls.
-struct TelevisionVideo: UIViewRepresentable {
-    let player: AVPlayer
-    func makeUIView(context: Context) -> VideoSurface {
-        let view = VideoSurface()
-        view.isUserInteractionEnabled = false
-        view.videoLayer.videoGravity = .resizeAspect
-        view.videoLayer.player = player
-        return view
-    }
-    func updateUIView(_ view: VideoSurface, context: Context) { view.videoLayer.player = player }
-    final class VideoSurface: UIView {
-        override class var layerClass: AnyClass { AVPlayerLayer.self }
-        var videoLayer: AVPlayerLayer { layer as! AVPlayerLayer }
-    }
-}
-#endif
-
-struct NativePlayer: UIViewControllerRepresentable {
-    @ObservedObject var session: PlaybackSession
-    var close: () -> Void
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        session.player.appliesMediaSelectionCriteriaAutomatically = false
-        controller.player = session.player
-        controller.delegate = context.coordinator
-        controller.allowsPictureInPicturePlayback = false
-        return controller
-    }
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) { }
-    func makeCoordinator() -> Coordinator { Coordinator(session: session, close: close) }
-    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
-        let session: PlaybackSession
-        let close: () -> Void
-        init(session: PlaybackSession, close: @escaping () -> Void) { self.session = session; self.close = close }
-        #if os(tvOS)
-        func playerViewControllerShouldDismiss(_ playerViewController: AVPlayerViewController) -> Bool { close(); return false }
+        player.currentItem?.navigationMarkerGroups = groups.isEmpty ? [] : [AVNavigationMarkersGroup(title: nil, timedNavigationMarkers: groups)]
         #endif
     }
 }

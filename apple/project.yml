@@ -30,6 +30,9 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: app.pictureshow.playback
+            CFBundleURLSchemes: [pictureshow]
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     sources: [App]
@@ -50,6 +53,9 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: app.pictureshow.playback
+            CFBundleURLSchemes: [pictureshow]
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     sources: [App]

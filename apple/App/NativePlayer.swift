@@ -1,0 +1,247 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Legitimate LLC.
+import SwiftUI
+import AVKit
+import PictureshowCore
+
+struct PlayerScreen: View {
+    @ObservedObject var session: PlaybackSession
+    var close: () async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var panel: String?
+    @State private var toolbarVisible = true
+    @State private var closing = false
+    var body: some View {
+        ZStack(alignment: .top) {
+            NativePlayer(session: session, close: finish).ignoresSafeArea()
+            #if os(iOS)
+            VStack {
+                HStack {
+                    Button("Back to details", systemImage: "chevron.left", action: finish).accessibilityIdentifier("closePlayer")
+                    Spacer()
+                    if toolbarVisible {
+                        Button("Audio and subtitles", systemImage: "captions.bubble") { panel = "tracks" }.accessibilityIdentifier("playerTracks")
+                        Button("Seek", systemImage: "slider.horizontal.3") { panel = "seek" }.accessibilityIdentifier("playerSeek")
+                        Button("Chapters", systemImage: "list.bullet") { panel = "chapters" }.accessibilityIdentifier("playerChapters")
+                    } else {
+                        Button("Playback options", systemImage: "ellipsis.circle") { toolbarVisible = true }.accessibilityIdentifier("playerOptions")
+                    }
+                }.buttonStyle(.bordered).padding().background(.black.opacity(0.55))
+                Spacer()
+                if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
+                    Button("Skip \(segment.type.rawValue)") { session.skip() }.buttonStyle(.borderedProminent).padding()
+                }
+                if let next = session.nextItem, session.nextCountdown != nil {
+                    HStack {
+                        Button("Play next: \(next.name)") { Task { await session.advance() } }
+                        Button("Cancel next episode") { session.cancelContinuation() }
+                    }.buttonStyle(.borderedProminent).padding().background(.black.opacity(0.8))
+                }
+                if toolbarVisible {
+                    HStack { Text(session.status).accessibilityIdentifier("playbackMethod"); Spacer(); Text(clock(session.positionTicks)).accessibilityIdentifier("playbackPosition") }
+                        .font(.caption).padding().background(.black.opacity(0.55)).allowsHitTesting(false)
+                }
+            }
+            #endif
+            if session.waitingForVideo || session.error != nil || session.reportError != nil {
+                VStack(spacing: 20) {
+                    if session.waitingForVideo { ProgressView(session.status) }
+                    if let error = session.error { Text(error).foregroundStyle(.orange) }
+                    if let error = session.reportError { Text(error) }
+                    Button("Back to details", action: finish).accessibilityIdentifier("loadingBack")
+                }.padding(32).background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 16)).padding(.top, 100)
+            }
+        }
+        .background(.black)
+        .onDisappear { session.beginClosing() }
+        .onChange(of: session.status) { _, value in if value == "Stopped", session.error == nil { finish() } }
+        .onChange(of: scenePhase) { _, value in if value != .active { session.backgrounded() } }
+        .onChange(of: panel) { _, value in session.panelOpen = value != nil }
+        .sheet(isPresented: Binding(get: { panel != nil }, set: { if !$0 { panel = nil } })) {
+            PlayerOptions(session: session, kind: panel ?? "tracks") { panel = nil }
+        }
+        .task(id: toolbarVisible) {
+            guard toolbarVisible else { return }
+            try? await Task.sleep(for: .seconds(10))
+            if !Task.isCancelled, !session.isPaused, !UIAccessibility.isVoiceOverRunning, panel == nil { toolbarVisible = false }
+        }
+    }
+    private func finish() { guard !closing else { return }; closing = true; session.beginClosing(); Task { await close(); dismiss() } }
+}
+
+private func clock(_ ticks: Int64) -> String { Catalog.resumeLabel(ticks).replacingOccurrences(of: "Resume from ", with: "") }
+
+struct PlayerOptions: View {
+    @ObservedObject var session: PlaybackSession
+    let kind: String
+    let done: () -> Void
+    @State private var audio: Int?
+    @State private var subtitle: Int?
+    var body: some View {
+        NavigationStack {
+            List {
+                if kind == "seek" {
+                    SeekOptions(session: session)
+                } else if kind == "chapters" {
+                    if session.chapters.isEmpty { Text("No chapters are available.") }
+                    ForEach(Array(session.chapters.enumerated()), id: \.offset) { index, chapter in
+                        Button { session.seek(toTicks: chapter.startTicks); done() } label: {
+                            HStack { ChapterArtwork(session: session, index: index); Text("\(chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name) · \(clock(chapter.startTicks))") }
+                        }
+                            .accessibilityValue(currentChapter(index) ? "Current chapter" : "")
+                    }
+                } else {
+                    Section("Audio") {
+                        track("Off", index: -1, type: "Audio", selected: audio == -1)
+                        ForEach(streams("Audio")) { track($0.label, index: $0.index, type: "Audio", selected: audio == $0.index) }
+                    }
+                    Section("Subtitles") {
+                        track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
+                        ForEach(streams("Subtitle")) { track($0.label, index: $0.index, type: "Subtitle", selected: subtitle == $0.index) }
+                        Text(session.subtitleTimingExplanation).font(.caption)
+                    }
+                    if let error = session.extrasError { Text(error) }
+                    Button("Apply tracks") { let a = audio, s = subtitle; done(); Task { await session.changeTracks(audio: a, subtitle: s) } }.accessibilityIdentifier("applyTracks").disabled(session.changingTracks)
+                }
+            }
+            .navigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : "Audio and subtitles")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: done) } }
+            .onAppear { audio = session.decision?.audioIndex; subtitle = session.decision?.subtitleIndex }
+        }
+    }
+    private func streams(_ type: String) -> [MediaStream] { session.decision?.source.mediaStreams.filter { $0.type == type } ?? [] }
+    private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
+        Button { if type == "Audio" { audio = index } else { subtitle = index } } label: {
+            HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }
+        }.accessibilityValue(selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
+    }
+    private func currentChapter(_ index: Int) -> Bool {
+        session.chapters[index].startTicks <= session.positionTicks && (index + 1 == session.chapters.count || session.chapters[index + 1].startTicks > session.positionTicks)
+    }
+}
+
+struct NativePlayer: UIViewControllerRepresentable {
+    @ObservedObject var session: PlaybackSession
+    var close: () -> Void
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = session.player; controller.delegate = context.coordinator
+        controller.showsPlaybackControls = true; controller.videoGravity = .resizeAspect
+        controller.allowsPictureInPicturePlayback = false
+        #if os(tvOS)
+        controller.playbackControlsIncludeInfoViews = true; controller.transportBarIncludesTitleView = true
+        let info = UIHostingController(rootView: PlaybackInformation(session: session)); info.title = "Pictureshow"
+        info.preferredContentSize = CGSize(width: 1200, height: 250)
+        controller.customInfoViewControllers = [info]
+        #endif
+        updateUIViewController(controller, context: context)
+        return controller
+    }
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        context.coordinator.close = close
+        #if os(tvOS)
+        let signature = "\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
+        if context.coordinator.menuSignature != signature {
+            context.coordinator.menuSignature = signature
+            func tracks(_ type: String) -> UIMenu {
+                let values = session.decision?.source.mediaStreams.filter { $0.type == type } ?? []
+                let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
+                let off = UIAction(title: "Off", identifier: UIAction.Identifier("\(type.lowercased())--1"), state: selected == -1 ? .on : .off) { _ in
+                    Task { await session.changeTracks(audio: type == "Audio" ? -1 : session.decision?.audioIndex, subtitle: type == "Subtitle" ? -1 : session.decision?.subtitleIndex) }
+                }
+                let actions = values.map { stream in
+                    UIAction(title: stream.label, subtitle: "Stream \(stream.index)", identifier: UIAction.Identifier("\(type.lowercased())-\(stream.index)"), attributes: session.changingTracks ? [.disabled] : [], state: selected == stream.index ? .on : .off) { _ in
+                        Task { await session.changeTracks(audio: type == "Audio" ? stream.index : session.decision?.audioIndex, subtitle: type == "Subtitle" ? stream.index : session.decision?.subtitleIndex) }
+                    }
+                }
+                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), children: [off] + actions)
+            }
+            let chapters = UIMenu(title: "Chapters", image: UIImage(systemName: "list.bullet"), children: session.chapters.enumerated().map { index, chapter in
+                UIAction(title: chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name, subtitle: clock(chapter.startTicks)) { _ in session.seek(toTicks: chapter.startTicks) }
+            })
+            let stop = UIAction(title: "Back to details", image: UIImage(systemName: "stop.fill"), identifier: UIAction.Identifier("closePlayer")) { _ in close() }
+            controller.transportBarCustomMenuItems = [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [stop]
+        }
+        var contextActions: [UIAction] = []
+        if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
+            contextActions.append(UIAction(title: "Skip \(segment.type.rawValue)", identifier: .init("skipSegment")) { _ in session.skip() })
+        }
+        if let next = session.nextItem, let countdown = session.nextCountdown {
+            contextActions.append(UIAction(title: "Play next: \(next.name) (\(countdown))", identifier: .init("playNext")) { _ in Task { await session.advance() } })
+            contextActions.append(UIAction(title: "Cancel next episode", identifier: .init("cancelNext")) { _ in session.cancelContinuation() })
+        }
+        let actionSignature = contextActions.map { $0.title }.joined(separator: "|")
+        if context.coordinator.actionSignature != actionSignature { context.coordinator.actionSignature = actionSignature; controller.contextualActions = contextActions }
+        #endif
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(session: session, close: close) }
+    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+        let session: PlaybackSession
+        var close: () -> Void
+        var menuSignature = "", actionSignature = ""
+        init(session: PlaybackSession, close: @escaping () -> Void) { self.session = session; self.close = close }
+        #if os(tvOS)
+        func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool { close(); return false }
+        func playerViewController(_ controller: AVPlayerViewController, willTransitionToVisibilityOfTransportBar visible: Bool, with coordinator: AVPlayerViewControllerAnimationCoordinator) { Task { @MainActor in session.controlsVisible = visible } }
+        func playerViewController(_ controller: AVPlayerViewController, timeToSeekAfterUserNavigatedFrom oldTime: CMTime, to targetTime: CMTime) -> CMTime { Task { @MainActor in session.nativeSeekBegan(targetTime.seconds) }; return targetTime }
+        #endif
+    }
+}
+
+private struct PlaybackInformation: View {
+    @ObservedObject var session: PlaybackSession
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(session.item.name).font(.title2).accessibilityAddTraits(.isHeader)
+                HStack { Text(session.status).accessibilityIdentifier("playbackMethod"); Text(clock(session.positionTicks)).accessibilityIdentifier("playbackPosition") }
+                Text(session.subtitleTimingExplanation).font(.caption)
+                SeekOptions(session: session)
+                if let warning = session.reportError ?? session.extrasError { Text(warning).foregroundStyle(.orange) }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+        }
+    }
+}
+
+private struct ChapterArtwork: View {
+    let session: PlaybackSession
+    let index: Int
+    @State private var image: UIImage?
+    var body: some View {
+        Group { if let image { Image(uiImage: image).resizable().scaledToFit().frame(width: 120, height: 68) } }
+            .accessibilityHidden(true).task { image = await session.chapterImage(index: index) }
+    }
+}
+private struct SeekOptions: View {
+    @ObservedObject var session: PlaybackSession
+    @State private var target: Double = 0
+    @State private var preview: UIImage?
+    @State private var hidePreview = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Seek to \(clock(Ticks.from(seconds: target)))").monospacedDigit()
+            if let preview, !hidePreview { Image(uiImage: preview).resizable().scaledToFit().frame(maxWidth: 320, maxHeight: 180).accessibilityHidden(true) }
+            #if os(iOS)
+            if let duration = session.durationSeconds {
+                Slider(value: $target, in: 0...duration, onEditingChanged: { editing in
+                    session.panelOpen = editing
+                    if !editing { session.seek(toTicks: Ticks.from(seconds: target)) }
+                }).accessibilityLabel("Seek position").accessibilityValue(clock(Ticks.from(seconds: target)))
+            }
+            #endif
+            HStack {
+                Button("Back 10 seconds") { adjust(-10) }.accessibilityIdentifier("seekBackward")
+                Button("Forward 10 seconds") { adjust(10) }.accessibilityIdentifier("seekForward")
+            }
+        }
+        .onAppear { target = Ticks.seconds(session.positionTicks) }
+        .task(id: target) {
+            hidePreview = false
+            preview = await session.seekPreview(ticks: Ticks.from(seconds: target))
+            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            hidePreview = true
+        }
+    }
+    private func adjust(_ delta: Double) { target = min(session.durationSeconds ?? .greatestFiniteMagnitude, max(0, target + delta)); session.seek(toTicks: Ticks.from(seconds: target)) }
+}
