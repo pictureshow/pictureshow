@@ -26,6 +26,15 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertEqual(app.textFields["serverAddress"].label, "Server address")
         activate(app.buttons["connect"])
         XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 15))
+        let username = app.textFields["username"]
+        reveal(username)
+        XCTAssertEqual(username.label, "Username")
+        let password = app.secureTextFields["password"]
+        reveal(password)
+        XCTAssertEqual(password.label, "Password")
+        let addressLabel = app.textFields["serverAddress"].label
+        print("F1_AX login_address_label=\(addressLabel) username_label=\(username.label) password_label=\(password.label)")
+        capture("Password sign-in")
         activate(app.buttons["signIn"])
         XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 20))
         try playAndResume(id: XCTUnwrap(config["directID"]), expected: "Direct play", key: "direct")
@@ -173,6 +182,9 @@ final class AppleSliceUITests: XCTestCase {
         capture("Direct startup initial preparation")
         let position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
+        #if os(iOS)
+        assertTouchPlayerActionLabels()
+        #endif
         XCTAssertFalse(position.label.isEmpty, "The initial clock value must be present before direct playback is measured")
         let initialSeconds = seconds(position.label)
         let observedAdvanceTarget = max(3, initialSeconds + 3)
@@ -207,12 +219,12 @@ final class AppleSliceUITests: XCTestCase {
         let episode = app.buttons["item-\(episodeID)"]
         reveal(episode); activate(episode)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
-        capture("Series episode detail")
         let play = app.buttons["play"]
+        XCTAssertTrue(play.frame.width > 0 && play.frame.height > 0)
+        XCTAssertTrue(app.frame.contains(play.frame), "The episode Play action must remain fully inside the visible viewport")
+        capture("Series episode detail")
         reveal(play); activate(play)
-        #if os(tvOS)
-        inspectNativeTVInfoAndTracks(preferDirect: true)
-        #else
+        #if os(iOS)
         let audio = try XCTUnwrap(config["episodeAudioIndex"])
         let subtitle = try XCTUnwrap(config["episodeSubtitleIndex"])
         // A tap on the already-selected option must still apply-and-dismiss. Then exercise a
@@ -228,6 +240,11 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 30))
         XCTAssertEqual(app.staticTexts["playbackMethod"].label, "Server HLS")
+        #if os(tvOS)
+        // This episode uses HLS. Keep its method assertion ahead of the native menus;
+        // the dedicated direct-player case below proves Direct play before track selection.
+        inspectNativeTVInfoAndTracks(preferDirect: false)
+        #endif
         let position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
         let beforeChange = seconds(position.label)
@@ -280,14 +297,17 @@ final class AppleSliceUITests: XCTestCase {
         app.launch()
         let play = app.buttons["play"]
         reveal(play); activate(play)
-        inspectNativeTVInfoAndTracks(preferDirect: true)
         let method = app.staticTexts["playbackMethod"]
-        XCTAssertTrue(method.exists)
+        XCTAssertTrue(method.waitForExistence(timeout: 30))
+        XCTAssertEqual(method.label, "Direct play", "Direct playback must be established before opening track menus")
         let position = app.staticTexts["playbackPosition"]
-        XCTAssertTrue(position.exists)
+        XCTAssertTrue(position.waitForExistence(timeout: 10))
         let before = seconds(position.label)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= before + 3 }, evaluatedWith: position)
         waitForExpectations(timeout: 35)
+        capture("Native TV Direct play advancing before track selection")
+        inspectNativeTVInfoAndTracks(preferDirect: true)
+        XCTAssertEqual(method.label, "Server HLS", "An explicit native track selection should renegotiate to HLS")
         capture("Native TV player transport")
         if let cue = config["directSubtitleCueSeconds"].flatMap(Int.init) {
             expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= cue }, evaluatedWith: position)
@@ -549,6 +569,22 @@ final class AppleSliceUITests: XCTestCase {
         return false
     }
     #if os(iOS)
+    private func assertTouchPlayerActionLabels() {
+        let expected: [(String, String)] = [
+            ("closePlayer", "Back to details"),
+            ("playerTracks", "Audio and subtitles"),
+            ("playerSeek", "Seek"),
+            ("playerChapters", "Chapters"),
+            ("rotatePlayer", "Rotate portrait or landscape")
+        ]
+        let observed = expected.map { identifier, label -> String in
+            let button = app.buttons[identifier]
+            XCTAssertTrue(button.waitForExistence(timeout: 10), "Missing touch player action \(identifier)")
+            XCTAssertEqual(button.label, label)
+            return "\(identifier)=\(button.label)"
+        }
+        print("F1_AX touch_player_actions " + observed.joined(separator: " | "))
+    }
     /// iOS track actions commit immediately and dismiss the sheet. Reopen it for each choice;
     /// this also avoids relying on a transient toolbar item after AVKit hides its controls.
     private func openTouchTrackPanel() {
@@ -594,6 +630,8 @@ final class AppleSliceUITests: XCTestCase {
             XCUIRemote.shared.press(.up)
             let trigger = app.buttons[menuTitle].firstMatch
             XCTAssertTrue(trigger.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) transport menu")
+            XCTAssertEqual(trigger.label, menuTitle, "The native AVKit transport menu should expose its visible label")
+            print("F1_AX tv_transport_menu_label=\(trigger.label)")
             activate(trigger)
             capture("Native TV \(menuTitle) transport menu")
             let prefix = menuTitle == "Audio" ? "audio-" : "subtitle-"
@@ -615,6 +653,8 @@ final class AppleSliceUITests: XCTestCase {
         }
         let info = app.buttons["Pictureshow"]
         XCTAssertTrue(info.waitForExistence(timeout: 10), "The native AVKit info tab should be titled Pictureshow")
+        XCTAssertEqual(info.label, "Pictureshow")
+        print("F1_AX tv_info_tab_label=\(info.label)")
         activate(info)
         XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["playbackPosition"].exists)
