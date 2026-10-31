@@ -461,12 +461,7 @@ final class AppleSliceUITests: XCTestCase {
         return parts.count == 2 ? parts[0] * 60 + parts[1] : 0
     }
     private func ensureSignedIn() {
-        if app.buttons["signOut"].waitForExistence(timeout: 3) { returnHome(); return }
-        // Home's account/sign-out actions sit at the end of a lazy list, so their absence is not
-        // proof of a signed-out state. The authenticated Home toolbar is a stable root marker.
-        if app.buttons["openSearch"].waitForExistence(timeout: 2) || app.buttons["openSettings"].exists {
-            returnHome(); return
-        }
+        if hasHomeRoot(timeout: 2) { returnHome(); return }
 
         // Clones may preserve this app's remembered server/account list. Select the pilot
         // account before deciding whether to sign in; never emit a full AX tree because it can
@@ -474,7 +469,7 @@ final class AppleSliceUITests: XCTestCase {
         let rememberedAccount = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "account-")).firstMatch
         if rememberedAccount.waitForExistence(timeout: 2) {
             activate(rememberedAccount)
-            if app.buttons["signOut"].waitForExistence(timeout: 8) { returnHome(); return }
+            if hasHomeRoot(timeout: 15) { returnHome(); return }
         } else if app.buttons["addServer"].waitForExistence(timeout: 1) {
             activate(app.buttons["addServer"])
         }
@@ -494,8 +489,12 @@ final class AppleSliceUITests: XCTestCase {
             return
         }
         activate(signIn)
-        XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 30))
+        XCTAssertTrue(hasHomeRoot(timeout: 30), "Successful sign-in should expose Home's Search or Settings toolbar action")
         returnHome()
+    }
+    private func hasHomeRoot(timeout: TimeInterval = 1) -> Bool {
+        app.buttons["openSearch"].waitForExistence(timeout: timeout)
+            || app.buttons["openSettings"].waitForExistence(timeout: timeout)
     }
     #if os(iOS)
     /// iOS track actions commit immediately and dismiss the sheet. Reopen it for each choice;
@@ -609,12 +608,22 @@ final class AppleSliceUITests: XCTestCase {
         #endif
     }
     private func returnHome() {
+        if hasHomeRoot(timeout: 1) { return }
         #if os(tvOS)
-        back()
+        for _ in 0..<10 where !hasHomeRoot(timeout: 1) { XCUIRemote.shared.press(.menu) }
         #else
+        // The four tabs keep separate NavigationStacks; selecting Home alone does not pop its
+        // current Accounts/Settings/Library route. Dismiss input first, switch tabs, then pop
+        // only until Home's own toolbar is visible.
+        if app.keyboards.firstMatch.exists {
+            let submit = app.keyboards.buttons["Search"].firstMatch
+            if submit.exists { activate(submit) }
+        }
         let home = app.buttons["Home"]
-        if home.waitForExistence(timeout: 5) { activate(home) } else { back() }
+        if home.waitForExistence(timeout: 5) { activate(home) }
+        for _ in 0..<10 where !hasHomeRoot(timeout: 1) { back() }
         #endif
+        XCTAssertTrue(hasHomeRoot(timeout: 5), "Navigation should return to Home with Search or Settings available")
     }
     private func capture(_ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
 }
