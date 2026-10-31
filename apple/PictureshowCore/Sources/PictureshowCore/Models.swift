@@ -83,13 +83,16 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
     public var parentThumbItemId: String?
     public var parentThumbImageTag: String?
     public var userData: ItemUserData
+    public var people: [PersonCredit]
+    public var chapters: [Chapter]
+    public var trickplay: [String:[String:TrickplayInfo]]
     public var mediaSources: [MediaSource]
     public init(id: String, name: String = "Untitled", type: String = "", userData: ItemUserData = ItemUserData(), runTimeTicks: Int64? = nil) {
         self.id = id; self.name = name; self.type = type; self.userData = userData; self.runTimeTicks = runTimeTicks
-        isFolder = false; genres = []; imageTags = [:]; backdropImageTags = []; parentBackdropImageTags = []; mediaSources = []
+        isFolder = false; genres = []; imageTags = [:]; backdropImageTags = []; parentBackdropImageTags = []; mediaSources = []; people = []; chapters = []; trickplay = [:]
     }
     enum CodingKeys: String, CodingKey {
-        case id = "Id", name = "Name", type = "Type", collectionType = "CollectionType", isFolder = "IsFolder", childCount = "ChildCount", recursiveItemCount = "RecursiveItemCount", overview = "Overview", productionYear = "ProductionYear", officialRating = "OfficialRating", communityRating = "CommunityRating", runTimeTicks = "RunTimeTicks", genres = "Genres", seriesName = "SeriesName", seriesId = "SeriesId", seasonId = "SeasonId", indexNumber = "IndexNumber", parentIndexNumber = "ParentIndexNumber", imageTags = "ImageTags", backdropImageTags = "BackdropImageTags", parentBackdropItemId = "ParentBackdropItemId", parentBackdropImageTags = "ParentBackdropImageTags", seriesPrimaryImageTag = "SeriesPrimaryImageTag", parentThumbItemId = "ParentThumbItemId", parentThumbImageTag = "ParentThumbImageTag", userData = "UserData", mediaSources = "MediaSources"
+        case id = "Id", name = "Name", type = "Type", collectionType = "CollectionType", isFolder = "IsFolder", childCount = "ChildCount", recursiveItemCount = "RecursiveItemCount", overview = "Overview", productionYear = "ProductionYear", officialRating = "OfficialRating", communityRating = "CommunityRating", runTimeTicks = "RunTimeTicks", genres = "Genres", seriesName = "SeriesName", seriesId = "SeriesId", seasonId = "SeasonId", indexNumber = "IndexNumber", parentIndexNumber = "ParentIndexNumber", imageTags = "ImageTags", backdropImageTags = "BackdropImageTags", parentBackdropItemId = "ParentBackdropItemId", parentBackdropImageTags = "ParentBackdropImageTags", seriesPrimaryImageTag = "SeriesPrimaryImageTag", parentThumbItemId = "ParentThumbItemId", parentThumbImageTag = "ParentThumbImageTag", userData = "UserData", mediaSources = "MediaSources", people = "People", chapters = "Chapters", trickplay = "Trickplay"
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -120,6 +123,9 @@ public struct MediaItem: Codable, Equatable, Sendable, Identifiable {
         parentThumbImageTag = try c.decodeIfPresent(String.self, forKey: .parentThumbImageTag)
         userData = try c.decodeIfPresent(ItemUserData.self, forKey: .userData) ?? ItemUserData()
         mediaSources = try c.decodeIfPresent([MediaSource].self, forKey: .mediaSources) ?? []
+        people = try c.decodeIfPresent([PersonCredit].self, forKey: .people) ?? []
+        chapters = try c.decodeIfPresent([Chapter].self, forKey: .chapters) ?? []
+        trickplay = try c.decodeIfPresent([String:[String:TrickplayInfo]].self, forKey: .trickplay) ?? [:]
     }
     public var isEmptyContainer: Bool {
         let container = isFolder || ["BoxSet", "Playlist", "Folder", "CollectionFolder", "Series", "Season"].contains(type)

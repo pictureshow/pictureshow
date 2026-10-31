@@ -17,7 +17,7 @@ public enum PlaybackSelection {
         guard let value else { return nil }
         let base = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "_", with: "-").split(separator: "-").first.map(String.init) ?? ""
         guard !base.isEmpty, base != "und" else { return nil }
-        let aliases = ["en":"eng", "fr":"fra", "fre":"fra", "de":"deu", "ger":"deu", "es":"spa", "it":"ita", "pt":"por", "ja":"jpn", "ko":"kor", "zh":"zho", "chi":"zho", "ru":"rus", "ar":"ara", "hi":"hin", "nl":"nld", "dut":"nld", "sv":"swe", "no":"nor", "da":"dan", "fi":"fin", "pl":"pol", "tr":"tur", "el":"ell", "gre":"ell", "he":"heb", "uk":"ukr", "cs":"ces", "cze":"ces", "ro":"ron", "rum":"ron", "hu":"hun", "th":"tha", "vi":"vie", "id":"ind"]
+        let aliases = ["alb":"sqi", "arm":"hye", "baq":"eus", "bur":"mya", "geo":"kat", "ice":"isl", "mac":"mkd", "mao":"mri", "may":"msa", "per":"fas", "slo":"slk", "tib":"bod", "wel":"cym", "en":"eng", "fr":"fra", "fre":"fra", "de":"deu", "ger":"deu", "es":"spa", "it":"ita", "pt":"por", "ja":"jpn", "ko":"kor", "zh":"zho", "chi":"zho", "ru":"rus", "ar":"ara", "hi":"hin", "nl":"nld", "dut":"nld", "sv":"swe", "no":"nor", "da":"dan", "fi":"fin", "pl":"pol", "tr":"tur", "el":"ell", "gre":"ell", "he":"heb", "uk":"ukr", "cs":"ces", "cze":"ces", "ro":"ron", "rum":"ron", "hu":"hun", "th":"tha", "vi":"vie", "id":"ind"]
         return aliases[base] ?? base
     }
     public static func startPositionMillis(ticks: Int64, resume: Bool, explicitPositionMs: Int64? = nil) -> Int64 {

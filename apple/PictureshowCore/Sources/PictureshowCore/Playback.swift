@@ -12,10 +12,14 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
     public var channels: Int?
     public var isExternal: Bool
     public var isDefault: Bool
+    public var isHearingImpaired: Bool
+    public var deliveryMethod: String?
+    public var realFrameRate: Double?
+    public var averageFrameRate: Double?
     public var isForced: Bool
     public var id: Int { index }
     public var label: String { displayTitle ?? title ?? [language, codec].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "Track \(index)" }
-    enum CodingKeys: String, CodingKey { case index = "Index", type = "Type", codec = "Codec", language = "Language", displayTitle = "DisplayTitle", title = "Title", channels = "Channels", isExternal = "IsExternal", isDefault = "IsDefault", isForced = "IsForced" }
+    enum CodingKeys: String, CodingKey { case index = "Index", type = "Type", codec = "Codec", language = "Language", displayTitle = "DisplayTitle", title = "Title", channels = "Channels", isExternal = "IsExternal", isDefault = "IsDefault", isForced = "IsForced", isHearingImpaired = "IsHearingImpaired", deliveryMethod = "DeliveryMethod", realFrameRate = "RealFrameRate", averageFrameRate = "AverageFrameRate" }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         index = try c.decodeIfPresent(Int.self, forKey: .index) ?? 0
@@ -28,6 +32,10 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
         isExternal = try c.decodeIfPresent(Bool.self, forKey: .isExternal) ?? false
         isDefault = try c.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
         isForced = try c.decodeIfPresent(Bool.self, forKey: .isForced) ?? false
+        isHearingImpaired = try c.decodeIfPresent(Bool.self, forKey: .isHearingImpaired) ?? false
+        deliveryMethod = try c.decodeIfPresent(String.self, forKey: .deliveryMethod)
+        realFrameRate = try c.decodeIfPresent(Double.self, forKey: .realFrameRate)
+        averageFrameRate = try c.decodeIfPresent(Double.self, forKey: .averageFrameRate)
     }
 }
 

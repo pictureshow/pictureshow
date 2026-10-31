@@ -19,7 +19,7 @@ public final class JellyfinClient: @unchecked Sendable {
     private let supportsHEVC: Bool
     private let deviceName: String
     private let version: String
-    private let fields = "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount,MediaSources"
+    private let fields = "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
     /// Injected sessions are intended for tests. Production defaults pin redirects to each request's origin.
     public init(deviceID: String, session: URLSession? = nil, supportsHEVC: Bool = false, deviceName: String = "Apple", version: String = "0.1.0") {
         self.deviceID = deviceID; self.supportsHEVC = supportsHEVC; self.deviceName = deviceName; self.version = version
@@ -113,14 +113,63 @@ public final class JellyfinClient: @unchecked Sendable {
     }
     public func item(account: Account, id: String) async throws -> MediaItem {
         var detail = try decoder.decode(MediaItem.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(id))"))
-        // Jellyfin 12's single-item UserData projection may differ from lists. Match Continue watching.
-        let projected = try await page(account: account, path: "Items", query: [URLQueryItem(name: "ids", value: id)])
-        if let item = projected.items.first(where: { $0.id == id }) { detail.userData = item.userData }
+        guard ["Movie", "Episode", "Video", "Series", "Season", "BoxSet", "Playlist", "Folder", "CollectionFolder"].contains(detail.type) else { return detail }
+        do {
+            let projected = try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "ids", value: id)]))
+            if let item = projected.items.first(where: { $0.id == id }) { detail.userData = item.userData }
+        } catch {
+            if error as? ClientError == .invalidCredentials || !["Movie", "Episode", "Video"].contains(detail.type) { throw error }
+        }
         return detail
     }
     public func browse(account: Account, parentID: String, startIndex: Int = 0, limit: Int = 60) async throws -> [MediaItem] {
-        try await page(account: account, path: "Items", query: [URLQueryItem(name: "parentId", value: parentID), URLQueryItem(name: "sortBy", value: "SortName"), URLQueryItem(name: "startIndex", value: String(max(0, startIndex))), URLQueryItem(name: "limit", value: String(min(200, max(1, limit))))]).items
+        try await browsePage(account: account, parentID: parentID, startIndex: startIndex, limit: limit).items
     }
+    public func browsePage(account: Account, parentID: String, startIndex: Int = 0, limit: Int = 60, sortBy: String = "SortName", descending: Bool = false, recursive: Bool = false, includeItemTypes: String? = nil, ids: [String] = []) async throws -> ItemPage {
+        let query: [URLQueryItem]
+        if !ids.isEmpty {
+            query = [URLQueryItem(name: "ids", value: ids.joined(separator: ",")), URLQueryItem(name: "limit", value: String(min(200,max(1,limit)))), URLQueryItem(name: "enableUserData", value: "true"), URLQueryItem(name: "fields", value: "ChildCount,RecursiveItemCount")]
+        } else {
+            query = [URLQueryItem(name: "parentId", value: parentID), URLQueryItem(name: "recursive", value: String(recursive)), URLQueryItem(name: "includeItemTypes", value: includeItemTypes), URLQueryItem(name: "sortBy", value: sortBy), URLQueryItem(name: "sortOrder", value: descending ? "Descending" : "Ascending"), URLQueryItem(name: "startIndex", value: String(max(0,startIndex))), URLQueryItem(name: "limit", value: String(min(200,max(1,limit)))), URLQueryItem(name: "enableTotalRecordCount", value: "true"), URLQueryItem(name: "fields", value: fields)].filter { $0.value != nil }
+        }
+        return try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: query))
+    }
+    public func search(account: Account, query: String, kind: SearchKind) async throws -> ItemPage {
+        let term = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard term.count >= 2 else { return try decoder.decode(ItemPage.self, from: Data("{}".utf8)) }
+        var parameters = [URLQueryItem(name: "searchTerm", value: term), URLQueryItem(name: "limit", value: "24")]
+        if kind != .people { parameters += [URLQueryItem(name: "recursive", value: "true"), URLQueryItem(name: "includeItemTypes", value: kind.rawValue), URLQueryItem(name: "enableTotalRecordCount", value: "true"), URLQueryItem(name: "fields", value: "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount")] }
+        return try decoder.decode(ItemPage.self, from: await request(account: account, path: kind == .people ? "Persons" : "Items", query: parameters))
+    }
+    public func personItems(account: Account, personID: String, startIndex: Int = 0, limit: Int = 60) async throws -> ItemPage {
+        try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "personIds", value: personID), URLQueryItem(name: "recursive", value: "true"), URLQueryItem(name: "includeItemTypes", value: "Movie,Series"), URLQueryItem(name: "sortBy", value: "ProductionYear,SortName"), URLQueryItem(name: "sortOrder", value: "Descending"), URLQueryItem(name: "startIndex", value: String(max(0,startIndex))), URLQueryItem(name: "limit", value: String(min(200,max(1,limit)))), URLQueryItem(name: "enableTotalRecordCount", value: "true"), URLQueryItem(name: "fields", value: "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount")]))
+    }
+    public func played(account: Account, itemID: String, value: Bool) async throws -> ItemUserData { try decoder.decode(ItemUserData.self, from: await request(account: account, path: "UserPlayedItems/\(ServerURLs.encode(itemID))", method: value ? "POST" : "DELETE")) }
+    public func favorite(account: Account, itemID: String, value: Bool) async throws -> ItemUserData { try decoder.decode(ItemUserData.self, from: await request(account: account, path: "UserFavoriteItems/\(ServerURLs.encode(itemID))", method: value ? "POST" : "DELETE")) }
+    public func publicUsers(server: Server) async throws -> [PublicUser] { try decoder.decode([PublicUser].self, from: await request(server: server, path: "Users/Public")) }
+    public func quickConnectEnabled(server: Server) async throws -> Bool { try decoder.decode(Bool.self, from: await request(server: server, path: "QuickConnect/Enabled")) }
+    public func configuration(account: Account) async throws -> UserConfiguration {
+        struct Response: Decodable { let Configuration: [String:JSONValue] }
+        let data = try await request(account: account, path: "Users/\(ServerURLs.encode(account.userId))", includeUserID: false)
+        return UserConfiguration(fields: try decoder.decode(Response.self, from: data).Configuration)
+    }
+    public func saveConfiguration(account: Account, configuration: UserConfiguration) async throws {
+        let data = try JSONEncoder().encode(configuration.fields)
+        let fields = try JSONSerialization.jsonObject(with: data) as! [String:Any]
+        _ = try await request(account: account, path: "Users/Configuration", method: "POST", body: fields)
+    }
+    public func playbackExtras(account: Account, itemID: String) async throws -> MediaItem { try decoder.decode(MediaItem.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))", query: [URLQueryItem(name: "fields", value: "Chapters,Trickplay")])) }
+    public func segments(account: Account, itemID: String) async throws -> [MediaSegment] {
+        struct Page: Decodable { let Items: [MediaSegment] }
+        return try decoder.decode(Page.self, from: await request(account: account, path: "MediaSegments/\(ServerURLs.encode(itemID))")).Items
+    }
+    public func nextEpisode(account: Account, item: MediaItem) async throws -> MediaItem? {
+        guard item.type == "Episode", let series = item.seriesId, !series.isEmpty else { return nil }
+        let page = try decoder.decode(ItemPage.self, from: await request(account: account, path: "Shows/\(ServerURLs.encode(series))/Episodes", query: [URLQueryItem(name: "adjacentTo", value: item.id), URLQueryItem(name: "isMissing", value: "false"), URLQueryItem(name: "enableUserData", value: "true"), URLQueryItem(name: "fields", value: "Overview")]))
+        return PlaybackExtras.adjacentEpisode(current: item, items: page.items)
+    }
+    public func chapterImageURL(account: Account, itemID: String, index: Int, tag: String) -> URL? { try? ServerURLs.endpoint(account.server, path: "Items/\(ServerURLs.encode(itemID))/Images/Chapter/\(index)", query: [URLQueryItem(name: "tag", value: tag), URLQueryItem(name: "maxWidth", value: "320")]) }
+    public func trickplaySheetURL(account: Account, itemID: String, mediaSourceID: String, width: Int, sheet: Int) -> URL? { try? ServerURLs.endpoint(account.server, path: "Videos/\(ServerURLs.encode(itemID))/Trickplay/\(width)/\(sheet).jpg", query: [URLQueryItem(name: "mediaSourceId", value: mediaSourceID)]) }
     public func seasons(account: Account, seriesID: String) async throws -> [MediaItem] {
         try await page(account: account, path: "Shows/\(ServerURLs.encode(seriesID))/Seasons").items
     }
@@ -190,8 +239,8 @@ public final class JellyfinClient: @unchecked Sendable {
         guard decision.method == .transcode, let id = decision.playSessionId else { return }
         _ = try await request(account: account, path: "Videos/ActiveEncodings", method: "DELETE", query: [URLQueryItem(name: "deviceId", value: account.deviceID), URLQueryItem(name: "playSessionId", value: id)])
     }
-    private func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil) async throws -> Data {
-        try await request(server: account.server, path: path, method: method, query: query + [URLQueryItem(name: "userId", value: account.userId)], body: body, token: account.accessToken, identity: account.deviceID)
+    private func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, includeUserID: Bool = true) async throws -> Data {
+        try await request(server: account.server, path: path, method: method, query: query + (includeUserID ? [URLQueryItem(name: "userId", value: account.userId)] : []), body: body, token: account.accessToken, identity: account.deviceID)
     }
     private func request(server: Server, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, token: String? = nil, identity: String? = nil, timeout: TimeInterval = 60) async throws -> Data {
         let url = try ServerURLs.endpoint(server, path: path, query: query)
