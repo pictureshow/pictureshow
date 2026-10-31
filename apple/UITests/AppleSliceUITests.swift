@@ -80,8 +80,12 @@ final class AppleSliceUITests: XCTestCase {
         let settings = app.buttons["openSettings"]
         reveal(settings); activate(settings)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "settingsTitle").firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch.exists)
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "audioLanguage").firstMatch.exists)
+        let maxBitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
+        reveal(maxBitrate)
+        XCTAssertTrue(maxBitrate.waitForExistence(timeout: 10))
+        let audioLanguage = app.descendants(matching: .any).matching(identifier: "audioLanguage").firstMatch
+        reveal(audioLanguage)
+        XCTAssertTrue(audioLanguage.waitForExistence(timeout: 10))
         capture("Settings")
 
         let diagnostics = app.buttons["openDiagnostics"]
@@ -211,6 +215,11 @@ final class AppleSliceUITests: XCTestCase {
         #else
         let audio = try XCTUnwrap(config["episodeAudioIndex"])
         let subtitle = try XCTUnwrap(config["episodeSubtitleIndex"])
+        let configuredAudio = app.buttons["audio-\(audio)"]
+        if configuredAudio.waitForExistence(timeout: 10), configuredAudio.value as? String == "Selected" {
+            // Exercise a real selection transition when the configured default is already active.
+            selectTouchTrack(type: "audio", index: "-1")
+        }
         selectTouchTrack(type: "audio", index: audio)
         selectTouchTrack(type: "subtitle", index: subtitle)
         openTouchTrackPanel()
@@ -556,7 +565,12 @@ final class AppleSliceUITests: XCTestCase {
         openTouchTrackPanel()
         let choice = app.buttons["\(type)-\(index)"]
         reveal(choice); activate(choice)
-        XCTAssertTrue(app.buttons["Done"].waitForNonExistence(timeout: 10), "Selecting \(type) should immediately dismiss the track sheet")
+        if type == "audio" {
+            XCTAssertTrue(app.staticTexts["Audio and subtitles"].waitForNonExistence(timeout: 10), "Selecting audio should immediately dismiss the track sheet")
+        } else {
+            XCTAssertTrue(app.staticTexts["Audio and subtitles"].waitForNonExistence(timeout: 10), "Selecting subtitles should immediately dismiss the track sheet")
+        }
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "\(type)-")).firstMatch.waitForNonExistence(timeout: 10), "Selected \(type) rows should leave the sheet when the choice commits")
     }
     #endif
     #if os(tvOS)
