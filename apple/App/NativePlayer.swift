@@ -31,6 +31,10 @@ struct PlayerScreen: View {
                         Button("Cancel next episode") { session.cancelContinuation() }
                     }.buttonStyle(.borderedProminent).padding(8)
                 }
+                Text(session.item.name).font(.subheadline.weight(.medium)).lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 4)
+                    .background(Theme.surface).accessibilityAddTraits(.isHeader).accessibilityIdentifier("playerTitle")
                 HStack(spacing: 0) {
                     Button("Back to details", systemImage: "chevron.left", action: finish).accessibilityIdentifier("closePlayer")
                     Button("Audio and subtitles", systemImage: "captions.bubble") { panel = "tracks" }.accessibilityIdentifier("playerTracks")
@@ -41,10 +45,10 @@ struct PlayerScreen: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(session.status).accessibilityIdentifier("playbackMethod")
                         Text(clock(session.positionTicks)).monospacedDigit().accessibilityIdentifier("playbackPosition")
-                    }.font(.caption2).fixedSize(horizontal: false, vertical: true)
+                    }.font(.caption).fixedSize(horizontal: false, vertical: true)
                 }
                 .buttonStyle(PlayerActionStyle()).labelStyle(.iconOnly)
-                .padding(.horizontal, 8).padding(.vertical, 4).background(.black)
+                .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.surface)
             }
             #else
             NativePlayer(session: session, close: finish).ignoresSafeArea()
