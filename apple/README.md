@@ -74,6 +74,10 @@ reopens preserve position/pause intent, clean their specific encoder and retain 
 and final Stop. Reports outlive UI dismissal. Failed final reports/cleanup are retained for an
 explicit retry on detail. Segments honor Ask/Automatic/Off, and next-episode continuation uses
 server adjacency, cancellation, reader/manual behavior and physical-end completion.
+tvOS suspends its early credits countdown while the native transport bar or an app panel is
+visible. iOS does not expose the corresponding native transport/scrub visibility callback, so
+its credits action requires Play next; ordinary guarded automatic continuation waits for physical
+end. VoiceOver always requires a manual Play next on both platforms.
 
 The former loopback relay has been removed. The renderer constructs a **direct, same-origin
 server media URL with the viewing account's `ApiKey` query credential**. AVKit can give that URL to
