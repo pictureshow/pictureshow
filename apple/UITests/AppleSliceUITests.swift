@@ -215,11 +215,10 @@ final class AppleSliceUITests: XCTestCase {
         #else
         let audio = try XCTUnwrap(config["episodeAudioIndex"])
         let subtitle = try XCTUnwrap(config["episodeSubtitleIndex"])
-        let configuredAudio = app.buttons["audio-\(audio)"]
-        if configuredAudio.waitForExistence(timeout: 10), configuredAudio.value as? String == "Selected" {
-            // Exercise a real selection transition when the configured default is already active.
-            selectTouchTrack(type: "audio", index: "-1")
-        }
+        // A tap on the already-selected option must still apply-and-dismiss. Then exercise a
+        // real change and restore the configured audio track for the subsequent playback check.
+        selectTouchTrack(type: "audio", index: audio)
+        selectTouchTrack(type: "audio", index: "-1")
         selectTouchTrack(type: "audio", index: audio)
         selectTouchTrack(type: "subtitle", index: subtitle)
         openTouchTrackPanel()
