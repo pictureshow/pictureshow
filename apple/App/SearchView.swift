@@ -54,9 +54,11 @@ struct SearchView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 HStack {
-                    TextField("Search movies, shows and people", text: $state.query).autocorrectionDisabled().submitLabel(.search).focused($fieldFocused).accessibilityLabel("Search").accessibilityIdentifier("searchField")
+                    TextField(text: $state.query, prompt: Text("Search movies, shows and people").foregroundStyle(Theme.muted)) { Text("Search") }.autocorrectionDisabled().submitLabel(.search).focused($fieldFocused).accessibilityLabel("Search").accessibilityIdentifier("searchField")
                         #if os(iOS)
-                        .textInputAutocapitalization(.never).textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.never).textFieldStyle(.plain)
+                        .padding(12).frame(minHeight: 48).background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+                        .overlay { RoundedRectangle(cornerRadius: 8).stroke(Theme.muted.opacity(0.6), lineWidth: 1) }
                         #endif
                         .onSubmit { fieldFocused = false; if let account = model.account { state.remember(account) } }
                     if !state.query.isEmpty { Button { state.query = ""; fieldFocused = true } label: { Label("Clear", systemImage: "xmark.circle.fill").minimumTouchTarget() }.accessibilityIdentifier("clearSearch") }

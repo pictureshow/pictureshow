@@ -451,7 +451,7 @@ struct TouchShell: View {
                 case 1: LibrariesView(open: { open($0, tab: index) })
                 case 2: SearchView(open: { open($0, tab: index) })
                 case 3: SettingsView()
-                default: HomeView(open: { open($0, tab: index) })
+                default: HomeView(open: { open($0, tab: index) }, showSearch: { tab = 2 }, showSettings: { tab = 3 })
                 }
             }
             .navigationDestination(for: AppRoute.self) { route in destination(route, open: { open($0, tab: index) }) }

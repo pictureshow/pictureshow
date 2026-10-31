@@ -22,12 +22,12 @@ struct AccountsView: View {
                     Text(server.name).font(.title2.bold()).accessibilityAddTraits(.isHeader)
                     ForEach(model.snapshot.accounts.filter { $0.server.url == server.url }, id: \.localKey) { account in
                         VStack(alignment: .leading, spacing: 12) {
-                            Button { Task { await model.select(account); if model.account != nil { dismiss() } } } label: { Label(account.username + (account.accessToken.isEmpty ? " · Sign in again" : ""), systemImage: account.localKey == model.account?.localKey ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle").minimumTouchTarget() }.accessibilityValue(account.localKey == model.account?.localKey ? "Current account" : "").accessibilityIdentifier("account-\(account.userId)")
-                            Button { removal = Removal(account: account, count: 1, opener: "remove-\(account.localKey)") } label: { Text("Remove \(account.username)").minimumTouchTarget() }.focused($focused, equals: "remove-\(account.localKey)").accessibilityIdentifier("removeAccount-\(account.userId)")
+                            Button { Task { await model.select(account); if model.account != nil { dismiss() } } } label: { Label(account.username + (account.accessToken.isEmpty ? " · Sign in again" : account.localKey == model.account?.localKey ? " · Current account" : ""), systemImage: account.localKey == model.account?.localKey ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle").minimumTouchTarget() }.accessibilityIdentifier("account-\(account.userId)")
+                            Button(role: .destructive) { removal = Removal(account: account, count: 1, opener: "remove-\(account.localKey)") } label: { Text("Remove \(account.username)").minimumTouchTarget() }.tint(.red).focused($focused, equals: "remove-\(account.localKey)").accessibilityIdentifier("removeAccount-\(account.userId)")
                         }
                     }
                     Button { model.beginSignIn(server: server); dismiss() } label: { Text("Sign in another user on \(server.name)").minimumTouchTarget() }
-                    Button { removal = Removal(server: server, count: model.snapshot.accounts.filter { $0.server.url == server.url }.count, opener: "server-\(server.url.absoluteString)") } label: { Text("Remove server").minimumTouchTarget() }.focused($focused, equals: "server-\(server.url.absoluteString)")
+                    Button(role: .destructive) { removal = Removal(server: server, count: model.snapshot.accounts.filter { $0.server.url == server.url }.count, opener: "server-\(server.url.absoluteString)") } label: { Text("Remove server").minimumTouchTarget() }.tint(.red).focused($focused, equals: "server-\(server.url.absoluteString)")
                     Divider()
                 }
                 Button { model.beginSignIn(); dismiss() } label: { Label("Add a server", systemImage: "plus").minimumTouchTarget() }.accessibilityIdentifier("addServer")

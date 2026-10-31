@@ -6,6 +6,8 @@ import PictureshowCore
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
     var open: (MediaItem) -> Void
+    var showSearch: (() -> Void)?
+    var showSettings: (() -> Void)?
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 32) {
@@ -20,8 +22,10 @@ struct HomeView: View {
         .background(Theme.background.ignoresSafeArea()).navigationTitle("Pictureshow")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                NavigationLink(value: AppRoute.search) { Label("Search", systemImage: "magnifyingglass").minimumTouchTarget() }.accessibilityIdentifier("openSearch")
-                NavigationLink(value: AppRoute.settings) { Label("Settings", systemImage: "gearshape").minimumTouchTarget() }.accessibilityIdentifier("openSettings")
+                if let showSearch { Button(action: showSearch) { Label("Search", systemImage: "magnifyingglass").minimumTouchTarget() }.accessibilityIdentifier("openSearch") }
+                else { NavigationLink(value: AppRoute.search) { Label("Search", systemImage: "magnifyingglass").minimumTouchTarget() }.accessibilityIdentifier("openSearch") }
+                if let showSettings { Button(action: showSettings) { Label("Settings", systemImage: "gearshape").minimumTouchTarget() }.accessibilityIdentifier("openSettings") }
+                else { NavigationLink(value: AppRoute.settings) { Label("Settings", systemImage: "gearshape").minimumTouchTarget() }.accessibilityIdentifier("openSettings") }
             }
         }
         .refreshable { await model.loadHome() }
@@ -100,8 +104,9 @@ struct Artwork: View {
     var wide = false
     @State private var image: UIImage?
     var body: some View {
-        ZStack {
-            Theme.surface
+        // Artwork fills the proposed cell/hero bounds without contributing an image's
+        // natural aspect width to a vertical ScrollView's content measurement.
+        Theme.surface.overlay {
             if let image { Image(uiImage: image).resizable().scaledToFill() }
             else { Image(systemName: item.type == "Series" ? "tv" : item.isFolder ? "square.stack" : "film").font(.largeTitle).foregroundStyle(Theme.muted) }
         }
@@ -203,7 +208,7 @@ struct LibraryView: View {
                     } }
                     if let error = page.error { ErrorNotice(error: error) { Task { await load() } } }
                     if page.items.isEmpty && !page.loading && page.error == nil { Text("No titles are available.").foregroundStyle(Theme.muted); Button { Task { await load(reset: true) } } label: { Text("Refresh").minimumTouchTarget() } }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.cardWidth + 12), spacing: 22)], alignment: .leading, spacing: 28) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.cardWidth + 12), spacing: 22, alignment: .top)], alignment: .leading, spacing: 28) {
                         ForEach(page.items) { item in
                             Button { opener = item.id; UserDefaults.standard.set(item.id, forKey: memoryKey); open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
                                 .onAppear { if item.id == page.items.suffix(8).first?.id, page.next < page.total { Task { await load() } } }
