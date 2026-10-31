@@ -48,13 +48,27 @@ final class AppleSliceUITests: XCTestCase {
     /// on screenshots as semantic evidence. The private config names a visible demo-library item.
     func testAccountSearchSettingsAboutAndLicenses() throws {
         ensureSignedIn()
+        capture("Home")
 
         let accounts = app.buttons["openAccounts"]
         reveal(accounts); activate(accounts)
         XCTAssertTrue(app.staticTexts["accountsTitle"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "account-")).firstMatch.exists)
         capture("Accounts")
-        back()
+        returnHome()
+
+        #if os(iOS)
+        let libraries = app.buttons["Libraries"]
+        XCTAssertTrue(libraries.waitForExistence(timeout: 10), "The iOS tab or iPad side rail should expose Libraries")
+        activate(libraries)
+        capture("Libraries root")
+        let libraryID = try XCTUnwrap(config["libraryID"])
+        let library = app.buttons["item-\(libraryID)"]
+        reveal(library); activate(library)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch.waitForExistence(timeout: 15))
+        capture("Movie library")
+        returnHome()
+        #endif
 
         let search = app.buttons["openSearch"]
         reveal(search); activate(search)
@@ -66,6 +80,7 @@ final class AppleSliceUITests: XCTestCase {
         let searchItem = try XCTUnwrap(config["searchItemID"] ?? config["directID"])
         XCTAssertTrue(app.buttons["item-\(searchItem)"].waitForExistence(timeout: 20))
         capture("Search results")
+        returnHome()
 
         let settings = app.buttons["openSettings"]
         reveal(settings); activate(settings)
@@ -74,14 +89,30 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "audioLanguage").firstMatch.exists)
         capture("Settings")
 
+        let diagnostics = app.buttons["openDiagnostics"]
+        reveal(diagnostics); activate(diagnostics)
+        XCTAssertTrue(app.staticTexts["This device"].waitForExistence(timeout: 10))
+        capture("This device diagnostics")
+        back()
+
+        let supporter = app.buttons["openSupporter"]
+        reveal(supporter); activate(supporter)
+        XCTAssertTrue(app.staticTexts["billingUnavailable"].waitForExistence(timeout: 10))
+        capture("Support information")
+        back()
+
         let about = app.buttons["openAbout"]
         reveal(about); activate(about)
         XCTAssertTrue(app.staticTexts["aboutTitle"].waitForExistence(timeout: 10))
         capture("About")
         let licenses = app.buttons["openLicenses"]
         reveal(licenses); activate(licenses)
-        XCTAssertTrue(app.staticTexts["licenseTitle"].waitForExistence(timeout: 10))
+        let mpl = app.buttons["license-MPL-2.0"]
+        XCTAssertTrue(mpl.waitForExistence(timeout: 10))
         capture("Licenses")
+        reveal(mpl); activate(mpl)
+        XCTAssertTrue(app.staticTexts["licenseTitle"].waitForExistence(timeout: 10))
+        capture("MPL license text")
     }
     /// Confirms iPad layout survives rotation while the primary app sections remain reachable.
     func testiPadLandscapeAccountAndCatalogNavigation() throws {
@@ -106,8 +137,12 @@ final class AppleSliceUITests: XCTestCase {
         let library = app.buttons["Libraries"]
         XCTAssertTrue(library.waitForExistence(timeout: 10), "iPad root should expose the Libraries section")
         activate(library)
-        capture("iPad landscape libraries")
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch.exists)
+        capture("iPad landscape Libraries root")
+        let libraryID = try XCTUnwrap(config["libraryID"])
+        let movieLibrary = app.buttons["item-\(libraryID)"]
+        reveal(movieLibrary); activate(movieLibrary)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch.waitForExistence(timeout: 15))
+        capture("iPad landscape movie library")
         returnHome()
         let search = app.buttons["openSearch"]
         activate(search)
@@ -152,6 +187,7 @@ final class AppleSliceUITests: XCTestCase {
         if let libraryID = config["showsLibraryID"] {
             let library = app.buttons["item-\(libraryID)"].firstMatch
             reveal(library); activate(library)
+            capture("TV shows library")
         }
         #endif
         let series = app.buttons["item-\(seriesID)"].firstMatch
@@ -163,6 +199,7 @@ final class AppleSliceUITests: XCTestCase {
         let episode = app.buttons["item-\(episodeID)"]
         reveal(episode); activate(episode)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
+        capture("Series episode detail")
         let play = app.buttons["play"]
         reveal(play); activate(play)
         #if os(tvOS)
