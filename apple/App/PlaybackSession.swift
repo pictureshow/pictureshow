@@ -18,6 +18,7 @@ import MediaAccessibility
     @Published private(set) var reportError: String?
     @Published private(set) var positionTicks: Int64 = 0
     @Published private(set) var changingTracks = false
+    @Published private(set) var terminal = false
     @Published private(set) var isPaused = false
     @Published private(set) var waitingForVideo = true
     @Published private(set) var chapters: [Chapter] = []
@@ -41,7 +42,12 @@ import MediaAccessibility
     private var timeoutTask: Task<Void, Never>?
     private var reportTail: Task<Void, Never>?
     private var reportsQueued = 0
+    private var failedStart: (PlayDecision, Int64, Bool)?
+    private var failedProgress: (PlayDecision, Int64, Bool)?
+    private var finalReport: (PlayDecision, Int64, Bool)?
     private var failedStop: (PlayDecision, Int64, Bool)?
+    private var failedPlayedID: String?
+    private var completionTask: Task<Bool, Never>?
     private var failedEncodings: [PlayDecision] = []
     private var viewingID = UUID()
     private var started = false
@@ -62,6 +68,7 @@ import MediaAccessibility
     private var nextLookupPending = true
     private var switching = false
     private var completionCommitted = false
+    private var completedTicks: Int64?
     private var lastReportTime = Date.distantPast
     private var lastTickTime = Date()
     private var countdownElapsed: Double = 0
@@ -82,14 +89,25 @@ import MediaAccessibility
         try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try AVAudioSession.sharedInstance().setActive(true)
         var selectedSubtitle = subtitle
+        var captionLanguage: String?
         if subtitle == nil, MACaptionAppearanceGetDisplayType(.user) == .alwaysOn,
            let configuration = try? await client.configuration(account: account),
            let language = Captions.language(enabled: true, configuration: configuration, deviceLanguage: Locale.preferredLanguages.first ?? "") {
+            captionLanguage = language
             if let source = decision?.source ?? item.mediaSources.first { selectedSubtitle = Captions.index(source: source, preferredLanguage: language) }
         }
-        let next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
+        var next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
             audioIndex: audio, subtitleIndex: selectedSubtitle, forceTranscode: forceVideoTranscode,
             mediaSourceID: decision?.source.id ?? item.mediaSources.first?.id, preferences: preferences, forceHLS: forceHLS || audio != nil)
+        guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
+        // Episode/list responses need not contain streams. Apply captions to the fresh
+        // negotiated source, never to the previous episode's metadata.
+        if let captionLanguage, let preferred = Captions.index(source: next.source, preferredLanguage: captionLanguage), next.subtitleIndex != preferred {
+            let sourceID = next.source.id
+            next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
+                audioIndex: audio, subtitleIndex: preferred, forceTranscode: forceVideoTranscode,
+                mediaSourceID: sourceID, preferences: preferences, forceHLS: forceHLS || audio != nil)
+        }
         guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
         let url: URL
         do { url = try ServerPlaybackURL.make(decisionURL: next.url, server: account.server.url,
@@ -118,9 +136,10 @@ import MediaAccessibility
         }
         controlObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] observed, _ in
             Task { @MainActor in
-                guard let self, self.timelineReady, !self.changingTracks, !self.closed else { return }
+                guard let self, self.timelineReady, self.generation == version, !self.closed else { return }
                 if observed.timeControlStatus != .waitingToPlayAtSpecifiedRate {
-                    self.pauseIntent = observed.timeControlStatus == .paused
+                    let ended = self.durationSeconds.map { observed.currentTime().seconds >= $0 - 0.05 } ?? false
+                    if observed.timeControlStatus != .paused || !ended { self.pauseIntent = observed.timeControlStatus == .paused }
                     self.isPaused = self.pauseIntent
                     self.enqueueProgress()
                 }
@@ -187,12 +206,14 @@ import MediaAccessibility
         let target = min(upper, max(0, ticks)); pendingSeekTicks = target; lastSeekTime = Date()
         countdownElapsed = 0
         guard timelineReady else { positionTicks = target; return }
-        let wasPaused = pauseIntent
         player.seek(to: CMTime(seconds: Ticks.seconds(target), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] success in
             Task { @MainActor in
                 guard let self, !self.closed, success else { return }
                 self.pendingSeekTicks = nil; self.positionTicks = target
-                if wasPaused { self.player.pause(); self.pauseIntent = true; self.isPaused = true }
+                // A media Play/Pause received during the asynchronous seek is newer than
+                // the intent at seek start. Apply that current intent on completion.
+                if self.pauseIntent { self.player.pause() } else { self.player.play() }
+                self.isPaused = self.pauseIntent
                 self.enqueueProgress()
             }
         }
@@ -254,26 +275,42 @@ import MediaAccessibility
         }
     }
     private func physicalEnd() async {
-        guard !closed, !switching, !pauseIntent, Date().timeIntervalSince(lastSeekTime) > 0.8 else { return }
+        guard !closed, !switching, !pauseIntent, pendingSeekTicks == nil else { return }
         if item.type == "Episode", !continuationCancelled {
             if nextLookupPending { status = "Finding next episode…"; await extrasTask?.value }
             if nextLookupFailed { status = "Finding next episode…"; do { nextItem = try await client.nextEpisode(account: account, item: item); nextLookupFailed = false } catch { extrasError = "Could not find the next episode." } }
             if nextItem != nil, !UIAccessibility.isVoiceOverRunning { await advance(); return }
             if nextItem != nil { nextCountdown = 0; pauseIntent = true; isPaused = true; return }
         }
-        await completeIfNeeded(); await stop()
+        _ = await completeIfNeeded(); await stop()
     }
-    private func completeIfNeeded() async {
-        guard !completionCommitted else { return }; completionCommitted = true
-        if let duration = durationSeconds { positionTicks = PlaybackEndPosition.completed(currentTicks / 10_000, durationMs: Int64(duration * 1000)) * 10_000 }
-        do { _ = try await client.played(account: account, itemID: item.id, value: true) }
-        catch { reportError = "The server could not mark this title watched." }
+    private func completeIfNeeded() async -> Bool {
+        if completionCommitted { return true }
+        if let completionTask { return await completionTask.value }
+        let itemID = item.id
+        if let duration = durationSeconds { positionTicks = PlaybackEndPosition.completed(currentTicks / 10_000, durationMs: Int64(duration * 1000)) * 10_000; completedTicks = positionTicks }
+        let task = Task { [self] in
+            do {
+                _ = try await client.played(account: account, itemID: itemID, value: true)
+                completionCommitted = true; failedPlayedID = nil; return true
+            } catch { failedPlayedID = itemID; reportError = "The server could not mark this title watched. Retry saving progress from details."; return false }
+        }
+        completionTask = task
+        let result = await task.value; completionTask = nil; return result
     }
     func advance() async {
         guard !switching, !closed, let next = nextItem else { return }
-        switching = true; await completeIfNeeded(); await finishViewing()
-        guard !closed else { switching = false; return }
-        item = next; viewingID = UUID(); started = false; stopped = false; completionCommitted = false; fallbackUsed = false
+        switching = true
+        guard await completeIfNeeded(), !closed else {
+            error = "Completion could not be saved. Go back to details and retry saving progress before continuing."
+            pauseIntent = true; isPaused = true; player.pause(); switching = false; return
+        }
+        await finishViewing()
+        guard !closed, reportError == nil else {
+            if !closed { error = "Progress could not be saved. Go back to details and retry saving progress before continuing." }
+            switching = false; return
+        }
+        item = next; decision = nil; completedTicks = nil; viewingID = UUID(); started = false; stopped = false; completionCommitted = false; fallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
         segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
         do { try await prepare(startTicks: 0, audio: nil, subtitle: nil) } catch { self.error = "Could not start the next episode. Go back and try again." }
@@ -290,15 +327,23 @@ import MediaAccessibility
             await previous?.value
             defer { reportsQueued -= 1 }
             do {
+                if kind != "start", let (first, position, paused) = failedStart {
+                    try await client.reportStart(account: account, decision: first, positionTicks: position, paused: paused)
+                    failedStart = nil
+                }
                 if kind == "start" { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused) }
                 else if kind == "stop" { try await client.reportStopped(account: account, decision: decision, positionTicks: ticks, failed: error != nil) }
                 else { try await client.reportProgress(account: account, decision: decision, positionTicks: ticks, paused: paused) }
                 #if DEBUG
                 Logger(subsystem: "app.pictureshow", category: "Reports").notice("Accepted report kind=\(kind, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public) ticks=\(ticks)")
                 #endif
-                if kind == "stop" { failedStop = nil }
-                if failedStop == nil && failedEncodings.isEmpty { reportError = nil }
+                if kind == "start" { failedStart = nil }
+                if kind == "progress" { failedProgress = nil }
+                if kind == "stop" { failedStop = nil; failedProgress = nil }
+                clearReportErrorIfRecovered()
             } catch {
+                if kind == "start" { failedStart = (decision, ticks, paused) }
+                if kind == "progress" { failedProgress = (decision, ticks, paused) }
                 if kind == "stop" { failedStop = (decision, ticks, self.error != nil) }
                 reportError = "The server could not save progress. Resume may be unavailable. Check your connection."
             }
@@ -307,11 +352,11 @@ import MediaAccessibility
     private func enqueueProgress() { if started, !stopped, let decision { enqueueReport(decision: decision, kind: "progress", ticks: currentTicks, paused: pauseIntent) } }
     func beginClosing() {
         guard !closed else { return }; closed = true; generation += 1; player.pause()
-        closeTask = Task { [self] in await finishViewing() }
+        closeTask = Task { [self] in await finishViewing(); terminal = true }
     }
     func stop() async { beginClosing(); await closeTask?.value }
     private func releaseStream() async {
-        positionTicks = currentTicks; generation += 1; timelineReady = false
+        positionTicks = completedTicks ?? currentTicks; generation += 1; timelineReady = false
         timeoutTask?.cancel(); timeoutTask = nil
         startTask?.cancel(); await startTask?.value; startTask = nil
         statusObservation = nil; controlObservation = nil
@@ -326,8 +371,17 @@ import MediaAccessibility
     }
     func retrySaving() async {
         await reportTail?.value
+        if let failedPlayedID {
+            do { _ = try await client.played(account: account, itemID: failedPlayedID, value: true); self.failedPlayedID = nil; completionCommitted = true }
+            catch { reportError = "The server could not mark this title watched. Check your connection and retry." }
+        }
+        if let (decision, ticks, paused) = failedStart {
+            do { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused); failedStart = nil }
+            catch { reportError = "The server could not record playback. Check your connection and retry."; return }
+        }
+        if failedStop == nil, failedProgress != nil, let finalReport { failedStop = finalReport }
         if let (decision, ticks, failed) = failedStop {
-            do { try await client.reportStopped(account: account, decision: decision, positionTicks: ticks, failed: failed); failedStop = nil }
+            do { try await client.reportStopped(account: account, decision: decision, positionTicks: ticks, failed: failed); failedStop = nil; failedProgress = nil }
             catch { reportError = "The server could not save the final position. Check your connection and retry." }
         }
         let pending = failedEncodings; failedEncodings = []
@@ -335,23 +389,26 @@ import MediaAccessibility
             do { try await client.stopEncoding(account: account, decision: decision) }
             catch { failedEncodings.append(decision) }
         }
-        if failedStop == nil && failedEncodings.isEmpty { reportError = nil }
-        else if !failedEncodings.isEmpty { reportError = "The server could not stop an encoding. Check your connection and retry." }
+        clearReportErrorIfRecovered()
+        if !failedEncodings.isEmpty { reportError = "The server could not stop an encoding. Check your connection and retry." }
+    }
+    private func clearReportErrorIfRecovered() {
+        if failedStart == nil && failedProgress == nil && failedStop == nil && failedPlayedID == nil && failedEncodings.isEmpty { reportError = nil }
     }
     private func finishViewing() async {
-        guard !stopped else { return }; positionTicks = currentTicks; stopped = true
+        guard !stopped else { return }; positionTicks = completedTicks ?? currentTicks; stopped = true
         extrasTask?.cancel(); timeoutTask?.cancel()
         let last = decision
         await releaseStream()
-        if started, let last { enqueueReport(decision: last, kind: "stop", ticks: positionTicks, paused: true) }
+        if started, let last { finalReport = (last, positionTicks, error != nil); enqueueReport(decision: last, kind: "stop", ticks: positionTicks, paused: true) }
         await reportTail?.value; status = "Stopped"; waitingForVideo = false
     }
     func changeTracks(audio: Int?, subtitle: Int?, forceVideoTranscode: Bool = false) async {
         guard !changingTracks, !closed else { return }; changingTracks = true
-        let position = currentTicks, paused = pauseIntent
+        let position = currentTicks
         enqueueProgress(); await reportTail?.value; await releaseStream()
         guard !closed else { changingTracks = false; return }
-        pauseIntent = paused; pendingSeekTicks = position
+        pendingSeekTicks = position
         do { try await prepare(startTicks: position, audio: audio, subtitle: subtitle, forceHLS: true, forceVideoTranscode: forceVideoTranscode) }
         catch { self.error = "Could not apply the selected tracks. Go back and try again." }
         changingTracks = false

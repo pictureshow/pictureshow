@@ -55,7 +55,7 @@ struct PlayerScreen: View {
         }
         .background(.black)
         .onDisappear { session.beginClosing() }
-        .onChange(of: session.status) { _, value in if value == "Stopped", session.error == nil { finish() } }
+        .onChange(of: session.terminal) { _, value in if value, session.error == nil { finish() } }
         .onChange(of: scenePhase) { _, value in if value != .active { session.backgrounded() } }
         .onChange(of: panel) { _, value in session.panelOpen = value != nil }
         .sheet(isPresented: Binding(get: { panel != nil }, set: { if !$0 { panel = nil } })) {
@@ -70,6 +70,17 @@ struct PlayerScreen: View {
     private func finish() { guard !closing else { return }; closing = true; session.beginClosing(); Task { await close(); dismiss() } }
 }
 
+private func trackName(_ stream: MediaStream) -> String {
+    var parts = [stream.label]
+    let lower = stream.label.lowercased()
+    if let language = stream.language, let name = Locale.current.localizedString(forLanguageCode: language), !lower.contains(name.lowercased()), !lower.contains(language.lowercased()) { parts.append(name) }
+    if let codec = stream.codec, !lower.contains(codec.lowercased()) { parts.append(codec.uppercased()) }
+    if let channels = stream.channels, !lower.contains("\(channels) channel") { parts.append("\(channels) channels") }
+    if stream.isForced && (!lower.contains("forced") || lower.contains("non-forced") || lower.contains("non forced")) { parts.append("Forced") }
+    if stream.isHearingImpaired && !lower.contains("hearing impaired") && !lower.contains("sdh") { parts.append("Hearing impaired") }
+    parts.append("Stream \(stream.index)")
+    return parts.joined(separator: " · ")
+}
 private func clock(_ ticks: Int64) -> String { Catalog.resumeLabel(ticks).replacingOccurrences(of: "Resume from ", with: "") }
 
 struct PlayerOptions: View {
@@ -94,11 +105,11 @@ struct PlayerOptions: View {
                 } else {
                     Section("Audio") {
                         track("Off", index: -1, type: "Audio", selected: audio == -1)
-                        ForEach(streams("Audio")) { track($0.label, index: $0.index, type: "Audio", selected: audio == $0.index) }
+                        ForEach(streams("Audio")) { track(trackName($0), index: $0.index, type: "Audio", selected: audio == $0.index) }
                     }
                     Section("Subtitles") {
                         track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
-                        ForEach(streams("Subtitle")) { track($0.label, index: $0.index, type: "Subtitle", selected: subtitle == $0.index) }
+                        ForEach(streams("Subtitle")) { track(trackName($0), index: $0.index, type: "Subtitle", selected: subtitle == $0.index) }
                         Text(session.subtitleTimingExplanation).font(.caption)
                     }
                     if let error = session.extrasError { Text(error) }
@@ -151,7 +162,7 @@ struct NativePlayer: UIViewControllerRepresentable {
                     Task { await session.changeTracks(audio: type == "Audio" ? -1 : session.decision?.audioIndex, subtitle: type == "Subtitle" ? -1 : session.decision?.subtitleIndex) }
                 }
                 let actions = values.map { stream in
-                    UIAction(title: stream.label, subtitle: "Stream \(stream.index)", identifier: UIAction.Identifier("\(type.lowercased())-\(stream.index)"), attributes: session.changingTracks ? [.disabled] : [], state: selected == stream.index ? .on : .off) { _ in
+                    UIAction(title: trackName(stream), subtitle: nil, identifier: UIAction.Identifier("\(type.lowercased())-\(stream.index)"), attributes: session.changingTracks ? [.disabled] : [], state: selected == stream.index ? .on : .off) { _ in
                         Task { await session.changeTracks(audio: type == "Audio" ? stream.index : session.decision?.audioIndex, subtitle: type == "Subtitle" ? stream.index : session.decision?.subtitleIndex) }
                     }
                 }

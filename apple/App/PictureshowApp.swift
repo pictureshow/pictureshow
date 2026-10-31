@@ -4,10 +4,11 @@ import SwiftUI
 import PictureshowCore
 import Security
 import VideoToolbox
+import CryptoKit
 
 @main struct PictureshowApp: App {
     @StateObject private var model = AppModel()
-    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent) } }
+    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent).controlSize(.large) } }
 }
 
 enum Theme {
@@ -61,6 +62,7 @@ struct AccountSnapshot: Codable {
     let signInFlow = SignInFlow()
     private var accountGeneration = 0
     private var homeGeneration = 0
+    private var migrationTask: Task<Void, Never>?
     private var authenticatedClient: JellyfinClient
     private let installationID: String
     var client: JellyfinClient { authenticatedClient }
@@ -139,8 +141,47 @@ struct AccountSnapshot: Codable {
         accountGeneration += 1; homeGeneration += 1; account = nil; rows = []
         beginSignIn(server: failed.server, username: failed.username); sessionEnded = true
     }
+    /// Older builds used an installation-wide identity. Move only that viewer to a new
+    /// authorized session; a failed/disabled Quick Connect never destroys its working token.
+    private func migrateLegacyIdentityIfNeeded(_ saved: Account) {
+        guard migrationTask == nil, (saved.deviceID == installationID || snapshot.accounts.filter({ $0.deviceID == saved.deviceID }).count > 1) else { return }
+        let key = "identity-retry-" + SHA256.hash(data: Data(saved.localKey.utf8)).map { String(format: "%02x", $0) }.joined()
+        guard UserDefaults.standard.double(forKey: key) <= Date().timeIntervalSince1970 else { return }
+        UserDefaults.standard.set(Date().addingTimeInterval(1800).timeIntervalSince1970, forKey: key)
+        let generation = accountGeneration, freshClient = makeClient(UUID().uuidString), oldClient = client
+        migrationTask = Task {
+            defer {
+                migrationTask = nil
+                if let current = account, current.localKey != saved.localKey { migrateLegacyIdentityIfNeeded(current) }
+            }
+            do {
+                let renewed = try await withThrowingTaskGroup(of: Account.self) { group in
+                    group.addTask {
+                        let attempt = try await freshClient.initiateQuickConnect(server: saved.server)
+                        try await oldClient.authorizeQuickConnect(account: saved, code: attempt.code)
+                        let result = try await freshClient.authenticateQuickConnect(server: saved.server, secret: attempt.secret)
+                        if Task.isCancelled { try? await freshClient.logout(account: result); throw CancellationError() }
+                        return result
+                    }
+                    group.addTask { try await Task.sleep(for: .seconds(3)); throw CancellationError() }
+                    defer { group.cancelAll() }
+                    guard let result = try await group.next() else { throw CancellationError() }; return result
+                }
+                guard generation == accountGeneration, account?.accessToken == saved.accessToken,
+                      renewed.userId == saved.userId else { try? await freshClient.logout(account: renewed); return }
+                var changed = snapshot
+                guard let index = changed.accounts.firstIndex(where: { $0.localKey == saved.localKey }) else { try? await freshClient.logout(account: renewed); return }
+                changed.accounts[index] = renewed
+                do { try AccountVault.saveSnapshot(changed) }
+                catch { try? await freshClient.logout(account: renewed); return }
+                snapshot = changed; account = renewed; authenticatedClient = freshClient
+                // Do not log out the old shared device: another saved viewer may still use it.
+            } catch { /* Keep the accepted credential; the persisted deadline permits a later retry. */ }
+        }
+    }
     func loadHome() async {
         guard let account else { return }
+        migrateLegacyIdentityIfNeeded(account)
         let accountVersion = accountGeneration; homeGeneration += 1; let requestVersion = homeGeneration
         loading = rows.isEmpty; homeError = nil
         defer { if accountGeneration == accountVersion && homeGeneration == requestVersion { loading = false } }

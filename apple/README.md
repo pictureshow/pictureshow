@@ -1,108 +1,121 @@
 # Pictureshow for Apple
 
-Native SwiftUI clients for iPhone, iPad and Apple TV. Both targets use the same UI sources,
-the Foundation-only `PictureshowCore` package and AVFoundation/AVKit playback. Requires
-Xcode 16 or newer; deployment targets are iOS/iPadOS 17 and tvOS 17. Bundle ID: `app.pictureshow`.
+One SwiftUI application for iPhone, iPad and Apple TV. Both unsigned simulator targets use
+`app.pictureshow`. Minimum deployment is iOS/iPadOS/tvOS 17. No provisioning, signing or store
+submission is configured by this project.
 
-Open `Pictureshow.xcodeproj` and select `Pictureshow-iOS` or `Pictureshow-tvOS`. The checked-in
-project is generated from `project.yml` with XcodeGen; regenerate after changing targets or files:
+## Build and tests
+
+Open `Pictureshow.xcodeproj`, or regenerate it with XcodeGen after changing `project.yml`:
 
 ```sh
 xcodegen generate --spec apple/project.yml
 xcodebuild -project apple/Pictureshow.xcodeproj -scheme Pictureshow-iOS \
-  -destination 'generic/platform=iOS Simulator' build
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 xcodebuild -project apple/Pictureshow.xcodeproj -scheme Pictureshow-tvOS \
-  -destination 'generic/platform=tvOS Simulator' build
+  -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO build
 swift test --package-path apple/PictureshowCore
 swift test --package-path apple/PictureshowTransport
 ```
 
-Pass `--scratch-path` or `-derivedDataPath` to place build products on an appropriate development
-volume. Builds are unsigned by default. No provisioning profile, Apple team or store configuration
-is included. Unsigned simulators store the test account in their app sandbox because they have no
-Keychain access-group entitlement. Physical-device builds use Keychain exclusively; that path
-requires verification when device signing is configured in a later task.
+Use leased simulator/build capacity and an external DerivedData/scratch directory in shared
+workspaces. Keep builds serial. The core test runner discovers every JSON fixture recursively in
+this checkout's `spec/vectors/` by default; `PICTURESHOW_SPEC_DIR` overrides the directory containing
+`vectors/`. Unknown schema versions, suites, operations, duplicate IDs and empty suites fail.
+No baseline vector families are skipped. `ReferenceDeviceProfile` translates the reference
+capability inputs for contract verification; the application uses the separate conservative
+`AppleProfile` and does not claim Android decoder or FFmpeg capabilities.
 
-## Slice behavior
+## Application and platform presentation
 
-Enter a Jellyfin address, then use a password or approve the displayed Quick Connect code in an
-already signed-in Jellyfin client. Home loads Continue watching, Next up, libraries and the latest
-movies/series from each relevant library. Failed shelves show a warning while healthy shelves remain
-available. Detail views refresh the server's list-based UserData projection so their resume position
-matches Continue watching, including Jellyfin 12. Series expose seasons and episode details.
+The app includes remembered servers and multiple viewers, password/public-user-assisted sign-in,
+Quick Connect, independent viewer device identities, matching-token expiry, account/server removal,
+and local sign-out before best-effort remote logout. Physical builds use Keychain. Unsigned
+simulator builds use atomic protected sandbox files because they lack Keychain entitlements.
+Automatic LAN discovery is explicitly unavailable in this unsigned build; manual URLs support
+reverse-proxy paths, private networks and VPNs.
 
-The app negotiates a conservative Apple device profile: H.264 SDR in MP4/M4V/MOV, and HEVC SDR when
-VideoToolbox reports hardware decoding. Unsupported containers, video/audio codecs, or selected
-subtitle formats use Jellyfin's HLS H.264/AAC route. A direct decoder failure permits one HLS retry.
-The request binds the media-source ID so Jellyfin applies explicit track choices, including Off.
-The app's audio and subtitle chooser renegotiates at the current position; subtitles use
-server burn-in. iPhone and iPad use native AVKit seeking and pause/play. Apple TV uses a passive
-AVPlayerLayer with focusable SwiftUI Back, track, pause/play and ten-second seek controls, plus
-the remote's play/pause command. TV video fits between the persistent header and transport so
-those controls cannot cover burned-in captions. Native embedded-track changes are observed and reported only
-when stream metadata identifies a unique server index; uncertain indices are omitted rather
-than guessed from track order. Use the explicit chooser to select such tracks. The app reports start,
-progress, stop and exact-session encoder cleanup, and returns to the detail action with focus.
-
-Playback URLs never contain the server token. A per-playback HTTP relay binds only to loopback,
-uses a random capability path, and adds credentials only after validating the upstream origin.
-It streams byte ranges and rewrites HLS variants, segments, keys, maps and subtitle URIs through
-the same origin gate. Cross-origin redirects are refused. Manifest buffers are capped at 2 MB.
-Completed responses drain before an explicit TCP write-close; peer closure or a finite cleanup
-timeout disposes the transfer.
-Finite Jellyfin HLS uses the full source timeline; resume seeks and reports absolute player time.
-
-## Design and parity
-
-`App/DesignTokens.swift` is generated from `spec/design/tokens.json`:
+Home has Continue watching, Next up, libraries and latest movie/show shelves. Libraries page and
+sort, search has grouped results and viewer-scoped recent searches, and person pages show biography
+and filmography. Movie/series/season/episode details use authoritative UserData, desired-state watched
+and favorite writes, and a report/read barrier with bounded pending actions and explicit retry.
+Saved routes and shelf opener identities are viewer-scoped. iPhone uses tabs; regular-width iPad
+uses a side rail, with separate root navigation stacks. Native large controls, safe areas, Dynamic
+Type, VoiceOver labels and focus support accompany the Android palette/type tokens generated by:
 
 ```sh
 python3 apple/generate-design-tokens.py
 ```
 
-The palette, type sizes, poster ratios and card widths follow the Android reference. System sans-serif
-rendering, Dynamic Type, navigation, media controls, VoiceOver and tvOS focus stay native.
+Local settings include bitrate, caption size/background and segment modes. Audio output is shown as AVKit-managed rather than offering an ineffective passthrough toggle.
+Server audio/subtitle languages and subtitle mode preserve unknown configuration fields. AVKit
+manages the actual audio sink; encoded passthrough support is unreported. Diagnostic output describes
+the real device/route plus the advertised profile. About, complete MPL-2.0 notices and an honest
+unavailable Apple support-purchase screen are included. No external payment substitute or invented
+subscription price/entitlement appears. See [PARITY.md](PARITY.md) for every feature ID and evidence.
 
-`PictureshowCore` ports the needed Kotlin address, authorization, catalog, playback-decision and
-lifecycle wire tests. Set `PICTURESHOW_SPEC_DIR` to the directory containing `vectors/` to run shared
-vectors before the spec branch has been integrated. Unsupported vector families are reported as
-outside this slice; they are not silently counted as passed. This package does not port Android
-Media3/FFmpeg decoder logic. Settings, segment skipping, next-episode prompts, chapter/trickplay
-previews, live media and downloads are subsequent features.
+## Native playback and media URLs
 
-## Simulator flow tests
+Both platforms use `AVPlayerViewController`. Apple TV gets full-bleed video, the native transport
+bar, clickpad/touch scrubbing, info panels and chapter navigation. Server-negotiated Audio and
+Subtitles menus are supplied through `transportBarCustomMenuItems`; segments and next-episode
+choices use `contextualActions`. Pictureshow's info tab adds method/status, current position and
+an optional seek/trickplay surface. Native contextual actions appear when the transport bar is
+hidden; they do not replace it. iOS/iPad keep AVKit controls plus supplemental track/chapter/seek
+sheets and explicit Back. Native OS transport behavior takes precedence over reproducing Android
+control chrome or its exact auto-hide/key-repeat timing.
 
-The `*-UITests` targets exercise the real server/sign-in/detail/direct/HLS/resume flow. They require
-an explicitly supplied private pilot account via test-runner `PICTURESHOW_PILOT_JSON`, a JSON object
-with string values `server`, `username`, `password`, `libraryID`, `directID` and `hlsID`.
-For nested libraries, include `samplesFolderID` and `directContainers`/`hlsContainers`
-(pipe-separated intermediate folder IDs). Resolve these from the signed-in catalog rather than
-assuming a sample folder is itself playable. The series test also takes `seriesID`, `seasonID` and
-`episodeID` (and optionally `showsLibraryID` to browse from the library). For actual track selection,
-provide `directAudioIndex` and `directSubtitleIndex`. Set `directResumeEligible` or
-`hlsResumeEligible` to `"false"` for short samples excluded by the server's resume policy.
-An optional `resumeID`/`resumeContainers` title with `resumeResumeSeconds` exercises a longer
-eligible video; the test waits for that position, stops, then verifies playback past the saved
-position after reopening. Pass the configuration through
-a local `.xctestrun` environment; keep it outside the repository. DEBUG-only app environment values
-prefill the sign-in fields without bypassing server discovery, authentication or the UI actions.
-`testServerHLSAndResume` exercises the unsupported-codec and long-title resume paths independently
-of the strict direct-play gate. `testDirectPlaybackStartup` is a diagnostic that opens a configured
-detail using an existing valid account, then requires advancing direct video. It does not replace
-the full server/sign-in/catalog flow. The TV series test also checks remote play/pause, ten-second
-seek, Menu cancellation of track selection, and Menu return with Play focus restored.
+H.264 SDR MP4/M4V/MOV and hardware-reported HEVC SDR are candidate direct paths. The server's
+compatible HLS H.264/AAC route handles other formats; audio-only switches permit video copying,
+while positive subtitle choices negotiate server burn-in. One native decoder failure permits a
+full HLS recovery. No HDR/Dolby Vision, DTS/TrueHD passthrough or local PGS decoding is inferred.
+Finite Jellyfin VOD HLS uses absolute source time, including after track replacements. Internal
+reopens preserve position/pause intent, clean their specific encoder and retain one viewing Start
+and final Stop. Reports outlive UI dismissal. Failed final reports/cleanup are retained for an
+explicit retry on detail. Segments honor Ask/Automatic/Off, and next-episode continuation uses
+server adjacency, cancellation, reader/manual behavior and physical-end completion.
 
-The Quick Connect test checks cancellation by default. With `approveQuickConnect: "true"`, a private
-harness must approve the displayed code, and the test asserts arrival at home. Test sample videos
-must be long enough to establish resume, and the direct sample must be in an Apple-supported
-container as well as use supported codecs.
+The former loopback relay has been removed. The renderer constructs a **direct, same-origin
+server media URL with the viewing account's `ApiKey` query credential**. AVKit can give that URL to
+an external AirPlay receiver, which fetches it itself; a phone's `127.0.0.1` relay cannot serve a
+receiver on another device. Core decisions remain credential-free and API/artwork use header
+authentication with origin-pinned redirects. The media boundary strips obsolete query credentials
+and adds the current viewer credential once. Sources requiring custom nonstandard HTTP headers
+fail with a readable explanation rather than silently dropping those requirements.
 
-Simulator evidence cannot establish Apple TV hardware codec support, HDR/Dolby Vision, audio output
-routing/passthrough, real Siri Remote behavior, AirPlay, background playback or Keychain entitlements.
-These need a separately authorized hardware pass. This slice does not access any household device.
+**Exposure and trust boundary:** the viewer token is present in the final media URL and can appear
+in server/reverse-proxy access logs, network inspection and native media diagnostics. Do not log,
+share or publish those URLs or raw diagnostic artifacts. AVKit and AirPlay fetch their own nested
+playlists, segments, keys and redirects; the API session does not intercept or pin those requests.
+The chosen server and the media locations it serves are trusted for playback. AirPlay video also
+requires the receiver to reach the configured server URL; a development localhost tunnel is not
+reachable from a household receiver. Removing the relay makes native external playback feasible;
+simulator runs do not establish real AirPlay, Siri Remote touch gestures or receiver codec support.
 
-During iOS simulator acceptance (2026-10-31), a progressive H.264/AAC MP4 with embedded timed text
-and metadata tracks intermittently failed with AVFoundation -11800 / underlying -12780. The same
-failure reproduced over plain local HTTP outside the relay; an identical local-file control passed.
-The cause remains unestablished. Successful direct video and the server-HLS recovery path are
-separate observations; these runs do not establish reliable progressive playback on real devices.
+AVKit exposes system caption styling. App `textStyleRules` affect supported native WebVTT only.
+Burned-in captions retain the video's authored appearance and timing. Apple's public AVKit API
+does not expose per-viewing subtitle clock delay, so this limitation is stated instead of offering
+a control that does nothing. Native controls handle caption safe-area behavior where supported;
+burned-in pixels cannot be repositioned independently of the video.
+
+## Runtime acceptance
+
+UI tests need an explicitly supplied private `PICTURESHOW_PILOT_JSON` configuration in a local
+`.xctestrun` environment, never committed credentials. Required identity/media keys are `server`,
+`username`, `password`, `libraryID`, `directID` and `hlsID`; optional container paths, series/season/
+episode IDs, track indices and a sufficiently long resume fixture exercise the rest of the flow.
+DEBUG field-prefill variables still drive discovery/authentication; they do not bypass either.
+Quick Connect approval requires a separate authorized private harness.
+
+The prior progressive H.264/AAC sample intermittently failed on the iPhone simulator with
+AVFoundation -11800 / underlying -12780. The identical file also failed intermittently over plain
+HTTP outside the old relay, while a local-file control passed. Follow-up direct-URL experiments
+are recorded with their actual trial counts in the private leg report; no transport change is
+credited as a decoder fix without those results.
+
+Real iPhone/iPad and Apple TV checks remain necessary for progressive codec reliability/HEVC
+variants, HDR/Dolby Vision and tone mapping, audio routes/HDMI/encoded output, real Siri Remote
+gestures, AirPlay external playback, local-network permission, physical Keychain entitlements,
+interruptions/background behavior and subtitle renderer differences. Household hardware is not
+part of the simulator acceptance. Live media, downloads, general music/photo playback and profile
+editing are outside the current Android reference scope as described in `spec/features/`.

@@ -40,7 +40,7 @@ private struct SettingsForm: View {
         Form {
             Section("Playback") {
                 Picker("Max streaming bitrate", selection: preference(\.bitrateMbps)) { ForEach(PlaybackPreferences.bitrates, id: \.self) { value in Text(value.map { "\($0) Mbps" } ?? "Auto (200 Mbps)").tag(value) } }.accessibilityIdentifier("maxBitrate")
-                Toggle("Audio passthrough", isOn: preference(\.passthrough)).accessibilityIdentifier("passthrough")
+                Text("Audio output: managed by AVKit").accessibilityIdentifier("passthrough")
                 Text("Encoded passthrough formats are unreported by this app. AVKit manages the current output route; no DTS or TrueHD passthrough is claimed.").font(.caption).foregroundStyle(Theme.muted)
             }
             Section("Captions") {

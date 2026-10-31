@@ -18,7 +18,9 @@ final class ServerPlaybackURLTests: XCTestCase {
         for value in ["http://media.example.test/base/a", "https://other.example.test/a", "https://media.example.test:444/a", "https://user:pass@media.example.test/a"] {
             XCTAssertThrowsError(try ServerPlaybackURL.make(decisionURL: URL(string: value)!, server: server, token: "fixture"))
         }
-        XCTAssertThrowsError(try ServerPlaybackURL.make(decisionURL: server, server: server, token: "fixture", requiredHeaders: ["X-Custom-Upstream":"required"]))
+        for header in ["X-Custom-Upstream", "Accept", "User-Agent"] {
+            XCTAssertThrowsError(try ServerPlaybackURL.make(decisionURL: server, server: server, token: "fixture", requiredHeaders: [header:"required"]))
+        }
         XCTAssertNoThrow(try ServerPlaybackURL.make(decisionURL: URL(string: "https://media.example.test:443/base/a")!, server: server, token: "fixture"))
     }
 }

@@ -51,7 +51,7 @@ private struct RemovalConfirmation: View {
         ScrollView { VStack(alignment: .leading, spacing: 24) {
             Text(request.question).font(.title2).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).foregroundStyle(.orange) }
-            Button("Cancel", action: cancel).focused($cancelFocused).disabled(committing).keyboardShortcut(.cancelAction).accessibilityHint(request.question).accessibilityIdentifier("cancelRemoval")
+            Button("Cancel", action: cancel).focused($cancelFocused).disabled(committing).accessibilityHint(request.question).accessibilityIdentifier("cancelRemoval")
             Button("Remove", role: .destructive) { committing = true; do { try commit() } catch { self.error = error.localizedDescription; committing = false } }.disabled(committing).accessibilityIdentifier("confirmRemoval")
         }.buttonStyle(.bordered).padding(Theme.gutter).frame(maxWidth: 720, alignment: .leading).frame(maxWidth: .infinity) }
             .interactiveDismissDisabled(committing).onAppear { cancelFocused = true }

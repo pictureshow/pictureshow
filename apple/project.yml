@@ -65,6 +65,18 @@ targets:
     settings:
       base:
         TARGETED_DEVICE_FAMILY: '3'
+  Pictureshow-iOS-UnitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [UnitTests]
+    dependencies:
+      - target: Pictureshow-iOS
+      - package: PictureshowCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pictureshow.unittests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Pictureshow-iOS.app/Pictureshow-iOS
+        BUNDLE_LOADER: $(TEST_HOST)
   Pictureshow-iOS-UITests:
     type: bundle.ui-testing
     platform: iOS
@@ -91,7 +103,7 @@ schemes:
       targets:
         Pictureshow-iOS: all
     test:
-      targets: [Pictureshow-iOS-UITests]
+      targets: [Pictureshow-iOS-UnitTests, Pictureshow-iOS-UITests]
   Pictureshow-tvOS:
     build:
       targets:

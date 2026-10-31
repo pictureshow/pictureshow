@@ -21,7 +21,7 @@ public enum ServerPlaybackURL {
               port(decisionURL) == port(server), decisionURL.user == nil, decisionURL.password == nil else { throw Failure.crossOrigin }
         // AVURLAsset's undocumented HTTPHeaderFields key is not an AirPlay transport contract.
         // Do not silently ignore a source that requires a custom upstream header.
-        guard requiredHeaders.allSatisfy({ ["authorization", "x-emby-token", "accept", "user-agent"].contains($0.key.lowercased()) }) else { throw Failure.unsupportedHeaders }
+        guard requiredHeaders.allSatisfy({ ["authorization", "x-emby-token"].contains($0.key.lowercased()) }) else { throw Failure.unsupportedHeaders }
         guard var parts = URLComponents(url: decisionURL, resolvingAgainstBaseURL: false), !token.isEmpty else { throw Failure.invalidURL }
         let credentials = ["apikey", "api_key", "x-emby-token", "token", "access_token", "accesstoken"]
         parts.queryItems = (parts.queryItems ?? []).filter { !credentials.contains($0.name.lowercased()) } + [URLQueryItem(name: "ApiKey", value: token)]

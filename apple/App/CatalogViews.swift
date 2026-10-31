@@ -205,7 +205,7 @@ struct LibraryView: View {
                     if page.items.isEmpty && !page.loading && page.error == nil { Text("No titles are available.").foregroundStyle(Theme.muted); Button("Refresh") { Task { await load(reset: true) } } }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.cardWidth + 12), spacing: 22)], alignment: .leading, spacing: 28) {
                         ForEach(page.items) { item in
-                            Button { opener = item.id; remember(item.id); open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
+                            Button { opener = item.id; UserDefaults.standard.set(item.id, forKey: memoryKey); open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
                                 .onAppear { if item.id == page.items.suffix(8).first?.id, page.next < page.total { Task { await load() } } }
                         }
                     }
@@ -216,9 +216,20 @@ struct LibraryView: View {
                 .task(id: id) { if page.items.isEmpty { await load(reset: true) } }
                 .onChange(of: sort) { _, _ in Task { await load(reset: true) } }
                 .onChange(of: descending) { _, _ in Task { await load(reset: true) } }
-                .onAppear { if let opener { proxy.scrollTo(opener, anchor: .center); focused = opener } }
+                .onAppear { if opener == nil { opener = UserDefaults.standard.string(forKey: memoryKey) }; if let opener, page.items.contains(where: { $0.id == opener }) { proxy.scrollTo(opener, anchor: .center); focused = opener } }
+                .onChange(of: page.items.map(\.id)) { _, ids in if focused == nil, let opener, ids.contains(opener) { proxy.scrollTo(opener, anchor: .center); focused = opener } }
                 .onChange(of: focused) { _, value in if let value { withAnimation { proxy.scrollTo(value, anchor: .center) } } }
         }
     }
-    private func load(reset: Bool = false) async { await page.load(model: model, parent: id, person: person, sort: sort, descending: descending, reset: reset) }
+    private var memoryKey: String { "library-opener:" + (model.account?.localKey ?? "") + ":" + id }
+    private func load(reset: Bool = false) async {
+        await page.load(model: model, parent: id, person: person, sort: sort, descending: descending, reset: reset)
+        // A cold restored detail may have originated beyond the first page. Locate that
+        // card through ordinary paging, stopping on cancellation or a non-advancing page.
+        while !Task.isCancelled, let opener, !page.items.contains(where: { $0.id == opener }), page.next < page.total, page.error == nil {
+            let before = page.next
+            await page.load(model: model, parent: id, person: person, sort: sort, descending: descending)
+            if page.next <= before { break }
+        }
+    }
 }
