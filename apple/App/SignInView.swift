@@ -83,6 +83,7 @@ private struct SignInForm: View {
     @State private var busy = false
     @State private var users: [PublicUser] = []
     @State private var quickEnabled: Bool?
+    @State private var availabilityError: String?
     @State private var work: Task<Void, Never>?
     @FocusState private var focused: String?
     var body: some View {
@@ -109,6 +110,7 @@ private struct SignInForm: View {
                         Button(busy ? "Signing in…" : "Sign in") { signIn(server) }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
                         if quickEnabled == true { Button("Use Quick Connect") { flow.begin(server: server, model: model) }.disabled(busy).accessibilityIdentifier("quickConnect") }
                         else if quickEnabled == false { Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted) }
+                        else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button("Retry Quick Connect availability") { Task { await loadOptions(server) } } }
                         else { Text("Checking Quick Connect…").foregroundStyle(Theme.muted) }
                         Button("Change server") { leaveServer() }.disabled(busy)
                     }
@@ -136,7 +138,7 @@ private struct SignInForm: View {
         }
         .background(Theme.background.ignoresSafeArea())
         .task {
-            server = model.signInServer ?? flow.attempt?.server; username = model.signInUsername
+            server = model.signInServer ?? flow.attempt?.server ?? model.snapshot.servers.last; username = model.signInUsername
             if let server { await loadOptions(server); if flow.attempt != nil { flow.poll(model: model) } }
             #if DEBUG
             let env = ProcessInfo.processInfo.environment
@@ -169,7 +171,7 @@ private struct SignInForm: View {
     }
     private func loadOptions(_ server: Server) async {
         do { users = try await model.client.publicUsers(server: server) } catch { users = [] }
-        do { quickEnabled = try await model.client.quickConnectEnabled(server: server) } catch { quickEnabled = false }
+        do { quickEnabled = try await model.client.quickConnectEnabled(server: server); availabilityError = nil } catch { quickEnabled = nil; availabilityError = "Quick Connect availability could not be checked. Password sign-in is still available." }
     }
     private func signIn(_ server: Server) {
         guard !busy, !username.isEmpty else { return }; busy = true; error = nil

@@ -55,6 +55,7 @@ struct AccountSnapshot: Codable {
     @Published var playbackSaving = false
     @Published var playbackSaveError: String?
     @Published var refreshID = UUID()
+    @Published var externalDetailID: String?
     let preferences = AppPreferences()
     let signInFlow = SignInFlow()
     private var accountGeneration = 0
@@ -74,6 +75,7 @@ struct AccountSnapshot: Codable {
             snapshot = try AccountVault.loadSnapshot()
             account = snapshot.accounts.first { $0.localKey == snapshot.selected && !$0.accessToken.isEmpty }
             if let account { authenticatedClient = makeClient(account.deviceID) }
+            else if let expired = snapshot.accounts.first(where: { $0.localKey == snapshot.selected && $0.accessToken.isEmpty }) { beginSignIn(server: expired.server, username: expired.username); sessionEnded = true }
             storageError = nil
         } catch { storageError = error.localizedDescription }
     }
@@ -129,7 +131,7 @@ struct AccountSnapshot: Codable {
               current.localKey == failed.localKey, current.accessToken == failed.accessToken else { return }
         var changed = snapshot
         if let index = changed.accounts.firstIndex(where: { $0.localKey == failed.localKey && $0.accessToken == failed.accessToken }) { changed.accounts[index].accessToken = "" }
-        changed.selected = nil
+        changed.selected = failed.localKey
         do { try AccountVault.saveSnapshot(changed); snapshot = changed }
         catch { storageError = error.localizedDescription; return }
         accountGeneration += 1; homeGeneration += 1; account = nil; rows = []
@@ -173,6 +175,19 @@ struct AccountSnapshot: Codable {
             await loadHome()
         }
     }
+    func openPlaybackURL(_ url: URL) async {
+        guard url.scheme == "pictureshow" else { return }
+        guard let input = ExternalPlaybackRequest(url: url) else { playbackError = "Could not open this playback request."; return }
+        guard let account else { return }
+        let version = accountGeneration
+        do {
+            var item = try await client.item(account: account, id: input.itemID)
+            guard version == accountGeneration, item.id.lowercased() == input.itemID, ["Movie", "Episode"].contains(item.type), !item.isFolder else { throw ClientError.invalidResponse }
+            if let position = input.positionMs { item.userData.playbackPositionTicks = position * 10_000 }
+            externalDetailID = item.id
+            await play(item, resume: true, audio: nil, subtitle: nil)
+        } catch { handle(error, account: account); playbackError = "This item is unavailable for the current account." }
+    }
     func presentationDismissed() async {
         if dismissingPlayback != nil { dismissingPlayback = nil; return }
         if let activePlayback { await playerClosed(activePlayback) }
@@ -209,7 +224,10 @@ enum AccountVault {
         if FileManager.default.fileExists(atPath: snapshotURL.path) { return try JSONDecoder().decode(AccountSnapshot.self, from: Data(contentsOf: snapshotURL)) }
         #endif
         if let data = try read(snapshotQuery) { return try JSONDecoder().decode(AccountSnapshot.self, from: data) }
-        if let legacy = load() { return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
+        #if targetEnvironment(simulator)
+        if FileManager.default.fileExists(atPath: simulatorURL.path) { let legacy = try JSONDecoder().decode(Account.self, from: Data(contentsOf: simulatorURL)); return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
+        #endif
+        if let data = try read(query) { let legacy = try JSONDecoder().decode(Account.self, from: data); return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
         return AccountSnapshot()
     }
     static func saveSnapshot(_ value: AccountSnapshot) throws {
@@ -263,8 +281,32 @@ enum AccountVault {
     enum StorageError: LocalizedError { case failed; var errorDescription: String? { "Could not read or save your sign-ins securely. Try again." } }
 }
 
+struct ExternalPlaybackRequest {
+    let itemID: String
+    let positionMs: Int64?
+    init?(url: URL) {
+        guard let c = URLComponents(url: url, resolvingAgainstBaseURL: false), c.scheme == "pictureshow", c.host == "play", c.user == nil, c.password == nil, c.port == nil, c.fragment == nil else { return nil }
+        let parts = c.percentEncodedPath.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[0].isEmpty, let id = String(parts[1]).removingPercentEncoding,
+              id.count == 32, id.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains($0) }) else { return nil }
+        let query = c.queryItems ?? []; guard query.allSatisfy({ $0.name == "positionMs" }), query.count <= 1 else { return nil }
+        if let value = query.first {
+            guard let text = value.value, !text.isEmpty, text.utf8.allSatisfy({ (48...57).contains($0) }), let number = Int64(text), number <= Int64.max / 10_000 else { return nil }; positionMs = number
+        } else { positionMs = nil }
+        itemID = id.lowercased()
+    }
+}
+
 enum AppRoute: Hashable, Codable {
     case detail(String), library(String, String), search, settings, accounts, information(String)
+}
+
+struct NavigationSnapshot: Codable { var viewer: String; var tab: Int; var paths: [[AppRoute]] }
+enum NavigationMemory {
+    static func read(viewer: String) -> NavigationSnapshot? {
+        guard let data = UserDefaults.standard.data(forKey: "navigation-v1"), let record = try? JSONDecoder().decode(NavigationSnapshot.self, from: data), record.viewer == viewer else { return nil }; return record
+    }
+    static func save(viewer: String, tab: Int, paths: [[AppRoute]]) { if let data = try? JSONEncoder().encode(NavigationSnapshot(viewer: viewer, tab: tab, paths: paths)) { UserDefaults.standard.set(data, forKey: "navigation-v1") } }
 }
 
 struct RootView: View {
@@ -285,13 +327,16 @@ struct RootView: View {
                         .navigationDestination(for: AppRoute.self) { route in destination(route, open: open) }
                 }
                 .id(model.account?.localKey)
-                .task { await model.loadHome() }
+                .task { if path.isEmpty, let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer) { path = saved.paths.first ?? [] }; await model.loadHome() }
+                .onChange(of: path) { _, value in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: 0, paths: [value]) } }
                 .onChange(of: path) { _, value in if value.isEmpty { Task { await model.loadHome() } } }
                 #endif
             } else if model.showSignIn || model.snapshot.accounts.isEmpty { SignInView() }
             else { NavigationStack { AccountsView() } }
         }
         .background(Theme.background.ignoresSafeArea())
+        .onOpenURL { url in Task { await model.openPlaybackURL(url) } }
+        .onChange(of: model.externalDetailID) { _, id in if let id { path = [.detail(id)] } }
         #if DEBUG
         .onAppear {
             if model.account != nil, path.isEmpty, let item = ProcessInfo.processInfo.environment["PICTURESHOW_TEST_DETAIL_ID"] { path = [.detail(item)] }
@@ -333,7 +378,13 @@ struct TouchShell: View {
                 TabView(selection: $tab) { ForEach(0..<4) { index in stack(index).tabItem { Label(names[index], systemImage: icons[index]) }.tag(index) } }
             }
         }
-        .task { await model.loadHome() }
+        .task {
+            if let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer), saved.paths.count == 4 { paths = saved.paths; tab = min(3,max(0,saved.tab)) }
+            await model.loadHome()
+        }
+        .onChange(of: model.externalDetailID) { _, id in if let id { tab = 0; paths[0] = [.detail(id)] } }
+        .onChange(of: paths) { _, paths in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: tab, paths: paths) } }
+        .onChange(of: tab) { _, tab in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: tab, paths: paths) } }
         #if DEBUG
         .onAppear { if let id = ProcessInfo.processInfo.environment["PICTURESHOW_TEST_DETAIL_ID"], paths[0].isEmpty { paths[0] = [.detail(id)] } }
         #endif

@@ -35,6 +35,7 @@ struct ErrorNotice: View {
 }
 
 struct CatalogShelf: View {
+    @EnvironmentObject private var model: AppModel
     let title: String
     let items: [MediaItem]
     var wide = false
@@ -48,17 +49,19 @@ struct CatalogShelf: View {
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 20) {
                         ForEach(items) { item in
-                            Button { opener = item.id; open(item) } label: { CatalogCard(item: item, wide: wide) }
+                            Button { opener = item.id; remember(item.id); open(item) } label: { CatalogCard(item: item, wide: wide) }
                                 .buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id)
                                 .accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
                         }
                     }.padding(.horizontal, Theme.gutter).padding(.vertical, 14)
                 }.scrollClipDisabled().televisionFocusSection()
-                    .onAppear { if let opener { proxy.scrollTo(opener, anchor: .center); focused = opener } }
+                    .onAppear { if opener == nil { opener = UserDefaults.standard.string(forKey: memoryKey) }; if let opener, items.contains(where: { $0.id == opener }) { proxy.scrollTo(opener, anchor: .center); focused = opener } }
                     .onChange(of: focused) { _, value in if let value { withAnimation { proxy.scrollTo(value, anchor: .center) } } }
             }
         }
     }
+    private var memoryKey: String { "catalog-opener:" + (model.account?.localKey ?? "") + ":" + title }
+    private func remember(_ id: String) { UserDefaults.standard.set(id, forKey: memoryKey) }
 }
 
 struct CatalogCard: View {
@@ -202,7 +205,7 @@ struct LibraryView: View {
                     if page.items.isEmpty && !page.loading && page.error == nil { Text("No titles are available.").foregroundStyle(Theme.muted); Button("Refresh") { Task { await load(reset: true) } } }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.cardWidth + 12), spacing: 22)], alignment: .leading, spacing: 28) {
                         ForEach(page.items) { item in
-                            Button { opener = item.id; open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
+                            Button { opener = item.id; remember(item.id); open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
                                 .onAppear { if item.id == page.items.suffix(8).first?.id, page.next < page.total { Task { await load() } } }
                         }
                     }
