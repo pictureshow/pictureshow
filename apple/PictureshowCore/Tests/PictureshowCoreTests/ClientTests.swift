@@ -192,6 +192,16 @@ final class ClientTests: XCTestCase {
         do { _ = try await client.home(account: account); XCTFail("Expected expired credentials") }
         catch { XCTAssertEqual(error as? ClientError, .invalidCredentials) }
     }
+    func testSameViewerDeviceRenewalApprovesCodeWithOldAccountIdentity() async throws {
+        StubProtocol.handler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/base/QuickConnect/Authorize")
+            XCTAssertEqual(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems, [URLQueryItem(name: "code", value: "123456")])
+            XCTAssertTrue(request.value(forHTTPHeaderField: "Authorization")!.contains("account-device"))
+            return (200, self.json("true"))
+        }
+        try await client.authorizeQuickConnect(account: account, code: "123456")
+    }
     func testPasswordAndQuickConnectUseStableInstallIdentityAndNeverURLCredentials() async throws {
         var calls: [String] = []
         StubProtocol.handler = { request in

@@ -89,7 +89,7 @@ final class SpecVectorTests:XCTestCase {
     }
     func mockClient(_ i:[String:Any],identity:[String:Any])->JellyfinClient{VectorProtocol.responses=i["responses"] as? [[String:Any]] ?? [];VectorProtocol.requests=[];let config=URLSessionConfiguration.ephemeral;config.protocolClasses=[VectorProtocol.self];return JellyfinClient(deviceID:text(identity,"deviceId","install"),session:URLSession(configuration:config),deviceName:text(identity,"deviceName","Fixture TV"),version:text(identity,"version","0.1.0"))}
     func http(_ i:[String:Any],account:Account,identity:[String:Any])async throws->Any{
-        let client=mockClient(i,identity:identity);let action=text(i,"action");var result:[String:Any]=["kind":"success"]
+        let action=text(i,"action");guard ["catalog.views","catalog.resume","catalog.nextUp","catalog.latest","catalog.seasons","catalog.episodes","catalog.item","catalog.items","catalog.played","catalog.favorite","search","personItems","prepare","configuration","saveConfiguration","stopEncoding","reportStart","reportProgress","reportStopped"].contains(action) else { throw NSError(domain:"Unknown HTTP action \(action)",code:1) };let client=mockClient(i,identity:identity);var result:[String:Any]=["kind":"success"]
         do {switch action {
         case "catalog.views":_ = try await client.views(account:account)
         case "catalog.resume":_ = try await client.resume(account:account)

@@ -63,6 +63,11 @@ public final class JellyfinClient: @unchecked Sendable {
     public func quickConnectStatus(server: Server, secret: String) async throws -> QuickConnectState {
         try decoder.decode(QuickConnectState.self, from: await request(server: server, path: "QuickConnect/Connect", query: [URLQueryItem(name: "secret", value: secret)]))
     }
+    public func authorizeQuickConnect(account: Account, code: String) async throws {
+        guard code.count == 6, code.allSatisfy({ $0.isNumber }) else { throw ClientError.invalidResponse }
+        let approved = try decoder.decode(Bool.self, from: await request(account: account, path: "QuickConnect/Authorize", method: "POST", query: [URLQueryItem(name: "code", value: code)], includeUserID: false))
+        guard approved else { throw ClientError.invalidResponse }
+    }
     public func authenticateQuickConnect(server: Server, secret: String) async throws -> Account {
         let data = try await request(server: server, path: "Users/AuthenticateWithQuickConnect", method: "POST", body: ["Secret": secret])
         return try account(from: data, server: server)
@@ -264,7 +269,7 @@ public final class JellyfinClient: @unchecked Sendable {
         catch { if Task.isCancelled { throw CancellationError() }; throw ClientError.network }
         guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
         guard let responseURL = http.url, ServerURLs.isSameOrigin(server.url, responseURL) else { throw ClientError.unsafeStreamURL }
-        if http.statusCode == 401 || http.statusCode == 403 { throw ClientError.invalidCredentials }
+        if http.statusCode == 401 { throw ClientError.invalidCredentials }
         guard (200..<300).contains(http.statusCode) else { throw ClientError.server(http.statusCode) }
         return data
     }
