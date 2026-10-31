@@ -63,7 +63,17 @@ describe("browser persistence boundaries", () => {
             deviceId: "old-device",
         };
         session.setItem("pictureshow.account", JSON.stringify(account));
+        const write = local.setItem;
+        local.setItem = () => {
+            throw Error("Quota");
+        };
+        expect(() => readSaved()).toThrow("Quota");
+        expect(session.getItem("pictureshow.account")).toBe(
+            JSON.stringify(account),
+        );
+        local.setItem = write;
         const state = readSaved();
+        expect(local.getItem("pictureshow.accounts.v1")).not.toBe(null);
         expect(state.current).toBe(accountKey(account));
         saveSaved(state);
         expect(session.getItem("pictureshow.account")).toBe(null);

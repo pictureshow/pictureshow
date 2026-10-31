@@ -472,3 +472,45 @@ test("a transient saved-account read failure keeps the sign-in and retries hydra
         ),
     ).toBe(1);
 });
+
+test("an upgraded session sign-in commits persistently before a fresh browser tab reopens it", async ({
+    page,
+    context,
+}) => {
+    await fixture(page);
+    await signIn(page);
+    const oldIdentity = await page.evaluate(() => {
+        const old = JSON.parse(
+            localStorage.getItem("pictureshow.accounts.v1")!,
+        );
+        sessionStorage.setItem(
+            "pictureshow.account",
+            JSON.stringify(old.accounts[0]),
+        );
+        localStorage.removeItem("pictureshow.accounts.v1");
+        return old.accounts[0].deviceId;
+    });
+    await page.reload();
+    await expect(
+        page.getByRole("heading", { name: "Viewer", exact: true }),
+    ).toBeVisible();
+    expect(
+        await page.evaluate(() =>
+            sessionStorage.getItem("pictureshow.account"),
+        ),
+    ).toBe(null);
+    const reopened = await context.newPage();
+    await fixture(reopened);
+    await reopened.goto("/");
+    await expect(
+        reopened.getByRole("heading", { name: "Viewer", exact: true }),
+    ).toBeVisible();
+    expect(
+        await reopened.evaluate(
+            () =>
+                JSON.parse(localStorage.getItem("pictureshow.accounts.v1")!)
+                    .accounts[0].deviceId,
+        ),
+    ).toBe(oldIdentity);
+    await reopened.close();
+});

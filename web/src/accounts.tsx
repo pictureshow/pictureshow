@@ -39,12 +39,16 @@ export function readSaved(): Saved {
     const legacy = JSON.parse(
         sessionStorage.getItem("pictureshow.account") ?? "null",
     );
-    return {
+    const migrated: Saved = {
         version: 1,
         accounts: legacy?.accessToken ? [legacy] : [],
         servers: legacy?.server ? [legacy.server] : [],
         current: legacy?.accessToken ? accountKey(legacy) : undefined,
     };
+    // Commit the persistent replacement before forgetting a working session.
+    // A blocked write leaves the original available to the startup Retry flow.
+    if (legacy?.accessToken) saveSaved(migrated);
+    return migrated;
 }
 export function saveSaved(s: Saved) {
     localStorage.setItem(key, JSON.stringify(s));
