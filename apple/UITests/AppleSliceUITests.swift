@@ -168,6 +168,7 @@ final class AppleSliceUITests: XCTestCase {
         let playFromStart = app.buttons["startOver"]
         reveal(playFromStart)
         XCTAssertTrue(playFromStart.waitForExistence(timeout: 15), "Direct startup trials must use Play from start, not a saved resume position")
+        capture("Movie detail")
         let playRequestedAt = ProcessInfo.processInfo.systemUptime
         activate(playFromStart)
         #if os(tvOS)
@@ -212,11 +213,15 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         let series = app.buttons["item-\(seriesID)"].firstMatch
         reveal(series); activate(series)
+        XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
+        capture("Series detail")
         let seasonID = try XCTUnwrap(config["seasonID"])
+        let episodeID = try XCTUnwrap(config["episodeID"])
         let season = app.buttons["season-\(seasonID)"]
         reveal(season); activate(season)
-        let episodeID = try XCTUnwrap(config["episodeID"])
         let episode = app.buttons["item-\(episodeID)"]
+        XCTAssertTrue(episode.waitForExistence(timeout: 10))
+        capture("Season episodes")
         reveal(episode); activate(episode)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
         let play = app.buttons["play"]
@@ -400,6 +405,7 @@ final class AppleSliceUITests: XCTestCase {
         activate(button)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
         if let name = config[key + "Name"] { XCTAssertEqual(app.staticTexts["detailTitle"].label, name) }
+        capture("\(key.capitalized) media detail")
         let play = app.buttons["play"]
         reveal(play)
         XCTAssertTrue(play.waitForExistence(timeout: 15))
