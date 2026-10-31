@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity() {
 internal fun itemRoute(item: MediaItem) = "item?item=${Uri.encode(Json.encodeToString(item))}"
 
 private fun playerRoute(item: MediaItem, resume: Boolean) =
-    playerRoute(item, if (resume) item.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000 else 0)
+    playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
 
 internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
 

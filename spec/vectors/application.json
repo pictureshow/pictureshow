@@ -1,0 +1,2253 @@
+{
+  "schemaVersion": 1,
+  "suite": "application",
+  "cases": [
+    {
+      "id": "settings.empty.defaults",
+      "operation": "settings",
+      "input": {},
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.120",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 120
+      },
+      "expected": {
+        "bitrateMbps": 120,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 120000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.80",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 80
+      },
+      "expected": {
+        "bitrateMbps": 80,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 80000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.40",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 40
+      },
+      "expected": {
+        "bitrateMbps": 40,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 40000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.20",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 20
+      },
+      "expected": {
+        "bitrateMbps": 20,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 20000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.10",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 10
+      },
+      "expected": {
+        "bitrateMbps": 10,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 10000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.4",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 4
+      },
+      "expected": {
+        "bitrateMbps": 4,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 4000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.0",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 0
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.-1",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": -1
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.200",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 200
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.5",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 5
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.invalid-enums-fall-back",
+      "operation": "settings",
+      "input": {
+        "subtitleSize": "Unknown",
+        "subtitleBackground": "unknown",
+        "segmentModes": {
+          "Intro": "wrong",
+          "Unknown": "Off"
+        }
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.explicit-values",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 40,
+        "passthrough": false,
+        "subtitleSize": "ExtraLarge",
+        "subtitleBackground": "Box",
+        "segmentModes": {
+          "Intro": "Automatic",
+          "Outro": "Off",
+          "Recap": "Ask"
+        }
+      },
+      "expected": {
+        "bitrateMbps": 40,
+        "passthrough": false,
+        "subtitleSize": "ExtraLarge",
+        "subtitleBackground": "Box",
+        "segmentModes": {
+          "Intro": "Automatic",
+          "Outro": "Off",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 40000000,
+        "passthroughEnabled": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.None",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": null
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.120",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 120
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.80",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 80
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.40",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 40
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.20",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 20
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.10",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 10
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.4",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 4
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.0",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 0
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.-1",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": -1
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.200",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 200
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.5",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 5
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "audio.server-wins",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": 2,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.server-language-index",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": 1,
+        "preferredLanguage": "fr",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.server-minus-one",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": -1,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.default-before-language",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.language-fallback",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng",
+            "IsDefault": false
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": false
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": false
+          }
+        ]
+      },
+      "expected": 1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.iso3-region-fallback",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "fr-CA",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng",
+            "IsDefault": false
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": false
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": false
+          }
+        ]
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.no-preference-first",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "und",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng",
+            "IsDefault": false
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": false
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": false
+          }
+        ]
+      },
+      "expected": 1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.no-audio",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": []
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.null-means-off",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.minus-one-off",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": -1,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.server-forced-choice",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": 5,
+        "preferredLanguage": "fr",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 5,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.server-no-client-override",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": 7,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 7,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "resume.ticks-floor",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 45678,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.negative-clamped",
+      "operation": "resume-start",
+      "input": {
+        "ticks": -1000,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.start-over",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": false,
+        "explicitPositionMs": null
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.explicit-zero",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": true,
+        "explicitPositionMs": 0
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.explicit-position",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": true,
+        "explicitPositionMs": 123
+      },
+      "expected": 123,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.zero",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 0,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.large-safe-integer",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 9007199254740000,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 900719925474,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "segment.before",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 9999,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.start-inclusive",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 10000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": "intro",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.last-millisecond",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 19999,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": "intro",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.end-exclusive",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 20000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.off",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {
+          "Intro": "Off"
+        },
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.automatic",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {
+          "Intro": "Automatic"
+        },
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": "intro",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.overflow",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 0,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 0,
+            "EndTicks": 5153978750000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.unknown",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Unknown",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.invalid-order",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 0
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.credits-start",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 100000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 900000000,
+            "EndTicks": 1000000000
+          }
+        ]
+      },
+      "expected": 90000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.last-ten-seconds",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 100000,
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": 90000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.short-video",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 8000,
+        "segments": []
+      },
+      "expected": 0,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.unknown-duration",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 0,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 900000000,
+            "EndTicks": 1000000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.outside-duration",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 100000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 2000000000,
+            "EndTicks": 2100000000
+          }
+        ]
+      },
+      "expected": 90000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.implausible-credits",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 7200000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 0,
+            "EndTicks": 18600000000
+          }
+        ]
+      },
+      "expected": 7190000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.adjacent-inserted-special",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "previous",
+            "Type": "Episode"
+          },
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "special",
+            "Type": "Episode",
+            "ParentIndexNumber": 0
+          }
+        ]
+      },
+      "expected": "special",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.cross-season",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "season-two",
+            "Type": "Episode",
+            "ParentIndexNumber": 2
+          }
+        ]
+      },
+      "expected": "season-two",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.last-episode",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "previous",
+            "Type": "Episode"
+          },
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.current-absent",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "other",
+            "Type": "Episode"
+          },
+          {
+            "Id": "later",
+            "Type": "Episode"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.non-episode-successor",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "movie",
+            "Type": "Movie"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.duplicate-current",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.movie-no-request",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "movie",
+          "Type": "Movie"
+        },
+        "items": []
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.no-series-no-request",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode"
+        },
+        "items": []
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "configuration.defaults",
+      "operation": "user-configuration",
+      "input": {
+        "fields": {},
+        "change": null
+      },
+      "expected": {
+        "audioLanguage": "",
+        "subtitleLanguage": "",
+        "subtitleMode": "Default",
+        "fields": {}
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/UserConfigurationTest.kt"
+    },
+    {
+      "id": "configuration.null-languages",
+      "operation": "user-configuration",
+      "input": {
+        "fields": {
+          "AudioLanguagePreference": null,
+          "SubtitleLanguagePreference": null,
+          "SubtitleMode": "None",
+          "Other": null
+        },
+        "change": null
+      },
+      "expected": {
+        "audioLanguage": "",
+        "subtitleLanguage": "",
+        "subtitleMode": "None",
+        "fields": {
+          "AudioLanguagePreference": null,
+          "SubtitleLanguagePreference": null,
+          "SubtitleMode": "None",
+          "Other": null
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/UserConfigurationTest.kt"
+    },
+    {
+      "id": "configuration.preserves-future-fields",
+      "operation": "user-configuration",
+      "input": {
+        "fields": {
+          "AudioLanguagePreference": "eng",
+          "Unknown": {
+            "nested": [
+              1,
+              "keep"
+            ]
+          },
+          "RememberAudioSelections": true
+        },
+        "change": {
+          "name": "AudioLanguagePreference",
+          "value": "jpn"
+        }
+      },
+      "expected": {
+        "audioLanguage": "jpn",
+        "subtitleLanguage": "",
+        "subtitleMode": "Default",
+        "fields": {
+          "AudioLanguagePreference": "jpn",
+          "Unknown": {
+            "nested": [
+              1,
+              "keep"
+            ]
+          },
+          "RememberAudioSelections": true
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/UserConfigurationTest.kt"
+    },
+    {
+      "id": "end.decoder-overrun",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 62059,
+        "durationMs": 60031
+      },
+      "expected": {
+        "bounded": 60031,
+        "completed": 60031
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.physical-before-damaged-timeline",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 60000,
+        "durationMs": 4294982295
+      },
+      "expected": {
+        "bounded": 60000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.unknown-duration",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 60000,
+        "durationMs": 0
+      },
+      "expected": {
+        "bounded": 60000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.negative-duration-sentinel",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 60000,
+        "durationMs": -1
+      },
+      "expected": {
+        "bounded": 60000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.negative-position",
+      "operation": "end-position",
+      "input": {
+        "positionMs": -1,
+        "durationMs": 60000
+      },
+      "expected": {
+        "bounded": 0,
+        "completed": 0
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.round-exactly-one-second",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 59000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "bounded": 59000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.do-not-round-over-one-second",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 58999,
+        "durationMs": 60000
+      },
+      "expected": {
+        "bounded": 58999,
+        "completed": 58999
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.round-at-plausible-duration-ceiling",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 86399500,
+        "durationMs": 86400000
+      },
+      "expected": {
+        "bounded": 86399500,
+        "completed": 86400000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.do-not-round-above-duration-ceiling",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 86399501,
+        "durationMs": 86400001
+      },
+      "expected": {
+        "bounded": 86399501,
+        "completed": 86399501
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.physical-position-before-ordinary-duration",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 90000,
+        "durationMs": 120000
+      },
+      "expected": {
+        "bounded": 90000,
+        "completed": 90000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "captions.off-retains-server",
+      "operation": "caption-language",
+      "input": {
+        "enabled": false,
+        "configuration": {
+          "SubtitleMode": "Always",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.failed-config-retains-server",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": null,
+        "tvLanguage": "en"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.none-retains-server",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "None",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.none-case-insensitive",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "nOnE",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-language-before-tv",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "Default",
+          "SubtitleLanguagePreference": "fra"
+        },
+        "tvLanguage": "en-US"
+      },
+      "expected": "fra",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.tv-language-fallback",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "Smart",
+          "SubtitleLanguagePreference": ""
+        },
+        "tvLanguage": "en-US"
+      },
+      "expected": "en-US",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.onlyforced-does-not-disable-full-captions",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "OnlyForced",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": "eng",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.blank-server-pref-uses-tv",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "Always",
+          "SubtitleLanguagePreference": "  "
+        },
+        "tvLanguage": "fr-CA"
+      },
+      "expected": "fr-CA",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.full-before-forced",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.hearing-impaired-before-server-default",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-default-before-default-flag",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 2,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.default-flag-before-index",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "IsDefault": true
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.lowest-index-tie-break",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 9,
+              "Language": "eng"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.no-language-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 2,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "ja"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.unknown-language-does-not-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "und"
+            }
+          ]
+        },
+        "preferredLanguage": "und"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.regional-and-bibliographic-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 2,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "fre",
+              "IsForced": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "fra"
+            }
+          ]
+        },
+        "preferredLanguage": "fr_CA"
+      },
+      "expected": 3,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.audio-not-selected",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Language": "eng"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.codec-and-delivery-server-owned",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "DeliveryMethod": "Encode",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "subrip",
+              "DeliveryMethod": "External"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 3,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.forced-selected-when-only-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "IsForced": true
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.blank-preference-unselected",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "  "
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.alb",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "alb"
+            }
+          ]
+        },
+        "preferredLanguage": "sqi"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.arm",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "arm"
+            }
+          ]
+        },
+        "preferredLanguage": "hye"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.baq",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "baq"
+            }
+          ]
+        },
+        "preferredLanguage": "eus"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.bur",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "bur"
+            }
+          ]
+        },
+        "preferredLanguage": "mya"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.chi",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "chi"
+            }
+          ]
+        },
+        "preferredLanguage": "zho"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.cze",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "cze"
+            }
+          ]
+        },
+        "preferredLanguage": "ces"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.dut",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "dut"
+            }
+          ]
+        },
+        "preferredLanguage": "nld"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.fre",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "fre"
+            }
+          ]
+        },
+        "preferredLanguage": "fra"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.geo",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "geo"
+            }
+          ]
+        },
+        "preferredLanguage": "kat"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.ger",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "ger"
+            }
+          ]
+        },
+        "preferredLanguage": "deu"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.gre",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "gre"
+            }
+          ]
+        },
+        "preferredLanguage": "ell"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.ice",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "ice"
+            }
+          ]
+        },
+        "preferredLanguage": "isl"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.mac",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "mac"
+            }
+          ]
+        },
+        "preferredLanguage": "mkd"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.mao",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "mao"
+            }
+          ]
+        },
+        "preferredLanguage": "mri"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.may",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "may"
+            }
+          ]
+        },
+        "preferredLanguage": "msa"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.per",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "per"
+            }
+          ]
+        },
+        "preferredLanguage": "fas"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.rum",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "rum"
+            }
+          ]
+        },
+        "preferredLanguage": "ron"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.slo",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "slo"
+            }
+          ]
+        },
+        "preferredLanguage": "slk"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.tib",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "tib"
+            }
+          ]
+        },
+        "preferredLanguage": "bod"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.wel",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "wel"
+            }
+          ]
+        },
+        "preferredLanguage": "cym"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    }
+  ]
+}

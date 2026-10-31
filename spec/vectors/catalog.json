@@ -1,0 +1,1283 @@
+{
+  "schemaVersion": 1,
+  "suite": "reference",
+  "sources": [
+    "core/src/commonTest/kotlin/app/pictureshow/core/CatalogClientTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/DetailResumeHttpTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/SearchClientTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/playback/PlaybackClientTest.kt"
+  ],
+  "context": {
+    "server": {
+      "id": "server",
+      "name": "Fixture server",
+      "url": "https://media.example.test/jellyfin",
+      "version": "12.0.0"
+    },
+    "identity": {
+      "deviceName": "Fixture TV",
+      "deviceId": "install",
+      "version": "0.1.0"
+    },
+    "account": {
+      "userId": "viewer",
+      "token": "fixture-token",
+      "deviceId": "account-device"
+    }
+  },
+  "cases": [
+    {
+      "id": "catalog-views",
+      "operation": "http",
+      "input": {
+        "action": "catalog.views",
+        "parentId": "library",
+        "seriesId": "series",
+        "seasonId": "season",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/UserViews",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-resume",
+      "operation": "http",
+      "input": {
+        "action": "catalog.resume",
+        "parentId": "library",
+        "seriesId": "series",
+        "seasonId": "season",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/UserItems/Resume",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "mediaTypes": [
+                "Video"
+              ],
+              "limit": [
+                "24"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-nextUp",
+      "operation": "http",
+      "input": {
+        "action": "catalog.nextUp",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Shows/NextUp",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "limit": [
+                "24"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-latest",
+      "operation": "http",
+      "input": {
+        "action": "catalog.latest",
+        "parentId": "library",
+        "seriesId": "series",
+        "seasonId": "season",
+        "responses": [
+          {
+            "status": 200,
+            "body": []
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/Latest",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "parentId": [
+                "library"
+              ],
+              "limit": [
+                "24"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-seasons",
+      "operation": "http",
+      "input": {
+        "action": "catalog.seasons",
+        "parentId": "library",
+        "seriesId": "series",
+        "seasonId": "season",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Shows/series/Seasons",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-episodes",
+      "operation": "http",
+      "input": {
+        "action": "catalog.episodes",
+        "parentId": "library",
+        "seriesId": "series",
+        "seasonId": "season",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Shows/series/Episodes",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "seasonId": [
+                "season"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-nextup-scoped",
+      "operation": "http",
+      "input": {
+        "action": "catalog.nextUp",
+        "seriesId": "series",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Shows/NextUp",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "limit": [
+                "24"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ],
+              "seriesId": [
+                "series"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-items-defaults",
+      "operation": "http",
+      "input": {
+        "action": "catalog.items",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "parentId": [
+                "library"
+              ],
+              "recursive": [
+                "false"
+              ],
+              "sortBy": [
+                "SortName"
+              ],
+              "sortOrder": [
+                "Ascending"
+              ],
+              "startIndex": [
+                "0"
+              ],
+              "limit": [
+                "60"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-items-clamped",
+      "operation": "http",
+      "input": {
+        "action": "catalog.items",
+        "startIndex": -5,
+        "limit": 900,
+        "descending": true,
+        "recursive": true,
+        "includeItemTypes": "Movie,Series",
+        "sortBy": "ProductionYear",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "parentId": [
+                "library"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Movie,Series"
+              ],
+              "sortBy": [
+                "ProductionYear"
+              ],
+              "sortOrder": [
+                "Descending"
+              ],
+              "startIndex": [
+                "0"
+              ],
+              "limit": [
+                "200"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-items-ids",
+      "operation": "http",
+      "input": {
+        "action": "catalog.items",
+        "ids": [
+          "a",
+          "b"
+        ],
+        "limit": 0,
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "ids": [
+                "a,b"
+              ],
+              "limit": [
+                "1"
+              ],
+              "enableUserData": [
+                "true"
+              ],
+              "fields": [
+                "ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-played-true",
+      "operation": "http",
+      "input": {
+        "action": "catalog.played",
+        "itemId": "film",
+        "value": true,
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/UserPlayedItems/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-played-false",
+      "operation": "http",
+      "input": {
+        "action": "catalog.played",
+        "itemId": "film",
+        "value": false,
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "DELETE",
+            "path": "/jellyfin/UserPlayedItems/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-favorite-true",
+      "operation": "http",
+      "input": {
+        "action": "catalog.favorite",
+        "itemId": "film",
+        "value": true,
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/UserFavoriteItems/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-favorite-false",
+      "operation": "http",
+      "input": {
+        "action": "catalog.favorite",
+        "itemId": "film",
+        "value": false,
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "DELETE",
+            "path": "/jellyfin/UserFavoriteItems/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-movies",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "MOVIES",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Movie"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-shows",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "SHOWS",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Series"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-episodes",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "EPISODES",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Episode"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-collections",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "COLLECTIONS",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "BoxSet"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-people",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "PEOPLE",
+        "query": "  Paper moon  ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Persons",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "searchTerm": [
+                "Paper moon"
+              ],
+              "limit": [
+                "24"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "search-short-no-request",
+      "operation": "http",
+      "input": {
+        "action": "search",
+        "kind": "MOVIES",
+        "query": " a ",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "person-pagination-bounds",
+      "operation": "http",
+      "input": {
+        "action": "personItems",
+        "personId": "person",
+        "startIndex": -1,
+        "limit": 999,
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "personIds": [
+                "person"
+              ],
+              "recursive": [
+                "true"
+              ],
+              "includeItemTypes": [
+                "Movie,Series"
+              ],
+              "sortBy": [
+                "ProductionYear,SortName"
+              ],
+              "sortOrder": [
+                "Descending"
+              ],
+              "startIndex": [
+                "0"
+              ],
+              "limit": [
+                "200"
+              ],
+              "enableTotalRecordCount": [
+                "true"
+              ],
+              "fields": [
+                "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-error-401",
+      "operation": "http",
+      "input": {
+        "action": "catalog.resume",
+        "responses": [
+          {
+            "status": 401,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/UserItems/Resume",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "mediaTypes": [
+                "Video"
+              ],
+              "limit": [
+                "24"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "EXPIRED"
+        }
+      }
+    },
+    {
+      "id": "catalog-error-500",
+      "operation": "http",
+      "input": {
+        "action": "catalog.resume",
+        "responses": [
+          {
+            "status": 500,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/UserItems/Resume",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "mediaTypes": [
+                "Video"
+              ],
+              "limit": [
+                "24"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "SERVER"
+        }
+      }
+    },
+    {
+      "id": "playback-stop-encoding-device-scope",
+      "operation": "http",
+      "input": {
+        "action": "stopEncoding",
+        "playSessionId": "play / session",
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "DELETE",
+            "path": "/jellyfin/Videos/ActiveEncodings",
+            "query": {
+              "deviceId": [
+                "account-device"
+              ],
+              "playSessionId": [
+                "play / session"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "wire-reportStart",
+      "operation": "http",
+      "input": {
+        "action": "reportStart",
+        "body": {
+          "ItemId": "film",
+          "PlayMethod": "DirectPlay",
+          "PositionTicks": 1230000,
+          "IsPaused": true,
+          "IsMuted": false,
+          "CanSeek": true,
+          "RepeatMode": "RepeatNone",
+          "PlaybackOrder": "Default",
+          "SubtitleStreamIndex": -1
+        },
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/Sessions/Playing",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "ItemId": "film",
+              "PlayMethod": "DirectPlay",
+              "PositionTicks": 1230000,
+              "IsPaused": true,
+              "IsMuted": false,
+              "CanSeek": true,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default",
+              "SubtitleStreamIndex": -1
+            }
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "wire-reportProgress",
+      "operation": "http",
+      "input": {
+        "action": "reportProgress",
+        "body": {
+          "ItemId": "film",
+          "PlayMethod": "DirectPlay",
+          "PositionTicks": 1230000,
+          "IsPaused": true,
+          "IsMuted": false,
+          "CanSeek": true,
+          "RepeatMode": "RepeatNone",
+          "PlaybackOrder": "Default",
+          "SubtitleStreamIndex": -1
+        },
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/Sessions/Playing/Progress",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "ItemId": "film",
+              "PlayMethod": "DirectPlay",
+              "PositionTicks": 1230000,
+              "IsPaused": true,
+              "IsMuted": false,
+              "CanSeek": true,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default",
+              "SubtitleStreamIndex": -1
+            }
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "wire-reportStopped",
+      "operation": "http",
+      "input": {
+        "action": "reportStopped",
+        "body": {
+          "ItemId": "film",
+          "PositionTicks": 1230000,
+          "Failed": true
+        },
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/Sessions/Playing/Stopped",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "ItemId": "film",
+              "PositionTicks": 1230000,
+              "Failed": true
+            }
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "catalog-detail-batch-projection",
+      "operation": "http",
+      "input": {
+        "action": "catalog.item",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Id": "film",
+              "Type": "Movie",
+              "UserData": {
+                "PlaybackPositionTicks": 0
+              }
+            }
+          },
+          {
+            "status": 200,
+            "body": {
+              "Items": [
+                {
+                  "Id": "film",
+                  "UserData": {
+                    "PlaybackPositionTicks": 900000000
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "ids": [
+                "film"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success",
+          "resumeTicks": 900000000
+        }
+      }
+    }
+  ]
+}

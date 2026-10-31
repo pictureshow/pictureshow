@@ -99,5 +99,8 @@ internal suspend fun resolvePlaybackEntry(entry: PlaybackEntry, account: Account
     if (!item.id.equals(entry.itemId, ignoreCase = true) || item.type !in setOf("Movie", "Episode") || item.isFolder) {
         return ResolvedPlaybackEntry.Unavailable
     }
-    return ResolvedPlaybackEntry.Open(item, entry.positionMs ?: (item.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000))
+    return ResolvedPlaybackEntry.Open(
+        item,
+        app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, explicitPositionMs = entry.positionMs)
+    )
 }

@@ -150,7 +150,11 @@ class HlsLastSegmentTest {
             output.open(decision, initialMs, 0, if (captions) 1 else -1, true)
             val player = requireNotNull(output.player.value)
             if (queued.isNotEmpty()) {
-                waitUntil { requests.any { it.endsWith(".ts") } && player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) }
+                // synchronizedList guards mutation, but iterator traversal also needs its monitor.
+                waitUntil {
+                    synchronized(requests) { requests.any { it.endsWith(".ts") } } &&
+                        player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+                }
                 assertEquals(Player.STATE_BUFFERING, player.playbackState)
                 queued.forEach(player::seekTo)
                 releaseSegment.countDown()

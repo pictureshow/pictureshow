@@ -47,3 +47,8 @@ tasks.register<Sync>("serverCompatRuntime") {
     from(requireNotNull(compatibilityCompilation.runtimeDependencyFiles)) { into("lib") }
     into(layout.buildDirectory.dir("reports/server-compat/runtime"))
 }
+
+// Run the repository parity contract as part of ordinary :core:jvmTest (and check).
+tasks.named<ProcessResources>("jvmTestProcessResources") {
+    from(rootProject.file("spec/vectors")) { into("parity-vectors") }
+}

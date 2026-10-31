@@ -48,9 +48,7 @@ internal object PlaybackTracks {
             (if (stream.channels != null && stream.channels == format.channelCount) 2 else 0) +
             (if (stream.codec != null && codec(format.sampleMimeType) == normalizeCodec(stream.codec)) 1 else 0)
 
-    fun language(value: String?): String? = value?.takeIf { it.isNotBlank() && it != "und" }?.let {
-        runCatching { Locale.forLanguageTag(it.replace('_', '-')).isO3Language }.getOrDefault(it.lowercase())
-    }
+    fun language(value: String?): String? = app.pictureshow.core.playback.StreamDefaults.language(value)
 
     private fun normalizeCodec(codec: String?): String? = when (val name = codec?.lowercase(Locale.ROOT)) {
         "srt", "subrip" -> "subrip"

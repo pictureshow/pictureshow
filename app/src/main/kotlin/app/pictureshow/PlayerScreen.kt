@@ -129,7 +129,7 @@ internal fun PlayerScreen(
     LaunchedEffect(current) { onCurrentItem(current) }
     key(current.id) {
         PlayerItemScreen(account, current, start, catalog, onNext = { next ->
-            start = next.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000
+            start = app.pictureshow.core.resumeStartPositionMs(next.userData.playbackPositionTicks)
             current = next
         }, onExit = onExit)
     }

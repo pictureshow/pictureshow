@@ -12,8 +12,8 @@ import androidx.media3.common.text.Cue
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 
-enum class SubtitleSize { System, Small, Normal, Large, ExtraLarge }
-enum class SubtitleBackground { System, None, Shadow, Box }
+typealias SubtitleSize = app.pictureshow.core.playback.SubtitleSize
+typealias SubtitleBackground = app.pictureshow.core.playback.SubtitleBackground
 
 data class SubtitleAppearance(
     val size: SubtitleSize = SubtitleSize.System,
