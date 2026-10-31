@@ -11,42 +11,43 @@ struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var panel: String?
-    @State private var toolbarVisible = true
     @State private var closing = false
     @State private var orientationError: String?
     var body: some View {
         ZStack(alignment: .top) {
-            NativePlayer(session: session, close: finish).ignoresSafeArea()
             #if os(iOS)
-            VStack {
-                HStack {
-                    Button("Back to details", systemImage: "chevron.left", action: finish).accessibilityIdentifier("closePlayer")
-                    Spacer()
-                    if toolbarVisible {
-                        Button("Audio and subtitles", systemImage: "captions.bubble") { panel = "tracks" }.accessibilityIdentifier("playerTracks")
-                        Button("Seek", systemImage: "slider.horizontal.3") { panel = "seek" }.accessibilityIdentifier("playerSeek")
-                        Button("Chapters", systemImage: "list.bullet") { panel = "chapters" }.accessibilityIdentifier("playerChapters")
-                        Button("Rotate portrait or landscape", systemImage: "rotate.right") { rotate() }.accessibilityIdentifier("rotatePlayer")
-                    } else {
-                        Button("Playback options", systemImage: "ellipsis.circle") { toolbarVisible = true }.accessibilityIdentifier("playerOptions")
-                    }
-                }.buttonStyle(.bordered).labelStyle(.iconOnly).controlSize(.large).padding().background(.black.opacity(0.55))
-                if let orientationError { Text(orientationError).font(.caption).padding().background(.black.opacity(0.75)) }
-                Spacer()
+            // Keep app actions outside AVKit's viewport: iOS exposes no transport-menu
+            // extension or visibility callback. An overlay collides with native controls.
+            VStack(spacing: 0) {
+                NativePlayer(session: session, close: finish)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let orientationError { Text(orientationError).font(.caption).padding(8) }
                 if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
-                    Button("Skip \(segment.type.rawValue)") { session.skip() }.buttonStyle(.borderedProminent).padding()
+                    Button("Skip \(segment.type.rawValue)") { session.skip() }.buttonStyle(.borderedProminent).padding(8)
                 }
                 if let next = session.nextItem, session.nextCountdown != nil {
                     HStack {
                         Button("Play next: \(next.name)") { Task { await session.advance() } }
                         Button("Cancel next episode") { session.cancelContinuation() }
-                    }.buttonStyle(.borderedProminent).padding().background(.black.opacity(0.8))
+                    }.buttonStyle(.borderedProminent).padding(8)
                 }
-                if toolbarVisible {
-                    HStack { Text(session.status).accessibilityIdentifier("playbackMethod"); Spacer(); Text(clock(session.positionTicks)).accessibilityIdentifier("playbackPosition") }
-                        .font(.caption).padding().background(.black.opacity(0.55)).allowsHitTesting(false)
+                HStack(spacing: 0) {
+                    Button("Back to details", systemImage: "chevron.left", action: finish).accessibilityIdentifier("closePlayer")
+                    Button("Audio and subtitles", systemImage: "captions.bubble") { panel = "tracks" }.accessibilityIdentifier("playerTracks")
+                    Button("Seek", systemImage: "slider.horizontal.3") { panel = "seek" }.accessibilityIdentifier("playerSeek")
+                    Button("Chapters", systemImage: "list.bullet") { panel = "chapters" }.accessibilityIdentifier("playerChapters")
+                    Button("Rotate portrait or landscape", systemImage: "rotate.right") { rotate() }.accessibilityIdentifier("rotatePlayer")
+                    Spacer(minLength: 4)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(session.status).accessibilityIdentifier("playbackMethod")
+                        Text(clock(session.positionTicks)).monospacedDigit().accessibilityIdentifier("playbackPosition")
+                    }.font(.caption2).fixedSize(horizontal: false, vertical: true)
                 }
+                .buttonStyle(PlayerActionStyle()).labelStyle(.iconOnly)
+                .padding(.horizontal, 8).padding(.vertical, 4).background(.black)
             }
+            #else
+            NativePlayer(session: session, close: finish).ignoresSafeArea()
             #endif
             if session.waitingForVideo || session.error != nil || session.reportError != nil {
                 VStack(spacing: 20) {
@@ -62,20 +63,11 @@ struct PlayerScreen: View {
         .onChange(of: session.terminal) { _, value in if value, session.error == nil { finish() } }
         .onChange(of: scenePhase) { _, value in if value != .active { session.backgrounded() } }
         .onChange(of: panel) { _, value in session.panelOpen = value != nil }
-        .onChange(of: toolbarVisible, initial: true) { _, value in
-            #if os(iOS)
-            session.controlsVisible = value
-            #endif
-        }
         .sheet(isPresented: Binding(get: { panel != nil }, set: { if !$0 { panel = nil } })) {
             PlayerOptions(session: session, kind: panel ?? "tracks") { panel = nil }
         }
-        .task(id: "\(toolbarVisible)|\(session.isPaused)|\(panel ?? "")") {
-            guard toolbarVisible, !session.isPaused, panel == nil else { return }
-            try? await Task.sleep(for: .seconds(10))
-            if !Task.isCancelled, !session.isPaused, !UIAccessibility.isVoiceOverRunning, panel == nil { toolbarVisible = false }
-        }
     }
+
     private func rotate() {
         #if os(iOS)
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) else { return }
@@ -87,6 +79,17 @@ struct PlayerScreen: View {
     }
     private func finish() { guard !closing else { return }; closing = true; session.beginClosing(); Task { await close(); dismiss() } }
 }
+
+
+#if os(iOS)
+private struct PlayerActionStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.frame(width: 48, height: 48)
+            .background(configuration.isPressed ? Color.white.opacity(0.2) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+    }
+}
+#endif
 
 private func trackName(_ stream: MediaStream) -> String {
     var parts = [stream.label]
@@ -106,8 +109,8 @@ struct PlayerOptions: View {
     @Environment(\.dismiss) private var dismiss
     let kind: String
     let done: () -> Void
-    @State private var audio: Int?
-    @State private var subtitle: Int?
+    private var audio: Int? { session.decision?.audioIndex }
+    private var subtitle: Int? { session.decision?.subtitleIndex }
     var body: some View {
         NavigationStack {
             List {
@@ -122,6 +125,7 @@ struct PlayerOptions: View {
                             .accessibilityValue(currentChapter(index) ? "Current chapter" : "")
                     }
                 } else {
+                    if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
                     Section("Audio") {
                         track("Off", index: -1, type: "Audio", selected: audio == -1)
                         ForEach(streams("Audio")) { track(trackName($0), index: $0.index, type: "Audio", selected: audio == $0.index) }
@@ -136,7 +140,6 @@ struct PlayerOptions: View {
             }
             .navigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : "Audio and subtitles")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone") } }
-            .onAppear { audio = session.decision?.audioIndex; subtitle = session.decision?.subtitleIndex }
         }
     }
     private func closePanel() { done(); dismiss() }
@@ -152,7 +155,8 @@ struct PlayerOptions: View {
             Task { await session.changeTracks(audio: chosenAudio, subtitle: chosenSubtitle) }
         } label: {
             HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }.minimumTouchTarget()
-        }.accessibilityValue(selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
+        }.disabled(session.changingTracks)
+            .accessibilityValue(session.changingTracks ? "Applying tracks" : selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
     }
     private func currentChapter(_ index: Int) -> Bool {
         session.chapters[index].startTicks <= session.positionTicks && (index + 1 == session.chapters.count || session.chapters[index + 1].startTicks > session.positionTicks)
@@ -185,7 +189,7 @@ struct NativePlayer: UIViewControllerRepresentable {
             func tracks(_ type: String) -> UIMenu {
                 let values = session.decision?.source.mediaStreams.filter { $0.type == type } ?? []
                 let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
-                let off = UIAction(title: "Off", identifier: UIAction.Identifier("\(type.lowercased())--1"), state: selected == -1 ? .on : .off) { _ in
+                let off = UIAction(title: "Off", identifier: UIAction.Identifier("\(type.lowercased())--1"), attributes: session.changingTracks ? [.disabled] : [], state: selected == -1 ? .on : .off) { _ in
                     Task { await session.changeTracks(audio: type == "Audio" ? -1 : session.decision?.audioIndex, subtitle: type == "Subtitle" ? -1 : session.decision?.subtitleIndex) }
                 }
                 let actions = values.map { stream in

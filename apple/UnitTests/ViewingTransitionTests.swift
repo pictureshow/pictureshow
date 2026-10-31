@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 import XCTest
+import AVFoundation
 import PictureshowCore
 @testable import Pictureshow_iOS
 
@@ -30,6 +31,12 @@ private final class ViewingProtocol: URLProtocol {
     override func stopLoading() { }
 }
 
+/// Keep decoder/network activity outside this HTTP lifecycle test. Native decoding is
+/// covered by simulator acceptance; it must not race a synthetic physical-EOS event.
+private final class InertViewingPlayer: AVPlayer {
+    override func replaceCurrentItem(with item: AVPlayerItem?) { }
+}
+
 @MainActor final class ViewingTransitionTests: XCTestCase {
     private var session: PlaybackSession!
     override func tearDown() { ViewingProtocol.requests = []; ViewingProtocol.failPlayed = false }
@@ -42,7 +49,7 @@ private final class ViewingProtocol: URLProtocol {
         var item = MediaItem(id: "first", name: "First", type: "Episode")
         item.seriesId = "series"
         item.mediaSources = [MediaSource(id: "first-source", supportsDirectPlay: true)]
-        session = PlaybackSession(client: client, account: account, item: item)
+        session = PlaybackSession(client: client, account: account, item: item, player: InertViewingPlayer())
         try await session.prepare(startTicks: 0, audio: nil, subtitle: -1)
         for _ in 0..<100 {
             if session.nextItem != nil { return }

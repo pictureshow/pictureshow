@@ -62,7 +62,8 @@ Subtitles menus are supplied through `transportBarCustomMenuItems`; segments and
 choices use `contextualActions`. Pictureshow's info tab adds method/status, current position and
 an optional seek/trickplay surface. Native contextual actions appear when the transport bar is
 hidden; they do not replace it. iOS/iPad keep AVKit controls plus supplemental track/chapter/seek
-sheets and explicit Back. Native OS transport behavior takes precedence over reproducing Android
+sheets and explicit Back in a separate bottom action strip, outside the native video/control
+viewport. iOS does not expose tvOS transport-menu or contextual-action extensions. Native OS transport behavior takes precedence over reproducing Android
 control chrome or its exact auto-hide/key-repeat timing.
 
 H.264 SDR MP4/M4V/MOV and hardware-reported HEVC SDR are candidate direct paths. The server's

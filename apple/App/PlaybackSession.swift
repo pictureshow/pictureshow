@@ -10,7 +10,7 @@ import MediaAccessibility
 /// A viewing owns reports. Decoder replacements own encoders, never another viewing Start/Stop.
 @MainActor final class PlaybackSession: ObservableObject, Identifiable {
     let id = UUID()
-    let player = AVPlayer()
+    let player: AVPlayer
     @Published private(set) var item: MediaItem
     @Published private(set) var decision: PlayDecision?
     @Published private(set) var status = "Preparing playback…"
@@ -76,8 +76,8 @@ import MediaAccessibility
     private var stalledSince: Date?
     private var lastObservedTicks: Int64 = 0
 
-    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init()) {
-        self.client = client; self.account = account; self.item = item; self.preferences = preferences
+    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer()) {
+        self.client = client; self.account = account; self.item = item; self.preferences = preferences; self.player = player
         player.allowsExternalPlayback = true
         player.appliesMediaSelectionCriteriaAutomatically = false
     }
