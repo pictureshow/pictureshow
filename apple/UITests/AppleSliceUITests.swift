@@ -473,6 +473,7 @@ final class AppleSliceUITests: XCTestCase {
             activate(app.buttons["signIn"])
             XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 20))
         }
+        returnHome()
     }
     #if os(iOS)
     /// iOS track actions commit immediately and dismiss the sheet. Reopen it for each choice;
