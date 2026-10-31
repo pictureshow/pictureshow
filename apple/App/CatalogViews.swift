@@ -14,14 +14,14 @@ struct HomeView: View {
                 if let error = model.homeError { ErrorNotice(error: error) { Task { await model.loadHome() } }.padding(.horizontal, Theme.gutter) }
                 if !model.loading && model.rows.isEmpty && model.homeError == nil { Text("Your server has no videos yet.").foregroundStyle(Theme.muted).padding(.horizontal, Theme.gutter) }
                 ForEach(model.rows) { row in CatalogShelf(title: row.title, items: row.items, wide: row.wide || row.library, open: open) }
-                HStack { NavigationLink("Switch user", value: AppRoute.accounts).accessibilityIdentifier("openAccounts"); Button("Sign out") { Task { await model.signOut() } }.accessibilityIdentifier("signOut") }.buttonStyle(.bordered).padding(Theme.gutter)
+                HStack { NavigationLink(value: AppRoute.accounts) { Text("Switch user").minimumTouchTarget() }.accessibilityIdentifier("openAccounts"); Button { Task { await model.signOut() } } label: { Text("Sign out").minimumTouchTarget() }.accessibilityIdentifier("signOut") }.buttonStyle(.bordered).padding(Theme.gutter)
             }.padding(.vertical, 24)
         }
         .background(Theme.background.ignoresSafeArea()).navigationTitle("Pictureshow")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                NavigationLink(value: AppRoute.search) { Label("Search", systemImage: "magnifyingglass") }.accessibilityIdentifier("openSearch")
-                NavigationLink(value: AppRoute.settings) { Label("Settings", systemImage: "gearshape") }.accessibilityIdentifier("openSettings")
+                NavigationLink(value: AppRoute.search) { Label("Search", systemImage: "magnifyingglass").minimumTouchTarget() }.accessibilityIdentifier("openSearch")
+                NavigationLink(value: AppRoute.settings) { Label("Settings", systemImage: "gearshape").minimumTouchTarget() }.accessibilityIdentifier("openSettings")
             }
         }
         .refreshable { await model.loadHome() }
@@ -31,7 +31,7 @@ struct HomeView: View {
 struct ErrorNotice: View {
     let error: String
     var retry: () -> Void
-    var body: some View { VStack(alignment: .leading, spacing: 12) { Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true); Button("Retry", action: retry).buttonStyle(.bordered).accessibilityIdentifier("retry") } }
+    var body: some View { VStack(alignment: .leading, spacing: 12) { Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true); Button(action: retry) { Text("Retry").minimumTouchTarget() }.buttonStyle(.bordered).accessibilityIdentifier("retry") } }
 }
 
 struct CatalogShelf: View {
@@ -154,7 +154,7 @@ struct LibrariesView: View {
     @EnvironmentObject private var model: AppModel
     var open: (MediaItem) -> Void
     var body: some View {
-        ScrollView { VStack(alignment: .leading) { if let row = model.rows.first(where: { $0.library }) { CatalogShelf(title: "Your libraries", items: row.items, wide: true, open: open) } else if model.loading { ProgressView("Loading libraries…") } else { Text("No libraries available."); Button("Refresh") { Task { await model.loadHome() } } } }.padding(.vertical, 24) }.navigationTitle("Libraries").background(Theme.background.ignoresSafeArea())
+        ScrollView { VStack(alignment: .leading) { if let row = model.rows.first(where: { $0.library }) { CatalogShelf(title: "Your libraries", items: row.items, wide: true, open: open) } else if model.loading { ProgressView("Loading libraries…") } else { Text("No libraries available."); Button { Task { await model.loadHome() } } label: { Text("Refresh").minimumTouchTarget() } } }.padding(.vertical, 24) }.navigationTitle("Libraries").background(Theme.background.ignoresSafeArea())
     }
 }
 
@@ -199,10 +199,10 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     if !person { HStack {
                         Picker("Sort by", selection: $sort) { Text("Title").tag("SortName"); Text("Date added").tag("DateCreated"); Text("Release date").tag("PremiereDate") }.accessibilityIdentifier("librarySort")
-                        Button(descending ? "Descending" : "Ascending", systemImage: descending ? "arrow.down" : "arrow.up") { descending.toggle() }.buttonStyle(.bordered).accessibilityIdentifier("sortDirection")
+                        Button { descending.toggle() } label: { Label(descending ? "Descending" : "Ascending", systemImage: descending ? "arrow.down" : "arrow.up").minimumTouchTarget() }.buttonStyle(.bordered).accessibilityIdentifier("sortDirection")
                     } }
                     if let error = page.error { ErrorNotice(error: error) { Task { await load() } } }
-                    if page.items.isEmpty && !page.loading && page.error == nil { Text("No titles are available.").foregroundStyle(Theme.muted); Button("Refresh") { Task { await load(reset: true) } } }
+                    if page.items.isEmpty && !page.loading && page.error == nil { Text("No titles are available.").foregroundStyle(Theme.muted); Button { Task { await load(reset: true) } } label: { Text("Refresh").minimumTouchTarget() } }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.cardWidth + 12), spacing: 22)], alignment: .leading, spacing: 28) {
                         ForEach(page.items) { item in
                             Button { opener = item.id; UserDefaults.standard.set(item.id, forKey: memoryKey); open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
@@ -210,7 +210,7 @@ struct LibraryView: View {
                         }
                     }
                     if page.loading { ProgressView("Loading titles…") }
-                    if page.next < page.total && !page.loading { Button("Load more") { Task { await load() } } }
+                    if page.next < page.total && !page.loading { Button { Task { await load() } } label: { Text("Load more").minimumTouchTarget() } }
                 }.padding(Theme.gutter)
             }.background(Theme.background.ignoresSafeArea()).navigationTitle(name)
                 .task(id: id) { if page.items.isEmpty { await load(reset: true) } }

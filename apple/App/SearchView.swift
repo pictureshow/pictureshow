@@ -59,12 +59,12 @@ struct SearchView: View {
                         .textInputAutocapitalization(.never).textFieldStyle(.roundedBorder)
                         #endif
                         .onSubmit { fieldFocused = false; if let account = model.account { state.remember(account) } }
-                    if !state.query.isEmpty { Button("Clear", systemImage: "xmark.circle.fill") { state.query = ""; fieldFocused = true }.accessibilityIdentifier("clearSearch") }
+                    if !state.query.isEmpty { Button { state.query = ""; fieldFocused = true } label: { Label("Clear", systemImage: "xmark.circle.fill").minimumTouchTarget() }.accessibilityIdentifier("clearSearch") }
                 }.padding(.horizontal, Theme.gutter)
                 if let error = state.storageError { Text(error).foregroundStyle(.orange).padding(.horizontal, Theme.gutter) }
                 if normalizedSearch(state.query).count < 2 {
                     Text("Enter at least 2 characters to search.").foregroundStyle(Theme.muted).padding(.horizontal, Theme.gutter)
-                    if !state.recents.isEmpty { Text("Recent searches").font(.title2).accessibilityAddTraits(.isHeader).padding(.horizontal, Theme.gutter); ForEach(state.recents, id: \.self) { term in Button(term) { state.query = term; fieldFocused = false }.buttonStyle(.bordered).padding(.horizontal, Theme.gutter) }; Button("Clear recent searches") { if let account = model.account { state.clearHistory(account) } }.padding(.horizontal, Theme.gutter) }
+                    if !state.recents.isEmpty { Text("Recent searches").font(.title2).accessibilityAddTraits(.isHeader).padding(.horizontal, Theme.gutter); ForEach(state.recents, id: \.self) { term in Button { state.query = term; fieldFocused = false } label: { Text(term).minimumTouchTarget() }.buttonStyle(.bordered).padding(.horizontal, Theme.gutter) }; Button { if let account = model.account { state.clearHistory(account) } } label: { Text("Clear recent searches").minimumTouchTarget() }.padding(.horizontal, Theme.gutter) }
                 } else {
                     if state.loading { ProgressView("Searching…").padding(.horizontal, Theme.gutter) }
                     if !state.errors.isEmpty { ErrorNotice(error: state.errors.joined(separator: "\n")) { Task { await state.search(model: model, delay: false) } }.padding(.horizontal, Theme.gutter) }

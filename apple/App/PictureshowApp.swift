@@ -8,7 +8,7 @@ import CryptoKit
 
 @main struct PictureshowApp: App {
     @StateObject private var model = AppModel()
-    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent).controlSize(.large) } }
+    var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent).controlSize(.large).minimumTouchListRows() } }
 }
 
 enum Theme {
@@ -367,7 +367,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if let error = model.storageError {
-                VStack(spacing: 24) { Text("Sign-in storage unavailable").font(.title); Text(error); Button("Retry") { model.restore() } }
+                VStack(spacing: 24) { Text("Sign-in storage unavailable").font(.title); Text(error); Button { model.restore() } label: { Text("Retry").minimumTouchTarget() } }
                     .padding(Theme.gutter)
             } else if model.showSignIn { SignInView()
             } else if model.account != nil {
@@ -423,7 +423,7 @@ struct TouchShell: View {
         Group {
             if width == .regular {
                 HStack(spacing: 0) {
-                    VStack(spacing: 24) { ForEach(0..<4) { index in Button { tab = index } label: { Label(names[index], systemImage: icons[index]).frame(maxWidth: .infinity, alignment: .leading).padding(12) }.buttonStyle(.bordered).tint(tab == index ? Theme.accent : Theme.muted).accessibilityValue(tab == index ? "Selected" : "") }; Spacer() }.padding().frame(width: 170).background(Theme.surface)
+                    VStack(spacing: 24) { ForEach(0..<4) { index in Button { tab = index } label: { Label(names[index], systemImage: icons[index]).frame(maxWidth: .infinity, alignment: .leading).padding(12).minimumTouchTarget() }.buttonStyle(.bordered).tint(tab == index ? Theme.accent : Theme.muted).accessibilityValue(tab == index ? "Selected" : "") }; Spacer() }.padding().frame(width: 170).background(Theme.surface)
                     stack(tab)
                 }
             } else {

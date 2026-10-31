@@ -146,7 +146,7 @@ struct DetailView: View {
                         hero(header, current: item)
                         if item.type == "Series" {
                             Text("Seasons").font(.title2.bold()).accessibilityAddTraits(.isHeader)
-                            ScrollView(.horizontal) { HStack(spacing: 18) { ForEach(state.seasons) { season in Button(season.name) { opener = "season-\(season.id)"; state.chooseSeason(season.id, model: model) }.buttonStyle(.bordered).tint(state.selectedSeason == season.id ? Theme.accent : Theme.muted).accessibilityValue(state.selectedSeason == season.id ? "Selected" : "").accessibilityIdentifier("season-\(season.id)").focused($focused, equals: "season-\(season.id)").id("season-\(season.id)") } }.padding(.vertical, 8) }
+                            ScrollView(.horizontal) { HStack(spacing: 18) { ForEach(state.seasons) { season in Button { opener = "season-\(season.id)"; state.chooseSeason(season.id, model: model) } label: { Text(season.name).minimumTouchTarget() }.buttonStyle(.bordered).tint(state.selectedSeason == season.id ? Theme.accent : Theme.muted).accessibilityValue(state.selectedSeason == season.id ? "Selected" : "").accessibilityIdentifier("season-\(season.id)").focused($focused, equals: "season-\(season.id)").id("season-\(season.id)") } }.padding(.vertical, 8) }
                         }
                         if ["Series", "Season"].contains(item.type) {
                             if state.episodes.isEmpty && state.fresh { Text("No episodes are available.").foregroundStyle(Theme.muted) }
@@ -154,13 +154,13 @@ struct DetailView: View {
                         }
                         if !item.people.isEmpty {
                             Text("Cast and crew").font(.title2.bold()).accessibilityAddTraits(.isHeader)
-                            ForEach(item.people) { person in Button { var target = MediaItem(id: person.id, name: person.name, type: "Person"); target.overview = nil; open(target) } label: { VStack(alignment: .leading) { Text(person.name); Text(person.role ?? person.type ?? "").font(.caption).foregroundStyle(Theme.muted) } }.buttonStyle(.bordered).accessibilityLabel([person.name, person.role ?? person.type].compactMap { $0 }.joined(separator: ", ")) }
+                            ForEach(item.people) { person in Button { var target = MediaItem(id: person.id, name: person.name, type: "Person"); target.overview = nil; open(target) } label: { VStack(alignment: .leading) { Text(person.name); Text(person.role ?? person.type ?? "").font(.caption).foregroundStyle(Theme.muted) }.minimumTouchTarget() }.buttonStyle(.bordered).accessibilityLabel([person.name, person.role ?? person.type].compactMap { $0 }.joined(separator: ", ")) }
                         }
                         if header != item, let overview = item.overview, overview != header.overview { Text("More details").font(.title2).accessibilityAddTraits(.isHeader); Text(overview) }
                     } else if state.reading { ProgressView("Loading item…") }
-                    if let error = state.readError { Text(error).foregroundStyle(.orange); Button(state.reading ? "Retrying…" : "Retry") { state.refresh(id: id, model: model, deliberate: true) }.disabled(state.reading).buttonStyle(.borderedProminent).focused($focused, equals: "detailRetry").id("detailRetry").accessibilityIdentifier("detailRetry") }
-                    if let error = state.writeError { Text(error).foregroundStyle(.orange); Button("Retry change") { state.retryWrite(model: model) }.buttonStyle(.bordered) }
-                    if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange); Button(model.playbackSaving ? "Saving progress…" : "Retry saving progress") { Task { await model.retryPlaybackSave() } }.disabled(model.playbackSaving).buttonStyle(.bordered).accessibilityIdentifier("retryProgress") }
+                    if let error = state.readError { Text(error).foregroundStyle(.orange); Button { state.refresh(id: id, model: model, deliberate: true) } label: { Text(state.reading ? "Retrying…" : "Retry").minimumTouchTarget() }.disabled(state.reading).buttonStyle(.borderedProminent).focused($focused, equals: "detailRetry").id("detailRetry").accessibilityIdentifier("detailRetry") }
+                    if let error = state.writeError { Text(error).foregroundStyle(.orange); Button { state.retryWrite(model: model) } label: { Text("Retry change").minimumTouchTarget() }.buttonStyle(.bordered) }
+                    if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange); Button { Task { await model.retryPlaybackSave() } } label: { Text(model.playbackSaving ? "Saving progress…" : "Retry saving progress").minimumTouchTarget() }.disabled(model.playbackSaving).buttonStyle(.bordered).accessibilityIdentifier("retryProgress") }
                     if let notice = state.notice { Text(notice).foregroundStyle(Theme.muted) }
                 }.padding(Theme.gutter)
             }
@@ -180,7 +180,15 @@ struct DetailView: View {
             .onChange(of: state.reading) { _, value in if !value { state.drain(model: model) } }
             .onChange(of: state.focusRequest) { _, request in if let request { if request == "detailRetry" || focused == "detailRetry" || focused == nil { proxy.scrollTo(request, anchor: .center); focused = request }; state.focusRequest = nil } }
             .onChange(of: focused) { _, focus in if let focus { opener = focus; withAnimation { proxy.scrollTo(focus, anchor: .center) } } }
-            #if os(iOS)
+            #if os(tvOS)
+            .onPlayPauseCommand {
+                guard let item = state.item,
+                      item.isPlayable || ["Series", "Season"].contains(item.type),
+                      state.readError == nil else { return }
+                opener = "play"
+                state.offer(.play(true), model: model)
+            }
+            #else
             .navigationBarTitleDisplayMode(.inline)
             #endif
         }
@@ -205,11 +213,11 @@ struct DetailView: View {
         let layout = horizontal ? AnyLayout(HStackLayout(spacing: 16)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
         layout {
             if item.isPlayable || ["Series", "Season"].contains(item.type) {
-                Button(primaryLabel(item), systemImage: "play.fill") { opener = "play"; state.offer(.play(true), model: model) }.buttonStyle(.borderedProminent).disabled(state.fresh && state.target == nil).focused($focused, equals: "play").id("play").accessibilityIdentifier("play")
+                Button { opener = "play"; state.offer(.play(true), model: model) } label: { Label(primaryLabel(item), systemImage: "play.fill").minimumTouchTarget() }.buttonStyle(.borderedProminent).disabled(state.fresh && state.target == nil).focused($focused, equals: "play").id("play").accessibilityIdentifier("play")
             }
-            Button(item.isWatched ? "Mark unwatched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle") { opener = "watched"; state.offer(.watched(!item.isWatched), model: model) }.buttonStyle(.bordered).disabled(item.isEmptyContainer).focused($focused, equals: "watched").id("watched").accessibilityValue(item.isWatched ? "Watched" : "Unwatched").accessibilityIdentifier("watched")
-            Button(item.userData.isFavorite ? "Remove favorite" : "Add favorite", systemImage: item.userData.isFavorite ? "heart.fill" : "heart") { opener = "favorite"; state.offer(.favorite(!item.userData.isFavorite), model: model) }.buttonStyle(.bordered).focused($focused, equals: "favorite").id("favorite").accessibilityValue(item.userData.isFavorite ? "Favorite" : "Not favorite").accessibilityIdentifier("favorite")
-            if item.isPlayable { Button("Play from start") { opener = "startOver"; state.offer(.play(false), model: model) }.buttonStyle(.bordered).focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver") }
+            Button { opener = "watched"; state.offer(.watched(!item.isWatched), model: model) } label: { Label(item.isWatched ? "Mark unwatched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle").minimumTouchTarget() }.buttonStyle(.bordered).disabled(item.isEmptyContainer).focused($focused, equals: "watched").id("watched").accessibilityValue(item.isWatched ? "Watched" : "Unwatched").accessibilityIdentifier("watched")
+            Button { opener = "favorite"; state.offer(.favorite(!item.userData.isFavorite), model: model) } label: { Label(item.userData.isFavorite ? "Remove favorite" : "Add favorite", systemImage: item.userData.isFavorite ? "heart.fill" : "heart").minimumTouchTarget() }.buttonStyle(.bordered).focused($focused, equals: "favorite").id("favorite").accessibilityValue(item.userData.isFavorite ? "Favorite" : "Not favorite").accessibilityIdentifier("favorite")
+            if item.isPlayable { Button { opener = "startOver"; state.offer(.play(false), model: model) } label: { Text("Play from start").minimumTouchTarget() }.buttonStyle(.bordered).focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver") }
         }
     }
     private func primaryLabel(_ item: MediaItem) -> String {
@@ -239,7 +247,7 @@ struct PersonFilmography: View {
             if page.items.isEmpty && !page.loading && page.error == nil { Text("No linked titles are available.") }
             ForEach(page.items) { item in Button { open(item) } label: { HStack { Artwork(item: item).frame(width: 80, height: 110); VStack(alignment: .leading) { Text(item.name); Text(item.cardSubtitle).foregroundStyle(Theme.muted) } } }.buttonStyle(PosterButtonStyle()).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)").onAppear { if item.id == page.items.last?.id, page.next < page.total { Task { await page.load(model: model, parent: id, person: true) } } } }
             if page.loading { ProgressView("Loading filmography…") }
-            if page.next < page.total && !page.loading { Button("Load more") { Task { await page.load(model: model, parent: id, person: true) } } }
+            if page.next < page.total && !page.loading { Button { Task { await page.load(model: model, parent: id, person: true) } } label: { Text("Load more").minimumTouchTarget() } }
         }.task(id: id) { await page.load(model: model, parent: id, person: true, reset: true) }
     }
 }

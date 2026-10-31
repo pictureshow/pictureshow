@@ -87,10 +87,19 @@ private struct SignInForm: View {
     @State private var work: Task<Void, Never>?
     @FocusState private var focused: String?
     var body: some View {
+        #if os(iOS)
+        GeometryReader { viewport in
+            form(compact: viewport.size.height < 480)
+        }
+        #else
+        form(compact: false)
+        #endif
+    }
+    private func form(compact: Bool) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Label("Pictureshow", systemImage: "play.rectangle.fill").modifier(TokenFont(DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
-                Text(server?.name ?? "Your Jellyfin, beautifully at home.").modifier(TokenFont(DesignTokens.titleSize)).foregroundStyle(Theme.muted)
+            VStack(alignment: .leading, spacing: compact ? 16 : 24) {
+                Label("Pictureshow", systemImage: "play.rectangle.fill").modifier(TokenFont(compact ? DesignTokens.titleSize : DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
+                Text(server?.name ?? "Your Jellyfin, beautifully at home.").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize)).foregroundStyle(Theme.muted)
                 if model.sessionEnded { Text("Your session ended. Sign in again.").foregroundStyle(.orange).accessibilityIdentifier("sessionEnded") }
                 if let server {
                     Text(server.url.host ?? "Jellyfin").foregroundStyle(Theme.muted)
@@ -99,25 +108,25 @@ private struct SignInForm: View {
                     } else {
                         if !users.isEmpty {
                             Text("Public users").font(.headline).accessibilityAddTraits(.isHeader)
-                            ScrollView(.horizontal) { HStack { ForEach(users, id: \.id) { user in Button(user.name) { username = user.name; focused = "password" }.buttonStyle(.bordered) } } }
+                            ScrollView(.horizontal) { HStack { ForEach(users, id: \.id) { user in Button { username = user.name; focused = "password" } label: { Text(user.name).minimumTouchTarget() }.buttonStyle(.bordered) } } }
                         }
                         TextField("Username", text: $username).textContentType(.username).autocorrectionDisabled().focused($focused, equals: "username").submitLabel(.next).onSubmit { focused = "password" }.accessibilityIdentifier("username")
                         HStack {
                             Group { if showPassword { TextField("Password", text: $password) } else { SecureField("Password", text: $password) } }
                                 .textContentType(.password).focused($focused, equals: "password").submitLabel(.go).onSubmit { signIn(server) }.accessibilityIdentifier("password")
-                            Button(showPassword ? "Hide" : "Show") { showPassword.toggle(); focused = "password" }.accessibilityLabel(showPassword ? "Hide password" : "Show password").buttonStyle(.bordered)
+                            Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show").minimumTouchTarget() }.accessibilityLabel(showPassword ? "Hide password" : "Show password").buttonStyle(.bordered)
                         }
-                        Button(busy ? "Signing in…" : "Sign in") { signIn(server) }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
-                        if quickEnabled == true { Button("Use Quick Connect") { flow.begin(server: server, model: model) }.disabled(busy).accessibilityIdentifier("quickConnect") }
+                        Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").minimumTouchTarget() }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
+                        if quickEnabled == true { Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").minimumTouchTarget() }.disabled(busy).accessibilityIdentifier("quickConnect") }
                         else if quickEnabled == false { Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted) }
-                        else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button("Retry Quick Connect availability") { Task { await loadOptions(server) } } }
+                        else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").minimumTouchTarget() } }
                         else { Text("Checking Quick Connect…").foregroundStyle(Theme.muted) }
-                        Button("Change server") { leaveServer() }.disabled(busy)
+                        Button { leaveServer() } label: { Text("Change server").minimumTouchTarget() }.disabled(busy)
                     }
                 } else {
                     if !model.snapshot.servers.isEmpty {
                         Text("Remembered servers").font(.headline).accessibilityAddTraits(.isHeader)
-                        ForEach(model.snapshot.servers, id: \.url) { saved in Button(saved.name) { address = saved.url.absoluteString; connect() }.buttonStyle(.bordered) }
+                        ForEach(model.snapshot.servers, id: \.url) { saved in Button { address = saved.url.absoluteString; connect() } label: { Text(saved.name).minimumTouchTarget() }.buttonStyle(.bordered) }
                     }
                     TextField("Server address", text: $address).textContentType(.URL).autocorrectionDisabled().focused($focused, equals: "server").submitLabel(.go).onSubmit(connect)
                         .accessibilityLabel("Server address").accessibilityHint("Enter your Jellyfin server URL, including its port or path if needed").accessibilityIdentifier("serverAddress")
@@ -125,16 +134,16 @@ private struct SignInForm: View {
                         .textInputAutocapitalization(.never).keyboardType(.URL)
                         #endif
                     Text("Automatic LAN discovery is unavailable in this unsigned build. Enter your server address on your network, VPN, or private server.").font(.callout).foregroundStyle(Theme.muted)
-                    Button("Connect", action: connect).disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
+                    Button(action: connect) { Text("Connect").minimumTouchTarget() }.disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
                 }
-                if !model.snapshot.accounts.isEmpty { Button("Remembered accounts") { work?.cancel(); flow.clear(); model.showSignIn = false }.disabled(busy) }
+                if !model.snapshot.accounts.isEmpty { Button { work?.cancel(); flow.clear(); model.showSignIn = false } label: { Text("Remembered accounts").minimumTouchTarget() }.disabled(busy) }
                 if busy || flow.busy { ProgressView(busy ? "Connecting…" : "Getting a Quick Connect code…") }
                 if let message = error ?? flow.error { Text(message).foregroundStyle(.orange).accessibilityIdentifier("signInError") }
             }
             #if os(iOS)
             .textFieldStyle(.roundedBorder)
             #endif
-            .buttonStyle(.borderedProminent).frame(maxWidth: 720, alignment: .leading).padding(Theme.gutter).frame(maxWidth: .infinity)
+            .buttonStyle(.borderedProminent).frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
         }
         .background(Theme.background.ignoresSafeArea())
         .task {
@@ -158,8 +167,8 @@ private struct SignInForm: View {
             Text(code).font(.system(size: 48, weight: .bold, design: .monospaced)).accessibilityLabel("Quick Connect code " + code.map(String.init).joined(separator: " ")).accessibilityIdentifier("quickCode")
             Text("In an already signed-in Jellyfin app, open Quick Connect and enter this code. Waiting for approval…").foregroundStyle(Theme.muted)
         }
-        if flow.attempt == nil || flow.error != nil { Button("Renew Quick Connect code") { flow.clear(); flow.begin(server: server, model: model) }.disabled(flow.busy) }
-        Button("Use password") { flow.hide(); focused = "username" }.accessibilityIdentifier("cancelQuick")
+        if flow.attempt == nil || flow.error != nil { Button { flow.clear(); flow.begin(server: server, model: model) } label: { Text("Renew Quick Connect code").minimumTouchTarget() }.disabled(flow.busy) }
+        Button { flow.hide(); focused = "username" } label: { Text("Use password").minimumTouchTarget() }.accessibilityIdentifier("cancelQuick")
     }
     private func connect() {
         guard !busy, !address.isEmpty else { return }; busy = true; error = nil

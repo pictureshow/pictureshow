@@ -22,15 +22,15 @@ struct AccountsView: View {
                     Text(server.name).font(.title2.bold()).accessibilityAddTraits(.isHeader)
                     ForEach(model.snapshot.accounts.filter { $0.server.url == server.url }, id: \.localKey) { account in
                         VStack(alignment: .leading, spacing: 12) {
-                            Button { Task { await model.select(account); if model.account != nil { dismiss() } } } label: { Label(account.username + (account.accessToken.isEmpty ? " · Sign in again" : ""), systemImage: account.localKey == model.account?.localKey ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle") }.accessibilityValue(account.localKey == model.account?.localKey ? "Current account" : "").accessibilityIdentifier("account-\(account.userId)")
-                            Button("Remove \(account.username)") { removal = Removal(account: account, count: 1, opener: "remove-\(account.localKey)") }.focused($focused, equals: "remove-\(account.localKey)").accessibilityIdentifier("removeAccount-\(account.userId)")
+                            Button { Task { await model.select(account); if model.account != nil { dismiss() } } } label: { Label(account.username + (account.accessToken.isEmpty ? " · Sign in again" : ""), systemImage: account.localKey == model.account?.localKey ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle").minimumTouchTarget() }.accessibilityValue(account.localKey == model.account?.localKey ? "Current account" : "").accessibilityIdentifier("account-\(account.userId)")
+                            Button { removal = Removal(account: account, count: 1, opener: "remove-\(account.localKey)") } label: { Text("Remove \(account.username)").minimumTouchTarget() }.focused($focused, equals: "remove-\(account.localKey)").accessibilityIdentifier("removeAccount-\(account.userId)")
                         }
                     }
-                    Button("Sign in another user on \(server.name)") { model.beginSignIn(server: server); dismiss() }
-                    Button("Remove server") { removal = Removal(server: server, count: model.snapshot.accounts.filter { $0.server.url == server.url }.count, opener: "server-\(server.url.absoluteString)") }.focused($focused, equals: "server-\(server.url.absoluteString)")
+                    Button { model.beginSignIn(server: server); dismiss() } label: { Text("Sign in another user on \(server.name)").minimumTouchTarget() }
+                    Button { removal = Removal(server: server, count: model.snapshot.accounts.filter { $0.server.url == server.url }.count, opener: "server-\(server.url.absoluteString)") } label: { Text("Remove server").minimumTouchTarget() }.focused($focused, equals: "server-\(server.url.absoluteString)")
                     Divider()
                 }
-                Button("Add a server", systemImage: "plus") { model.beginSignIn(); dismiss() }.accessibilityIdentifier("addServer")
+                Button { model.beginSignIn(); dismiss() } label: { Label("Add a server", systemImage: "plus").minimumTouchTarget() }.accessibilityIdentifier("addServer")
             }.buttonStyle(.bordered).padding(Theme.gutter).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
         }.navigationTitle("Accounts").background(Theme.background.ignoresSafeArea())
             .sheet(item: $removal, onDismiss: { }) { request in RemovalConfirmation(request: request, cancel: { focused = request.opener; removal = nil }, commit: {
@@ -51,8 +51,8 @@ private struct RemovalConfirmation: View {
         ScrollView { VStack(alignment: .leading, spacing: 24) {
             Text(request.question).font(.title2).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).foregroundStyle(.orange) }
-            Button("Cancel", action: cancel).focused($cancelFocused).disabled(committing).accessibilityHint(request.question).accessibilityIdentifier("cancelRemoval")
-            Button("Remove", role: .destructive) { committing = true; do { try commit() } catch { self.error = error.localizedDescription; committing = false } }.disabled(committing).accessibilityIdentifier("confirmRemoval")
+            Button(action: cancel) { Text("Cancel").minimumTouchTarget() }.focused($cancelFocused).disabled(committing).accessibilityHint(request.question).accessibilityIdentifier("cancelRemoval")
+            Button(role: .destructive) { committing = true; do { try commit() } catch { self.error = error.localizedDescription; committing = false } } label: { Text("Remove").minimumTouchTarget() }.disabled(committing).accessibilityIdentifier("confirmRemoval")
         }.buttonStyle(.bordered).padding(Theme.gutter).frame(maxWidth: 720, alignment: .leading).frame(maxWidth: .infinity) }
             .interactiveDismissDisabled(committing).onAppear { cancelFocused = true }
             #if os(tvOS)
