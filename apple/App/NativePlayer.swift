@@ -3,6 +3,7 @@
 import SwiftUI
 import AVKit
 import PictureshowCore
+import OSLog
 
 struct PlayerScreen: View {
     @ObservedObject var session: PlaybackSession
@@ -102,6 +103,7 @@ private func clock(_ ticks: Int64) -> String { Catalog.resumeLabel(ticks).replac
 
 struct PlayerOptions: View {
     @ObservedObject var session: PlaybackSession
+    @Environment(\.dismiss) private var dismiss
     let kind: String
     let done: () -> Void
     @State private var audio: Int?
@@ -114,8 +116,8 @@ struct PlayerOptions: View {
                 } else if kind == "chapters" {
                     if session.chapters.isEmpty { Text("No chapters are available.") }
                     ForEach(Array(session.chapters.enumerated()), id: \.offset) { index, chapter in
-                        Button { session.seek(toTicks: chapter.startTicks); done() } label: {
-                            HStack { ChapterArtwork(session: session, index: index); Text("\(chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name) · \(clock(chapter.startTicks))") }
+                        Button { session.seek(toTicks: chapter.startTicks); closePanel() } label: {
+                            HStack { ChapterArtwork(session: session, index: index); Text("\(chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name) · \(clock(chapter.startTicks))") }.frame(maxWidth: .infinity, alignment: .leading).minimumTouchTarget()
                         }
                             .accessibilityValue(currentChapter(index) ? "Current chapter" : "")
                     }
@@ -133,19 +135,23 @@ struct PlayerOptions: View {
                 }
             }
             .navigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : "Audio and subtitles")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: done) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone") } }
             .onAppear { audio = session.decision?.audioIndex; subtitle = session.decision?.subtitleIndex }
         }
     }
+    private func closePanel() { done(); dismiss() }
     private func streams(_ type: String) -> [MediaStream] { session.decision?.source.mediaStreams.filter { $0.type == type } ?? [] }
     private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
         Button {
+            #if DEBUG
+            Logger(subsystem: "app.pictureshow", category: "Playback").notice("Track action type=\(type, privacy: .public) index=\(index)")
+            #endif
             let chosenAudio = type == "Audio" ? index : session.decision?.audioIndex
             let chosenSubtitle = type == "Subtitle" ? index : session.decision?.subtitleIndex
-            done()
+            closePanel()
             Task { await session.changeTracks(audio: chosenAudio, subtitle: chosenSubtitle) }
         } label: {
-            HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }
+            HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }.minimumTouchTarget()
         }.accessibilityValue(selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
     }
     private func currentChapter(_ index: Int) -> Bool {
