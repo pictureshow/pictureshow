@@ -10,7 +10,7 @@ Jellyfin VOD HLS advertises the full source timeline. Seek to `initialSeekSecond
 
 Jellyfin 12 applies explicit audio/subtitle indices only when the playback request binds a `MediaSourceId`. Pass a known detail source ID to `prepare` for one request; otherwise, when explicit tracks are supplied, the client discovers the preferred source and negotiates again with its ID. This includes subtitles Off (`-1`), which otherwise can silently become the server default external subtitle and force HLS.
 
-`homeContent(account:)` returns healthy rows and section warnings. An expired sign-in still throws. Detail requests refresh UserData through the same list projection used by Continue watching, matching Jellyfin 12's behavior. A failed projection fails the complete detail read, including Movie/Episode/Video, so the app can retain its freshness/Retry barrier instead of publishing ambiguous primary resume/watched state. A successful batch without the requested item still retains the pre-existing primary-detail fallback; it remains an explicit freshness limitation.
+`homeContent(account:)` returns healthy rows and section warnings. An expired sign-in still throws. Detail requests refresh UserData through the same list projection used by Continue watching, matching Jellyfin 12's behavior. A failed projection fails the complete detail read, including Movie/Episode/Video, so the app can retain its freshness/Retry barrier instead of publishing ambiguous primary resume/watched state. A successful batch without the requested item fails as an invalid response; metadata from another item or an empty array cannot establish authoritative state.
 
 Run the XCTest ports from the repository root:
 

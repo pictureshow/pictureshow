@@ -123,7 +123,8 @@ public final class JellyfinClient: @unchecked Sendable {
         // ambiguous primary UserData. A failed projection must keep freshness-sensitive actions
         // behind Retry rather than publish stale resume/watched state as a successful detail.
         let projected = try decoder.decode(ItemPage.self, from: await request(account: account, path: "Items", query: [URLQueryItem(name: "ids", value: id)]))
-        if let item = projected.items.first(where: { $0.id == id }) { detail.userData = item.userData }
+        guard let item = projected.items.first(where: { $0.id == id }) else { throw ClientError.invalidResponse }
+        detail.userData = item.userData
         return detail
     }
     public func browse(account: Account, parentID: String, startIndex: Int = 0, limit: Int = 60) async throws -> [MediaItem] {
