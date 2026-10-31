@@ -41,6 +41,7 @@
 		ED661D0F6A884795EED03756 /* InformationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C48F9E81301BFC98EA5ECA /* InformationView.swift */; };
 		EE0C2FD722C288CB5B6277A8 /* PictureshowCore in Frameworks */ = {isa = PBXBuildFile; productRef = EB5F6866F9D22F311E5D8792 /* PictureshowCore */; };
 		FB85D1CA4154D262DF23CFAC /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BFCFD95C287E0DAD32DDE54 /* AccountsView.swift */; };
+		FBD70081C90A41AE1BF181B8 /* AccountStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C91A71C6A0E4957660B0A18 /* AccountStorageTests.swift */; };
 		FBEFAC4ED266305174DAC15B /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BFCFD95C287E0DAD32DDE54 /* AccountsView.swift */; };
 		FC4B5E15B7E6707EC0107CAA /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8BC88131B14D3FDC4B03C068 /* PictureshowTransport */; };
 /* End PBXBuildFile section */
@@ -71,6 +72,7 @@
 
 /* Begin PBXFileReference section */
 		0574B9F5F8ACC028256A7851 /* PictureshowTransport */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PictureshowTransport; path = PictureshowTransport; sourceTree = SOURCE_ROOT; };
+		0C91A71C6A0E4957660B0A18 /* AccountStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStorageTests.swift; sourceTree = "<group>"; };
 		0CFDDCBD010D6461EC33712E /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		11E0148B4068A19A5C78D094 /* Pictureshow-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CD5723AAA6FA2FF9EFD6B8F /* Pictureshow-iOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -197,6 +199,7 @@
 		9DF3A958EF7A9328ADEA32A8 /* UnitTests */ = {
 			isa = PBXGroup;
 			children = (
+				0C91A71C6A0E4957660B0A18 /* AccountStorageTests.swift */,
 				E7F3A78BB15FA4AEFB04E9A4 /* ViewingTransitionTests.swift */,
 			);
 			path = UnitTests;
@@ -419,6 +422,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FBD70081C90A41AE1BF181B8 /* AccountStorageTests.swift in Sources */,
 				A7B2E286D12AD6B0374D4608 /* ViewingTransitionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

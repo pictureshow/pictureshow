@@ -271,15 +271,18 @@ enum AccountVault {
         if let data { try? write(data, query: q) } else { SecItemDelete(q as CFDictionary) }
         #endif
     }
-    static func loadSnapshot() throws -> AccountSnapshot {
+    static func loadSnapshot(simulatorDirectory: URL? = nil) throws -> AccountSnapshot {
         #if targetEnvironment(simulator)
-        if FileManager.default.fileExists(atPath: snapshotURL.path) { return try JSONDecoder().decode(AccountSnapshot.self, from: Data(contentsOf: snapshotURL)) }
-        #endif
+        // Unsigned simulator builds have no Keychain entitlement. A missing file
+        // means first launch, not an invitation to query an inaccessible Keychain.
+        let snapshotFile = simulatorDirectory?.appendingPathComponent(snapshotURL.lastPathComponent) ?? snapshotURL
+        let legacyFile = simulatorDirectory?.appendingPathComponent(simulatorURL.lastPathComponent) ?? simulatorURL
+        if FileManager.default.fileExists(atPath: snapshotFile.path) { return try JSONDecoder().decode(AccountSnapshot.self, from: Data(contentsOf: snapshotFile)) }
+        if FileManager.default.fileExists(atPath: legacyFile.path) { let legacy = try JSONDecoder().decode(Account.self, from: Data(contentsOf: legacyFile)); return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
+        #else
         if let data = try read(snapshotQuery) { return try JSONDecoder().decode(AccountSnapshot.self, from: data) }
-        #if targetEnvironment(simulator)
-        if FileManager.default.fileExists(atPath: simulatorURL.path) { let legacy = try JSONDecoder().decode(Account.self, from: Data(contentsOf: simulatorURL)); return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
-        #endif
         if let data = try read(query) { let legacy = try JSONDecoder().decode(Account.self, from: data); return AccountSnapshot(accounts: [legacy], selected: legacy.localKey, servers: [legacy.server]) }
+        #endif
         return AccountSnapshot()
     }
     static func saveSnapshot(_ value: AccountSnapshot) throws {
