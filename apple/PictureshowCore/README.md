@@ -19,8 +19,28 @@ swift test --package-path apple/PictureshowCore
 PICTURESHOW_SPEC_DIR="$PWD/spec" swift test --package-path apple/PictureshowCore
 ```
 
-The vector runner discovers `spec/` in the repository by default. A standalone Apple checkout without shared fixtures records an explicit skipped vector test; provide `PICTURESHOW_SPEC_DIR` to require fixture execution. The runner currently covers address candidates, authorization encoding, URL origin/resolution/token stripping, image URLs, playback decisions, tick conversion, resume entry, and default stream choice. It prints the executed count and operations outside this slice. Android decoder/profile fixtures cannot describe AVFoundation's capabilities and are not asserted as Apple profiles.
+The vector runner discovers the repository's `spec/vectors/` recursively by default; `PICTURESHOW_SPEC_DIR` overrides
+that directory's parent for standalone package checks. Missing fixtures, unknown schema/suite/operation, duplicate
+IDs and empty suites fail. There is no snapshot-update mode or skipped vector family. The adapter structurally
+compares complete outputs with the shared committed expectations, including HTTP method/path/query/header/body and
+returned error/outcome. The suite ports caption language/index ranking, final position policy, settings validation,
+configuration preservation, segments/continuation, reports, account identity and encoder cleanup, plus network,
+negotiation and recovery.
 
-Application `end-position` vectors describe final-report completion and duration bounding, which belong to the platform playback lifecycle and have no matching helper in this package. `caption-language` describes system-caption enablement and server user-configuration precedence; `language(_:)` only normalizes a tag. `caption-index` describes accessibility caption ranking by hearing impairment, forced status and language, while `defaultStream` preserves the server choice. These three families are explicitly excluded with reasons, rather than claiming that a related helper implements their policy.
+`ReferenceDeviceProfile` translates the shared Android demux/capability policy for equivalent capability inputs,
+including its conservative decoder envelopes and HDR/profile constraints. It is separate from `AppleProfile`, which
+is the app's conservative AVFoundation protocol profile. Passing Android compatibility fixtures is not a claim that
+AVFoundation decodes Matroska, PGS, FFmpeg audio or Android passthrough formats. The reduced `ProfileEvaluator` port
+lives in tests and models only the documented server conditions, not real playback.
 
-The XCTest ports also cover live HTTP request construction through a mock URLProtocol: account-bound device identity, password and Quick Connect flows, detail resume projection, partial home failures, negotiation/track selection, start/progress/stop reports, expired sessions, and session-scoped encoder cleanup. These request-level behaviors and the full-timeline HLS resume regression, and the source-bound Off/selected-track negotiation are candidates for additional shared vectors.
+`PlaybackPreferences` decodes corrupt stored choices to Android defaults; `UserConfiguration` preserves unknown
+JSON values. `Captions` supplies the shared accessibility language/track policy. `PlaybackExtras` supplies chapter,
+segment, trickplay and chronological adjacency helpers; the app owns the actual renderer, skip/next interaction and
+native caption appearance/timing capabilities. `PlaybackEndPosition.completed` is for confirmed physical EOS only,
+not an ordinary pause/seek/Stop.
+
+The XCTest ports also cover request construction through a mock URLProtocol: account-bound identity, password and
+Quick Connect, detail resume projection, partial home failures, track-bound negotiation, progress/stop DTOs, expired
+sessions, and session-scoped cleanup. Additional shared regression fixtures exercise source discovery and bound
+Off/burn-in negotiation, absolute HLS position through a track replacement, partial home row assembly, and lossless
+configuration read/save. Decoder/focus/spoken-output/runtime checks remain separate acceptance evidence.

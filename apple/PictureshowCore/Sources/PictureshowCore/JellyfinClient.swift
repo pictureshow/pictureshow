@@ -206,41 +206,33 @@ public final class JellyfinClient: @unchecked Sendable {
         request.setValue("image/*", forHTTPHeaderField: "Accept")
         return try await responseData(for: request, server: account.server)
     }
-    public func prepare(account: Account, itemID: String, startTicks: Int64 = 0, audioIndex: Int? = nil, subtitleIndex: Int? = nil, forceTranscode: Bool = false, mediaSourceID: String? = nil, preferences: PlaybackPreferences = PlaybackPreferences()) async throws -> PlayDecision {
-        var body: [String:Any] = ["UserId": account.userId, "DeviceProfile": AppleProfile.json(supportsHEVC: supportsHEVC, maxStreamingBitrate: preferences.maxStreamingBitrate), "MaxStreamingBitrate": preferences.maxStreamingBitrate, "StartTimeTicks": max(0, startTicks), "EnableDirectPlay": !forceTranscode && (subtitleIndex ?? -1) < 0, "EnableDirectStream": false, "EnableTranscoding": true, "AllowVideoStreamCopy": !forceTranscode && (subtitleIndex ?? -1) < 0, "AllowAudioStreamCopy": !forceTranscode, "AutoOpenLiveStream": false, "AlwaysBurnInSubtitleWhenTranscoding": true]
-        if let audioIndex { body["AudioStreamIndex"] = audioIndex }
-        if let subtitleIndex { body["SubtitleStreamIndex"] = subtitleIndex }
-        if let mediaSourceID { body["MediaSourceId"] = mediaSourceID }
+    public func prepare(account: Account, itemID: String, startTicks: Int64 = 0, audioIndex: Int? = nil, subtitleIndex: Int? = nil, forceTranscode: Bool = false, mediaSourceID: String? = nil, preferences: PlaybackPreferences = PlaybackPreferences(), forceHLS: Bool = false) async throws -> PlayDecision {
+        let body = PlaybackRequests.body(userID: account.userId, profile: AppleProfile.json(supportsHEVC: supportsHEVC, maxStreamingBitrate: preferences.maxStreamingBitrate), maxStreamingBitrate: preferences.maxStreamingBitrate, startTicks: max(0,startTicks), mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex, enableDirectPlay: !forceTranscode && !forceHLS && (subtitleIndex ?? -1) < 0, enableDirectStream: false, allowVideoStreamCopy: !forceTranscode && (subtitleIndex ?? -1) < 0, allowAudioStreamCopy: !forceTranscode, alwaysBurnIn: true)
+        return try await negotiate(account: account, itemID: itemID, body: body, startTicks: startTicks, mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex)
+    }
+    /// The portable reference profile uses the same wire negotiation as the Apple runtime. Only profile
+    /// construction and deliberate platform request flags differ; source binding and decisions are shared.
+    public func prepareReference(account: Account, itemID: String, capabilities: DeviceCapabilities, startMs: Int64 = 0, mediaSourceID: String? = nil, audioIndex: Int? = nil, subtitleIndex: Int? = nil, enableDirectPlay: Bool = true, enableDirectStream: Bool = true, allowVideoStreamCopy: Bool = true, allowAudioStreamCopy: Bool = true, requireVideoStreamCopy: Bool = false) async throws -> PlayDecision {
+        let body = PlaybackRequests.body(userID: account.userId, profile: ReferenceDeviceProfile.build(capabilities), maxStreamingBitrate: capabilities.settings?.maxStreamingBitrate ?? 200_000_000, startTicks: startMs * 10_000, mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex, enableDirectPlay: enableDirectPlay, enableDirectStream: enableDirectStream, allowVideoStreamCopy: allowVideoStreamCopy, allowAudioStreamCopy: allowAudioStreamCopy)
+        let decision = try await negotiate(account: account, itemID: itemID, body: body, startTicks: startMs * 10_000, mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex)
+        if requireVideoStreamCopy { guard let recovered = PlaybackRecovery.preserveVideo(decision, subtitleIndex: subtitleIndex) else { throw ClientError.noCompatibleSource }; return recovered }
+        return decision
+    }
+    private func negotiate(account: Account, itemID: String, body originalBody: [String:Any], startTicks: Int64, mediaSourceID: String?, audioIndex: Int?, subtitleIndex: Int?) async throws -> PlayDecision {
+        var body = originalBody
         let path = "Items/\(ServerURLs.encode(itemID))/PlaybackInfo"
         var info = try decoder.decode(PlaybackInfo.self, from: await request(account: account, path: path, method: "POST", body: body, includeUserID: false))
         var boundSourceID = mediaSourceID
-        // Jellyfin 12 applies explicit track indices only to a bound media source. An initial
-        // unbound request can return the user's default subtitle (even when Off was requested).
-        // Discover the preferred source, then negotiate the actual selection against its ID.
-        if mediaSourceID == nil, audioIndex != nil || subtitleIndex != nil {
-            let preferred = info.mediaSources.first(where: { $0.supportsDirectPlay || $0.supportsDirectStream || !($0.transcodingUrl ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? info.mediaSources.first
-            if let id = preferred?.id, !id.isEmpty {
-                boundSourceID = id
-                body["MediaSourceId"] = id
-                info = try decoder.decode(PlaybackInfo.self, from: await request(account: account, path: path, method: "POST", body: body, includeUserID: false))
-            }
-        }
-        return try PlayDecisions.decide(account: account, itemID: itemID, response: info, startTicks: startTicks, audioIndex: audioIndex, subtitleIndex: subtitleIndex, mediaSourceID: boundSourceID, deviceName: deviceName, version: version)
-    }
-    public func prepareReference(account: Account, itemID: String, capabilities: DeviceCapabilities, startMs: Int64 = 0, mediaSourceID: String? = nil, audioIndex: Int? = nil, subtitleIndex: Int? = nil, enableDirectPlay: Bool = true, enableDirectStream: Bool = true, allowVideoStreamCopy: Bool = true, allowAudioStreamCopy: Bool = true, requireVideoStreamCopy: Bool = false) async throws -> PlayDecision {
-        var body = PlaybackRequests.body(userID: account.userId, profile: ReferenceDeviceProfile.build(capabilities), maxStreamingBitrate: capabilities.settings?.maxStreamingBitrate ?? 200_000_000, startTicks: startMs * 10_000, mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex, enableDirectPlay: enableDirectPlay, enableDirectStream: enableDirectStream, allowVideoStreamCopy: allowVideoStreamCopy, allowAudioStreamCopy: allowAudioStreamCopy)
-        var info = try decoder.decode(PlaybackInfo.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/PlaybackInfo", method: "POST", body: body, includeUserID: false))
-        var boundSourceID = mediaSourceID
+        // No URL from the discovery response is opened, so this step cannot start an encoder.
+        // Retain the bound response's session for reports and account-scoped encoder cleanup.
         if mediaSourceID == nil, audioIndex != nil || subtitleIndex != nil, info.errorCode == nil {
             let preferred = info.mediaSources.first { $0.supportsDirectPlay || $0.supportsDirectStream || !($0.transcodingUrl ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? info.mediaSources.first
             if let id = preferred?.id, !id.isEmpty {
                 boundSourceID = id; body["MediaSourceId"] = id
-                info = try decoder.decode(PlaybackInfo.self, from: await request(account: account, path: "Items/\(ServerURLs.encode(itemID))/PlaybackInfo", method: "POST", body: body, includeUserID: false))
+                info = try decoder.decode(PlaybackInfo.self, from: await request(account: account, path: path, method: "POST", body: body, includeUserID: false))
             }
         }
-        let decision = try PlayDecisions.decide(account: account, itemID: itemID, response: info, startTicks: startMs * 10_000, audioIndex: audioIndex, subtitleIndex: subtitleIndex, mediaSourceID: boundSourceID, deviceName: deviceName, version: version)
-        if requireVideoStreamCopy { guard let recovered = PlaybackRecovery.preserveVideo(decision, subtitleIndex: subtitleIndex) else { throw ClientError.noCompatibleSource }; return recovered }
-        return decision
+        return try PlayDecisions.decide(account: account, itemID: itemID, response: info, startTicks: startTicks, audioIndex: audioIndex, subtitleIndex: subtitleIndex, mediaSourceID: boundSourceID, deviceName: deviceName, version: version)
     }
     public func sendReport(account: Account, kind: String, body: [String:Any]) async throws {
         let paths = ["start":"Sessions/Playing", "progress":"Sessions/Playing/Progress", "stopped":"Sessions/Playing/Stopped"]

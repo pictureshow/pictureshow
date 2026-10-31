@@ -111,6 +111,22 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(reports["/base/Sessions/Playing/Stopped"]?["PlaySessionId"] as? String, "play-session")
         XCTAssertEqual(reports["/base/Sessions/Playing/Stopped"]?["PositionTicks"] as? Int, 430_000_000)
     }
+    func testAudioTrackHLSKeepsVideoCopyAndAppliesUserBitrate() async throws {
+        StubProtocol.handler = { request in
+            let body = try self.body(request)
+            XCTAssertEqual(body["EnableDirectPlay"] as? Bool, false)
+            XCTAssertEqual(body["AllowVideoStreamCopy"] as? Bool, true, "Audio changes must not universally force video encode")
+            XCTAssertEqual(body["AllowAudioStreamCopy"] as? Bool, true)
+            XCTAssertEqual(body["MaxStreamingBitrate"] as? Int, 4_000_000)
+            XCTAssertEqual((body["DeviceProfile"] as? [String:Any])?["MaxStreamingBitrate"] as? Int, 4_000_000)
+            XCTAssertEqual(body["MediaSourceId"] as? String, "source")
+            return (200, self.json(#"{"MediaSources":[{"Id":"source","TranscodingUrl":"/Videos/movie/master.m3u8?VideoCodec=copy&AudioCodec=aac"}],"PlaySessionId":"bound"}"#))
+        }
+        let decision = try await client.prepare(account: account, itemID: "movie", audioIndex: 2, subtitleIndex: -1, mediaSourceID: "source", preferences: PlaybackPreferences(bitrateMbps: 4), forceHLS: true)
+        XCTAssertEqual(decision.method, .transcode)
+        XCTAssertEqual(decision.playSessionId, "bound")
+        XCTAssertTrue(decision.url.absoluteString.contains("VideoCodec=copy"))
+    }
     func testFailedResumeShelfDoesNotHideLibrariesNextUpOrLatest() async throws {
         StubProtocol.handler = { request in
             switch request.url!.lastPathComponent {
