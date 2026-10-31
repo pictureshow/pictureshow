@@ -1,0 +1,14 @@
+/* Generated from spec/design/tokens.json; regenerate with npm run tokens. */
+:root {
+    --color-app-window: #10131cff;
+    --color-app-accent: #b8c4ffff;
+    --color-app-muted: #b9c1d6ff;
+    --color-app-field: #202635ff;
+    --color-app-artworkPlaceholder: #262d3dff;
+    --color-tv-primary: #d0bcffff;
+    --color-tv-onSurface: #e6e1e5ff;
+    --color-tv-border: #9a95a1ff;
+    --focus-tv-fieldRingColor: #b8c4ffff;
+    --focus-tv-fieldRingWidth: 3px;
+    --radius-tv-card: 8px;
+}
