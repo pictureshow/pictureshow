@@ -35,12 +35,7 @@ final class AppleSliceUITests: XCTestCase {
     /// Keep unsupported-codec playback and server resume observable even if the
     /// separate direct-decoder gate fails on the simulator's media stack.
     func testServerHLSAndResume() throws {
-        if !app.buttons["signOut"].waitForExistence(timeout: 3) {
-            activate(app.buttons["connect"])
-            XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 15))
-            activate(app.buttons["signIn"])
-            XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 20))
-        }
+        ensureSignedIn()
         try playAndResume(id: XCTUnwrap(config["hlsID"]), expected: "Server HLS", key: "hls")
         try playAndResume(id: XCTUnwrap(config["resumeID"]), expected: "Server HLS", key: "resume")
     }
@@ -210,7 +205,7 @@ final class AppleSliceUITests: XCTestCase {
         selectTouchTrack(type: "audio", index: audio)
         selectTouchTrack(type: "subtitle", index: subtitle)
         openTouchTrackPanel()
-        XCTAssertEqual(app.buttons["subtitle-track-\(subtitle)"].value as? String, "Selected")
+        XCTAssertEqual(app.buttons["subtitle-\(subtitle)"].value as? String, "Selected")
         capture("Audio and subtitle selection")
         activate(app.buttons["Done"])
         #endif
@@ -437,7 +432,7 @@ final class AppleSliceUITests: XCTestCase {
             selectTouchTrack(type: "audio", index: audio)
             selectTouchTrack(type: "subtitle", index: subtitle)
             openTouchTrackPanel()
-            let subtitleChoice = app.buttons["subtitle-track-\(subtitle)"]
+            let subtitleChoice = app.buttons["subtitle-\(subtitle)"]
             XCTAssertEqual(subtitleChoice.value as? String, "Selected")
             capture("Explicit audio and subtitle choices")
             activate(app.buttons["Done"])
@@ -466,13 +461,40 @@ final class AppleSliceUITests: XCTestCase {
         return parts.count == 2 ? parts[0] * 60 + parts[1] : 0
     }
     private func ensureSignedIn() {
-        if !app.buttons["signOut"].waitForExistence(timeout: 3) {
-            let connect = app.buttons["connect"]
-            if connect.waitForExistence(timeout: 5) { activate(connect) }
-            XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 15))
-            activate(app.buttons["signIn"])
-            XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 20))
+        if app.buttons["signOut"].waitForExistence(timeout: 3) { returnHome(); return }
+        // Home's account/sign-out actions sit at the end of a lazy list, so their absence is not
+        // proof of a signed-out state. The authenticated Home toolbar is a stable root marker.
+        if app.buttons["openSearch"].waitForExistence(timeout: 2) || app.buttons["openSettings"].exists {
+            returnHome(); return
         }
+
+        // Clones may preserve this app's remembered server/account list. Select the pilot
+        // account before deciding whether to sign in; never emit a full AX tree because it can
+        // contain entered form data.
+        let rememberedAccount = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "account-")).firstMatch
+        if rememberedAccount.waitForExistence(timeout: 2) {
+            activate(rememberedAccount)
+            if app.buttons["signOut"].waitForExistence(timeout: 8) { returnHome(); return }
+        } else if app.buttons["addServer"].waitForExistence(timeout: 1) {
+            activate(app.buttons["addServer"])
+        }
+
+        let quickCancel = app.buttons["cancelQuick"]
+        if quickCancel.waitForExistence(timeout: 1) { activate(quickCancel) }
+        let signIn = app.buttons["signIn"]
+        if !signIn.waitForExistence(timeout: 3) {
+            let connect = app.buttons["connect"]
+            if connect.exists { activate(connect) }
+        }
+        guard signIn.waitForExistence(timeout: 25) else {
+            let known = ["connect", "signIn", "serverAddress", "accountsTitle", "addServer", "cancelQuick", "quickCode", "signOut", "openSearch", "openSettings"]
+            let visible = app.descendants(matching: .any).allElementsBoundByIndex
+                .map(\.identifier).filter { known.contains($0) || $0.hasPrefix("account-") }
+            XCTFail("Could not reach password sign-in. Visible safe identifiers: \(visible.joined(separator: ","))")
+            return
+        }
+        activate(signIn)
+        XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 30))
         returnHome()
     }
     #if os(iOS)
@@ -489,7 +511,7 @@ final class AppleSliceUITests: XCTestCase {
     }
     private func selectTouchTrack(type: String, index: String) {
         openTouchTrackPanel()
-        let choice = app.buttons["\(type)-track-\(index)"]
+        let choice = app.buttons["\(type)-\(index)"]
         reveal(choice); activate(choice)
         XCTAssertTrue(app.buttons["Done"].waitForNonExistence(timeout: 10), "Selecting \(type) should immediately dismiss the track sheet")
     }
