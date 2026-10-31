@@ -152,8 +152,11 @@ final class AppleSliceUITests: XCTestCase {
         app.terminate()
         app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["directID"])
         app.launch()
-        let play = app.buttons["play"]
-        reveal(play); activate(play)
+        let playFromStart = app.buttons["startOver"]
+        reveal(playFromStart)
+        XCTAssertTrue(playFromStart.waitForExistence(timeout: 15), "Direct startup trials must use Play from start, not a saved resume position")
+        let playRequestedAt = ProcessInfo.processInfo.systemUptime
+        activate(playFromStart)
         #if os(tvOS)
         XCUIRemote.shared.press(.up)
         let info = app.buttons["Pictureshow"]
@@ -162,18 +165,22 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         let method = app.staticTexts["playbackMethod"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
+        print("F1_METRIC direct_method_presentation_ms=\(Int((ProcessInfo.processInfo.systemUptime - playRequestedAt) * 1000)) method=\(method.label)")
         capture("Direct startup initial preparation")
         let position = app.staticTexts["playbackPosition"]
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= 3 }, evaluatedWith: position)
-        waitForExpectations(timeout: 40)
+        XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
+        XCTAssertFalse(position.label.isEmpty, "The initial clock value must be present before direct playback is measured")
+        XCTAssertLessThanOrEqual(seconds(position.label), 1, "Play from start must begin at the initial timeline position")
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: 3, timeout: 40, metric: "direct"))
+        print("F1_METRIC direct_clock_advanced_from_play_ms=\(Int((ProcessInfo.processInfo.systemUptime - playRequestedAt) * 1000)) seconds=\(seconds(position.label))")
         XCTAssertEqual(method.label, "Direct play")
         capture("Direct startup advancing video")
         #if os(tvOS)
-        leaveNativeTVPlayer(returningTo: play)
+        leaveNativeTVPlayer(returningTo: playFromStart)
         #else
         activate(app.buttons["closePlayer"])
         #endif
-        XCTAssertTrue(play.waitForExistence(timeout: 15))
+        XCTAssertTrue(playFromStart.waitForExistence(timeout: 15))
     }
     func testSeriesSeasonsEpisodeAndTrackControls() throws {
         ensureSignedIn()
@@ -212,9 +219,9 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 30))
         XCTAssertEqual(app.staticTexts["playbackMethod"].label, "Server HLS")
         let position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
         let beforeChange = seconds(position.label)
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= beforeChange + 5 }, evaluatedWith: position)
-        waitForExpectations(timeout: 35)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: beforeChange + 5, timeout: 35, metric: "episode"))
         capture("Episode playback after track apply")
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
@@ -377,17 +384,11 @@ final class AppleSliceUITests: XCTestCase {
         capture("\(expected) initial preparation")
         XCTAssertEqual(method.label, expected)
         let position = app.staticTexts["playbackPosition"]
-        let advanced = NSPredicate(format: "label != %@ AND label != %@", "0:00", "0:01")
-        expectation(for: advanced, evaluatedWith: position)
-        waitForExpectations(timeout: 35)
+        XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 35, metric: key))
         // Respect the server's minimum video duration and watched percentage for resume.
         let minimum = max(Int(config[key + "ResumeSeconds"] ?? "6") ?? 6, seconds(position.label) + 6)
-        let enoughProgress = NSPredicate { _, _ in
-            let parts = position.label.split(separator: ":").compactMap { Int($0) }
-            return parts.count == 2 && parts[0] * 60 + parts[1] >= minimum
-        }
-        expectation(for: enoughProgress, evaluatedWith: position)
-        waitForExpectations(timeout: TimeInterval(minimum + 35))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: minimum, timeout: TimeInterval(minimum + 35), metric: key + "_resume"))
         #if os(iOS)
         XCTAssertTrue(app.buttons["playerTracks"].exists)
         #endif
@@ -417,16 +418,14 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 10))
         #endif
         let resumeMinimum = eligible ? max(2, seconds(saved.replacingOccurrences(of: "Resume from ", with: "")) + 2) : 2
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= resumeMinimum }, evaluatedWith: position)
-        waitForExpectations(timeout: 30)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: resumeMinimum, timeout: 30, metric: key + "_resumed"))
         capture("\(expected) \(eligible ? "resumed" : "replayed short sample") after \(saved)")
         if key == "direct", let audio = config["directAudioIndex"], let subtitle = config["directSubtitleIndex"] {
             #if os(tvOS)
             _ = audio; _ = subtitle
             inspectNativeTVInfoAndTracks(preferDirect: true)
             let beforeChange = seconds(position.label)
-            expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= beforeChange + 5 }, evaluatedWith: position)
-            waitForExpectations(timeout: 35)
+            XCTAssertTrue(waitForPlaybackClock(position, minimum: beforeChange + 5, timeout: 35, metric: "tv_track_change"))
             capture("Subtitle selection renegotiated to HLS")
             #else
             selectTouchTrack(type: "audio", index: audio)
@@ -439,8 +438,7 @@ final class AppleSliceUITests: XCTestCase {
             expectation(for: NSPredicate(format: "label == %@", "Server HLS"), evaluatedWith: method)
             waitForExpectations(timeout: 30)
             let beforeChange = seconds(position.label)
-            expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= beforeChange + 5 }, evaluatedWith: position)
-            waitForExpectations(timeout: 30)
+            XCTAssertTrue(waitForPlaybackClock(position, minimum: beforeChange + 5, timeout: 30, metric: "touch_track_change"))
             capture("Subtitle selection renegotiated to HLS")
             if let cue = config["directSubtitleCueSeconds"].flatMap(Int.init) {
                 _ = cue
@@ -462,6 +460,10 @@ final class AppleSliceUITests: XCTestCase {
     }
     private func ensureSignedIn() {
         if hasHomeRoot(timeout: 2) { returnHome(); return }
+        // NavigationMemory intentionally restores the last authenticated stack. A detail,
+        // library, settings, search, account, or player route is signed in even when Home's
+        // toolbar identifiers are not currently in the accessibility tree.
+        if hasAuthenticatedNavigationState() { returnHome(); return }
 
         // Clones may preserve this app's remembered server/account list. Select the pilot
         // account before deciding whether to sign in; never emit a full AX tree because it can
@@ -495,6 +497,46 @@ final class AppleSliceUITests: XCTestCase {
     private func hasHomeRoot(timeout: TimeInterval = 1) -> Bool {
         app.buttons["openSearch"].waitForExistence(timeout: timeout)
             || app.buttons["openSettings"].waitForExistence(timeout: timeout)
+    }
+    private func hasAuthenticatedNavigationState() -> Bool {
+        let fixedMarkers: [XCUIElement] = [
+            app.staticTexts["detailTitle"], app.staticTexts["settingsTitle"], app.staticTexts["accountsTitle"],
+            app.staticTexts["aboutTitle"], app.textFields["searchField"], app.buttons["play"],
+            app.staticTexts["playbackMethod"], app.staticTexts["playbackPosition"], app.buttons["Pictureshow"],
+            app.buttons["closePlayer"], app.buttons["playerTracks"], app.buttons["playerOptions"]
+        ]
+        if fixedMarkers.contains(where: \.exists) { return true }
+        let rootLabels = ["Home", "Libraries", "Search", "Settings"]
+        if rootLabels.contains(where: { app.buttons.matching(NSPredicate(format: "label == %@", $0)).firstMatch.exists }) { return true }
+        return app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "item-")).firstMatch.exists
+    }
+    /// AVKit hides its overlay after a short idle interval. Keep revealing it while observing a
+    /// non-empty clock; a missing or empty accessibility label can never count as progress.
+    private func waitForPlaybackClock(_ position: XCUIElement, minimum: Int, timeout: TimeInterval, metric: String) -> Bool {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + timeout
+        var lastRevealAt: TimeInterval = 0
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if position.exists, !position.label.isEmpty, seconds(position.label) >= minimum {
+                print("F1_METRIC \(metric)_clock_advanced_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) seconds=\(seconds(position.label))")
+                return true
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            if now - lastRevealAt >= 3 {
+                #if os(tvOS)
+                XCUIRemote.shared.press(.up)
+                #else
+                let options = app.buttons["playerOptions"]
+                if options.exists { activate(options) }
+                else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+                #endif
+                lastRevealAt = now
+            }
+            Thread.sleep(forTimeInterval: 0.35)
+        }
+        let finalLabel = position.exists ? position.label : "<missing>"
+        print("F1_METRIC \(metric)_clock_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) final_position=\(finalLabel)")
+        return false
     }
     #if os(iOS)
     /// iOS track actions commit immediately and dismiss the sheet. Reopen it for each choice;
@@ -612,6 +654,7 @@ final class AppleSliceUITests: XCTestCase {
         #if os(tvOS)
         for _ in 0..<10 where !hasHomeRoot(timeout: 1) { XCUIRemote.shared.press(.menu) }
         #else
+        if app.buttons["closePlayer"].exists { activate(app.buttons["closePlayer"]) }
         // The four tabs keep separate NavigationStacks; selecting Home alone does not pop its
         // current Accounts/Settings/Library route. Dismiss input first, switch tabs, then pop
         // only until Home's own toolbar is visible.
