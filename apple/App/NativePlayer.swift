@@ -12,6 +12,7 @@ struct PlayerScreen: View {
     @State private var panel: String?
     @State private var toolbarVisible = true
     @State private var closing = false
+    @State private var orientationError: String?
     var body: some View {
         ZStack(alignment: .top) {
             NativePlayer(session: session, close: finish).ignoresSafeArea()
@@ -24,10 +25,12 @@ struct PlayerScreen: View {
                         Button("Audio and subtitles", systemImage: "captions.bubble") { panel = "tracks" }.accessibilityIdentifier("playerTracks")
                         Button("Seek", systemImage: "slider.horizontal.3") { panel = "seek" }.accessibilityIdentifier("playerSeek")
                         Button("Chapters", systemImage: "list.bullet") { panel = "chapters" }.accessibilityIdentifier("playerChapters")
+                        Button("Rotate portrait or landscape", systemImage: "rotate.right") { rotate() }.accessibilityIdentifier("rotatePlayer")
                     } else {
                         Button("Playback options", systemImage: "ellipsis.circle") { toolbarVisible = true }.accessibilityIdentifier("playerOptions")
                     }
-                }.buttonStyle(.bordered).padding().background(.black.opacity(0.55))
+                }.buttonStyle(.bordered).labelStyle(.iconOnly).controlSize(.large).padding().background(.black.opacity(0.55))
+                if let orientationError { Text(orientationError).font(.caption).padding().background(.black.opacity(0.75)) }
                 Spacer()
                 if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
                     Button("Skip \(segment.type.rawValue)") { session.skip() }.buttonStyle(.borderedProminent).padding()
@@ -58,14 +61,28 @@ struct PlayerScreen: View {
         .onChange(of: session.terminal) { _, value in if value, session.error == nil { finish() } }
         .onChange(of: scenePhase) { _, value in if value != .active { session.backgrounded() } }
         .onChange(of: panel) { _, value in session.panelOpen = value != nil }
+        .onChange(of: toolbarVisible, initial: true) { _, value in
+            #if os(iOS)
+            session.controlsVisible = value
+            #endif
+        }
         .sheet(isPresented: Binding(get: { panel != nil }, set: { if !$0 { panel = nil } })) {
             PlayerOptions(session: session, kind: panel ?? "tracks") { panel = nil }
         }
-        .task(id: toolbarVisible) {
-            guard toolbarVisible else { return }
+        .task(id: "\(toolbarVisible)|\(session.isPaused)|\(panel ?? "")") {
+            guard toolbarVisible, !session.isPaused, panel == nil else { return }
             try? await Task.sleep(for: .seconds(10))
             if !Task.isCancelled, !session.isPaused, !UIAccessibility.isVoiceOverRunning, panel == nil { toolbarVisible = false }
         }
+    }
+    private func rotate() {
+        #if os(iOS)
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) else { return }
+        let target: UIInterfaceOrientationMask = scene.interfaceOrientation.isLandscape ? .portrait : .landscapeRight
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: target)) { error in
+            Task { @MainActor in orientationError = "This window could not rotate. Use the device orientation or a full-screen window." }
+        }
+        #endif
     }
     private func finish() { guard !closing else { return }; closing = true; session.beginClosing(); Task { await close(); dismiss() } }
 }
@@ -113,7 +130,6 @@ struct PlayerOptions: View {
                         Text(session.subtitleTimingExplanation).font(.caption)
                     }
                     if let error = session.extrasError { Text(error) }
-                    Button("Apply tracks") { let a = audio, s = subtitle; done(); Task { await session.changeTracks(audio: a, subtitle: s) } }.accessibilityIdentifier("applyTracks").disabled(session.changingTracks)
                 }
             }
             .navigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : "Audio and subtitles")
@@ -123,7 +139,12 @@ struct PlayerOptions: View {
     }
     private func streams(_ type: String) -> [MediaStream] { session.decision?.source.mediaStreams.filter { $0.type == type } ?? [] }
     private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
-        Button { if type == "Audio" { audio = index } else { subtitle = index } } label: {
+        Button {
+            let chosenAudio = type == "Audio" ? index : session.decision?.audioIndex
+            let chosenSubtitle = type == "Subtitle" ? index : session.decision?.subtitleIndex
+            done()
+            Task { await session.changeTracks(audio: chosenAudio, subtitle: chosenSubtitle) }
+        } label: {
             HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }
         }.accessibilityValue(selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
     }
@@ -236,7 +257,7 @@ private struct SeekOptions: View {
             #if os(iOS)
             if let duration = session.durationSeconds {
                 Slider(value: $target, in: 0...duration, onEditingChanged: { editing in
-                    session.panelOpen = editing
+                    if editing { session.nativeSeekBegan(target) }
                     if !editing { session.seek(toTicks: Ticks.from(seconds: target)) }
                 }).accessibilityLabel("Seek position").accessibilityValue(clock(Ticks.from(seconds: target)))
             }

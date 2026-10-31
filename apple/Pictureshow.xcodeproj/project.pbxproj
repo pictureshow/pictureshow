@@ -11,6 +11,7 @@
 		22EEFD74CE9BD3CE4CAB0AE7 /* NativePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED20D6B4E0FF0CBFDE61285F /* NativePlayer.swift */; };
 		2315B71227D493238750EE59 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		23178F52ECB499187B8771AD /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414DE71D03568307C1B5DF0A /* SearchView.swift */; };
+		28B9DDFA00CBB610D36035F3 /* AccessibilityStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92C95D89DC790C3EB88A395 /* AccessibilityStatus.swift */; };
 		2C2BB7B6650F229A378ED387 /* PictureshowCore in Frameworks */ = {isa = PBXBuildFile; productRef = F322A465C30A0926D67EDF10 /* PictureshowCore */; };
 		3F2C51E8D81F56BF967603B2 /* MPL-2.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */; };
 		4F18E5FF869E22FC934B7269 /* PictureshowCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8CA8FE97305ABE653712A622 /* PictureshowCore */; };
@@ -18,6 +19,7 @@
 		6882A07567BE1173DDBBA97B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D979FD5F6655B17B01A6E075 /* SettingsView.swift */; };
 		6C4FC39FFE12312F7A625E5A /* NativePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED20D6B4E0FF0CBFDE61285F /* NativePlayer.swift */; };
 		72E0D67C0C6D06E42C187125 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D979FD5F6655B17B01A6E075 /* SettingsView.swift */; };
+		737327C39FADF1424FEC543C /* AccessibilityStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92C95D89DC790C3EB88A395 /* AccessibilityStatus.swift */; };
 		882EB3B90D8B8FFBD8952D4F /* PlaybackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDD6E0937BBEEAE9622CF83 /* PlaybackSession.swift */; };
 		90441AC588AA02C9BCB67941 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		931B8B697C2B6334882D8C7A /* CatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FA85AA82A654E61D1D5117 /* CatalogViews.swift */; };
@@ -86,6 +88,7 @@
 		D979FD5F6655B17B01A6E075 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E7F3A78BB15FA4AEFB04E9A4 /* ViewingTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewingTransitionTests.swift; sourceTree = "<group>"; };
 		E8DFE48B43481D4DCECA35AE /* PictureshowApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PictureshowApp.swift; sourceTree = "<group>"; };
+		E92C95D89DC790C3EB88A395 /* AccessibilityStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityStatus.swift; sourceTree = "<group>"; };
 		ED20D6B4E0FF0CBFDE61285F /* NativePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -159,6 +162,7 @@
 		65E16F23844A6A4FD6ACBEE5 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				E92C95D89DC790C3EB88A395 /* AccessibilityStatus.swift */,
 				5BFCFD95C287E0DAD32DDE54 /* AccountsView.swift */,
 				D0FA85AA82A654E61D1D5117 /* CatalogViews.swift */,
 				A23DE8E3C9A071C533008D69 /* DesignTokens.swift */,
@@ -363,6 +367,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				737327C39FADF1424FEC543C /* AccessibilityStatus.swift in Sources */,
 				FBEFAC4ED266305174DAC15B /* AccountsView.swift in Sources */,
 				931B8B697C2B6334882D8C7A /* CatalogViews.swift in Sources */,
 				2315B71227D493238750EE59 /* DesignTokens.swift in Sources */,
@@ -389,6 +394,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				28B9DDFA00CBB610D36035F3 /* AccessibilityStatus.swift in Sources */,
 				FB85D1CA4154D262DF23CFAC /* AccountsView.swift in Sources */,
 				B2616443BCD3E4A216E92641 /* CatalogViews.swift in Sources */,
 				90441AC588AA02C9BCB67941 /* DesignTokens.swift in Sources */,

@@ -253,7 +253,16 @@ import MediaAccessibility
               let trigger = PlaybackExtras.nextTrigger(durationMs: Int64(duration * 1000), segments: segments),
               positionTicks / 10_000 >= trigger else { nextCountdown = nil; return }
         let credits = PlaybackExtras.creditsStart(durationMs: Int64(duration * 1000), segments: segments) != nil
-        if credits && !pauseIntent && !waiting && !panelOpen && !controlsVisible && now.timeIntervalSince(lastSeekTime) > 2 && !UIAccessibility.isVoiceOverRunning {
+        // tvOS reports native transport visibility. iOS has no equivalent public
+        // AVKit callback, so keep its early credits action manual rather than
+        // interrupt a viewer who may be using the native scrubber. Physical EOS
+        // still uses the ordinary guarded continuation path on both platforms.
+        #if os(tvOS)
+        let permitsEarlyContinuation = true
+        #else
+        let permitsEarlyContinuation = false
+        #endif
+        if credits && permitsEarlyContinuation && !pauseIntent && !waiting && !panelOpen && !controlsVisible && now.timeIntervalSince(lastSeekTime) > 2 && !UIAccessibility.isVoiceOverRunning {
             countdownElapsed += elapsed
             nextCountdown = max(0, 10 - Int(countdownElapsed))
             if countdownElapsed >= 10 { Task { await advance() } }

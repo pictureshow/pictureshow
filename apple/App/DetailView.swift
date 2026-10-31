@@ -171,6 +171,7 @@ struct DetailView: View {
                 }
             }
             .background(Theme.background.ignoresSafeArea()).navigationTitle(state.header?.name ?? "Details")
+            .announceStatus(state.readError ?? state.writeError ?? model.playbackSaveError ?? state.notice)
             .task(id: id) { state.appear(); state.refresh(id: id, model: model) }
             .onAppear { state.appear(); state.refresh(id: id, model: model); focused = opener }
             .onDisappear { state.leave() }
