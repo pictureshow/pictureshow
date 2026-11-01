@@ -1976,17 +1976,34 @@ final class AppleSliceUITests: XCTestCase {
             XCTFail("The identified native AVKit presentation should be visible before sending Menu")
             return
         }
-        for attempt in 0..<3 where tvPlayerSnapshot() != nil {
+        func detailHasReturned() -> Bool {
+            guard let root = try? app.snapshot() else { return false }
+            let nodes = tvSnapshotNodes(root)
+            let playerMarkers: Set<String> = ["pictureshowNativePlayer", "AVInfoMenuCollection", "playbackMethod", "playbackPosition"]
+            guard !nodes.contains(where: { playerMarkers.contains($0.identifier) }) else { return false }
+            return nodes.contains {
+                ["play", "startOver"].contains($0.identifier) && $0.elementType == .button && $0.isEnabled
+                    && $0.frame.width > 0 && $0.frame.height > 0 && root.frame.contains($0.frame)
+            }
+        }
+        var returned = false
+        for attempt in 0..<3 {
             // The detail opener is obscured by AVKit until Menu dismisses it.
             // Resolving its hittability/focus here can fail before the Back input.
             print("F1_TV_BACK step=\(attempt + 1) playerPresent=true")
             XCUIRemote.shared.press(.menu)
             let deadline = ProcessInfo.processInfo.systemUptime + 4
-            while ProcessInfo.processInfo.systemUptime < deadline, tvPlayerSnapshot() != nil {
+            while ProcessInfo.processInfo.systemUptime < deadline {
+                // Closing Info briefly drops both player AX representations before
+                // the transport returns. Only a positive catalog action can end
+                // this wait; a transient missing marker cannot skip later Menu inputs.
+                if detailHasReturned() { returned = true; break }
                 Thread.sleep(forTimeInterval: 0.25)
             }
+            if returned { break }
         }
         captureFullScreen("Native TV after Menu before detail focus verification")
+        XCTAssertTrue(returned, "Native Menu should return to a visible detail action, not an intermediate AVKit transition")
         XCTAssertNil(tvPlayerSnapshot(), "Native Menu should dismiss the identified AVKit player presentation")
         XCTAssertTrue(play.waitForExistence(timeout: 15), "The original detail Play action should reappear after native dismissal")
         XCTAssertTrue(play.isHittable, "The original detail Play action should be hittable after native dismissal")
