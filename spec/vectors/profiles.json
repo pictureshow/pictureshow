@@ -2743,7 +2743,7 @@
           {
             "Container": "ts",
             "Type": "Video",
-            "VideoCodec": "h264,hevc",
+            "VideoCodec": "hevc,h264",
             "AudioCodec": "eac3,ac3,aac,mp3",
             "Protocol": "hls",
             "EstimateContentLength": false,
@@ -3356,6 +3356,1942 @@
         ]
       },
       "note": "Explicit rich fixture: 4K HDR/DV decoder tuples, receiver passthrough and 120 Mbps cap. Full profile independently transcribed from the builder and existing assertions; compare every field."
+    },
+    {
+      "id": "profile-hevc-hardware-display",
+      "operation": "profile",
+      "input": {
+        "capabilities": {
+          "name": "Basic 1080p stick",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "Constrained Baseline",
+                "Baseline",
+                "Main",
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            },
+            {
+              "codec": "HEVC",
+              "profiles": [
+                "Main"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 1
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            }
+          ],
+          "display": {
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            },
+            {
+              "codec": "AC3",
+              "maxChannels": 6
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        }
+      },
+      "expected": {
+        "Name": "Basic 1080p stick",
+        "MaxStreamingBitrate": 200000000,
+        "MaxStaticBitrate": 200000000,
+        "DirectPlayProfiles": [
+          {
+            "Container": "mkv",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "mp4,m4v,mov",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "ts,mpegts",
+            "AudioCodec": "aac,ac3",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "avi",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "mpeg,mpg",
+            "AudioCodec": "ac3",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "flv",
+            "AudioCodec": "aac",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          }
+        ],
+        "TranscodingProfiles": [
+          {
+            "Container": "ts",
+            "Type": "Video",
+            "VideoCodec": "hevc,h264",
+            "AudioCodec": "aac,ac3",
+            "Protocol": "hls",
+            "EstimateContentLength": false,
+            "EnableMpegtsM2TsMode": false,
+            "TranscodeSeekInfo": "Auto",
+            "CopyTimestamps": false,
+            "Context": "Streaming",
+            "EnableSubtitlesInManifest": false,
+            "MaxAudioChannels": "2",
+            "MinSegments": 1,
+            "SegmentLength": 0,
+            "BreakOnNonKeyFrames": false,
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              }
+            ],
+            "EnableAudioVbrEncoding": true
+          }
+        ],
+        "ContainerProfiles": [],
+        "CodecProfiles": [
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "constrained baseline|baseline|main|high",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "42",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "h264"
+          },
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "main",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "123",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR|DOVIWithSDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "hevc"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "aac"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "6",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "ac3"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+          }
+        ],
+        "SubtitleProfiles": [
+          {
+            "Format": "subrip",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "srt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ass",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ssa",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "webm"
+          },
+          {
+            "Format": "mov_text",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "ttml",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "ts,mpegts"
+          },
+          {
+            "Format": "srt",
+            "Method": "External"
+          },
+          {
+            "Format": "subrip",
+            "Method": "External"
+          },
+          {
+            "Format": "ass",
+            "Method": "External"
+          },
+          {
+            "Format": "ssa",
+            "Method": "External"
+          },
+          {
+            "Format": "vtt",
+            "Method": "External"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "External"
+          },
+          {
+            "Format": "ttml",
+            "Method": "External"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Encode"
+          }
+        ]
+      }
+    },
+    {
+      "id": "profile-hevc-software",
+      "operation": "profile",
+      "input": {
+        "capabilities": {
+          "name": "Basic 1080p stick",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "Constrained Baseline",
+                "Baseline",
+                "Main",
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            },
+            {
+              "codec": "HEVC",
+              "profiles": [
+                "Main"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 1
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0,
+              "hardware": false
+            }
+          ],
+          "display": {
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            },
+            {
+              "codec": "AC3",
+              "maxChannels": 6
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        }
+      },
+      "expected": {
+        "Name": "Basic 1080p stick",
+        "MaxStreamingBitrate": 200000000,
+        "MaxStaticBitrate": 200000000,
+        "DirectPlayProfiles": [
+          {
+            "Container": "mkv",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "mp4,m4v,mov",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "ts,mpegts",
+            "AudioCodec": "aac,ac3",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "avi",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "mpeg,mpg",
+            "AudioCodec": "ac3",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "flv",
+            "AudioCodec": "aac",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          }
+        ],
+        "TranscodingProfiles": [
+          {
+            "Container": "ts",
+            "Type": "Video",
+            "VideoCodec": "h264,hevc",
+            "AudioCodec": "aac,ac3",
+            "Protocol": "hls",
+            "EstimateContentLength": false,
+            "EnableMpegtsM2TsMode": false,
+            "TranscodeSeekInfo": "Auto",
+            "CopyTimestamps": false,
+            "Context": "Streaming",
+            "EnableSubtitlesInManifest": false,
+            "MaxAudioChannels": "2",
+            "MinSegments": 1,
+            "SegmentLength": 0,
+            "BreakOnNonKeyFrames": false,
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              }
+            ],
+            "EnableAudioVbrEncoding": true
+          }
+        ],
+        "ContainerProfiles": [],
+        "CodecProfiles": [
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "constrained baseline|baseline|main|high",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "42",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "h264"
+          },
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "main",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "123",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR|DOVIWithSDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "hevc"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "aac"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "6",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "ac3"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+          }
+        ],
+        "SubtitleProfiles": [
+          {
+            "Format": "subrip",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "srt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ass",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ssa",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "webm"
+          },
+          {
+            "Format": "mov_text",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "ttml",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "ts,mpegts"
+          },
+          {
+            "Format": "srt",
+            "Method": "External"
+          },
+          {
+            "Format": "subrip",
+            "Method": "External"
+          },
+          {
+            "Format": "ass",
+            "Method": "External"
+          },
+          {
+            "Format": "ssa",
+            "Method": "External"
+          },
+          {
+            "Format": "vtt",
+            "Method": "External"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "External"
+          },
+          {
+            "Format": "ttml",
+            "Method": "External"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Encode"
+          }
+        ]
+      }
+    },
+    {
+      "id": "profile-hevc-undersized-for-display",
+      "operation": "profile",
+      "input": {
+        "capabilities": {
+          "name": "Basic 1080p stick",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "Constrained Baseline",
+                "Baseline",
+                "Main",
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            },
+            {
+              "codec": "HEVC",
+              "profiles": [
+                "Main"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 1
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            }
+          ],
+          "display": {
+            "maxWidth": 3840,
+            "maxHeight": 2160,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            },
+            {
+              "codec": "AC3",
+              "maxChannels": 6
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        }
+      },
+      "expected": {
+        "Name": "Basic 1080p stick",
+        "MaxStreamingBitrate": 200000000,
+        "MaxStaticBitrate": 200000000,
+        "DirectPlayProfiles": [
+          {
+            "Container": "mkv",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "mp4,m4v,mov",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "ts,mpegts",
+            "AudioCodec": "aac,ac3",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "avi",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "mpeg,mpg",
+            "AudioCodec": "ac3",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "flv",
+            "AudioCodec": "aac",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          }
+        ],
+        "TranscodingProfiles": [
+          {
+            "Container": "ts",
+            "Type": "Video",
+            "VideoCodec": "h264,hevc",
+            "AudioCodec": "aac,ac3",
+            "Protocol": "hls",
+            "EstimateContentLength": false,
+            "EnableMpegtsM2TsMode": false,
+            "TranscodeSeekInfo": "Auto",
+            "CopyTimestamps": false,
+            "Context": "Streaming",
+            "EnableSubtitlesInManifest": false,
+            "MaxAudioChannels": "2",
+            "MinSegments": 1,
+            "SegmentLength": 0,
+            "BreakOnNonKeyFrames": false,
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "3840",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "2160",
+                "IsRequired": false
+              }
+            ],
+            "EnableAudioVbrEncoding": true
+          }
+        ],
+        "ContainerProfiles": [],
+        "CodecProfiles": [
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "constrained baseline|baseline|main|high",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "42",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "h264"
+          },
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "main",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "123",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR|DOVIWithSDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "hevc"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "aac"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "6",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "ac3"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+          }
+        ],
+        "SubtitleProfiles": [
+          {
+            "Format": "subrip",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "srt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ass",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ssa",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "webm"
+          },
+          {
+            "Format": "mov_text",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "ttml",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "ts,mpegts"
+          },
+          {
+            "Format": "srt",
+            "Method": "External"
+          },
+          {
+            "Format": "subrip",
+            "Method": "External"
+          },
+          {
+            "Format": "ass",
+            "Method": "External"
+          },
+          {
+            "Format": "ssa",
+            "Method": "External"
+          },
+          {
+            "Format": "vtt",
+            "Method": "External"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "External"
+          },
+          {
+            "Format": "ttml",
+            "Method": "External"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Encode"
+          }
+        ]
+      }
+    },
+    {
+      "id": "profile-hevc-slow-hardware",
+      "operation": "profile",
+      "input": {
+        "capabilities": {
+          "name": "Basic 1080p stick",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "Constrained Baseline",
+                "Baseline",
+                "Main",
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            },
+            {
+              "codec": "HEVC",
+              "profiles": [
+                "Main"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 1
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 15.0
+            }
+          ],
+          "display": {
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            },
+            {
+              "codec": "AC3",
+              "maxChannels": 6
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        }
+      },
+      "expected": {
+        "Name": "Basic 1080p stick",
+        "MaxStreamingBitrate": 200000000,
+        "MaxStaticBitrate": 200000000,
+        "DirectPlayProfiles": [
+          {
+            "Container": "mkv",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "mp4,m4v,mov",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "ts,mpegts",
+            "AudioCodec": "aac,ac3",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "avi",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "mpeg,mpg",
+            "AudioCodec": "ac3",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "flv",
+            "AudioCodec": "aac",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          }
+        ],
+        "TranscodingProfiles": [
+          {
+            "Container": "ts",
+            "Type": "Video",
+            "VideoCodec": "h264,hevc",
+            "AudioCodec": "aac,ac3",
+            "Protocol": "hls",
+            "EstimateContentLength": false,
+            "EnableMpegtsM2TsMode": false,
+            "TranscodeSeekInfo": "Auto",
+            "CopyTimestamps": false,
+            "Context": "Streaming",
+            "EnableSubtitlesInManifest": false,
+            "MaxAudioChannels": "2",
+            "MinSegments": 1,
+            "SegmentLength": 0,
+            "BreakOnNonKeyFrames": false,
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              }
+            ],
+            "EnableAudioVbrEncoding": true
+          }
+        ],
+        "ContainerProfiles": [],
+        "CodecProfiles": [
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "constrained baseline|baseline|main|high",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "42",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "h264"
+          },
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "main",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "123",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "15",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR|DOVIWithSDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "hevc"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "aac"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "6",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "ac3"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+          }
+        ],
+        "SubtitleProfiles": [
+          {
+            "Format": "subrip",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "srt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ass",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ssa",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "webm"
+          },
+          {
+            "Format": "mov_text",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "ttml",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "ts,mpegts"
+          },
+          {
+            "Format": "srt",
+            "Method": "External"
+          },
+          {
+            "Format": "subrip",
+            "Method": "External"
+          },
+          {
+            "Format": "ass",
+            "Method": "External"
+          },
+          {
+            "Format": "ssa",
+            "Method": "External"
+          },
+          {
+            "Format": "vtt",
+            "Method": "External"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "External"
+          },
+          {
+            "Format": "ttml",
+            "Method": "External"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Encode"
+          }
+        ]
+      }
+    },
+    {
+      "id": "profile-hevc-insufficient-main-level",
+      "operation": "profile",
+      "input": {
+        "capabilities": {
+          "name": "Basic 1080p stick",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "Constrained Baseline",
+                "Baseline",
+                "Main",
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            },
+            {
+              "codec": "HEVC",
+              "profiles": [
+                "Main"
+              ],
+              "maxLevel": {
+                "major": 3,
+                "minor": 1
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            }
+          ],
+          "display": {
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            },
+            {
+              "codec": "AC3",
+              "maxChannels": 6
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        }
+      },
+      "expected": {
+        "Name": "Basic 1080p stick",
+        "MaxStreamingBitrate": 200000000,
+        "MaxStaticBitrate": 200000000,
+        "DirectPlayProfiles": [
+          {
+            "Container": "mkv",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "mp4,m4v,mov",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "ts,mpegts",
+            "AudioCodec": "aac,ac3",
+            "VideoCodec": "h264,hevc",
+            "Type": "Video"
+          },
+          {
+            "Container": "avi",
+            "AudioCodec": "aac,ac3,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "mpeg,mpg",
+            "AudioCodec": "ac3",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          },
+          {
+            "Container": "flv",
+            "AudioCodec": "aac",
+            "VideoCodec": "h264",
+            "Type": "Video"
+          }
+        ],
+        "TranscodingProfiles": [
+          {
+            "Container": "ts",
+            "Type": "Video",
+            "VideoCodec": "h264,hevc",
+            "AudioCodec": "aac,ac3",
+            "Protocol": "hls",
+            "EstimateContentLength": false,
+            "EnableMpegtsM2TsMode": false,
+            "TranscodeSeekInfo": "Auto",
+            "CopyTimestamps": false,
+            "Context": "Streaming",
+            "EnableSubtitlesInManifest": false,
+            "MaxAudioChannels": "2",
+            "MinSegments": 1,
+            "SegmentLength": 0,
+            "BreakOnNonKeyFrames": false,
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              }
+            ],
+            "EnableAudioVbrEncoding": true
+          }
+        ],
+        "ContainerProfiles": [],
+        "CodecProfiles": [
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "constrained baseline|baseline|main|high",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "42",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "h264"
+          },
+          {
+            "Type": "Video",
+            "Conditions": [
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoProfile",
+                "Value": "main",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoLevel",
+                "Value": "93",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoBitDepth",
+                "Value": "8",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Width",
+                "Value": "1920",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "Height",
+                "Value": "1080",
+                "IsRequired": false
+              },
+              {
+                "Condition": "LessThanEqual",
+                "Property": "VideoFramerate",
+                "Value": "60",
+                "IsRequired": false
+              },
+              {
+                "Condition": "EqualsAny",
+                "Property": "VideoRangeType",
+                "Value": "SDR|DOVIWithSDR",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "hevc"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "aac"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "6",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "ac3"
+          },
+          {
+            "Type": "VideoAudio",
+            "Conditions": [
+              {
+                "Condition": "LessThanEqual",
+                "Property": "AudioChannels",
+                "Value": "8",
+                "IsRequired": false
+              }
+            ],
+            "ApplyConditions": [],
+            "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+          }
+        ],
+        "SubtitleProfiles": [
+          {
+            "Format": "subrip",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "srt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ass",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "ssa",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "mkv"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "webm"
+          },
+          {
+            "Format": "mov_text",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "ttml",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Embed",
+            "Container": "mp4,m4v,mov"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Embed",
+            "Container": "ts,mpegts"
+          },
+          {
+            "Format": "srt",
+            "Method": "External"
+          },
+          {
+            "Format": "subrip",
+            "Method": "External"
+          },
+          {
+            "Format": "ass",
+            "Method": "External"
+          },
+          {
+            "Format": "ssa",
+            "Method": "External"
+          },
+          {
+            "Format": "vtt",
+            "Method": "External"
+          },
+          {
+            "Format": "webvtt",
+            "Method": "External"
+          },
+          {
+            "Format": "ttml",
+            "Method": "External"
+          },
+          {
+            "Format": "pgssub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvdsub",
+            "Method": "Encode"
+          },
+          {
+            "Format": "dvbsub",
+            "Method": "Encode"
+          }
+        ]
+      }
     }
   ]
 }
