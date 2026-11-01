@@ -2265,6 +2265,149 @@
       },
       "expected": 0,
       "source": "web/core/src/parity.test.ts; zero is a valid credits boundary"
+    },
+    {
+      "id": "detail.empty.successful-empty-season",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.empty.successful-empty-series",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Series",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.empty.dependent-failure",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": false,
+        "readFailed": true,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.pending-read",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": true,
+        "readSucceeded": false,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.refresh-with-retained-success",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": true,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.unread-container",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": false,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.has-episodes",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 1,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.has-seasons",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Series",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 1
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.movie",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Movie",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.no-item",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": null,
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.failed-over-retained-success",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": true,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
     }
   ]
 }

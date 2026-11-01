@@ -56,6 +56,16 @@ class ApplicationParityVectorsTest {
             try {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
+                    "detail-empty" -> JsonPrimitive(
+                        showDetailEmptyState(
+                            input["itemType"]?.jsonPrimitive?.contentOrNull,
+                            input.getValue("loading").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("readSucceeded").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("readFailed").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("episodeCount").jsonPrimitive.intOrNull!!,
+                            input.getValue("seasonCount").jsonPrimitive.intOrNull!!
+                        )
+                    )
                     "settings" -> settings(input)
                     "validate-bitrate" -> buildJsonObject {
                         put("valid", runCatching { PlaybackPreferences.validateBitrate(input.nullableInt("bitrateMbps")) }.isSuccess)
