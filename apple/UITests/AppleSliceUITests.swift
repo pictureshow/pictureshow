@@ -1249,15 +1249,55 @@ final class AppleSliceUITests: XCTestCase {
         app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["episodeID"])
         app.launch()
         let play = try zeroPositionPlayAction()
-        reveal(play); activate(play)
+        reveal(play)
+        let playRequestedAt = ProcessInfo.processInfo.systemUptime
+        activate(play)
         let duration = try XCTUnwrap(config["episodeRunSeconds"].flatMap(Int.init))
         XCTAssertGreaterThan(duration, 20)
-        let credits = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: duration - 14, maximum: duration - 10,
-                                                        timeout: TimeInterval(duration + 20), metric: "tv_contextual_credits",
-                                                        requiredTitle: config["episodeName"], revealNativeHUD: false))
-        let exitDeadline = ProcessInfo.processInfo.systemUptime + TimeInterval(duration - credits.seconds - 2)
-        // Do not reveal the transport again: AVKit shows contextualActions only
-        // while its transport is hidden. Leave real playback running throughout.
+        let originalTitle = try XCTUnwrap(config["episodeName"])
+        let nextTitle = try XCTUnwrap(config["nextEpisodeName"])
+        let anchor = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 2, maximum: 12,
+                                                       timeout: 30, metric: "tv_contextual_playback_anchor",
+                                                       requiredTitle: originalTitle))
+        let exitDeadline = min(playRequestedAt + TimeInterval(duration - 2),
+                               ProcessInfo.processInfo.systemUptime + TimeInterval(duration - anchor.seconds - 2))
+        let prefix = "Next: \(nextTitle) ("
+        let nextControl = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND identifier != %@", prefix, "playNextTransport")).firstMatch
+        let cancelControl = app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Cancel next", "cancelNextTransport")).firstMatch
+        func countdown(_ label: String) -> Int? {
+            guard label.hasPrefix(prefix), label.hasSuffix(")"),
+                  let open = label.lastIndex(of: "("),
+                  let value = Int(label[label.index(after: open)..<label.index(before: label.endIndex)]),
+                  (3...15).contains(value) else { return nil }
+            return value
+        }
+        // Hidden AVKit HUD clocks retain their last AX value. Wait for the
+        // actual desired contextual surface, without revealing the transport.
+        var observedCountdown: Int?
+        while ProcessInfo.processInfo.systemUptime < exitDeadline {
+            if let snapshot = tvPlayerSnapshot(), snapshot.first(identifier: "pictureshowNativePlayer") != nil,
+               snapshot.nodes.contains(where: { $0.label == originalTitle }) {
+                let next = snapshot.nodes.filter {
+                    $0.elementType == .button && $0.isEnabled && $0.identifier != "playNextTransport"
+                        && countdown($0.label) != nil
+                }
+                let cancel = snapshot.nodes.filter {
+                    $0.elementType == .button && $0.isEnabled && $0.identifier != "cancelNextTransport"
+                        && $0.label == "Cancel next"
+                }
+                if next.count == 1, cancel.count == 1, nextControl.isHittable, cancelControl.isHittable {
+                    observedCountdown = countdown(next[0].label)
+                    print("F2_TV_CONTEXTUAL_SURFACE next=\(next[0].label) cancel=\(cancel[0].label) countdown=\(observedCountdown!) nextFrame=\(next[0].frame) cancelFrame=\(cancel[0].frame) snapshot=true")
+                    break
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        guard observedCountdown != nil else {
+            diagnoseTVManualNext(step: "missing contextual Next and Cancel")
+            XCTFail("The original episode must expose hittable contextual Next and Cancel before its playback deadline")
+            return
+        }
         captureFullScreen("Native TV contextual credits title countdown and Cancel")
         XCTAssertLessThan(ProcessInfo.processInfo.systemUptime, exitDeadline, "Capture while the original credits are still playing")
         // The visual assertion is now captured during playback. Pause with the
