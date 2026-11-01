@@ -55,7 +55,9 @@ struct PlayerScreen: View {
             #endif
             if session.waitingForVideo || session.error != nil || session.reportError != nil {
                 VStack(spacing: 20) {
-                    if session.waitingForVideo { ProgressView(session.status) }
+                    if session.waitingForVideo {
+                        ProgressView(session.status).accessibilityIdentifier("playbackWaiting")
+                    }
                     if let error = session.error { Text(error).foregroundStyle(.orange) }
                     if let error = session.reportError { Text(error) }
                     Button("Back to details", action: finish).accessibilityIdentifier("loadingBack")
