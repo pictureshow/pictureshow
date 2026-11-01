@@ -1235,11 +1235,11 @@ final class AppleSliceUITests: XCTestCase {
         let duration = try XCTUnwrap(config["episodeRunSeconds"].flatMap(Int.init))
         XCTAssertGreaterThan(duration, 20)
         let credits = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: duration - 14, maximum: duration - 10,
-                                                        timeout: TimeInterval(duration + 20), metric: "tv_contextual_credits"))
+                                                        timeout: TimeInterval(duration + 20), metric: "tv_contextual_credits",
+                                                        requiredTitle: config["episodeName"], revealNativeHUD: false))
         let exitDeadline = ProcessInfo.processInfo.systemUptime + TimeInterval(duration - credits.seconds - 2)
         // Do not reveal the transport again: AVKit shows contextualActions only
         // while its transport is hidden. Leave real playback running throughout.
-        Thread.sleep(forTimeInterval: 6)
         captureFullScreen("Native TV contextual credits title countdown and Cancel")
         XCTAssertLessThan(ProcessInfo.processInfo.systemUptime, exitDeadline, "Capture and leave before automatic continuation")
         leaveNativeTVPlayer(returningTo: play)
@@ -1781,14 +1781,14 @@ final class AppleSliceUITests: XCTestCase {
     /// Every observation still comes from the current immutable native tree.
     private func waitForTVPlayerClock(identifier: String, minimum: Int, maximum: Int? = nil,
                                       timeout: TimeInterval, metric: String, expectedMethod: String? = nil,
-                                      requiredTitle: String? = nil) -> TVClockObservation? {
+                                      requiredTitle: String? = nil, revealNativeHUD: Bool = true) -> TVClockObservation? {
         let started = ProcessInfo.processInfo.systemUptime
         let deadline = started + timeout
         var lastReveal = started - 2
         var lastClock = "<not exposed>"
         while ProcessInfo.processInfo.systemUptime < deadline {
             let now = ProcessInfo.processInfo.systemUptime
-            if identifier == "AXElapsedTime", now - lastReveal >= 2 {
+            if revealNativeHUD, identifier == "AXElapsedTime", now - lastReveal >= 2 {
                 XCUIRemote.shared.press(.up)
                 lastReveal = ProcessInfo.processInfo.systemUptime
             }
@@ -2076,11 +2076,20 @@ final class AppleSliceUITests: XCTestCase {
         }
         var returned = false
         for attempt in 0..<3 {
+            // A disappearing AX marker can be AVKit's panel transition, not a
+            // completed dismissal. Wait for a positive surface before another Menu.
+            let settleDeadline = ProcessInfo.processInfo.systemUptime + 1.5
+            while tvPlayerSnapshot() == nil && !detailHasReturned()
+                    && ProcessInfo.processInfo.systemUptime < settleDeadline {
+                Thread.sleep(forTimeInterval: 0.15)
+            }
+            if detailHasReturned() { returned = true; break }
+            guard tvPlayerSnapshot() != nil else { break }
             // The detail opener is obscured by AVKit until Menu dismisses it.
             // Resolving its hittability/focus here can fail before the Back input.
             print("F1_TV_BACK step=\(attempt + 1) playerPresent=true")
             XCUIRemote.shared.press(.menu)
-            let deadline = ProcessInfo.processInfo.systemUptime + 4
+            let deadline = ProcessInfo.processInfo.systemUptime + 1.5
             while ProcessInfo.processInfo.systemUptime < deadline {
                 // Closing Info briefly drops both player AX representations before
                 // the transport returns. Only a positive catalog action can end

@@ -279,8 +279,18 @@ struct NativePlayer: UIViewControllerRepresentable {
             continuationTransportActions.first?.title = "Play next: \(next.name) (\(countdown))"
             #endif
         }
-        func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool { close(); return false }
-        func playerViewController(_ controller: AVPlayerViewController, willTransitionToVisibilityOfTransportBar visible: Bool, with coordinator: AVPlayerViewControllerAnimationCoordinator) { Task { @MainActor in session.controlsVisible = visible } }
+        func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool {
+            #if DEBUG
+            Logger(subsystem: "app.pictureshow", category: "Playback").debug("Native dismissal requested ticks=\(self.session.positionTicks)")
+            #endif
+            close(); return false
+        }
+        func playerViewController(_ controller: AVPlayerViewController, willTransitionToVisibilityOfTransportBar visible: Bool, with coordinator: AVPlayerViewControllerAnimationCoordinator) {
+            #if DEBUG
+            Logger(subsystem: "app.pictureshow", category: "Playback").debug("Native transport visibility=\(visible) ticks=\(self.session.positionTicks)")
+            #endif
+            Task { @MainActor in session.controlsVisible = visible }
+        }
         func playerViewController(_ controller: AVPlayerViewController, timeToSeekAfterUserNavigatedFrom oldTime: CMTime, to targetTime: CMTime) -> CMTime { Task { @MainActor in session.nativeSeekBegan(targetTime.seconds) }; return targetTime }
         #endif
     }
