@@ -996,7 +996,18 @@ final class AppleSliceUITests: XCTestCase {
     /// AVKit exposes its native tab row through AVInfoMenuCollection. The cells can have no AX
     /// labels, so move Down into the row, then Right across its live cells to the custom last tab.
     private func openNativeTVInfoTab() {
-        if app.staticTexts["playbackMethod"].exists, app.staticTexts["playbackMethod"].isHittable { return }
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "The identified native player should contain the custom info surface")
+        let method = app.staticTexts["playbackMethod"]
+        let position = app.staticTexts["playbackPosition"]
+        func infoContentIsVisible() -> Bool {
+            nativePlayer.exists && method.exists && method.isHittable && position.exists && position.isHittable
+                && nativePlayer.frame.contains(method.frame) && nativePlayer.frame.contains(position.frame)
+        }
+        if infoContentIsVisible() {
+            print("F1_AX tv_info_content_visible step=already-visible method=\(method.label) position=\(position.label)")
+            return
+        }
         XCUIRemote.shared.press(.up)
         let collection = app.collectionViews["AVInfoMenuCollection"]
         XCTAssertTrue(collection.waitForExistence(timeout: 10), "AVKit should expose its native info-menu collection")
@@ -1016,27 +1027,31 @@ final class AppleSliceUITests: XCTestCase {
             return focusedIndex
         }
         var focusedIndex = cellTrace("before-down")
+        var contentVisible = infoContentIsVisible()
         if focusedIndex == nil {
             XCUIRemote.shared.press(.down)
             Thread.sleep(forTimeInterval: 0.2)
             focusedIndex = cellTrace("after-down")
+            contentVisible = infoContentIsVisible()
+            print("F1_AX tv_info_content_visible step=down visible=\(contentVisible) method=\(method.label) position=\(position.label)")
         }
-        for step in 0..<count where !target.hasFocus {
+        for step in 0..<count where !contentVisible && !target.hasFocus {
             let directionRight = focusedIndex.map { $0 < targetIndex } ?? true
             XCUIRemote.shared.press(directionRight ? .right : .left)
             Thread.sleep(forTimeInterval: 0.2)
             focusedIndex = cellTrace("horizontal-\(step + 1)-\(directionRight ? "right" : "left")")
+            contentVisible = infoContentIsVisible()
+            print("F1_AX tv_info_content_visible step=horizontal-\(step + 1) visible=\(contentVisible) method=\(method.label) position=\(position.label)")
         }
-        XCTAssertTrue(target.hasFocus, "Remote Right/Left should focus the final custom AVKit info tab")
-        capture("Native TV focused custom info tab before selection")
-        XCUIRemote.shared.press(.select)
-        let method = app.staticTexts["playbackMethod"]
-        let position = app.staticTexts["playbackPosition"]
-        XCTAssertTrue(method.waitForExistence(timeout: 15), "Selecting the custom info tab should expose Pictureshow playback status")
-        XCTAssertTrue(method.isHittable, "Playback status must be visible after selecting the custom info tab")
-        XCTAssertTrue(position.waitForExistence(timeout: 10), "The Pictureshow info tab should expose the playback clock")
-        XCTAssertTrue(position.isHittable, "Playback position must be visible after selecting the custom info tab")
-        print("F1_AX tv_info_tab_visible_title=Pictureshow axLabel=unexposed focusedCellHasFocus=\(target.hasFocus) targetFrame=\(target.frame)")
+        if !contentVisible {
+            XCTAssertTrue(target.hasFocus, "The final custom AVKit cell must be focused or reveal the visible custom-panel content")
+            capture("Native TV focused custom info tab before selection")
+            XCUIRemote.shared.press(.select)
+        }
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in infoContentIsVisible() }, object: method)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 15), .completed,
+                       "Remote navigation or activation should expose the app-owned method and clock inside the native player")
+        print("F1_AX tv_info_content_visible final=true method=\(method.label) position=\(position.label) focusedCellHasFocus=\(target.hasFocus) axCellLabelUnexposed=true")
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
         XCUIRemote.shared.press(.up)
