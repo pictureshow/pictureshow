@@ -1,0 +1,331 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Legitimate LLC.
+import XCTest
+import Foundation
+import AVFoundation
+import PictureshowCore
+@testable import Pictureshow_iOS
+
+/// Real URLSession transport, isolated to an in-process fixture. Held responses are
+/// cancelled by URLSession; no public host or actual network connection is used.
+private final class ExternalSubtitleHTTP: URLProtocol {
+    enum Delivery { case valid, http500, malformed, held, declaredOversize, streamedOversize }
+    struct Recorded { let path: String; let body: [String: Any] }
+    private static let lock = NSLock()
+    private static var delivery: Delivery = .valid
+    private static var recorded: [Recorded] = []
+    private static var cancelled: [String] = []
+    private static var held: [ObjectIdentifier: ExternalSubtitleHTTP] = [:]
+    static let caption = Data("WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nSelected caption\n".utf8)
+    static let source: [String: Any] = [
+        "Id": "source", "Container": "mp4", "SupportsDirectPlay": true,
+        "DefaultAudioStreamIndex": 1, "DefaultSubtitleStreamIndex": 4,
+        "MediaStreams": [
+            ["Index": 0, "Type": "Video", "Codec": "h264"],
+            ["Index": 1, "Type": "Audio", "Codec": "aac"],
+            ["Index": 4, "Type": "Subtitle", "Codec": "vtt", "IsExternal": true,
+             "DeliveryMethod": "External", "DeliveryUrl": "/captions/selected.vtt"],
+            ["Index": 5, "Type": "Subtitle", "Codec": "vtt", "IsExternal": true,
+             "DeliveryMethod": "External", "DeliveryUrl": "/captions/unselected.vtt"]
+        ]
+    ]
+    static func reset(_ value: Delivery) { lock.lock(); defer { lock.unlock() }; delivery = value; recorded = []; cancelled = []; held = [:] }
+    static var requests: [Recorded] { lock.lock(); defer { lock.unlock() }; return recorded }
+    static var stoppedPaths: [String] { lock.lock(); defer { lock.unlock() }; return cancelled }
+    static func configuration() -> URLSessionConfiguration {
+        let value = URLSessionConfiguration.ephemeral
+        value.protocolClasses = [ExternalSubtitleHTTP.self]
+        return value
+    }
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "media.example.test" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    private static func body(_ request: URLRequest) -> [String: Any] {
+        var data = request.httpBody ?? Data()
+        if let stream = request.httpBodyStream {
+            stream.open(); defer { stream.close() }
+            var bytes = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&bytes, maxLength: bytes.count)
+                if count <= 0 { break }; data.append(bytes, count: count)
+            }
+        }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
+    override func startLoading() {
+        let path = request.url!.path
+        let body = Self.body(request)
+        Self.lock.lock()
+        Self.recorded.append(Recorded(path: path, body: body))
+        let delivery = Self.delivery
+        if path.hasPrefix("/captions/"), case .held = delivery { Self.held[ObjectIdentifier(self)] = self; Self.lock.unlock(); return }
+        Self.lock.unlock()
+        if path.hasPrefix("/captions/") {
+            switch delivery {
+            case .http500: respond(status: 500, data: Data("Unavailable".utf8))
+            case .malformed: respond(status: 200, data: Data("WEBVTT\n\n00:broken --> invalid\nMalformed".utf8))
+            case .declaredOversize: respond(status: 200, data: Data(), headers: ["Content-Length": String(TextSubtitles.maximumBytes + 1)])
+            case .streamedOversize: respond(status: 200, data: Data(repeating: 32, count: TextSubtitles.maximumBytes + 1))
+            case .valid: respond(status: 200, data: Self.caption)
+            case .held: break
+            }
+            return
+        }
+        let value: [String: Any]
+        if path.hasSuffix("PlaybackInfo") { value = ["MediaSources": [Self.source], "PlaySessionId": "subtitle-viewing"] }
+        else if path.hasSuffix("/Items/movie") { value = ["Id": "movie", "Type": "Movie", "Chapters": []] }
+        else if path.contains("MediaSegments") { value = ["Items": []] }
+        else { value = [:] }
+        respond(status: 200, data: try! JSONSerialization.data(withJSONObject: value))
+    }
+    private func respond(status: Int, data: Data, headers: [String: String] = [:]) {
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!, cacheStoragePolicy: .notAllowed)
+        if !data.isEmpty { client?.urlProtocol(self, didLoad: data) }
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        Self.cancelled.append(request.url!.path)
+        Self.held.removeValue(forKey: ObjectIdentifier(self))
+    }
+}
+
+/// The test chooses when optional retry time advances. At the limit, the retry
+/// stays suspended until cleanup; no wall-clock sleep or AV clock is advanced.
+@MainActor private final class SubtitleRetryClock {
+    var delays: [Int64] = []
+    var elapsedMs: Int64 = 0
+    let stopAtMs: Int64
+    private var waiters: [CheckedContinuation<Void, Error>] = []
+    init(stopAtMs: Int64 = 242_000) { self.stopAtMs = stopAtMs }
+    func sleep(_ milliseconds: Int64) async throws {
+        delays.append(milliseconds); elapsedMs += milliseconds
+        if elapsedMs < stopAtMs { await Task.yield(); try Task.checkCancellation(); return }
+        try await withCheckedThrowingContinuation { waiters.append($0) }
+    }
+    func finish() { let pending = waiters; waiters = []; pending.forEach { $0.resume(throwing: CancellationError()) } }
+}
+
+/// Deliberately ignores cancellation, so a late completion exercises the loader's
+/// generation/cancellation checks instead of relying on a cooperative transport.
+@MainActor private final class LateSubtitleFetch {
+    private(set) var pending: [String: CheckedContinuation<Data, Error>] = [:]
+    func fetch(_ url: URL) async throws -> Data { try await withCheckedThrowingContinuation { pending[url.path] = $0 } }
+    func complete(_ path: String, text: String) { pending.removeValue(forKey: path)?.resume(returning: Data(text.utf8)) }
+    func finish() { let values = pending.values; pending = [:]; values.forEach { $0.resume(throwing: CancellationError()) } }
+}
+
+private final class SubtitleInertPlayer: AVPlayer {
+    private(set) var replacements = 0
+    private(set) var seekTargets: [CMTime] = []
+    override func replaceCurrentItem(with item: AVPlayerItem?) { if item != nil { replacements += 1 } }
+    override func currentTime() -> CMTime { .invalid }
+    override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime, completionHandler: @escaping (Bool) -> Void) {
+        seekTargets.append(time); completionHandler(true)
+    }
+}
+
+@MainActor final class ExternalSubtitleTests: XCTestCase {
+    private func asset(_ name: String = "selected", originMs: Int64 = 0) -> ExternalTextSubtitles.Asset {
+        .init(id: name, url: URL(string: "https://media.example.test/captions/\(name).vtt")!, format: "vtt", originMs: originMs)
+    }
+    private func makeLoader(clock: SubtitleRetryClock) -> ExternalTextSubtitles {
+        ExternalTextSubtitles(fetch: { try await ExternalTextSubtitles.fetchBounded($0, configuration: ExternalSubtitleHTTP.configuration()) }, sleep: { try await clock.sleep($0) })
+    }
+    private func eventually(_ message: String, _ predicate: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while ContinuousClock.now < deadline {
+            if predicate() { return }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTFail(message, file: file, line: line)
+    }
+    private var captionRequests: [ExternalSubtitleHTTP.Recorded] { ExternalSubtitleHTTP.requests.filter { $0.path.hasPrefix("/captions/") } }
+
+    func testOnlySelectedTrackLoadsAndOffTrackChangeReleaseCancelHTTP() async throws {
+        ExternalSubtitleHTTP.reset(.held)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        loader.select(nil)
+        await Task.yield()
+        XCTAssertTrue(captionRequests.isEmpty, "Off must not prefetch optional tracks")
+        loader.select(asset())
+        try await eventually("Selected request did not reach URLSession") { self.captionRequests.count == 1 }
+        XCTAssertEqual(captionRequests.map(\.path), ["/captions/selected.vtt"])
+        loader.select(asset("other"))
+        try await eventually("Track change must cancel the old HTTP request and request only the new selection") {
+            ExternalSubtitleHTTP.stoppedPaths.contains("/captions/selected.vtt") && self.captionRequests.count == 2
+        }
+        XCTAssertFalse(captionRequests.contains { $0.path.contains("unselected") })
+        loader.select(nil)
+        try await eventually("Off must cancel the active HTTP request") { ExternalSubtitleHTTP.stoppedPaths.contains("/captions/other.vtt") }
+        XCTAssertTrue(loader.cues.isEmpty); XCTAssertNil(loader.text(atFullMediaMs: 121_000))
+        loader.select(asset("third"))
+        try await eventually("Third selected request did not begin") { self.captionRequests.count == 3 }
+        loader.release()
+        try await eventually("Release must cancel the selected request") { ExternalSubtitleHTTP.stoppedPaths.contains("/captions/third.vtt") }
+        XCTAssertNil(loader.selected); XCTAssertFalse(loader.loading); XCTAssertTrue(loader.cues.isEmpty)
+    }
+
+    func testLateResponsesCannotPublishAfterTrackOffOrRelease() async throws {
+        let transport = LateSubtitleFetch()
+        let loader = ExternalTextSubtitles(fetch: { try await transport.fetch($0) })
+        defer { loader.release(); transport.finish() }
+        for action in ["track", "off", "release"] {
+            loader.select(asset("old-" + action))
+            try await eventually("Old response was not held") { transport.pending["/captions/old-\(action).vtt"] != nil }
+            if action == "track" {
+                loader.select(asset("new"))
+                try await eventually("New response was not held") { transport.pending["/captions/new.vtt"] != nil }
+                transport.complete("/captions/new.vtt", text: "WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nNew selection")
+                try await eventually("New selected cues did not publish") { loader.text(atFullMediaMs: 121_000) == "New selection" }
+            } else if action == "off" { loader.select(nil) } else { loader.release() }
+            transport.complete("/captions/old-\(action).vtt", text: "WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nStale selection")
+            // A queued uncooperative completion must get an opportunity to execute.
+            try await Task.sleep(for: .milliseconds(20))
+            XCTAssertEqual(loader.text(atFullMediaMs: 121_000), action == "track" ? "New selection" : nil)
+            if action != "track" { XCTAssertTrue(loader.cues.isEmpty); XCTAssertNil(loader.selected) }
+        }
+    }
+
+    func testOffOnAndLocalSeekReuseParsedFullFileButReleaseEvictsIt() async throws {
+        ExternalSubtitleHTTP.reset(.valid)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        loader.select(asset())
+        try await eventually("Full-file cues did not load") { !loader.loading && !loader.cues.isEmpty }
+        XCTAssertEqual(loader.text(atFullMediaMs: 120_000), "Selected caption")
+        XCTAssertNil(loader.text(atFullMediaMs: 125_000))
+        loader.select(nil); loader.select(asset())
+        XCTAssertEqual(loader.text(atFullMediaMs: 121_000), "Selected caption")
+        XCTAssertNil(loader.text(atFullMediaMs: 0)); XCTAssertEqual(loader.text(atFullMediaMs: 124_999), "Selected caption")
+        XCTAssertEqual(captionRequests.count, 1, "Off/on and local timeline queries must reuse parsed cues")
+        loader.release(); loader.select(asset())
+        try await eventually("A released media period must not retain its cache") { self.captionRequests.count == 2 && !loader.loading }
+    }
+
+    func testRebasedTextUsesExtractionOriginWhileFullFileRetainsAuthoredTime() async throws {
+        let loader = ExternalTextSubtitles(fetch: { _ in Data("WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nRebased".utf8) })
+        defer { loader.release() }
+        loader.select(asset("rebased", originMs: 120_000))
+        try await eventually("Rebased cues did not load") { !loader.loading }
+        XCTAssertNil(loader.text(atFullMediaMs: 2_000))
+        XCTAssertEqual(loader.text(atFullMediaMs: 122_000), "Rebased")
+        XCTAssertNil(loader.text(atFullMediaMs: 124_000))
+        loader.select(asset("full", originMs: 0))
+        try await eventually("Full-file cues did not load") { !loader.loading }
+        XCTAssertEqual(loader.text(atFullMediaMs: 2_000), "Rebased")
+        XCTAssertNil(loader.text(atFullMediaMs: 122_000))
+    }
+
+    private func readySession(loader: ExternalTextSubtitles) async throws -> (PlaybackSession, SubtitleInertPlayer) {
+        let client = JellyfinClient(deviceID: "external-subtitle-test", session: URLSession(configuration: ExternalSubtitleHTTP.configuration()))
+        let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "external-subtitle-test")
+        var item = MediaItem(id: "movie", name: "Fixture movie", type: "Movie")
+        item.mediaSources = [try JSONDecoder().decode(MediaSource.self, from: JSONSerialization.data(withJSONObject: ExternalSubtitleHTTP.source))]
+        let player = SubtitleInertPlayer()
+        let session = PlaybackSession(client: client, account: account, item: item, player: player, externalSubtitles: loader)
+        try await session.prepare(startTicks: 0, audio: nil, subtitle: 4)
+        session.ready(version: 0)
+        try await eventually("Optional selected subtitles must not gate real session readiness or Start") {
+            !session.waitingForVideo && ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing") }
+        }
+        return (session, player)
+    }
+
+    func testHTTP500RetriesForVirtual242SecondsWithoutGatingAVReadyOrStart() async throws {
+        try await assertOptionalFailureDoesNotGateAV(.http500)
+    }
+    func testUnresolvedSelectedHTTPDoesNotGateSessionReadyStartAndStopCancelsIt() async throws {
+        ExternalSubtitleHTTP.reset(.held)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, player) = try await readySession(loader: loader)
+        try await eventually("Selected HTTP request was not held") { self.captionRequests.count == 1 }
+        XCTAssertTrue(loader.loading); XCTAssertTrue(loader.cues.isEmpty)
+        XCTAssertTrue(clock.delays.isEmpty, "An unresolved request is distinct from a failed retry")
+        XCTAssertFalse(session.waitingForVideo); XCTAssertNil(session.error); XCTAssertFalse(session.terminal)
+        XCTAssertEqual(player.replacements, 1)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("/Sessions/Playing") }.count, 1)
+        await session.stop()
+        try await eventually("Stopping the viewing must cancel its unresolved optional request") {
+            ExternalSubtitleHTTP.stoppedPaths.contains("/captions/selected.vtt")
+        }
+        XCTAssertNil(loader.selected); XCTAssertTrue(loader.cues.isEmpty)
+    }
+    func testMalformedSelectedTextRetriesWithoutConsumingAVFailureBudget() async throws {
+        try await assertOptionalFailureDoesNotGateAV(.malformed)
+    }
+    private func assertOptionalFailureDoesNotGateAV(_ failure: ExternalSubtitleHTTP.Delivery) async throws {
+        ExternalSubtitleHTTP.reset(failure)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, player) = try await readySession(loader: loader)
+        try await eventually("Optional retry clock did not cross the 242-second held-failure interval") { clock.elapsedMs >= 242_000 }
+        XCTAssertEqual(Array(clock.delays.prefix(12)), [1_000,2_000,3_000,4_000,5_000,6_000,7_000,8_000,9_000,10_000,10_000,10_000])
+        XCTAssertTrue(loader.unavailable); XCTAssertTrue(loader.loading)
+        XCTAssertGreaterThanOrEqual(captionRequests.count, 29)
+        XCTAssertFalse(captionRequests.contains { $0.path.contains("unselected") })
+        XCTAssertFalse(session.waitingForVideo); XCTAssertNil(session.error); XCTAssertNil(session.reportError)
+        XCTAssertFalse(session.terminal); XCTAssertEqual(session.status, "Direct play")
+        XCTAssertEqual(player.replacements, 1, "Optional text failure must not replace or fallback the A/V asset")
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 1)
+        XCTAssertFalse(ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing/Stopped") || $0.path.contains("UserPlayedItems") })
+        let negotiation = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("PlaybackInfo") })
+        XCTAssertEqual((negotiation.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, -1, "A/V must negotiate captions Off")
+        XCTAssertEqual(session.decision?.subtitleIndex, 4, "The selected optional track remains the user-facing/reporting choice")
+        let start = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("/Sessions/Playing") })
+        XCTAssertEqual((start.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, 4)
+        XCTAssertFalse(session.showStartupWaitHint(version: 0), "Ready A/V must reject a late startup deadline")
+        await session.changeTracks(audio: session.decision?.audioIndex, subtitle: -1)
+        let countAtOff = captionRequests.count
+        await Task.yield()
+        XCTAssertNil(loader.selected); XCTAssertNil(session.subtitleCue)
+        XCTAssertEqual(captionRequests.count, countAtOff)
+        XCTAssertEqual(player.replacements, 1, "Off must be a local text change")
+        await session.stop()
+    }
+
+    func testSessionTextOffOnAndSeekDoNotRenegotiateOrReplaceVideo() async throws {
+        ExternalSubtitleHTTP.reset(.valid)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, player) = try await readySession(loader: loader)
+        try await eventually("Selected cues did not load") { !loader.loading }
+        let playbackRequests = ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count
+        await session.changeTracks(audio: session.decision?.audioIndex, subtitle: -1)
+        await session.changeTracks(audio: session.decision?.audioIndex, subtitle: 4)
+        session.seek(toTicks: 121_000 * 10_000)
+        try await eventually("Local seek did not publish") { session.positionTicks == 121_000 * 10_000 }
+        XCTAssertEqual(loader.text(atFullMediaMs: session.positionTicks / 10_000), "Selected caption")
+        XCTAssertEqual(captionRequests.count, 1)
+        XCTAssertEqual(player.replacements, 1)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, playbackRequests)
+        XCTAssertNil(session.error)
+        await session.stop()
+        XCTAssertTrue(loader.cues.isEmpty); XCTAssertNil(loader.selected)
+    }
+
+    func testDeclared16MiBOverflowIsRejectedBeforeCaptionParsing() async throws {
+        ExternalSubtitleHTTP.reset(.declaredOversize)
+        do {
+            _ = try await ExternalTextSubtitles.fetchBounded(asset().url, configuration: ExternalSubtitleHTTP.configuration())
+            XCTFail("An advertised optional caption larger than 16 MiB must fail")
+        } catch { XCTAssertEqual(captionRequests.count, 1) }
+    }
+
+    func testUnannounced16MiBStreamOverflowIsIsolatedToOptionalText() async throws {
+        ExternalSubtitleHTTP.reset(.streamedOversize)
+        let completed = expectation(description: "Bounded optional subtitle stream rejects overflow")
+        let task = Task {
+            do {
+                _ = try await ExternalTextSubtitles.fetchBounded(asset().url, configuration: ExternalSubtitleHTTP.configuration())
+                XCTFail("A streamed optional caption larger than 16 MiB must fail")
+            } catch { }
+            completed.fulfill()
+        }
+        await fulfillment(of: [completed], timeout: 2)
+        task.cancel()
+        await task.value
+        XCTAssertEqual(captionRequests.count, 1)
+    }
+}
