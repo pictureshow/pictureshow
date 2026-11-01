@@ -641,7 +641,7 @@ final class AppleSliceUITests: XCTestCase {
             if let cue = config["directSubtitleCueSeconds"].flatMap(Int.init) {
                 XCTAssertTrue(waitForPlaybackClock(position, minimum: cue, timeout: TimeInterval(cue + 30), metric: "touch_positive_subtitle_cue"))
                 XCTAssertGreaterThanOrEqual(seconds(position.label), cue)
-                capture("Touch positive subtitle cue at \(cue)s")
+                capture("Touch selected subtitle playback after track apply")
             }
             #endif
         }
@@ -791,8 +791,9 @@ final class AppleSliceUITests: XCTestCase {
         if rootLabels.contains(where: { app.buttons.matching(NSPredicate(format: "label == %@", $0)).firstMatch.exists }) { return true }
         return app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "item-")).firstMatch.exists
     }
-    /// AVKit hides its overlay after a short idle interval. Keep revealing it while observing a
-    /// non-empty clock; a missing or empty accessibility label can never count as progress.
+    /// Reveal controls only while the clock itself is missing or empty. Tapping the center of an
+    /// already-present AVKit player can pause playback, so a clock below the target is never a
+    /// reason to synthesize a reveal tap.
     private func waitForPlaybackClock(_ position: XCUIElement, minimum: Int, timeout: TimeInterval, metric: String) -> Bool {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let deadline = startedAt + timeout
@@ -803,7 +804,8 @@ final class AppleSliceUITests: XCTestCase {
                 return true
             }
             let now = ProcessInfo.processInfo.systemUptime
-            if now - lastRevealAt >= 3 {
+            let needsReveal = !position.exists || position.label.isEmpty
+            if needsReveal, now - lastRevealAt >= 3 {
                 #if os(tvOS)
                 XCUIRemote.shared.press(.up)
                 #else
