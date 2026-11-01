@@ -114,6 +114,9 @@ import MediaAccessibility
                                              token: account.accessToken, requiredHeaders: next.headers) }
         catch { try? await client.stopEncoding(account: account, decision: next); throw error }
         decision = next; positionTicks = startTicks
+        // Session identifiers support scoped encoder cleanup after an interrupted pilot.
+        // Never log the asset URL, request headers or viewer credential.
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Negotiated viewing=\(self.viewingID.uuidString, privacy: .public) playSession=\(next.playSessionId ?? "none", privacy: .public) item=\(next.itemID, privacy: .public) source=\(next.source.id ?? "none", privacy: .public) method=\(String(describing: next.method), privacy: .public)")
         status = playbackMethodStatus
         player.isMuted = audio == -1
         let avItem = AVPlayerItem(url: url)
@@ -203,6 +206,7 @@ import MediaAccessibility
                let group = try? await self.player.currentItem?.asset.loadMediaSelectionGroup(for: .legible) { self.player.currentItem?.select(nil, in: group) }
             self.pendingSeekTicks = nil; self.timelineReady = true; self.waitingForVideo = false
             self.status = self.playbackMethodStatus
+            Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native ready viewing=\(self.viewingID.uuidString, privacy: .public) durationSeconds=\(self.durationSeconds ?? -1) targetTicks=\(target)")
             self.timeoutTask?.cancel(); self.timeoutTask = nil
             self.isPaused = self.pauseIntent
             if self.pauseIntent { self.player.pause() } else { self.player.play() }
