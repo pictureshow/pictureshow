@@ -1906,16 +1906,24 @@ final class AppleSliceUITests: XCTestCase {
         let matching = app.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
         // AVKit moves this row upward while Info is expanded. Bind the exact
         // native cell to its containing transport collection, not a screen band.
-        let rows = tvPlayerSnapshot()?.nodes.filter {
-            $0.elementType == .collectionView && $0.frame.width > app.frame.width * 0.90 && $0.frame.height < 110
-        } ?? []
-        let candidates = rows.flatMap { row in
-            tvSnapshotNodes(row).filter {
-                $0.elementType == .cell && $0.label == title && $0.frame.width > 0 && $0.frame.height > 0
-                    && row.frame.contains($0.frame)
-            }.map { (row: row, cell: $0) }
+        func candidates() -> [(row: XCUIElementSnapshot, cell: XCUIElementSnapshot)] {
+            let rows = tvPlayerSnapshot()?.nodes.filter {
+                $0.elementType == .collectionView && $0.frame.width > app.frame.width * 0.90 && $0.frame.height < 110
+            } ?? []
+            return rows.flatMap { row in
+                tvSnapshotNodes(row).filter {
+                    $0.elementType == .cell && $0.label == title && $0.frame.width > 0 && $0.frame.height > 0
+                        && row.frame.contains($0.frame)
+                }.map { (row: row, cell: $0) }
+            }
         }
-        guard candidates.count == 1, let candidate = candidates.first else {
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        var settled = candidates()
+        while settled.count != 1 && ProcessInfo.processInfo.systemUptime < deadline {
+            Thread.sleep(forTimeInterval: 0.15)
+            settled = candidates()
+        }
+        guard settled.count == 1, let candidate = settled.first else {
             captureFullScreen("Native TV missing \(title) transport row before teardown")
             XCTFail("The canonical native player must expose one transport row containing the exact \(title) cell")
             return matching
