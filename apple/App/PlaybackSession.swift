@@ -544,8 +544,9 @@ import MediaAccessibility
         source?.mediaStreams.first { stream in
             stream.index == index && stream.type == "Subtitle"
                 && (stream.isExternal || stream.isExternalURL || stream.deliveryMethod?.lowercased() == "external")
+                // Encode describes the server profile proposal. A known external
+                // text file still loads separately while the A/V request uses Off.
                 && ["srt", "subrip", "vtt", "webvtt"].contains(stream.codec?.lowercased() ?? "")
-                && stream.deliveryMethod?.lowercased() != "encode"
         }
     }
     private func selectExternalText(for decision: PlayDecision) {
