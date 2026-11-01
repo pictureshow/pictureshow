@@ -2,12 +2,31 @@
 // Copyright (c) Legitimate LLC.
 import XCTest
 import Network
+#if os(iOS)
+import UIKit
+#endif
 
 /// Run on a fresh owned simulator clone. The fixture is finite and local to this
 /// runner; the app uses its ordinary sign-in, mutation, deadline and Retry paths.
 final class DetailRecoveryUITests: XCTestCase {
     func testHeldRetryPublishesTruthfulFailureThenTransfersToFreshAction() throws {
         continueAfterFailure = false
+        #if os(iOS)
+        let requestedOrientation: UIDeviceOrientation?
+        if let value = ProcessInfo.processInfo.environment["PICTURESHOW_DETAIL_TEST_ORIENTATION"] {
+            guard UIDevice.current.userInterfaceIdiom == .pad else {
+                XCTFail("An explicit detail orientation case requires an iPad destination"); return
+            }
+            switch value {
+            case "portrait": requestedOrientation = .portrait
+            case "landscape": requestedOrientation = .landscapeLeft
+            default: XCTFail("Detail orientation must be portrait or landscape"); return
+            }
+        } else { requestedOrientation = nil }
+        let originalOrientation = requestedOrientation.map { _ in XCUIDevice.shared.orientation }
+        defer { if let originalOrientation { XCUIDevice.shared.orientation = originalOrientation } }
+        if let requestedOrientation { XCUIDevice.shared.orientation = requestedOrientation }
+        #endif
         let fixture = try DetailRecoveryHTTPFixture()
         defer { fixture.stop() }
         let app = XCUIApplication()
@@ -107,6 +126,22 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue(play.hasFocus, "Successful Retry must hand selection directly to the real fresh primary")
         #else
         XCTAssertTrue(play.isHittable, "Successful recovery must reveal a usable primary in the viewport")
+        #endif
+        #if os(iOS)
+        if let requestedOrientation {
+            XCTAssertEqual(XCUIDevice.shared.orientation, requestedOrientation, "The explicit iPad orientation must remain active through fresh recovery")
+            let window = app.windows.firstMatch
+            XCTAssertTrue(window.exists)
+            let frame = window.frame
+            XCTAssertGreaterThan(frame.width, 0)
+            XCTAssertGreaterThan(frame.height, 0)
+            if requestedOrientation == .portrait {
+                XCTAssertGreaterThan(frame.height, frame.width, "The final iPad window must actually be portrait")
+            } else {
+                XCTAssertGreaterThan(frame.width, frame.height, "The final iPad window must actually be landscape")
+            }
+            print("F2_DETAIL_ORIENTATION requested=\(requestedOrientation == .portrait ? "portrait" : "landscape") width=\(frame.width) height=\(frame.height)")
+        }
         #endif
         print("F2_DETAIL_RECOVERY reads=\(fixture.totalDetailReads) retryRetained=true freshPrimaryEnabled=\(play.isEnabled) readyValue=\(play.value as? String ?? "")")
     }
