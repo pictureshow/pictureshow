@@ -63,18 +63,26 @@ private final class SeekRaceProtocol: URLProtocol {
         var body: Any = [:]
         if path.hasSuffix("PlaybackInfo") {
             Self.playbackInfoCount += 1
-            if let value = Self.requestBody(request) { Self.playbackInfoBodies.append(value) }
-            let source = Self.playbackInfoCount == 1 ? "first-source" : "replacement-source"
+            let playbackRequest = Self.requestBody(request)
+            if let playbackRequest { Self.playbackInfoBodies.append(playbackRequest) }
+            let itemID = path.split(separator: "/").dropLast().last.map(String.init) ?? "first"
+            let source = playbackRequest?["MediaSourceId"] as? String
+                ?? (itemID == "next" ? "next-source" : "first-source")
+            var mediaSource: [String: Any] = [
+                "Id": source,
+                "MediaStreams": [
+                    ["Index": 0, "Type": "Video", "Codec": "h264"],
+                    ["Index": 1, "Type": "Audio", "Codec": "aac"]
+                ]
+            ]
+            if playbackRequest?["EnableDirectPlay"] as? Bool == true {
+                mediaSource["SupportsDirectPlay"] = true
+            } else {
+                mediaSource["TranscodingUrl"] = "/Videos/\(itemID)/master.m3u8"
+            }
             body = [
-                "MediaSources": [[
-                    "Id": source,
-                    "SupportsDirectPlay": true,
-                    "MediaStreams": [
-                        ["Index": 0, "Type": "Video", "Codec": "h264"],
-                        ["Index": 1, "Type": "Audio", "Codec": "aac"]
-                    ]
-                ]],
-                "PlaySessionId": source + "-session"
+                "MediaSources": [mediaSource],
+                "PlaySessionId": "fixture-session-\(Self.playbackInfoCount)"
             ]
         } else if path.hasSuffix("/Items/first") || path.hasSuffix("/Items/next") {
             body = ["Id": path.hasSuffix("/Items/first") ? "first" : "next", "Type": "Episode", "Chapters": []]
@@ -186,9 +194,15 @@ private final class SeekRaceProtocol: URLProtocol {
         session.seek(toTicks: oldTarget)
         XCTAssertEqual(player.seekTargets.count, 1)
 
+        let originalPlaySessionID = try XCTUnwrap(session.decision?.playSessionId)
         await session.changeTracks(audio: 1, subtitle: -1)
-        XCTAssertEqual(session.decision?.source.id, "replacement-source")
+        XCTAssertEqual(session.decision?.source.id, "first-source",
+                       "A same-item track replacement must honor the requested MediaSourceId")
+        XCTAssertNotEqual(session.decision?.playSessionId, originalPlaySessionID,
+                          "The replacement decoder should own a fresh play-session identifier")
         let replacementBody = try XCTUnwrap(SeekRaceProtocol.playbackInfoBodies.last)
+        XCTAssertEqual(replacementBody["MediaSourceId"] as? String, "first-source",
+                       "The same-item track request must remain bound to the original media source")
         XCTAssertEqual((replacementBody["StartTimeTicks"] as? NSNumber)?.int64Value, oldTarget,
                        "Track replacement must negotiate from the newest pending seek, not the old decoder clock")
         XCTAssertEqual(session.decision?.startTicks, oldTarget)
@@ -230,8 +244,12 @@ private final class SeekRaceProtocol: URLProtocol {
         await session.advance()
         XCTAssertEqual(session.item.id, "next")
         XCTAssertEqual(session.decision?.itemID, "next")
+        XCTAssertEqual(session.decision?.source.id, "next-source",
+                       "The adjacent item must negotiate its own distinct media source")
         XCTAssertEqual(session.decision?.startTicks, 0)
         let nextPlaybackBody = try XCTUnwrap(SeekRaceProtocol.playbackInfoBodies.last)
+        XCTAssertNotEqual(nextPlaybackBody["MediaSourceId"] as? String, "first-source",
+                          "The adjacent item must not reuse the previous item's source binding")
         XCTAssertEqual((nextPlaybackBody["StartTimeTicks"] as? NSNumber)?.int64Value, 0,
                        "A new episode must negotiate from its own beginning")
         session.ready(version: 1)
