@@ -571,7 +571,7 @@ final class AppleSliceUITests: XCTestCase {
     }
     /// Keeps basic native HLS clock, pause/resume, and Menu-to-detail focus acceptance
     /// independent of the custom Pictureshow info tab's unlabeled AVKit cell.
-    func testNativeTVHLSClockResumeAndBackFocus() throws {
+    func testNativeTVHLSClockPauseResumeAndBackFocus() throws {
         #if os(tvOS)
         ensureSignedIn()
         _ = try openSampleDetail(id: XCTUnwrap(config["hlsID"]), key: "hls")
@@ -584,6 +584,14 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: max(3, first + 3), timeout: 45, metric: "tv_hls_native_initial"))
         capture("Native TV HLS advancing elapsed-time clock")
 
+        // The 60s VP9 sample intentionally does not resume from a saved position. Confirm its
+        // negotiated method here; persistent-position resume is covered by the eligible fixture.
+        openNativeTVInfoTab()
+        let method = app.staticTexts["playbackMethod"]
+        XCTAssertTrue(waitForSettledMethod(method, expected: "Server HLS", timeout: 45),
+                      "The native clock fixture must settle to Server HLS before it is classified as HLS coverage")
+        capture("Native TV HLS playback method")
+
         XCUIRemote.shared.press(.playPause)
         let paused = seconds(elapsed.label)
         Thread.sleep(forTimeInterval: 2)
@@ -593,18 +601,12 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: paused + 3, timeout: 30, metric: "tv_hls_native_resumed"))
         capture("Native TV HLS elapsed time after remote resume")
 
+        let lastClock = seconds(elapsed.label)
+        XCTAssertGreaterThan(lastClock, paused, "The native clock should have advanced after remote resume")
         leaveNativeTVPlayer(returningTo: play)
         XCTAssertTrue(play.hasFocus, "Native Menu should return to HLS detail and restore its Play action focus")
-        let savedClock = seconds(elapsed.label)
         capture("Native TV HLS returned to detail")
-        activate(play)
-        XCUIRemote.shared.press(.up)
-        let reopenedClock = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
-        XCTAssertTrue(reopenedClock.waitForExistence(timeout: 60), "Reopening the HLS item should restore native AVKit controls")
-        XCTAssertTrue(waitForPlaybackClock(reopenedClock, minimum: savedClock + 2, timeout: 60, metric: "tv_hls_native_reopened"))
-        capture("Native TV HLS reopened after detail resume")
-        leaveNativeTVPlayer(returningTo: play)
-        XCTAssertTrue(play.hasFocus, "The second Menu return should restore focus to the original detail Play action")
+        XCTAssertTrue(play.isHittable, "The native player should be dismissed before returning to detail actions")
         XCTAssertTrue(app.staticTexts["detailTitle"].exists, "The native player should close back to the same HLS detail")
         #endif
     }
@@ -1119,8 +1121,18 @@ final class AppleSliceUITests: XCTestCase {
         capture("Native TV Pictureshow info panel")
     }
     private func leaveNativeTVPlayer(returningTo play: XCUIElement) {
-        for _ in 0..<2 where !play.exists { XCUIRemote.shared.press(.menu) }
-        XCTAssertTrue(play.waitForExistence(timeout: 15))
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "The identified native AVKit presentation should be visible before sending Menu")
+        for attempt in 0..<3 where nativePlayer.exists {
+            print("F1_TV_BACK step=\(attempt + 1) playerPresent=\(nativePlayer.exists) playHittable=\(play.isHittable) playFocused=\(play.hasFocus)")
+            XCUIRemote.shared.press(.menu)
+            let disappeared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: nativePlayer)
+            _ = XCTWaiter.wait(for: [disappeared], timeout: 4)
+        }
+        XCTAssertFalse(nativePlayer.exists, "Native Menu should dismiss the identified AVKit player presentation")
+        XCTAssertTrue(play.waitForExistence(timeout: 15), "The original detail Play action should reappear after native dismissal")
+        XCTAssertTrue(play.isHittable, "The original detail Play action should be hittable after native dismissal")
+        XCTAssertTrue(play.hasFocus, "Native Menu dismissal should restore focus to the original detail Play action")
     }
     private func probeNativeTVHomeFocusOnce() {
         XCTAssertTrue(hasHomeRoot(timeout: 10), "The focused Home probe must start on the authenticated Home root")
