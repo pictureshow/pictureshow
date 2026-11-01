@@ -184,7 +184,7 @@ import MediaAccessibility
     @discardableResult func showStartupWaitHint(version: Int) -> Bool {
         guard !timelineReady, generation == version, !closed else { return false }
         #if DEBUG
-        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Playback startup waiting itemStatus=\(player.currentItem?.status.rawValue ?? -1) controlStatus=\(player.timeControlStatus.rawValue) startTask=\(startTask != nil) paused=\(pauseIntent) viewing=\(viewingID.uuidString, privacy: .public)")
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Playback startup waiting itemStatus=\(self.player.currentItem?.status.rawValue ?? -1) controlStatus=\(self.player.timeControlStatus.rawValue) startTask=\(self.startTask != nil) paused=\(self.pauseIntent) viewing=\(self.viewingID.uuidString, privacy: .public)")
         #endif
         status = "Still waiting for playback. You can go back and try again."
         return true
