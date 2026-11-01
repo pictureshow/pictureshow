@@ -212,6 +212,53 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertFalse(controller.informationVisible)
         XCTAssertEqual(caption.frame.maxY, 1032, accuracy: 1,
                        "Closing Info with native controls hidden must restore the ordinary bottom margin")
+
+        let client = JellyfinClient(deviceID: "info-lifecycle-test", session: URLSession(configuration: ExternalSubtitleHTTP.configuration()))
+        let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "info-lifecycle-test")
+        let session = PlaybackSession(client: client, account: account, item: MediaItem(id: "movie", name: "Fixture movie", type: "Movie"), player: try XCTUnwrap(controller.player))
+        controller.installInformation(session: session)
+        let info = try XCTUnwrap(controller.customInfoViewControllers.first)
+        XCTAssertFalse(session.panelOpen)
+        info.loadViewIfNeeded()
+        info.viewWillAppear(false)
+        XCTAssertTrue(controller.informationVisible, "Info must reserve caption space before its appearance animation begins")
+        XCTAssertTrue(session.panelOpen, "Appearing Info must gate the early continuation countdown before didAppear")
+        controller.viewDidLayoutSubviews()
+        XCTAssertLessThanOrEqual(caption.frame.maxY, 486, "Info clearance must apply during appearance, before didAppear")
+        info.viewDidAppear(false)
+        XCTAssertTrue(controller.informationVisible)
+        XCTAssertTrue(session.panelOpen, "Visible Info must gate the early continuation countdown")
+        controller.showSubtitle(cue, controlsVisible: true, preferences: preferences)
+        controller.viewDidLayoutSubviews()
+        XCTAssertLessThanOrEqual(caption.frame.maxY, 486, "Info clearance must take priority over the ordinary HUD clearance")
+
+        let normalFontSize = caption.font.pointSize
+        let longCue = (1...40).map { "Fixture external subtitle line \($0)" }.joined(separator: "\n")
+        controller.showSubtitle(longCue, controlsVisible: false, preferences: preferences)
+        let fullCueHeight = caption.sizeThatFits(CGSize(width: video.width * 0.9, height: .greatestFiniteMagnitude)).height
+        XCTAssertGreaterThan(fullCueHeight, 486, "The multiline fixture must exceed the entire caption region above Info")
+        controller.viewDidLayoutSubviews()
+        XCTAssertEqual(caption.text, longCue)
+        XCTAssertFalse(caption.isHidden)
+        XCTAssertTrue(caption.frame.width > 0 && caption.frame.height > 0)
+        XCTAssertGreaterThanOrEqual(caption.frame.minY, 0, "An oversized cue must stay within the video instead of moving above it")
+        XCTAssertTrue(video.contains(caption.frame))
+        XCTAssertLessThanOrEqual(caption.frame.maxY, 486, "An oversized multiline cue must be clipped above Info rather than extend beneath it")
+        XCTAssertEqual(caption.font.pointSize, normalFontSize, "Info clearance must retain the selected subtitle font size")
+
+        controller.showSubtitle(cue, controlsVisible: false, preferences: preferences)
+        controller.viewDidLayoutSubviews()
+        XCTAssertEqual(caption.text, cue)
+        info.viewWillDisappear(false)
+        XCTAssertTrue(controller.informationVisible, "Info must retain caption clearance throughout its dismissal animation")
+        XCTAssertTrue(session.panelOpen, "Disappearing Info must keep the early continuation countdown gated until didDisappear")
+        controller.viewDidLayoutSubviews()
+        XCTAssertLessThanOrEqual(caption.frame.maxY, 486, "Info clearance must remain active until dismissal finishes")
+        info.viewDidDisappear(false)
+        controller.viewDidLayoutSubviews()
+        XCTAssertFalse(controller.informationVisible)
+        XCTAssertFalse(session.panelOpen)
+        XCTAssertEqual(caption.frame.maxY, 1032, accuracy: 1)
     }
     #endif
 

@@ -190,9 +190,7 @@ struct NativePlayer: UIViewControllerRepresentable {
         controller.view.accessibilityIdentifier = "pictureshowNativePlayer"
         #if os(tvOS)
         controller.playbackControlsIncludeInfoViews = true; controller.transportBarIncludesTitleView = true
-        let info = UIHostingController(rootView: PlaybackInformation(session: session)); info.title = "Pictureshow"
-        info.preferredContentSize = CGSize(width: 1200, height: 250)
-        controller.customInfoViewControllers = [info]
+        controller.installInformation(session: session)
         #endif
         updateUIViewController(controller, context: context)
         return controller
@@ -308,6 +306,16 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         informationVisible = visible
         viewIfLoaded?.setNeedsLayout()
     }
+    func installInformation(session: PlaybackSession) {
+        let info = PlaybackInformationController(rootView: PlaybackInformation(session: session))
+        info.title = "Pictureshow"
+        info.preferredContentSize = CGSize(width: 1200, height: 250)
+        info.onVisibilityChange = { [weak self, weak session] visible in
+            self?.setInformationVisible(visible)
+            session?.panelOpen = visible
+        }
+        customInfoViewControllers = [info]
+    }
     #endif
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -348,17 +356,35 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         #endif
         guard !video.isNull, video.width > 0, video.height > 0 else { caption.frame = .zero; return }
         let captionWidth = video.width * 0.9
-        let captionHeight = min(video.height * 0.6, caption.sizeThatFits(CGSize(width: captionWidth, height: .greatestFiniteMagnitude)).height + 8)
         #if os(tvOS)
         // AVKit's title, transport and Info tabs occupy the lower video band.
         // Keep external text above that band while the native controls appear.
-        let inset = controlsVisible ? video.height * 0.4 : min(48, video.height * 0.08)
+        let inset = informationVisible ? video.height * 0.55
+            : controlsVisible ? video.height * 0.4 : min(48, video.height * 0.08)
         #else
         let inset = controlsVisible ? min(240, video.height * 0.35) : min(48, video.height * 0.08)
         #endif
+        // Oversized cues retain their preferred type size and truncate within
+        // the space above native UI instead of drawing behind the panel.
+        let captionHeight = min(video.height * 0.6, video.height - inset,
+                                caption.sizeThatFits(CGSize(width: captionWidth, height: .greatestFiniteMagnitude)).height + 8)
         caption.frame = CGRect(x: video.midX - captionWidth / 2, y: max(video.minY, video.maxY - inset - captionHeight), width: captionWidth, height: captionHeight)
     }
 }
+
+#if os(tvOS)
+private final class PlaybackInformationController: UIHostingController<PlaybackInformation> {
+    var onVisibilityChange: (@MainActor (Bool) -> Void)?
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        onVisibilityChange?(true)
+    }
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        onVisibilityChange?(false)
+    }
+}
+#endif
 
 private struct PlaybackInformation: View {
     @ObservedObject var session: PlaybackSession
