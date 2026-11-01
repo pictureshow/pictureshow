@@ -22,12 +22,13 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     private static var held: [ObjectIdentifier: ExternalSubtitleHTTP] = [:]
     private static var captionReference: String? = "/captions/selected.vtt"
     private static var encodedExternalSubrip = false
+    private static var embeddedSelectedTrack = false
     static let caption = Data("WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nSelected caption\n".utf8)
     static var source: [String: Any] {
-        lock.lock(); let reference = captionReference, encoded = encodedExternalSubrip; lock.unlock()
-        var selected: [String: Any] = ["Index": encoded ? 0 : 4, "Type": "Subtitle", "Codec": encoded ? "subrip" : "vtt", "IsExternal": true,
-                                      "DeliveryMethod": encoded ? "Encode" : "External"]
-        if let reference { selected["DeliveryUrl"] = reference }
+        lock.lock(); let reference = captionReference, encoded = encodedExternalSubrip, embedded = embeddedSelectedTrack; lock.unlock()
+        var selected: [String: Any] = ["Index": encoded ? 0 : 4, "Type": "Subtitle", "Codec": embedded ? "mov_text" : encoded ? "subrip" : "vtt", "IsExternal": !embedded,
+                                      "DeliveryMethod": embedded ? "Embed" : encoded ? "Encode" : "External"]
+        if !embedded, let reference { selected["DeliveryUrl"] = reference }
         return [
         "Id": "source", "Container": "mp4", "SupportsDirectPlay": true,
         "DefaultAudioStreamIndex": encoded ? 2 : 1, "DefaultSubtitleStreamIndex": encoded ? 0 : 4,
@@ -40,9 +41,9 @@ private final class ExternalSubtitleHTTP: URLProtocol {
         ]
         ]
     }
-    static func reset(_ value: Delivery, captionReference: String? = "/captions/selected.vtt", encodedExternalSubrip: Bool = false) {
+    static func reset(_ value: Delivery, captionReference: String? = "/captions/selected.vtt", encodedExternalSubrip: Bool = false, embeddedSelectedTrack: Bool = false) {
         lock.lock(); defer { lock.unlock() }
-        delivery = value; self.captionReference = captionReference; self.encodedExternalSubrip = encodedExternalSubrip
+        delivery = value; self.captionReference = captionReference; self.encodedExternalSubrip = encodedExternalSubrip; self.embeddedSelectedTrack = embeddedSelectedTrack
         recorded = []; cancelled = []; held = [:]
     }
     // Shared resolve-24/25 append even slash-prefixed references to the configured
@@ -345,7 +346,35 @@ private final class SubtitleInertPlayer: AVPlayer {
         let start = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("/Sessions/Playing") })
         XCTAssertEqual((start.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, 0)
         XCTAssertEqual(player.replacements, 1); XCTAssertNil(session.error)
+        let explanation = session.subtitleTimingExplanation.lowercased()
+        XCTAssertTrue(explanation.contains("pictureshow") && explanation.contains("external text") && explanation.contains("overlay"),
+                      "Info must identify the actual app-rendered external text path, even when delivery was proposed as Encode")
+        XCTAssertFalse(explanation.contains("avkit uses the system caption renderer"),
+                       "Selected external text is not being rendered by AVKit")
+        XCTAssertTrue(explanation.contains("timing") && explanation.contains("not available"))
+        XCTAssertFalse(session.subtitleTimingAvailable)
+
+        await session.changeTracks(audio: session.decision?.audioIndex, subtitle: -1)
+        XCTAssertEqual(session.decision?.subtitleIndex, -1)
+        XCTAssertNil(loader.selected, "Off must leave the real external renderer selection empty")
+        XCTAssertFalse(session.subtitleTimingExplanation.lowercased().contains("overlay"), "Off cannot claim the external overlay is rendering")
+        XCTAssertFalse(session.subtitleTimingAvailable)
+        XCTAssertEqual(player.replacements, 1)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 1)
         await session.stop()
+
+        // Exercise an actual embedded selection through prepare, rather than
+        // assigning a decision or testing an unselected source's metadata.
+        ExternalSubtitleHTTP.reset(.valid, embeddedSelectedTrack: true)
+        let (embeddedSession, _) = try await readySession(loader: loader, expectedCaptionPath: nil, subtitleIndex: 4)
+        XCTAssertEqual(embeddedSession.decision?.subtitleIndex, 4)
+        XCTAssertFalse(try XCTUnwrap(embeddedSession.decision?.source.mediaStreams.first { $0.index == 4 }).isExternal)
+        XCTAssertNil(loader.selected)
+        XCTAssertTrue(captionRequests.isEmpty, "A nonexternal selection must not start the app's optional text loader")
+        XCTAssertFalse(embeddedSession.subtitleTimingExplanation.lowercased().contains("overlay"),
+                       "A nonexternal selection cannot claim the external overlay is rendering")
+        XCTAssertFalse(embeddedSession.subtitleTimingAvailable)
+        await embeddedSession.stop()
     }
 
     func testColdSelectedCuesPublishWhilePausedWithoutClockMovementOrResume() async throws {
