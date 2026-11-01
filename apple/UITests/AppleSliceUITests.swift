@@ -1884,9 +1884,11 @@ final class AppleSliceUITests: XCTestCase {
         }
         if let observation = tvInfoObservation(initial) { return finish(observation, step: "already-visible") }
         XCUIRemote.shared.press(.up)
+        var lastNavigationAt = ProcessInfo.processInfo.systemUptime
         let deadline = ProcessInfo.processInfo.systemUptime + 15
         var refreshes = 0
         var noFocus = 0
+        var transitionDowns = 0
         var focusedAt: TimeInterval?
         var selected = false
         var step = 0
@@ -1902,11 +1904,20 @@ final class AppleSliceUITests: XCTestCase {
             // Selecting is needed on some native states; after that input, wait
             // passively for content rather than closing it with more arrows.
             if selected { Thread.sleep(forTimeInterval: 0.15); continue }
+            // Native tab expansion takes longer than a remote key dispatch.
+            // The observed successful path spaced its Down inputs by >1 s;
+            // dispatching the next key during that transition hid the surface.
+            guard ProcessInfo.processInfo.systemUptime - lastNavigationAt >= 1 else {
+                Thread.sleep(forTimeInterval: 0.15)
+                continue
+            }
             guard let collection = snapshot.first(identifier: "AVInfoMenuCollection") else {
                 guard refreshes < 3 else { break }
                 refreshes += 1; XCUIRemote.shared.press(.up)
+                lastNavigationAt = ProcessInfo.processInfo.systemUptime
                 continue
             }
+            guard snapshot.nodes.filter({ $0.identifier == "AVInfoMenuCollection" }).count == 1 else { break }
             let cells = tvSnapshotNodes(collection).filter {
                 $0.elementType == .cell && $0.frame.width > 0 && $0.frame.height > 0
                     && collection.frame.contains($0.frame)
@@ -1916,7 +1927,10 @@ final class AppleSliceUITests: XCTestCase {
             guard cells.count >= 2, let target = cells.last, target.isEnabled else { break }
             let focusedCell = cells.first { $0.hasFocus }
             let focused = focusedCell ?? snapshot.nodes.filter {
-                $0.hasFocus && $0.elementType == .cell && $0.frame.width > 0 && $0.frame.height > 0
+                $0.hasFocus && ($0.elementType == .cell || $0.elementType == .button)
+                    && $0.frame.width > 0 && $0.frame.height > 0
+                    && $0.frame.width < collection.frame.width
+                    && $0.frame.height < collection.frame.height * 2
             }.min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
             print("F2_TV_INFO_NAV step=\(step) target=\(target.frame) focused=\(focused.map { String(describing: $0.frame) } ?? "<unexposed>") refreshes=\(refreshes)")
             step += 1
@@ -1924,6 +1938,7 @@ final class AppleSliceUITests: XCTestCase {
                 noFocus = 0
                 if let focusedAt, ProcessInfo.processInfo.systemUptime - focusedAt >= 1 {
                     XCUIRemote.shared.press(.select); selected = true
+                    lastNavigationAt = ProcessInfo.processInfo.systemUptime
                 } else if focusedAt == nil { focusedAt = ProcessInfo.processInfo.systemUptime }
                 Thread.sleep(forTimeInterval: 0.15)
             } else if let focused {
@@ -1931,11 +1946,12 @@ final class AppleSliceUITests: XCTestCase {
                 let dx = target.frame.midX - focused.frame.midX
                 let dy = target.frame.midY - focused.frame.midY
                 XCUIRemote.shared.press(abs(dy) > 30 ? (dy > 0 ? .down : .up) : (dx > 0 ? .right : .left))
+                lastNavigationAt = ProcessInfo.processInfo.systemUptime
             } else {
                 focusedAt = nil; noFocus += 1
-                // Full-screen ancestors can briefly report focus while AVKit
-                // moves into a tab. They supply no directional basis. Observe
-                // that transition without sending a second Down through it.
+                // The observed collapsed native collection has three cells and
+                // temporarily exposes only root focus. Its successful expansion
+                // needs another Down after animation, not root-frame geometry.
                 if noFocus == 1 {
                     let state = snapshot.nodes.filter {
                         $0.identifier == "AVInfoMenuCollection" || $0.elementType == .cell || $0.hasFocus
@@ -1944,7 +1960,11 @@ final class AppleSliceUITests: XCTestCase {
                         print("F2_TV_INFO_TRANSITION type=\(node.elementType.rawValue) id=\(node.identifier) label=\(node.label) frame=\(node.frame) focus=\(node.hasFocus)")
                     }
                 }
-                Thread.sleep(forTimeInterval: 0.15)
+                guard cells.count == 3, transitionDowns < 3 else { break }
+                transitionDowns += 1
+                print("F2_TV_INFO_TRANSITION_DOWN attempt=\(transitionDowns) collection=\(collection.frame) cells=\(cells.count)")
+                XCUIRemote.shared.press(.down)
+                lastNavigationAt = ProcessInfo.processInfo.systemUptime
             }
         }
         diagnoseTVInfo(step: "missing required Info fields")
