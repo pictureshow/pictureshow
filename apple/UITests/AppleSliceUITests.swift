@@ -1262,13 +1262,13 @@ final class AppleSliceUITests: XCTestCase {
         let exitDeadline = min(playRequestedAt + TimeInterval(duration - 2),
                                ProcessInfo.processInfo.systemUptime + TimeInterval(duration - anchor.seconds - 2))
         let prefix = "Next: \(nextTitle) ("
-        let nextControl = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND identifier != %@", prefix, "playNextTransport")).firstMatch
+        let nextPattern = "^Next: \(NSRegularExpression.escapedPattern(for: nextTitle)) \\((?:[3-9]|1[0-5])\\)$"
+        let nextControl = app.buttons.matching(NSPredicate(format: "label MATCHES %@ AND identifier != %@", nextPattern, "playNextTransport")).firstMatch
         let cancelControl = app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Cancel next", "cancelNextTransport")).firstMatch
         func countdown(_ label: String) -> Int? {
             guard label.hasPrefix(prefix), label.hasSuffix(")"),
-                  let open = label.lastIndex(of: "("),
-                  let value = Int(label[label.index(after: open)..<label.index(before: label.endIndex)]),
-                  (3...15).contains(value) else { return nil }
+                  let value = Int(label.dropFirst(prefix.count).dropLast()),
+                  (3...15).contains(value), label == "\(prefix)\(value))" else { return nil }
             return value
         }
         // Hidden AVKit HUD clocks retain their last AX value. Wait for the
@@ -1285,8 +1285,9 @@ final class AppleSliceUITests: XCTestCase {
                     $0.elementType == .button && $0.isEnabled && $0.identifier != "cancelNextTransport"
                         && $0.label == "Cancel next"
                 }
-                if next.count == 1, cancel.count == 1, nextControl.isHittable, cancelControl.isHittable {
-                    observedCountdown = countdown(next[0].label)
+                if next.count == 1, cancel.count == 1, nextControl.isHittable, cancelControl.isHittable,
+                   let currentCountdown = countdown(nextControl.label) {
+                    observedCountdown = currentCountdown
                     print("F2_TV_CONTEXTUAL_SURFACE next=\(next[0].label) cancel=\(cancel[0].label) countdown=\(observedCountdown!) nextFrame=\(next[0].frame) cancelFrame=\(cancel[0].frame) snapshot=true")
                     break
                 }
