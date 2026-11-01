@@ -772,17 +772,20 @@ internal fun PlayerSubtitles(
                 )
             }
         )
-        DisposableEffect(appearance, bounds.height(), safe.height()) {
+        val currentAppearance by rememberUpdatedState(appearance)
+        val currentHeightScale by rememberUpdatedState(bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+        // CaptioningManager registers settings observers through Binder. Keep that work out of overlay changes.
+        DisposableEffect(context, subtitles) {
             val manager = context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
             val listener = object : CaptioningManager.CaptioningChangeListener() {
                 override fun onEnabledChanged(enabled: Boolean) {
-                    appearance.applyTo(subtitles, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+                    currentAppearance.applyTo(subtitles, context, currentHeightScale)
                 }
                 override fun onFontScaleChanged(fontScale: Float) {
-                    appearance.applyTo(subtitles, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+                    currentAppearance.applyTo(subtitles, context, currentHeightScale)
                 }
                 override fun onUserStyleChanged(userStyle: CaptioningManager.CaptionStyle) {
-                    appearance.applyTo(subtitles, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
+                    currentAppearance.applyTo(subtitles, context, currentHeightScale)
                 }
             }
             manager?.addCaptioningChangeListener(listener)
