@@ -80,13 +80,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
@@ -1025,6 +1024,7 @@ fun CatalogDetail(
         !recoveryActive && playbackWaiting && !pendingFailed && state.error == null && pendingCanPlay && queuePendingAction != null
     val pendingActions = if (pendingEnabled) {
         PendingDetailActions(
+            available = !pendingExpired && !expiryReported,
             playLabel = when {
                 pendingExpired || expiryReported -> "Play unavailable"
                 playQueued == "resume" -> "Play requested"
@@ -1348,7 +1348,7 @@ fun CatalogDetail(
                             )
                             if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
                             val container = item.type in listOf("Series", "Season")
-                            if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive)) {
+                            if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
                                 DetailActions(
                                     if (recoveryActive) headerItem else item, playItem, state.busy, initial,
                                     if (playbackLayout) {
@@ -1367,14 +1367,14 @@ fun CatalogDetail(
                                     playbackLayout || playbackWaiting,
                                     readyQueuedTargets = readyQueuedTargets,
                                     fromStartFocus = fromStartFocus,
-                                    blocked = recoveryActive
+                                    blocked = recoveryActive || (playbackWaiting && pendingActions == null)
                                 ) {
                                     if (trackSelection) selectedSection = "header"
                                 }
                             }
                             headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
                             if (headerItem.genres.isNotEmpty()) Text(headerItem.genres.joinToString(" · "), color = CatalogMuted)
-                            if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive)) {
+                            if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
                                 DetailActions(
                                     if (recoveryActive) headerItem else item, playItem, state.busy, initial,
                                     if (playbackLayout) {
@@ -1393,7 +1393,7 @@ fun CatalogDetail(
                                     playbackLayout || playbackWaiting,
                                     readyQueuedTargets = readyQueuedTargets,
                                     fromStartFocus = fromStartFocus,
-                                    blocked = recoveryActive
+                                    blocked = recoveryActive || (playbackWaiting && pendingActions == null)
                                 ) {
                                     if (trackSelection) selectedSection = "header"
                                 }
@@ -1456,13 +1456,21 @@ fun CatalogDetail(
                                     modifier = Modifier.width(200.dp).heightIn(min = 72.dp).focusRequester(retry)
                                         .testTag("detail:retry").onFocusChanged { retryFocused = it.isFocused }
                                         .detailFocusDiagnostic("retry").semantics {
-                                            if (retryWorking || recoveryHandoff) stateDescription = "Loading item. Please wait."
+                                            // TalkBack TV speaks state before the button label. Lead with
+                                            // Retry so a long reason cannot defer the usable action cue.
+                                            // Focus/state events suffice; a live region queues duplicate
+                                            // loading cues behind which a fresh-action announcement waits.
+                                            stateDescription = if (retryWorking || recoveryHandoff) {
+                                                "Loading item. Please wait."
+                                            } else {
+                                                "Retry. Loading failed. $recoveryReason"
+                                            }
                                         }
                                 ) { Text(if (retryWorking || recoveryHandoff) "Retrying…" else "Retry") }
                                 Text(
                                     if (recoveryHandoff) recoveryHandoffMessage ?: recoveryReason else recoveryReason,
                                     color = Color(0xFFFFCCB8),
-                                    modifier = Modifier.testTag("detail:read-error").semantics { liveRegion = LiveRegionMode.Polite }
+                                    modifier = Modifier.testTag("detail:read-error")
                                 )
                             } else {
                                 CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
@@ -1516,7 +1524,15 @@ fun CatalogDetail(
                     )
                 }
             }
-            if (item?.type in listOf("Series", "Season") && !state.loading && state.episodes.isEmpty() && state.seasons.isEmpty()) {
+            if (app.pictureshow.core.showDetailEmptyState(
+                    item?.type,
+                    state.loading,
+                    state.readSucceeded,
+                    state.readFailed,
+                    state.episodes.size,
+                    state.seasons.size
+                )
+            ) {
                 item(key = "empty") { Text("No episodes are available.") }
             }
         }
@@ -1821,6 +1837,7 @@ private fun Modifier.detailFocusDiagnostic(target: String): Modifier = onFocusCh
 private data class DetailCommand(val generation: Int, val mutationTarget: String?, val action: () -> Unit)
 
 private data class PendingDetailActions(
+    val available: Boolean,
     val playLabel: String,
     val fromStartLabel: String,
     val playedLabel: String,
@@ -1920,7 +1937,20 @@ private fun DetailActions(
                     if (it.isFocused) focusedChildren.add(target) else focusedChildren.remove(target)
                     onHeaderFocus(target, it.isFocused)
                     if (BuildConfig.DEBUG && it.isFocused) PlaybackDiagnostics.write("detail-focus target=$target")
-                }.testTag("detail:$tag$suffix").onPreviewKeyEvent {
+                }.testTag("detail:$tag$suffix").semantics {
+                    // Keep Material input focus/geometry while exposing the real availability
+                    // to services. Compose omits click actions for disabled semantics.
+                    if (pending?.available == false) {
+                        disabled()
+                        stateDescription = "Unavailable while saving progress."
+                    } else if (!blocked && pending == null && stableLayout) {
+                        stateDescription = when (target) {
+                            "played" -> if (item.isWatched) "Ready. Watched" else "Ready. Unwatched"
+                            "favorite" -> if (item.userData.isFavorite) "Ready. Favorite" else "Ready. Not favorite"
+                            else -> "Ready"
+                        }
+                    }
+                }.onPreviewKeyEvent {
                     // Handle pending Select at DOWN, before a fresh callback can replace it.
                     // Activity's handoff owns the matching UP/repeats, even across completion.
                     if (!blocked &&
