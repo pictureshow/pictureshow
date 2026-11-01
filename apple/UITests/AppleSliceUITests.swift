@@ -654,9 +654,12 @@ final class AppleSliceUITests: XCTestCase {
         capture("TV subtitles Off before positive stream")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5), "Closing the Off menu should return to the same AVKit player")
+        XCTAssertTrue(waitForPausedClockNear(position, target: paused, tolerance: 1, timeout: 45,
+                                             metric: "tv_subtitle_off_restore"), "Turning subtitles Off should restore the paused position after native readiness")
         let afterOff = seconds(position.label)
         Thread.sleep(forTimeInterval: 2)
         XCTAssertLessThanOrEqual(seconds(position.label), afterOff + 1, "Turning subtitles Off should preserve paused intent")
+        XCTAssertGreaterThanOrEqual(seconds(position.label), max(0, afterOff - 1), "Turning subtitles Off should remain paused near the restored position")
 
         let label = selectNativeTVMenuTrack(menuTitle: "Subtitles", index: subtitleIndex)
         let selected = inspectNativeTVMenuSelection(menuTitle: "Subtitles", index: subtitleIndex)
@@ -664,9 +667,11 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(selected, "The native subtitle menu should expose the selected positive stream")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5))
-        XCTAssertGreaterThanOrEqual(seconds(position.label), max(0, paused - 1), "Subtitle replacement should restore the paused position")
+        XCTAssertTrue(waitForPausedClockNear(position, target: paused, tolerance: 1, timeout: 45,
+                                             metric: "tv_positive_subtitle_restore"), "Subtitle replacement should restore the paused position after native readiness")
         Thread.sleep(forTimeInterval: 2)
         XCTAssertLessThanOrEqual(seconds(position.label), paused + 1, "Subtitle replacement should preserve paused intent")
+        XCTAssertGreaterThanOrEqual(seconds(position.label), max(0, paused - 1), "Subtitle replacement should remain paused near the restored position")
         print("F1_METRIC tv_positive_subtitle_selected index=\(subtitleIndex) label=\(label) offLabel=\(offLabel) paused=\(paused)")
 
         XCUIRemote.shared.press(.playPause)
@@ -1166,6 +1171,23 @@ final class AppleSliceUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.25)
         }
         print("F1_METRIC playback_method_settle_timeout expected=\(expected ?? "Direct or Server HLS") actual=\(method.exists ? method.label : "<missing>")")
+        return false
+    }
+    /// Wait for a paused AVKit clock to return near its saved position after an item replacement.
+    /// Unlike waitForPlaybackClock, this does not require movement or synthesize a playback input.
+    private func waitForPausedClockNear(_ position: XCUIElement, target: Int, tolerance: Int, timeout: TimeInterval, metric: String) -> Bool {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + timeout
+        var lastLabel = "<missing>"
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            lastLabel = position.exists ? position.label : "<missing>"
+            if let current = parsedClockSeconds(lastLabel), abs(current - target) <= tolerance {
+                print("F1_METRIC \(metric)_restored_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) target=\(target) observed=\(current)")
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        print("F1_METRIC \(metric)_restore_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) target=\(target) final_position=\(lastLabel)")
         return false
     }
     private func hasHomeRoot(timeout: TimeInterval = 1) -> Bool {
