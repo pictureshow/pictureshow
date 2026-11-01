@@ -185,10 +185,10 @@ struct NativePlayer: UIViewControllerRepresentable {
         controller.player = session.player; controller.delegate = context.coordinator
         controller.showsPlaybackControls = true; controller.videoGravity = .resizeAspect
         controller.allowsPictureInPicturePlayback = false
-        #if os(tvOS)
-        // Identify the presentation container without changing its accessibility
-        // grouping; the underlying detail remains in the native AX tree.
+        // Identify the native video frame without changing accessibility grouping.
+        // Touch tests must reveal controls inside this frame, not the app strip.
         controller.view.accessibilityIdentifier = "pictureshowNativePlayer"
+        #if os(tvOS)
         controller.playbackControlsIncludeInfoViews = true; controller.transportBarIncludesTitleView = true
         let info = UIHostingController(rootView: PlaybackInformation(session: session)); info.title = "Pictureshow"
         info.preferredContentSize = CGSize(width: 1200, height: 250)
