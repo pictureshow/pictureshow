@@ -675,18 +675,16 @@ internal fun PlayerItemScreen(
                 }
             }
             chooser?.let { type ->
-                val streams = state.decision?.mediaSource?.mediaStreams.orEmpty().filter { it.type == type }
+                val menu = rememberPlayerTrackMenu(state.decision?.mediaSource?.mediaStreams.orEmpty(), type)
+                val streams = menu.streams
                 val selected = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
-                val labels = trackLabels(streams)
                 val title = if (type == MediaStreamType.Audio) "Audio" else "Subtitles"
                 PlayerPanel(title, {
                     chooser = null
                     returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
                 }, scrollable = false) {
                     TrackChoices(
-                        listOf(-1 to "Off") + streams.mapIndexed { i, stream ->
-                            stream.index to labels[i]
-                        },
+                        menu.choices,
                         selected,
                         onSelect = { index ->
                             select({

@@ -39,4 +39,31 @@ class PlaybackTrackLabelsTest {
             assertEquals("$title · SRT", trackLabel(subtitle.copy(language = "eng", title = title)))
         }
     }
+
+    @Test
+    fun metadataMatchingKeepsUnicodeWordBoundariesAndLiteralFormatPunctuation() {
+        val stream = MediaStream(type = MediaStreamType.Subtitle, index = 2, codec = "srt", isForced = true)
+        val notBadges = listOf(
+            "Unforced",
+            "Forcedness",
+            "Forced²",
+            "ForcedⅧ",
+            "Forced𐐀",
+            "Non-Forced",
+            "non‑forced"
+        )
+        notBadges.forEach { title ->
+            assertEquals("$title · SRT · Forced", trackLabel(stream.copy(title = title)), title)
+        }
+        listOf("(Forced)", "Forced / SRT", "Forced\nSRT", "anon-Forced", "é́non-Forced", "non-Forced / Forced").forEach { title ->
+            val format = if (title.contains("SRT")) "" else " · SRT"
+            assertEquals(title + format, trackLabel(stream.copy(title = title)), title)
+        }
+        assertEquals(
+            "E-AC-3 5.1 · Forced",
+            trackLabel(
+                MediaStream(type = MediaStreamType.Audio, index = 1, codec = "eac3", channels = 6, title = "E-AC-3 5.1", isForced = true)
+            )
+        )
+    }
 }

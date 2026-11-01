@@ -3098,6 +3098,195 @@
       },
       "expected": 2,
       "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "tracks.large-panel.selected-near-end",
+      "operation": "default-stream",
+      "source": "app/src/test/kotlin/app/pictureshow/TrackPanelResponsivenessTest.kt; spec/features/player.md PLAY-07",
+      "input": {
+        "streams": [
+          {
+            "Type": "Subtitle",
+            "Index": 2
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 3
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 4
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 6
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 7
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 8
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 9
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 10
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 11
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 12
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 13
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 14
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 15
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 16
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 17
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 18
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 19
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 20
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 21
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 22
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 23
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 24
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 25
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 26
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 27
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 28
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 29
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 30
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 31
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 32
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 33
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 34
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 35
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 36
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 37
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 38
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 39
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 40
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 41
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 42
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 43
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 44
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 45
+          }
+        ],
+        "type": "Subtitle",
+        "serverIndex": 43,
+        "preferredLanguage": "en"
+      },
+      "expected": 43
     }
   ]
 }
