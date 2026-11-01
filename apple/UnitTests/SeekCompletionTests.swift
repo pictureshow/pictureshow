@@ -160,13 +160,12 @@ private final class SeekRaceProtocol: URLProtocol {
         XCTFail("Expected " + String(count) + " controlled AVPlayer seek requests, observed " + String(player.seekTargets.count))
     }
 
-    private func waitForStartReport() async throws -> [String: Any] {
+    private func waitForStartReport() async -> [String: Any]? {
         for _ in 0..<100 {
             if let report = SeekRaceProtocol.startReportBodies.first { return report }
-            try await Task.sleep(for: .milliseconds(10))
+            try? await Task.sleep(for: .milliseconds(10))
         }
-        throw NSError(domain: "SeekCompletionTests", code: 1,
-                      userInfo: [NSLocalizedDescriptionKey: "PlaybackSession did not send its initial start report"])
+        return nil
     }
 
     private func drainMainActor() async throws {
@@ -203,21 +202,37 @@ private final class SeekRaceProtocol: URLProtocol {
         await session.stop()
     }
 
-    /// If a viewer seeks while the startup/resume seek is in flight, readiness must
-    /// apply the newer target before publishing ready or reporting the viewing start.
+    /// A target accepted while the resume seek is in flight must replace that target even
+    /// when it is zero, and a superseded AVPlayer completion may legitimately return false.
     func testSeekDuringInitialReadySeekUsesNewestTarget() async throws {
+        try await assertInitialReadySeekScenario(viewerSeconds: 47, oldSeekSuccess: true,
+                                                 scenario: "newer nonzero target")
+        try await assertInitialReadySeekScenario(viewerSeconds: 0, oldSeekSuccess: true,
+                                                 scenario: "newer zero target")
+        try await assertInitialReadySeekScenario(viewerSeconds: 47, oldSeekSuccess: false,
+                                                 scenario: "interrupted old completion")
+    }
+
+    private func assertInitialReadySeekScenario(viewerSeconds: Double, oldSeekSuccess: Bool,
+                                                 scenario: String) async throws {
         let startupTarget = Ticks.from(seconds: 12)
-        let viewerTarget = Ticks.from(seconds: 47)
+        let viewerTarget = Ticks.from(seconds: viewerSeconds)
         try await makePreparedSession(startTicks: startupTarget)
         session.ready(version: 0)
         try await waitForSeekCount(1)
+        guard !player.seekTargets.isEmpty else { await session.stop(); return }
         XCTAssertEqual(player.seekTargets[0].seconds, Ticks.seconds(startupTarget), accuracy: 0.001)
 
         session.seek(toTicks: viewerTarget)
         XCTAssertEqual(session.positionTicks, viewerTarget,
-                       "A viewer seek during startup should become the authoritative pending position")
+                       "A viewer seek during startup should become the authoritative pending position (\(scenario))")
 
-        player.completeSeek(at: 0, success: true)
+        player.completeSeek(at: 0, success: oldSeekSuccess)
+        try await drainMainActor()
+        if !oldSeekSuccess {
+            XCTAssertNil(session.error,
+                         "An interrupted startup seek must not reject the newer viewer target (\(scenario))")
+        }
         try await waitForSeekCount(2)
         guard player.seekTargets.count >= 2 else {
             // The current implementation can finish readiness using only the captured
@@ -227,18 +242,22 @@ private final class SeekRaceProtocol: URLProtocol {
         }
         let newestAVTarget = player.seekTargets[1]
         XCTAssertEqual(newestAVTarget.seconds, Ticks.seconds(viewerTarget), accuracy: 0.001,
-                       "Readiness must seek to the newer viewer target after the stale startup target completes")
+                       "Readiness must seek to the newer viewer target after the stale startup target completes (\(scenario))")
         player.completeSeek(at: 1, success: true)
         for _ in 0..<100 {
             if !session.waitingForVideo { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertFalse(session.waitingForVideo, "Readiness should finish after the newest target lands")
-        XCTAssertEqual(session.positionTicks, viewerTarget)
+        XCTAssertFalse(session.waitingForVideo, "Readiness should finish after the newest target lands (\(scenario))")
+        XCTAssertNil(session.error, "The newest target should complete without a startup error (\(scenario))")
+        XCTAssertEqual(session.positionTicks, viewerTarget, "The newest viewer target should remain published (\(scenario))")
 
-        let startReport = try await waitForStartReport()
-        XCTAssertEqual((startReport["PositionTicks"] as? NSNumber)?.int64Value, viewerTarget,
-                       "The server start report must use the newest viewer seek, not the stale resume target")
+        let startReport = await waitForStartReport()
+        XCTAssertNotNil(startReport, "Readiness should send its initial start report (\(scenario))")
+        if let startReport {
+            XCTAssertEqual((startReport["PositionTicks"] as? NSNumber)?.int64Value, viewerTarget,
+                           "The server start report must use the newest viewer seek, not the stale resume target (\(scenario))")
+        }
         await session.stop()
     }
 
