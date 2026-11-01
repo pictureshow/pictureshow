@@ -1903,21 +1903,30 @@ final class AppleSliceUITests: XCTestCase {
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
         XCUIRemote.shared.press(.up)
-        let controlRow = app.collectionViews.allElementsBoundByIndex.first {
-            $0.frame.width > app.frame.width * 0.90 && $0.frame.height < 110 && $0.frame.minY > app.frame.height * 0.60
+        let matching = app.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
+        // AVKit moves this row upward while Info is expanded. Bind the exact
+        // native cell to its containing transport collection, not a screen band.
+        let rows = tvPlayerSnapshot()?.nodes.filter {
+            $0.elementType == .collectionView && $0.frame.width > app.frame.width * 0.90 && $0.frame.height < 110
+        } ?? []
+        let candidates = rows.flatMap { row in
+            tvSnapshotNodes(row).filter {
+                $0.elementType == .cell && $0.label == title && $0.frame.width > 0 && $0.frame.height > 0
+                    && row.frame.contains($0.frame)
+            }.map { (row: row, cell: $0) }
         }
-        guard let controlRow else {
+        guard candidates.count == 1, let candidate = candidates.first else {
             captureFullScreen("Native TV missing \(title) transport row before teardown")
-            XCTFail("AVKit should expose the native transport action row")
-            return app.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
+            XCTFail("The canonical native player must expose one transport row containing the exact \(title) cell")
+            return matching
         }
-        let matching = controlRow.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
-        guard matching.waitForExistence(timeout: 5) else {
+        guard matching.waitForExistence(timeout: 5), app.cells.matching(NSPredicate(format: "label == %@", title)).count == 1,
+              candidate.row.frame.contains(matching.frame) else {
             captureFullScreen("Native TV missing \(title) transport control before teardown")
             XCTFail("AVKit should expose the exact native \(title) transport control")
             return matching
         }
-        print("F1_AX tv_transport_candidates title=\(title) row=\(String(describing: controlRow.frame)) matched=\(matching.frame) label=\(matching.label)")
+        print("F1_AX tv_transport_candidates title=\(title) row=\(candidate.row.frame) matched=\(matching.frame) label=\(matching.label) snapshot=true")
         return matching
     }
     private func waitForNativeTVMenuEnabled(_ element: XCUIElement, description: String) {
