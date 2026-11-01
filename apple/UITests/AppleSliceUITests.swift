@@ -93,9 +93,16 @@ final class AppleSliceUITests: XCTestCase {
         capture("Libraries root")
         let libraryID = try XCTUnwrap(config["libraryID"])
         let library = app.buttons["item-\(libraryID)"]
-        reveal(library); activate(library)
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch.waitForExistence(timeout: 15))
-        capture("Movie library")
+        let librarySort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
+        if librarySort.waitForExistence(timeout: 2) {
+            // NavigationMemory keeps each tab's own stack; the Libraries tab may restore the
+            // previously visited movie grid instead of its root shelf.
+            capture("Restored movie library")
+        } else {
+            reveal(library); activate(library)
+            XCTAssertTrue(librarySort.waitForExistence(timeout: 15), "Opening the Movies library should expose its sort controls")
+            capture("Movie library")
+        }
         returnHome()
         #endif
 
@@ -458,14 +465,23 @@ final class AppleSliceUITests: XCTestCase {
         capture("Audio and subtitle selection")
         activate(app.buttons["playerOptionsDone"])
         #endif
-        XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 30))
-        XCTAssertEqual(app.staticTexts["playbackMethod"].label, "Server HLS")
+        #if os(tvOS)
+        let playbackMethod = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
+        #else
+        let playbackMethod = app.staticTexts["playbackMethod"]
+        #endif
+        XCTAssertTrue(playbackMethod.waitForExistence(timeout: 30))
+        XCTAssertEqual(playbackMethod.label, "Server HLS")
         #if os(tvOS)
         // This episode uses HLS. Keep its method assertion ahead of the native menus;
         // the dedicated direct-player case below proves Direct play before track selection.
         inspectNativeTVInfoAndTracks(preferDirect: false)
         #endif
+        #if os(tvOS)
+        let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        #else
         let position = app.staticTexts["playbackPosition"]
+        #endif
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
         let beforeChange = seconds(position.label)
         XCTAssertTrue(waitForPlaybackClock(position, minimum: beforeChange + 5, timeout: 35, metric: "episode"))
@@ -479,9 +495,22 @@ final class AppleSliceUITests: XCTestCase {
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= pausedAt + 3 }, evaluatedWith: position)
         waitForExpectations(timeout: 15)
         let beforeSeek = seconds(position.label)
-        activate(app.buttons["seekForward"])
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= beforeSeek + 8 }, evaluatedWith: position)
-        waitForExpectations(timeout: 10)
+        let forward10 = app.buttons["seekForward"]
+        XCTAssertTrue(forward10.waitForExistence(timeout: 10), "The active Pictureshow info panel should expose Forward 10 seconds")
+        activate(forward10)
+        let seekDeadline = ProcessInfo.processInfo.systemUptime + 6
+        var landedForward10 = false
+        while ProcessInfo.processInfo.systemUptime < seekDeadline {
+            let landed = seconds(position.label)
+            if landed >= beforeSeek + 8 {
+                XCTAssertLessThanOrEqual(landed, beforeSeek + 12, "Forward 10 seconds should seek relative to the current clock")
+                landedForward10 = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        XCTAssertTrue(landedForward10, "Forward 10 seconds should move the playback clock by about ten seconds before natural playback can reach the target")
+        print("F1_METRIC tv_forward10_delta=\(seconds(position.label) - beforeSeek) before=\(beforeSeek) after=\(seconds(position.label))")
         capture("Remote pause resume and seek")
         leaveNativeTVPlayer(returningTo: play)
         #else
@@ -527,10 +556,10 @@ final class AppleSliceUITests: XCTestCase {
         let play = app.buttons["play"]
         reveal(play); activate(play)
         openNativeTVInfoTab()
-        let method = app.staticTexts["playbackMethod"]
+        let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
         XCTAssertTrue(method.waitForExistence(timeout: 30))
         XCTAssertTrue(waitForSettledMethod(method, expected: "Direct play", timeout: 45), "Direct playback must settle before opening native track menus")
-        let position = app.staticTexts["playbackPosition"]
+        let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
         XCTAssertTrue(position.waitForExistence(timeout: 10))
         let before = seconds(position.label)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= before + 3 }, evaluatedWith: position)
@@ -624,8 +653,9 @@ final class AppleSliceUITests: XCTestCase {
         let play = app.buttons["play"]
         reveal(play); activate(play)
         openNativeTVInfoTab()
-        XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 30))
-        let position = app.staticTexts["playbackPosition"]
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
         let duration = max(1, Double(config["episodeRunSeconds"] ?? "0") ?? 0)
         XCTAssertGreaterThan(duration, 0, "The adjacent episode test needs a known duration")
         let timeline = app.sliders.firstMatch
@@ -634,29 +664,38 @@ final class AppleSliceUITests: XCTestCase {
         let nearEndTarget = max(1, Int(duration) - 15)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= nearEndTarget }, evaluatedWith: position)
         waitForExpectations(timeout: 25)
-        let pause = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Pause")).firstMatch
-        XCTAssertTrue(pause.waitForExistence(timeout: 10), "Pause near the end so the native countdown cannot race the manual next action")
-        activate(pause)
+        XCUIRemote.shared.press(.playPause)
         let nearEnd = seconds(position.label)
         XCTAssertGreaterThanOrEqual(nearEnd, nearEndTarget, "Seeking near the end should update the native playback clock before waiting for Play next")
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), nearEnd + 1, "The remote Play/Pause command should hold near-end playback before the next action")
         capture("Native TV episode near end")
 
         let nextByID = app.descendants(matching: .any).matching(identifier: "playNext").firstMatch
         let nextByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Play next:")).firstMatch
         let next = nextByID.waitForExistence(timeout: 1) ? nextByID : nextByTitle
-        XCTAssertTrue(next.waitForExistence(timeout: 60), "Near the episode end, AVKit should expose the next-episode contextual action")
+        let nextVisible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            nativePlayer.exists && next.exists && next.isHittable && nativePlayer.frame.contains(next.frame)
+        }, object: next)
+        XCTAssertEqual(XCTWaiter.wait(for: [nextVisible], timeout: 60), .completed,
+                       "After the native HUD settles, AVKit should expose a visible next-episode contextual action inside the player")
         capture("Native TV Play next action available")
         activate(next)
 
         let expectedName = try XCTUnwrap(config["nextEpisodeName"])
-        XCTAssertTrue(app.staticTexts[expectedName].waitForExistence(timeout: 45), "The Pictureshow info panel should name the adjacent episode after handoff")
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) <= 12 }, evaluatedWith: position)
+        let playerTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", expectedName)).firstMatch
+        let titleChanged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            playerTitle.exists && playerTitle.frame.width > 0 && playerTitle.frame.height > 0
+                && nativePlayer.exists && nativePlayer.frame.contains(playerTitle.frame)
+        }, object: playerTitle)
+        XCTAssertEqual(XCTWaiter.wait(for: [titleChanged], timeout: 45), .completed, "The native player title should identify the adjacent episode after handoff")
+        expectation(for: NSPredicate { _, _ in self.seconds(position.label) < nearEnd - 10 }, evaluatedWith: position)
         waitForExpectations(timeout: 45)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= 2 }, evaluatedWith: position)
         waitForExpectations(timeout: 35)
         XCTAssertLessThanOrEqual(seconds(position.label), 12, "The next episode must start from its own beginning, not inherit the prior source position")
         capture("Native TV adjacent episode started")
-        XCUIRemote.shared.press(.menu)
+        leaveNativeTVPlayer(returningTo: play)
         #endif
     }
     private func playAndResume(id: String, expected: String, key: String) throws {
@@ -845,9 +884,17 @@ final class AppleSliceUITests: XCTestCase {
         reveal(episode); activate(episode)
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
     }
+    private func parsedClockSeconds(_ label: String) -> Int? {
+        let parts = label.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2 || parts.count == 3 else { return nil }
+        let values = parts.compactMap { Int($0) }
+        guard values.count == parts.count, values.allSatisfy({ $0 >= 0 }), values.last! < 60 else { return nil }
+        if values.count == 2 { return values[0] * 60 + values[1] }
+        guard values[1] < 60 else { return nil }
+        return values[0] * 3600 + values[1] * 60 + values[2]
+    }
     private func seconds(_ label: String) -> Int {
-        let parts = label.split(separator: ":").compactMap { Int($0) }
-        return parts.count == 2 ? parts[0] * 60 + parts[1] : 0
+        parsedClockSeconds(label) ?? 0
     }
     private func ensureSignedIn() {
         if hasHomeRoot(timeout: 2) { returnHome(); return }
@@ -1074,9 +1121,7 @@ final class AppleSliceUITests: XCTestCase {
         let forward10 = app.descendants(matching: .any).matching(identifier: "seekForward").firstMatch
         func safeLabel(_ element: XCUIElement) -> String { element.exists ? element.label : "<not exposed>" }
         func isClockLabel(_ value: String) -> Bool {
-            let parts = value.split(separator: ":", omittingEmptySubsequences: false)
-            return (parts.count == 2 || parts.count == 3)
-                && parts.allSatisfy { Int($0) != nil }
+            parsedClockSeconds(value) != nil
         }
         func visibleInPlayer(_ element: XCUIElement) -> Bool {
             guard element.exists else { return false }
@@ -1179,8 +1224,9 @@ final class AppleSliceUITests: XCTestCase {
             print("F1_AX tv_track_action_label type=\(menuTitle) label=\(action.label) value=\(action.value ?? "")")
             activate(action)
             openNativeTVInfoTab()
-            XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 20), "The AVKit info tab should report the playback clock after track replacement")
-            let method = app.staticTexts["playbackMethod"]
+            let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+            XCTAssertTrue(position.waitForExistence(timeout: 20), "The AVKit info tab should report the playback clock after track replacement")
+            let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
             XCTAssertTrue(method.waitForExistence(timeout: 10))
             expectation(for: NSPredicate(format: "label != %@", "Preparing playback…"), evaluatedWith: method)
             waitForExpectations(timeout: 45)
@@ -1208,8 +1254,8 @@ final class AppleSliceUITests: XCTestCase {
             capture("Native TV \(menuTitle) choice applied")
         }
         openNativeTVInfoTab()
-        XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["playbackPosition"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch.exists)
         capture("Native TV Pictureshow info panel")
     }
     private func leaveNativeTVPlayer(returningTo play: XCUIElement) {
