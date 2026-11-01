@@ -94,13 +94,18 @@ final class AppleSliceUITests: XCTestCase {
         let libraryID = try XCTUnwrap(config["libraryID"])
         let library = app.buttons["item-\(libraryID)"]
         let librarySort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
-        if librarySort.waitForExistence(timeout: 2) {
+        let directID = try XCTUnwrap(config["directID"])
+        let knownMovie = app.buttons["item-\(directID)"]
+        if librarySort.waitForExistence(timeout: 2), knownMovie.exists {
             // NavigationMemory keeps each tab's own stack; the Libraries tab may restore the
-            // previously visited movie grid instead of its root shelf.
+            // previously visited movie grid instead of its root shelf. Identify that grid by
+            // the configured movie card rather than a generic sort control alone.
             capture("Restored movie library")
         } else {
+            if librarySort.exists { back() }
             reveal(library); activate(library)
             XCTAssertTrue(librarySort.waitForExistence(timeout: 15), "Opening the Movies library should expose its sort controls")
+            XCTAssertTrue(knownMovie.waitForExistence(timeout: 15), "The opened library must contain the configured movie before it is identified as Movies")
             capture("Movie library")
         }
         returnHome()
@@ -216,12 +221,16 @@ final class AppleSliceUITests: XCTestCase {
         capture("iPad landscape Libraries root")
         let libraryID = try XCTUnwrap(config["libraryID"])
         let movieLibrary = app.buttons["item-\(libraryID)"]
+        let directID = try XCTUnwrap(config["directID"])
+        let knownMovie = app.buttons["item-\(directID)"]
         let librarySort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
-        if librarySort.waitForExistence(timeout: 2) {
+        if librarySort.waitForExistence(timeout: 2), knownMovie.exists {
             capture("iPad landscape restored movie library")
         } else {
+            if librarySort.exists { back() }
             reveal(movieLibrary); activate(movieLibrary)
             XCTAssertTrue(librarySort.waitForExistence(timeout: 15))
+            XCTAssertTrue(knownMovie.waitForExistence(timeout: 15), "The opened library must contain the configured movie before it is identified as Movies")
             capture("iPad landscape movie library")
         }
         returnHome()
@@ -598,7 +607,8 @@ final class AppleSliceUITests: XCTestCase {
         ensureSignedIn()
         _ = try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
         capture("TV positive-caption movie detail")
-        let play = app.buttons["play"]
+        let play = app.buttons["startOver"]
+        XCTAssertTrue(play.waitForExistence(timeout: 15), "The positive subtitle fixture must start from zero so cue timing is bounded")
         reveal(play); activate(play)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15))
