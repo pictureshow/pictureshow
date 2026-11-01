@@ -522,6 +522,26 @@ final class AppleSliceUITests: XCTestCase {
             }
         }
         try touchNativeTransport("Pause")
+        func captureTouchCueState(_ reason: String) {
+            if let snapshot = try? app.snapshot() {
+                var nodes: [XCUIElementSnapshot] = []
+                func collect(_ node: XCUIElementSnapshot) {
+                    nodes.append(node)
+                    node.children.forEach(collect)
+                }
+                collect(snapshot)
+                let video = nodes.first { $0.identifier == "pictureshowNativePlayer" }
+                let observedMethod = nodes.first { $0.identifier == "playbackMethod" }?.label ?? "<missing>"
+                let observedClock = nodes.first { $0.identifier == "playbackPosition" }?.label ?? "<missing>"
+                nodes.removeAll()
+                if let video { collect(video) }
+                let controls = nodes.filter { $0.elementType == .button && ["Play", "Pause"].contains($0.label) }
+                    .map { "\($0.label):\($0.frame)" }.joined(separator: " | ")
+                let observedFrame = video.map { String(describing: $0.frame) } ?? "<missing>"
+                print("F2_AX external_cue_state reason=\(reason) nativeFrame=\(observedFrame) method=\(observedMethod) clock=\(observedClock) controls=\(controls)")
+            }
+            capture("External text cue state before failed assertion")
+        }
         #else
         XCUIRemote.shared.press(.playPause)
         #endif
@@ -596,23 +616,51 @@ final class AppleSliceUITests: XCTestCase {
         print("F2_METRIC external_text_selected index=\(index) codec=\(codec) cue=\(cue)..<\(cueEnd) paused=\(paused) after=\(seconds(position.label)) method=\(method.label)")
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
-        #else
-        try touchNativeTransport("Play")
-        #endif
         let inCue = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard let value = self.parsedClockSeconds(position.label) else { return false }
             return value >= cue && value < cueEnd
         }, object: position)
         XCTAssertEqual(XCTWaiter.wait(for: [inCue], timeout: TimeInterval(cue + 15)), .completed, "Resume naturally into the actual external cue interval")
-        #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
         #else
-        try touchNativeTransport("Pause")
+        // Stay paused while a real slider gesture enters the short cue. AVKit UI
+        // dispatch can consume the entire cue if Pause starts after its first frame.
+        activate(app.buttons["playerSeek"])
+        let cueSlider = app.sliders["Seek position"]
+        XCTAssertTrue(cueSlider.waitForExistence(timeout: 10))
+        let duration = try XCTUnwrap(config["directRunSeconds"].flatMap(Double.init))
+        XCTAssertGreaterThan(duration, Double(cueEnd))
+        let cueTarget = cue + (cueEnd - cue) / 2
+        let currentSeekValue = seconds(cueSlider.value as? String ?? position.label)
+        let sliderFrame = cueSlider.frame
+        XCTAssertGreaterThan(sliderFrame.width, 40, "The real seek slider must have a usable touch target")
+        XCTAssertTrue(cueSlider.isHittable)
+        let thumbInset = min(12.0, sliderFrame.width * 0.05)
+        let railWidth = max(1, sliderFrame.width - 2 * thumbInset)
+        let startFraction = min(1, max(0, Double(currentSeekValue) / duration))
+        let targetFraction = min(1, max(0, Double(cueTarget) / duration))
+        let start = cueSlider.coordinate(withNormalizedOffset: CGVector(dx: (thumbInset + railWidth * startFraction) / sliderFrame.width, dy: 0.5))
+        let target = cueSlider.coordinate(withNormalizedOffset: CGVector(dx: (thumbInset + railWidth * targetFraction) / sliderFrame.width, dy: 0.5))
+        print("F2_GESTURE external_cue_slider frame=\(sliderFrame) start_seconds=\(currentSeekValue) target_seconds=\(cueTarget)")
+        start.press(forDuration: 0.15, thenDragTo: target)
+        let reached = waitForPausedClockNear(position, target: cueTarget, tolerance: 1, timeout: 15, metric: "external_paused_cue_seek")
+        if !reached { captureTouchCueState("real seek did not reach the cue midpoint") }
+        XCTAssertTrue(reached, "A slider label cannot substitute for the actual paused player reaching the cue")
+        activate(app.buttons["playerOptionsDone"])
         #endif
         Thread.sleep(forTimeInterval: 1)
         let cuePosition = seconds(position.label)
+        #if os(iOS)
+        if !(cue..<cueEnd ~= cuePosition) { captureTouchCueState("actual paused clock outside configured cue") }
+        #endif
         XCTAssertTrue(cue..<cueEnd ~= cuePosition, "The actual paused clock must still be inside the configured external cue")
         XCTAssertEqual(method.label, "Direct play")
+        #if os(iOS)
+        Thread.sleep(forTimeInterval: 2)
+        let stableCuePosition = seconds(position.label)
+        if stableCuePosition != cuePosition { captureTouchCueState("seek did not retain paused intent") }
+        XCTAssertEqual(stableCuePosition, cuePosition, "The real cue seek must retain the paused clock before overlay comparison")
+        #endif
         capture("External text 03 ON actual overlay at \(cuePosition)s")
 
         // The UILabel is intentionally not an accessibility element. Actual glyphs
@@ -631,6 +679,12 @@ final class AppleSliceUITests: XCTestCase {
         leaveNativeTVPlayer(returningTo: play)
         XCTAssertTrue(play.hasFocus, "Normal Menu should restore the original detail action after optional text changes")
         #else
+        try touchNativeTransport("Play")
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: max(cueEnd + 1, cuePosition + 3), timeout: 30, metric: "external_resume_past_cue"),
+                      "The actual native player must resume and advance beyond the external cue after On/Off/On")
+        XCTAssertTrue(nativePlayer.exists)
+        XCTAssertEqual(method.label, "Direct play")
+        capture("External text resumed beyond actual cue")
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(play.waitForExistence(timeout: 15))
         XCTAssertTrue(play.isHittable, "Normal Back must reveal the original usable detail action")
