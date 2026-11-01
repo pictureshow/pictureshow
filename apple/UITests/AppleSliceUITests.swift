@@ -1898,6 +1898,25 @@ final class AppleSliceUITests: XCTestCase {
         }
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
+        if let snapshot = tvPlayerSnapshot(), tvInfoObservation(snapshot) != nil {
+            // A selected custom Info page owns the remote until Back closes it.
+            // Up navigates that page; it does not reveal the transport underneath.
+            XCUIRemote.shared.press(.menu)
+            let deadline = ProcessInfo.processInfo.systemUptime + 5
+            var closed = false
+            while ProcessInfo.processInfo.systemUptime < deadline {
+                if let current = tvPlayerSnapshot(), tvInfoObservation(current) == nil {
+                    closed = true
+                    break
+                }
+                Thread.sleep(forTimeInterval: 0.15)
+            }
+            guard closed else {
+                captureFullScreen("Native TV Info must close before \(title) transport menu")
+                XCTFail("Back must close the custom Info page while retaining the native player before track navigation")
+                return app.cells.matching(NSPredicate(format: "label == %@ AND identifier != %@", title, "AVLegibleSettings")).firstMatch
+            }
+        }
         XCUIRemote.shared.press(.up)
         // AVKit can retain its built-in legible menu alongside the app's server
         // menu. Only the custom menu contains the negotiated Stream N actions.
@@ -1925,7 +1944,7 @@ final class AppleSliceUITests: XCTestCase {
         }
         guard settled.count == 1, let candidate = settled.first else {
             if let snapshot = tvPlayerSnapshot() {
-                let rows = snapshot.nodes.filter { $0.elementType == .collectionView && $0.frame.width > app.frame.width * 0.90 && $0.frame.height < 110 }
+                let rows = snapshot.nodes.filter { $0.elementType == .collectionView }
                 print("F2_TV_TRANSPORT_DIAGNOSTIC title=\(title) candidates=\(settled.count) rows=\(rows.count)")
                 for row in rows.prefix(4) {
                     for cell in tvSnapshotNodes(row).filter({ $0.elementType == .cell }).prefix(12) {
