@@ -339,7 +339,36 @@ final class AppleSliceUITests: XCTestCase {
         let seekPosition = app.sliders["Seek position"]
         XCTAssertTrue(seekPosition.waitForExistence(timeout: 10), "The Pictureshow Seek sheet should expose an accessible seek position")
         let duration = max(1, Double(config["directRunSeconds"] ?? "0") ?? 0)
-        seekPosition.adjust(toNormalizedSliderPosition: CGFloat(max(0, min(1, Double(cue) / duration))))
+        let currentSeekValue = seconds(seekPosition.value as? String ?? position.label)
+        let sliderFrame = seekPosition.frame
+        XCTAssertGreaterThan(sliderFrame.width, 40, "The labeled Pictureshow seek slider should have a real touch target")
+        let thumbInset = min(12.0, sliderFrame.width * 0.05)
+        let railWidth = max(1, sliderFrame.width - 2 * thumbInset)
+        let startFraction = min(1, max(0, Double(currentSeekValue) / duration))
+        let targetFraction = min(1, max(0, Double(cue) / duration))
+        let startX = thumbInset + railWidth * startFraction
+        let targetX = thumbInset + railWidth * targetFraction
+        let start = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: startX / sliderFrame.width, dy: 0.5))
+        let target = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: targetX / sliderFrame.width, dy: 0.5))
+        print("F1_GESTURE positive_subtitle_slider_drag frame=\(sliderFrame) start_seconds=\(currentSeekValue) target_seconds=\(cue) start_fraction=\(startFraction) target_fraction=\(targetFraction)")
+        start.press(forDuration: 0.15, thenDragTo: target)
+        let seekReadout = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Seek to ")).firstMatch
+        XCTAssertTrue(seekReadout.waitForExistence(timeout: 5), "The seek sheet should show its current Seek-to value after the first touch drag")
+        let readoutStart = seekReadout.label.range(of: "Seek to ")!.upperBound
+        let firstDragSeconds = seconds(String(seekReadout.label[readoutStart...]))
+        XCTAssertGreaterThan(firstDragSeconds, 0, "The seek slider's visible Seek-to readout must expose the dragged time")
+        let observedDuration = Double(firstDragSeconds) / targetFraction
+        let calibratedStartFraction = min(1, max(0, Double(firstDragSeconds) / observedDuration))
+        let calibratedTargetFraction = min(1, max(0, Double(cue) / observedDuration))
+        let calibratedStartX = thumbInset + railWidth * calibratedStartFraction
+        let calibratedTargetX = thumbInset + railWidth * calibratedTargetFraction
+        let calibratedStart = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: calibratedStartX / sliderFrame.width, dy: 0.5))
+        let calibratedTarget = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: calibratedTargetX / sliderFrame.width, dy: 0.5))
+        print("F1_GESTURE positive_subtitle_slider_calibration first_drag_seconds=\(firstDragSeconds) observed_duration_seconds=\(observedDuration) target_fraction=\(calibratedTargetFraction)")
+        calibratedStart.press(forDuration: 0.15, thenDragTo: calibratedTarget)
+        let calibratedReadoutStart = seekReadout.label.range(of: "Seek to ")!.upperBound
+        let calibratedSeconds = seconds(String(seekReadout.label[calibratedReadoutStart...]))
+        XCTAssertTrue((cue - 1)...(cue + 2) ~= calibratedSeconds, "The visible Seek-to readout should land in the requested cue window after touch calibration")
         activate(app.buttons["playerOptionsDone"])
         expectation(for: NSPredicate { _, _ in let value = self.seconds(position.label); return value >= cue - 1 && value <= cue + 2 }, evaluatedWith: position)
         waitForExpectations(timeout: 20)
@@ -744,7 +773,10 @@ final class AppleSliceUITests: XCTestCase {
         let signIn = app.buttons["signIn"]
         if !signIn.waitForExistence(timeout: 3) {
             let connect = app.buttons["connect"]
-            if connect.exists { activate(connect) }
+            if connect.exists {
+                capture("Server address sign-in")
+                activate(connect)
+            }
         }
         guard signIn.waitForExistence(timeout: 25) else {
             let known = ["connect", "signIn", "serverAddress", "accountsTitle", "addServer", "cancelQuick", "quickCode", "signOut", "openSearch", "openSettings"]
@@ -753,6 +785,8 @@ final class AppleSliceUITests: XCTestCase {
             XCTFail("Could not reach password sign-in. Visible safe identifiers: \(visible.joined(separator: ","))")
             return
         }
+        dismissKeyboardAndTypingIntro()
+        capture("Password sign-in")
         activate(signIn)
         XCTAssertTrue(hasHomeRoot(timeout: 30), "Successful sign-in should expose Home's Search or Settings toolbar action")
         returnHome()
@@ -922,9 +956,20 @@ final class AppleSliceUITests: XCTestCase {
             let directKey = menuTitle == "Audio" ? "directAudioIndex" : "directSubtitleIndex"
             let preferred = preferDirect ? config[directKey].map { prefix + $0 } : nil
             let actionQuery = app.descendants(matching: .any)
-            let action = preferred.map { actionQuery.matching(identifier: $0).firstMatch }
+            let identified = preferred.map { actionQuery.matching(identifier: $0).firstMatch }
                 ?? actionQuery.matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix)).firstMatch
+            var action = identified
+            if !action.waitForExistence(timeout: 2) {
+                // AVKit may expose native UIAction menu entries by their visible title rather
+                // than the action identifier. NativePlayer includes “Stream N” in each title.
+                if let streamIndex = preferDirect ? config[directKey] : nil {
+                    action = actionQuery.matching(NSPredicate(format: "label CONTAINS[c] %@", "Stream \(streamIndex)")).firstMatch
+                } else {
+                    action = actionQuery.matching(NSPredicate(format: "label CONTAINS[c] %@", "Stream")).firstMatch
+                }
+            }
             XCTAssertTrue(action.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) menu items")
+            print("F1_AX tv_track_action_label type=\(menuTitle) label=\(action.label) value=\(action.value ?? "")")
             activate(action)
             XCTAssertTrue(app.buttons["Pictureshow"].waitForExistence(timeout: 20), "Selecting a native \(menuTitle) item should return to playback")
             activate(app.buttons["Pictureshow"])
