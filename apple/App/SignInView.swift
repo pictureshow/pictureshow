@@ -110,10 +110,10 @@ private struct SignInForm: View {
                             Text("Public users").font(.headline).accessibilityAddTraits(.isHeader)
                             ScrollView(.horizontal) { HStack { ForEach(users, id: \.id) { user in Button { username = user.name; focused = "password" } label: { Text(user.name).minimumTouchTarget() }.buttonStyle(.bordered) } } }
                         }
-                        TextField("Username", text: $username).textContentType(.username).autocorrectionDisabled().focused($focused, equals: "username").submitLabel(.next).onSubmit { focused = "password" }.accessibilityIdentifier("username")
+                        TextField("Username", text: $username).textContentType(.username).autocorrectionDisabled().focused($focused, equals: "username").submitLabel(.next).onSubmit { focused = "password" }.accessibilityLabel("Username").accessibilityIdentifier("username")
                         HStack {
                             Group { if showPassword { TextField("Password", text: $password) } else { SecureField("Password", text: $password) } }
-                                .textContentType(.password).focused($focused, equals: "password").submitLabel(.go).onSubmit { signIn(server) }.accessibilityIdentifier("password")
+                                .textContentType(.password).focused($focused, equals: "password").submitLabel(.go).onSubmit { signIn(server) }.accessibilityLabel("Password").accessibilityIdentifier("password")
                             Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show").minimumTouchTarget() }.accessibilityLabel(showPassword ? "Hide password" : "Show password").buttonStyle(.bordered)
                         }
                         Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").minimumTouchTarget() }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
