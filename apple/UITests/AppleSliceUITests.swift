@@ -2268,13 +2268,25 @@ final class AppleSliceUITests: XCTestCase {
         XCUIRemote.shared.press(.menu)
         let deadline = ProcessInfo.processInfo.systemUptime + 3
         var exposedHUD = false
+        let infoIDs: Set<String> = ["playbackMethod", "playbackPosition", "seekBackward", "seekForward"]
         while ProcessInfo.processInfo.systemUptime < deadline {
             if let video = tvPlayerSnapshot(), video.first(identifier: "pictureshowNativePlayer") != nil,
-               tvInfoObservation(video) == nil,
-               let clock = video.first(identifier: "AXElapsedTime"), parsedClockSeconds(clock.label) == pausedSeconds,
-               video.nodes.contains(where: { $0.elementType == .cell && $0.hasFocus }) {
+               !video.nodes.contains(where: { infoIDs.contains($0.identifier) }) {
+                let clocks = video.nodes.filter { $0.identifier == "AXElapsedTime" }
+                let transportRows = video.nodes.filter {
+                    $0.elementType == .collectionView && $0.frame.width > video.bounds.width * 0.9
+                        && $0.frame.height < 110 && video.bounds.contains($0.frame)
+                }
+                let nativeCellFocused = transportRows.contains { row in
+                    tvSnapshotNodes(row).contains {
+                        $0.elementType == .cell && $0.hasFocus && $0.frame.width > 0 && $0.frame.height > 0
+                            && row.frame.contains($0.frame)
+                    }
+                }
+                guard clocks.count == 1, parsedClockSeconds(clocks[0].label) == pausedSeconds,
+                      nativeCellFocused else { Thread.sleep(forTimeInterval: 0.1); continue }
                 exposedHUD = true
-                print("F2_TV_CAPTION_PREVIEW nativeHUDClock=\(clock.label) infoAbsent=true nativeCellFocused=true snapshot=true")
+                print("F2_TV_CAPTION_PREVIEW nativeHUDClock=\(clocks[0].label) infoAbsent=true nativeCellFocused=true snapshot=true")
                 break
             }
             Thread.sleep(forTimeInterval: 0.1)
