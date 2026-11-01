@@ -176,6 +176,9 @@ struct NativePlayer: UIViewControllerRepresentable {
         controller.showsPlaybackControls = true; controller.videoGravity = .resizeAspect
         controller.allowsPictureInPicturePlayback = false
         #if os(tvOS)
+        // Identify the presentation container without changing its accessibility
+        // grouping; the underlying detail remains in the native AX tree.
+        controller.view.accessibilityIdentifier = "pictureshowNativePlayer"
         controller.playbackControlsIncludeInfoViews = true; controller.transportBarIncludesTitleView = true
         let info = UIHostingController(rootView: PlaybackInformation(session: session)); info.title = "Pictureshow"
         info.preferredContentSize = CGSize(width: 1200, height: 250)
