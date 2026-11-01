@@ -2256,44 +2256,33 @@ final class AppleSliceUITests: XCTestCase {
         label.range(of: "^(selected,\\s*)?Stream \(NSRegularExpression.escapedPattern(for: index))(\\s·|$)",
                     options: [.regularExpression, .caseInsensitive]) != nil
     }
-    /// Clear Info while retaining the native HUD for all three paired frames.
-    /// Fully hidden controls did not respond to the simulator's remote Up input;
-    /// a positive native clock/focus keeps this comparison navigable and timed.
+    /// Bracket each Info-free video frame with the same actual paused Info clock.
+    /// One Menu retains the native transport surface for the observed Up path;
+    /// pixels, rather than AX focus proxies, establish cue/control visibility.
     private func captureNativeTVExternalSubtitlePreview(_ name: String, pausedSeconds: Int) {
-        guard let initial = tvPlayerSnapshot(), tvInfoObservation(initial) != nil else {
-            XCTFail("Each caption preview must start from the identified custom Info page")
+        guard let initial = tvPlayerSnapshot(), let before = tvInfoObservation(initial),
+              before.method == "Direct play", parsedClockSeconds(before.clock) == pausedSeconds else {
+            XCTFail("Each caption preview must start from Direct Info at the actual paused caption clock")
             return
         }
         print("F2_TV_CAPTION_PREVIEW backStep=1 retainNativeHUD=true")
         XCUIRemote.shared.press(.menu)
-        let deadline = ProcessInfo.processInfo.systemUptime + 3
-        var exposedHUD = false
+        Thread.sleep(forTimeInterval: 0.25)
+        let deadline = ProcessInfo.processInfo.systemUptime + 2
+        var infoAbsent = false
         let infoIDs: Set<String> = ["playbackMethod", "playbackPosition", "seekBackward", "seekForward"]
         while ProcessInfo.processInfo.systemUptime < deadline {
             if let video = tvPlayerSnapshot(), video.first(identifier: "pictureshowNativePlayer") != nil,
                !video.nodes.contains(where: { infoIDs.contains($0.identifier) }) {
-                let clocks = video.nodes.filter { $0.identifier == "AXElapsedTime" }
-                let transportRows = video.nodes.filter {
-                    $0.elementType == .collectionView && $0.frame.width > video.bounds.width * 0.9
-                        && $0.frame.height < 110 && video.bounds.contains($0.frame)
-                }
-                let nativeCellFocused = transportRows.contains { row in
-                    tvSnapshotNodes(row).contains {
-                        $0.elementType == .cell && $0.hasFocus && $0.frame.width > 0 && $0.frame.height > 0
-                            && row.frame.contains($0.frame)
-                    }
-                }
-                guard clocks.count == 1, parsedClockSeconds(clocks[0].label) == pausedSeconds,
-                      nativeCellFocused else { Thread.sleep(forTimeInterval: 0.1); continue }
-                exposedHUD = true
-                print("F2_TV_CAPTION_PREVIEW nativeHUDClock=\(clocks[0].label) infoAbsent=true nativeCellFocused=true snapshot=true")
+                infoAbsent = true
+                print("F2_TV_CAPTION_PREVIEW infoAbsent=true nativePlayer=true priorInfoClock=\(before.clock) snapshot=true")
                 break
             }
             Thread.sleep(forTimeInterval: 0.1)
         }
-        guard exposedHUD else {
-            diagnoseTVInfo(step: "caption preview missing native HUD")
-            XCTFail("Caption comparison requires the actual paused native HUD without the custom Info panel")
+        guard infoAbsent else {
+            diagnoseTVInfo(step: "caption preview still contains Info")
+            XCTFail("Caption comparison must retain the native player without any custom Info fields")
             return
         }
         captureFullScreen(name)
