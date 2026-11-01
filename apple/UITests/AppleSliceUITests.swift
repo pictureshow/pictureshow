@@ -502,6 +502,9 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         #if os(tvOS)
         let playbackMethod = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
+        // The app-owned playback method is rendered in AVKit's custom Pictureshow info tab,
+        // not in the initial fullscreen transport surface. Navigate there before asserting it.
+        openNativeTVInfoTab()
         #else
         let playbackMethod = app.staticTexts["playbackMethod"]
         #endif
