@@ -627,12 +627,15 @@ final class AppleSliceUITests: XCTestCase {
         print("F2_METRIC external_text_selected index=\(index) codec=\(codec) cue=\(cue)..<\(cueEnd) paused=\(paused) after=\(seconds(position.label)) method=\(method.label)")
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
-        let inCue = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let value = self.parsedClockSeconds(position.label) else { return false }
-            return value >= cue && value < cueEnd
-        }, object: position)
-        XCTAssertEqual(XCTWaiter.wait(for: [inCue], timeout: TimeInterval(cue + 15)), .completed, "Resume naturally into the actual external cue interval")
+        // Native Resume dismisses Info. Observe AVKit's actual elapsed-time HUD
+        // while playing; its former custom Info clock is no longer on screen.
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: cue, maximum: cueEnd - 1,
+                                              timeout: TimeInterval(cue + 15), metric: "external_native_cue"),
+                          "Resume naturally into the actual external cue interval")
         XCUIRemote.shared.press(.playPause)
+        openNativeTVInfoTab()
+        position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        XCTAssertTrue(position.waitForExistence(timeout: 10))
         #else
         // Stay paused while a real slider gesture enters the short cue. AVKit UI
         // dispatch can consume the entire cue if Pause starts after its first frame.
