@@ -1090,6 +1090,8 @@ final class AppleSliceUITests: XCTestCase {
         // on the trailing sort control. If two presses leave focus unchanged, try the other axis.
         var unchangedFocusCount = 0
         var previousAxis = ""
+        var didSortHeaderProbe = false
+        var visitedFocusDirections = Set<String>()
         for _ in 0..<45 {
             if element.hasFocus { XCUIRemote.shared.press(.select); return }
             let focused = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
@@ -1102,12 +1104,39 @@ final class AppleSliceUITests: XCTestCase {
                 XCUIRemote.shared.press(.select)
                 return
             }
-            let focusKey = focused.map { "\($0.elementType.rawValue):\($0.identifier):\($0.label)" }
-                ?? current.map { "frame:\($0)" }
+            let currentLabel = focused?.label ?? ""
+            if !didSortHeaderProbe, element.identifier.hasPrefix("item-"),
+               ["Ascending", "Title", "Date added", "Release date"].contains(currentLabel) {
+                didSortHeaderProbe = true
+                for probeStep in 0..<4 {
+                    let probeFocus = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
+                    let probeLabel = probeFocus?.label ?? ""
+                    let probeFrame = probeFocus?.frame ?? focusedFrame()
+                    if probeLabel == "Title" { break }
+                    XCUIRemote.shared.press(.left)
+                    Thread.sleep(forTimeInterval: 0.15)
+                    let after = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
+                    let afterFrame = after?.frame ?? focusedFrame()
+                    print("F1_TV_SORT_PROBE step=\(probeStep + 1) from=\(probeLabel) frame=\(probeFrame.map { String(describing: $0) } ?? "<none>") direction=left to=\(after?.label ?? "<none>") frame=\(afterFrame.map { String(describing: $0) } ?? "<none>") target=\(element.identifier) targetFrame=\(element.frame)")
+                    if after?.label == probeLabel { break }
+                }
+                let beforeDown = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
+                let beforeDownFrame = beforeDown?.frame ?? focusedFrame()
+                XCUIRemote.shared.press(.down)
+                Thread.sleep(forTimeInterval: 0.15)
+                let afterDown = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
+                let afterDownFrame = afterDown?.frame ?? focusedFrame()
+                print("F1_TV_SORT_PROBE direction=down from=\(beforeDown?.label ?? "<none>") frame=\(beforeDownFrame.map { String(describing: $0) } ?? "<none>") to=\(afterDown?.label ?? "<none>") frame=\(afterDownFrame.map { String(describing: $0) } ?? "<none>") target=\(element.identifier) targetFrame=\(element.frame)")
+            }
+            let refreshedFocus = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
+            let refreshedFrame = refreshedFocus?.frame ?? focusedFrame()
+            let focusKey = refreshedFocus.map { "\($0.elementType.rawValue):\($0.identifier):\($0.label)" }
+                .map { "\($0):\(refreshedFrame.map { String(describing: $0) } ?? "<no-frame>")" }
+                ?? refreshedFrame.map { "frame:\($0)" }
                 ?? "<no-focus-exposed>"
-            let dx = current.map { element.frame.midX - $0.midX } ?? 0
-            let dy = current.map { element.frame.midY - $0.midY } ?? 100
-            let horizontallyAligned = current.map { $0.minX < element.frame.maxX && element.frame.minX < $0.maxX } ?? false
+            let dx = refreshedFrame.map { element.frame.midX - $0.midX } ?? 0
+            let dy = refreshedFrame.map { element.frame.midY - $0.midY } ?? 100
+            let horizontallyAligned = refreshedFrame.map { $0.minX < element.frame.maxX && element.frame.minX < $0.maxX } ?? false
             let verticalDirection: XCUIRemote.Button = dy > 0 ? .down : .up
             var direction = verticalDirection
             var axis = "vertical"
@@ -1121,7 +1150,7 @@ final class AppleSliceUITests: XCTestCase {
                     axis = "horizontal-after-stall"
                 }
                 unchangedFocusCount = 0
-            } else if let current, !horizontallyAligned, element.frame.midY > current.midY + 30 {
+            } else if let refreshedFrame, !horizontallyAligned, element.frame.midY > refreshedFrame.midY + 30 {
                 direction = dx > 0 ? .right : .left
                 axis = "horizontal-align-before-down"
             } else if abs(dy) > 30 {
@@ -1131,17 +1160,24 @@ final class AppleSliceUITests: XCTestCase {
                 axis = "horizontal"
             }
 
-            print("F1_TV_NAV focus=\(focusKey) targetID=\(element.identifier) targetLabel=\(element.label) direction=\(axis):\(String(describing: direction))")
+            let visitKey = "\(focusKey)|\(axis)|\(String(describing: direction))"
+            if visitedFocusDirections.contains(visitKey) {
+                direction = verticalDirection
+                axis = "vertical-cycle-break"
+            }
+            visitedFocusDirections.insert("\(focusKey)|\(axis)|\(String(describing: direction))")
+            print("F1_TV_NAV focus=\(focusKey) focusFrame=\(refreshedFrame.map { String(describing: $0) } ?? "<none>") targetID=\(element.identifier) targetLabel=\(element.label) targetFrame=\(element.frame) direction=\(axis):\(String(describing: direction))")
             XCUIRemote.shared.press(direction)
             Thread.sleep(forTimeInterval: 0.15)
             let updatedFocused = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
-            let updatedKey = updatedFocused.map { "\($0.elementType.rawValue):\($0.identifier):\($0.label)" }
-                ?? focusedFrame().map { "frame:\($0)" }
+            let updatedFrame = updatedFocused?.frame ?? focusedFrame()
+            let updatedKey = updatedFocused.map { "\($0.elementType.rawValue):\($0.identifier):\($0.label):\(updatedFrame.map { String(describing: $0) } ?? "<no-frame>")" }
+                ?? updatedFrame.map { "frame:\($0)" }
                 ?? "<no-focus-exposed>"
             if updatedKey == focusKey {
                 unchangedFocusCount += 1
             } else {
-                print("F1_TV_NAV_FOCUS_CHANGED from=\(focusKey) to=\(updatedKey)")
+                print("F1_TV_NAV_FOCUS_CHANGED from=\(focusKey) to=\(updatedKey) targetFrame=\(element.frame)")
                 unchangedFocusCount = 0
             }
             previousAxis = axis.hasPrefix("horizontal") ? "horizontal" : "vertical"
