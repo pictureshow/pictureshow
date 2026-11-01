@@ -444,13 +444,9 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(["srt", "subrip", "vtt", "webvtt"].contains(codec), "This case requires an actual external SRT/VTT fixture, never embedded mov_text")
         XCTAssertGreaterThan(cue, 2)
         XCTAssertGreaterThanOrEqual(cueEnd - cue, 3, "The configured cue must allow a bounded real-time pause and capture")
-        #if os(iOS)
         app.terminate()
         app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["directID"])
         app.launch()
-        #else
-        _ = try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
-        #endif
         let play = try zeroPositionPlayAction()
         reveal(play); activate(play)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
@@ -1903,7 +1899,10 @@ final class AppleSliceUITests: XCTestCase {
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
         XCUIRemote.shared.press(.up)
-        let matching = app.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
+        // AVKit can retain its built-in legible menu alongside the app's server
+        // menu. Only the custom menu contains the negotiated Stream N actions.
+        let query = app.cells.matching(NSPredicate(format: "label == %@ AND identifier != %@", title, "AVLegibleSettings"))
+        let matching = query.firstMatch
         // AVKit moves this row upward while Info is expanded. Bind the exact
         // native cell to its containing transport collection, not a screen band.
         func candidates() -> [(row: XCUIElementSnapshot, cell: XCUIElementSnapshot)] {
@@ -1912,7 +1911,8 @@ final class AppleSliceUITests: XCTestCase {
             } ?? []
             return rows.flatMap { row in
                 tvSnapshotNodes(row).filter {
-                    $0.elementType == .cell && $0.label == title && $0.frame.width > 0 && $0.frame.height > 0
+                    $0.elementType == .cell && $0.label == title && $0.identifier != "AVLegibleSettings"
+                        && $0.frame.width > 0 && $0.frame.height > 0
                         && row.frame.contains($0.frame)
                 }.map { (row: row, cell: $0) }
             }
@@ -1924,11 +1924,20 @@ final class AppleSliceUITests: XCTestCase {
             settled = candidates()
         }
         guard settled.count == 1, let candidate = settled.first else {
+            if let snapshot = tvPlayerSnapshot() {
+                let rows = snapshot.nodes.filter { $0.elementType == .collectionView && $0.frame.width > app.frame.width * 0.90 && $0.frame.height < 110 }
+                print("F2_TV_TRANSPORT_DIAGNOSTIC title=\(title) candidates=\(settled.count) rows=\(rows.count)")
+                for row in rows.prefix(4) {
+                    for cell in tvSnapshotNodes(row).filter({ $0.elementType == .cell }).prefix(12) {
+                        print("F2_TV_TRANSPORT_CELL row=\(row.frame) id=\(cell.identifier) label=\(cell.label) frame=\(cell.frame) focused=\(cell.hasFocus)")
+                    }
+                }
+            }
             captureFullScreen("Native TV missing \(title) transport row before teardown")
             XCTFail("The canonical native player must expose one transport row containing the exact \(title) cell")
             return matching
         }
-        guard matching.waitForExistence(timeout: 5), app.cells.matching(NSPredicate(format: "label == %@", title)).count == 1,
+        guard matching.waitForExistence(timeout: 5), query.count == 1,
               candidate.row.frame.contains(matching.frame) else {
             captureFullScreen("Native TV missing \(title) transport control before teardown")
             XCTFail("AVKit should expose the exact native \(title) transport control")
