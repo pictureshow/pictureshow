@@ -1630,10 +1630,25 @@ final class AppleSliceUITests: XCTestCase {
     private func tvPlayerSnapshot() -> TVPlayerSnapshot? {
         guard let root = try? app.snapshot() else { return nil }
         let nodes = tvSnapshotNodes(root)
-        guard let player = nodes.first(where: { $0.identifier == "pictureshowNativePlayer" }),
-              player.frame.width > 0, player.frame.height > 0 else { return nil }
+        let playerFrame: CGRect
+        if let player = nodes.first(where: { $0.identifier == "pictureshowNativePlayer" }),
+           player.frame.width > 0, player.frame.height > 0 {
+            playerFrame = player.frame
+        } else {
+            // AVKit's custom-info presentation temporarily omits the containing
+            // player view from AX. Require its own native tab surface AND every
+            // app-owned Info control in this same immutable tree before accepting
+            // the presentation; the app root by itself is never a player marker.
+            let required = ["AVInfoMenuCollection", "playbackMethod", "playbackPosition", "seekBackward", "seekForward"]
+            guard required.allSatisfy({ identifier in
+                let matches = nodes.filter { $0.identifier == identifier }
+                return matches.count == 1 && matches[0].frame.width > 0 && matches[0].frame.height > 0
+                    && root.frame.contains(matches[0].frame)
+            }) else { return nil }
+            playerFrame = root.frame
+        }
         return TVPlayerSnapshot(nodes: nodes.filter {
-            $0.frame.width > 0 && $0.frame.height > 0 && player.frame.contains($0.frame)
+            $0.frame.width > 0 && $0.frame.height > 0 && playerFrame.contains($0.frame)
                 && root.frame.contains($0.frame)
         })
     }

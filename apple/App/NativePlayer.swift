@@ -360,6 +360,9 @@ private struct PlaybackInformation: View {
                 SeekOptions(session: session)
                 if let warning = session.reportError ?? session.extrasError { Text(warning).foregroundStyle(.orange) }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+                #if os(tvOS)
+                .background(Theme.surface.opacity(0.95))
+                #endif
         }
     }
 }
