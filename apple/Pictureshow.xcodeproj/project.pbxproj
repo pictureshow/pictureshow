@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		10FF7DE827E875AC9A8B6996 /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8DCA7E7F54A8A046DB8216E5 /* PictureshowTransport */; };
+		11BAEB09CF2F5909D00F4003 /* SeekCompletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */; };
 		22EEFD74CE9BD3CE4CAB0AE7 /* NativePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED20D6B4E0FF0CBFDE61285F /* NativePlayer.swift */; };
 		2315B71227D493238750EE59 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		23178F52ECB499187B8771AD /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414DE71D03568307C1B5DF0A /* SearchView.swift */; };
@@ -87,6 +88,7 @@
 		98193AB8CC2DAA971427E2A9 /* AppleSliceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSliceUITests.swift; sourceTree = "<group>"; };
 		A23DE8E3C9A071C533008D69 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		B92A34BA8BB93A38445D9B43 /* Pictureshow-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Pictureshow-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeekCompletionTests.swift; sourceTree = "<group>"; };
 		CEDD6E0937BBEEAE9622CF83 /* PlaybackSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSession.swift; sourceTree = "<group>"; };
 		D0FA85AA82A654E61D1D5117 /* CatalogViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogViews.swift; sourceTree = "<group>"; };
 		D1767EBD427D72A530BF7231 /* Pictureshow-tvOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-tvOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -200,6 +202,7 @@
 			isa = PBXGroup;
 			children = (
 				0C91A71C6A0E4957660B0A18 /* AccountStorageTests.swift */,
+				C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */,
 				E7F3A78BB15FA4AEFB04E9A4 /* ViewingTransitionTests.swift */,
 			);
 			path = UnitTests;
@@ -423,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FBD70081C90A41AE1BF181B8 /* AccountStorageTests.swift in Sources */,
+				11BAEB09CF2F5909D00F4003 /* SeekCompletionTests.swift in Sources */,
 				A7B2E286D12AD6B0374D4608 /* ViewingTransitionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
