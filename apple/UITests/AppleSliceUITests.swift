@@ -944,10 +944,10 @@ final class AppleSliceUITests: XCTestCase {
             #if os(tvOS)
             if keyboard.exists { XCUIRemote.shared.press(.menu) }
             #endif
-            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 10), "Submitting search or closing the native keyboard should leave the results screen visible")
         } else {
             field.typeText("\n")
         }
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 10), "Submitting search or closing the native keyboard should leave the results screen visible")
         XCTAssertTrue(field.exists, "Search should remain open after the native keyboard is dismissed")
         XCTAssertTrue(result.isHittable, "The selected result should be reachable after the keyboard is dismissed")
     }
