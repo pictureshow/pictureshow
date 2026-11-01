@@ -264,15 +264,22 @@ private struct SeekOptions: View {
     @State private var target: Double = 0
     @State private var preview: UIImage?
     @State private var hidePreview = false
+    @State private var editing = false
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Seek to \(clock(Ticks.from(seconds: target)))").monospacedDigit()
             if let preview, !hidePreview { Image(uiImage: preview).resizable().scaledToFit().frame(maxWidth: 320, maxHeight: 180).accessibilityHidden(true) }
             #if os(iOS)
             if let duration = session.durationSeconds {
-                Slider(value: $target, in: 0...duration, onEditingChanged: { editing in
-                    if editing { session.nativeSeekBegan(target) }
-                    if !editing { session.seek(toTicks: Ticks.from(seconds: target)) }
+                Slider(value: Binding(get: { target }, set: { value in
+                    target = value
+                    // Accessibility adjustments need not send drag begin/end events.
+                    // Commit those changes here; physical drags commit once on release.
+                    if !editing { session.seek(toTicks: Ticks.from(seconds: value)) }
+                }), in: 0...duration, onEditingChanged: { value in
+                    let wasEditing = editing; editing = value
+                    if value { session.nativeSeekBegan(target) }
+                    else if wasEditing { session.seek(toTicks: Ticks.from(seconds: target)) }
                 }).accessibilityLabel("Seek position").accessibilityValue(clock(Ticks.from(seconds: target)))
             }
             #endif
