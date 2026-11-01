@@ -68,8 +68,10 @@ control chrome or its exact auto-hide/key-repeat timing.
 
 H.264 SDR MP4/M4V/MOV and hardware-reported HEVC SDR are candidate direct paths. The server's
 compatible HLS H.264/AAC route handles other formats; audio-only switches permit video copying,
-while positive subtitle choices negotiate server burn-in. One native decoder failure permits a
+while embedded/bitmap subtitle choices negotiate server burn-in. Selected external SRT/WebVTT text loads and retries independently in a bounded native overlay; the A/V request uses subtitles Off and reports retain the selected stream index. One native decoder failure permits a
 full HLS recovery. No HDR/Dolby Vision, DTS/TrueHD passthrough or local PGS decoding is inferred.
+Shared reference HEVC preference and Main-profile level eligibility are ported for equivalent capability inputs. Native HEVC transcode preference remains pending: VideoToolbox’s codec-wide support flag does not supply the per-decoder profile/level/size/rate evidence required by that policy, and Apple HEVC HLS requires a separately validated fMP4 target. The native server-HLS profile remains H.264/AAC; no hardware-level HEVC transcode parity is claimed.
+
 Finite Jellyfin VOD HLS uses absolute source time, including after track replacements. Internal
 reopens preserve position/pause intent, clean their specific encoder and retain one viewing Start
 and final Stop. Reports outlive UI dismissal. Failed final reports/cleanup are retained for an
@@ -112,11 +114,7 @@ episode IDs, track indices and a sufficiently long resume fixture exercise the r
 DEBUG field-prefill variables still drive discovery/authentication; they do not bypass either.
 Quick Connect approval requires a separate authorized private harness.
 
-The prior progressive H.264/AAC sample intermittently failed on the iPhone simulator with
-AVFoundation -11800 / underlying -12780. The identical file also failed intermittently over plain
-HTTP outside the old relay, while a local-file control passed. Follow-up direct-URL experiments
-are recorded with their actual trial counts in the private leg report; no transport change is
-credited as a decoder fix without those results.
+The former progressive startup failure (AVFoundation -11800 / underlying -12780) reproduces in an independent UIKit/AVKit control when automatic media-selection criteria are disabled before Ready. The app now enables automatic criteria before every item replacement and disables them only after that item becomes ready, before applying negotiated tracks. Identical-byte origin/range-mirror controls separate this ordering sensitivity from URL, MIME and transport. The private leg report records the controlled format matrix and production-app acceptance separately; no transport change is credited as the fix.
 
 Real iPhone/iPad and Apple TV checks remain necessary for progressive codec reliability/HEVC
 variants, HDR/Dolby Vision and tone mapping, audio routes/HDMI/encoded output, real Siri Remote
