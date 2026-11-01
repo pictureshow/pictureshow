@@ -594,8 +594,6 @@ final class AppleSliceUITests: XCTestCase {
         capture("Episode playback after track apply")
         XCTAssertTrue(playbackMethod.waitForExistence(timeout: 30))
         XCTAssertEqual(playbackMethod.label, "Server HLS")
-        let audio = try XCTUnwrap(config["episodeAudioIndex"])
-        let subtitle = try XCTUnwrap(config["episodeSubtitleIndex"])
         selectTouchTrack(type: "audio", index: audio)
         selectTouchTrack(type: "subtitle", index: subtitle)
         activate(app.buttons["closePlayer"])
