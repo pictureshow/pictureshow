@@ -424,6 +424,136 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         XCTAssertTrue(playFromStart.waitForExistence(timeout: 15))
     }
+    /// External plain text is an optional overlay on the existing Direct viewing.
+    /// Its exact cue window and same-time Off/On captures distinguish it from burn-in.
+    func testExternalTextSubtitleOverlayPreservesDirectViewing() throws {
+        ensureSignedIn()
+        let index = try XCTUnwrap(config["externalSubtitleIndex"].flatMap(Int.init))
+        let codec = try XCTUnwrap(config["externalSubtitleCodec"]).lowercased()
+        let cue = try XCTUnwrap(config["externalSubtitleCueSeconds"].flatMap(Int.init))
+        let cueEnd = try XCTUnwrap(config["externalSubtitleCueEndSeconds"].flatMap(Int.init))
+        XCTAssertGreaterThanOrEqual(index, 0, "External subtitle index must identify a real track, including index zero")
+        XCTAssertTrue(["srt", "subrip", "vtt", "webvtt"].contains(codec), "This case requires an actual external SRT/VTT fixture, never embedded mov_text")
+        XCTAssertGreaterThan(cue, 2)
+        XCTAssertGreaterThanOrEqual(cueEnd - cue, 3, "The configured cue must allow a bounded real-time pause and capture")
+        _ = try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
+        let play = try zeroPositionPlayAction()
+        reveal(play); activate(play)
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "Native video must be identified on both platforms before any scoped interaction")
+        let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
+        var position: XCUIElement
+        #if os(tvOS)
+        position = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        #else
+        position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(method.waitForExistence(timeout: 30))
+        XCTAssertTrue(waitForSettledMethod(method, expected: "Direct play", timeout: 45))
+        #endif
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
+        let advancing = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let value = self.parsedClockSeconds(position.label) else { return false }
+            return value >= 2 && value < cue
+        }, object: position)
+        XCTAssertEqual(XCTWaiter.wait(for: [advancing], timeout: 40), .completed, "Pause the zero-start viewing before the external cue begins")
+
+        #if os(iOS)
+        func touchNativeTransport(_ label: String) {
+            let control = nativePlayer.buttons.matching(NSPredicate(format: "label ==[c] %@", label)).firstMatch
+            if !control.exists || !control.isHittable {
+                // This is the native video frame, not the app/supplemental strip center.
+                nativePlayer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            }
+            XCTAssertTrue(control.waitForExistence(timeout: 5), "The real AVKit video should expose its \(label) control")
+            XCTAssertTrue(nativePlayer.frame.contains(control.frame), "Transport activation must stay inside the identified native video")
+            activate(control)
+        }
+        touchNativeTransport("Pause")
+        #else
+        XCUIRemote.shared.press(.playPause)
+        #endif
+        let paused = seconds(position.label)
+        #if os(tvOS)
+        openNativeTVInfoTab()
+        position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        #endif
+        XCTAssertTrue(method.waitForExistence(timeout: 15))
+        XCTAssertEqual(method.label, "Direct play", "The original native viewing must be Direct before optional text changes")
+        XCTAssertLessThan(paused, cue, "A missed short cue window is a failed setup, not later caption evidence")
+        XCTAssertTrue(waitForPausedClockNear(position, target: paused, tolerance: 1, timeout: 10, metric: "external_initial_pause"))
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertLessThanOrEqual(abs(seconds(position.label) - paused), 1)
+
+        func chooseExternalSubtitle(_ selectedIndex: String, tag: String) {
+            #if os(tvOS)
+            _ = selectNativeTVMenuTrack(menuTitle: "Subtitles", index: selectedIndex)
+            XCTAssertTrue(inspectNativeTVMenuSelection(menuTitle: "Subtitles", index: selectedIndex), "The native menu must check the exact external/Off selection")
+            capture("External text \(tag) native selected checkmark")
+            XCUIRemote.shared.press(.menu)
+            XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5))
+            openNativeTVInfoTab()
+            #else
+            selectTouchTrack(type: "subtitle", index: selectedIndex)
+            openTouchTrackPanel()
+            let choice = app.buttons["subtitle-\(selectedIndex)"]
+            reveal(choice)
+            XCTAssertEqual(choice.value as? String, "Selected")
+            capture("External text \(tag) touch selected checkmark")
+            activate(app.buttons["playerOptionsDone"])
+            #endif
+            XCTAssertTrue(method.waitForExistence(timeout: 10))
+            XCTAssertEqual(method.label, "Direct play", "External text and Off must not renegotiate the existing A/V item to HLS")
+            XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "playbackWaiting").firstMatch.exists, "An optional text choice must not restart A/V readiness")
+        }
+        chooseExternalSubtitle("-1", tag: "01 Off before external")
+        chooseExternalSubtitle(String(index), tag: "02 external before cue")
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(abs(seconds(position.label) - paused), 1, "Off then external must preserve paused clock and intent")
+        print("F2_METRIC external_text_selected index=\(index) codec=\(codec) cue=\(cue)..<\(cueEnd) paused=\(paused) after=\(seconds(position.label)) method=\(method.label)")
+        #if os(tvOS)
+        XCUIRemote.shared.press(.playPause)
+        #else
+        touchNativeTransport("Play")
+        #endif
+        let inCue = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let value = self.parsedClockSeconds(position.label) else { return false }
+            return value >= cue && value < cueEnd
+        }, object: position)
+        XCTAssertEqual(XCTWaiter.wait(for: [inCue], timeout: TimeInterval(cue + 15)), .completed, "Resume naturally into the actual external cue interval")
+        #if os(tvOS)
+        XCUIRemote.shared.press(.playPause)
+        #else
+        touchNativeTransport("Pause")
+        #endif
+        Thread.sleep(forTimeInterval: 1)
+        let cuePosition = seconds(position.label)
+        XCTAssertTrue(cue..<cueEnd ~= cuePosition, "The actual paused clock must still be inside the configured external cue")
+        XCTAssertEqual(method.label, "Direct play")
+        capture("External text 03 ON actual overlay at \(cuePosition)s")
+
+        // The UILabel is intentionally not an accessibility element. Actual glyphs
+        // and their disappearance are judged from these paired same-time frames.
+        chooseExternalSubtitle("-1", tag: "04 Off at cue")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertLessThanOrEqual(abs(seconds(position.label) - cuePosition), 1)
+        capture("External text 05 OFF same paused cue at \(seconds(position.label))s")
+        chooseExternalSubtitle(String(index), tag: "06 external restored at cue")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertLessThanOrEqual(abs(seconds(position.label) - cuePosition), 1)
+        XCTAssertTrue(cue..<cueEnd ~= seconds(position.label))
+        capture("External text 07 ON restored actual overlay at \(seconds(position.label))s")
+        print("F2_METRIC external_text_cue_on_off_on index=\(index) clock=\(seconds(position.label)) method=\(method.label) window=\(cue)..<\(cueEnd)")
+        #if os(tvOS)
+        leaveNativeTVPlayer(returningTo: play)
+        XCTAssertTrue(play.hasFocus, "Normal Menu should restore the original detail action after optional text changes")
+        #else
+        activate(app.buttons["closePlayer"])
+        XCTAssertTrue(play.waitForExistence(timeout: 15))
+        XCTAssertTrue(play.isHittable, "Normal Back must reveal the original usable detail action")
+        #endif
+        XCTAssertTrue(app.staticTexts["detailTitle"].exists)
+        capture("External text 08 normal Back to detail")
+    }
     func testTouchPositiveSubtitleSelectionAndCue() throws {
         #if os(iOS)
         ensureSignedIn()
