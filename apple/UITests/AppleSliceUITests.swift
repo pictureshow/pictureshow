@@ -1586,27 +1586,12 @@ final class AppleSliceUITests: XCTestCase {
             print("F1_TV_INFO_FOCUS step=\(step) targetCell=\(targetIndex)/\(count) targetFrame=\(target.frame) focusedIndex=\(focusedIndex.map { String($0) } ?? "none") cells={\(descriptions.joined(separator: " | "))}")
             return focusedIndex
         }
-        var focusedIndex = cellTrace("before-down")
-        var contentVisible = infoContentIsVisible()
-        if focusedIndex == nil {
-            XCUIRemote.shared.press(.down)
-            Thread.sleep(forTimeInterval: 0.2)
-            focusedIndex = cellTrace("after-down")
-            contentVisible = infoContentIsVisible()
-            print("F1_AX tv_info_content_visible step=down visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position)) methodHittable=\(method.isHittable) positionHittable=\(position.isHittable)")
-        }
-        for step in 0..<count where !contentVisible && !target.hasFocus {
-            let directionRight = focusedIndex.map { $0 < targetIndex } ?? true
-            XCUIRemote.shared.press(directionRight ? .right : .left)
-            Thread.sleep(forTimeInterval: 0.2)
-            focusedIndex = cellTrace("horizontal-\(step + 1)-\(directionRight ? "right" : "left")")
-            contentVisible = infoContentIsVisible()
-            print("F1_AX tv_info_content_visible step=horizontal-\(step + 1) visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position)) methodHittable=\(method.isHittable) positionHittable=\(position.isHittable)")
-        }
-        if !contentVisible {
-            XCTAssertTrue(target.hasFocus, "The final custom AVKit cell must be focused or reveal the visible custom-panel content")
-            capture("Native TV focused custom info tab before selection")
-            XCUIRemote.shared.press(.select)
+        _ = cellTrace("before-geometry-navigation")
+        if !infoContentIsVisible() {
+            // A tab cell need not itself own AX focus: AVKit may put focus on
+            // a descendant or the separate transport row. Route vertically and
+            // horizontally from the actual focused frame before real Select.
+            activateNativeTVMenuChoice(target)
         }
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in infoContentIsVisible() }, object: method)
         XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 15), .completed,
@@ -1668,10 +1653,11 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(choice.waitForExistence(timeout: 10))
         XCTAssertTrue(choice.isEnabled, "The settled native AVKit menu choice should be enabled")
         let focusedCellQuery = app.cells.matching(NSPredicate(format: "hasFocus == true"))
-        for _ in 0..<20 {
+        for step in 0..<20 {
             if choice.hasFocus { XCUIRemote.shared.press(.select); return }
             let focusedCell = focusedCellQuery.firstMatch
             let frame = focusedCell.exists ? focusedCell.frame : focusedFrame()
+            print("F2_TV_NATIVE_FOCUS step=\(step) target=\(choice.frame) focused=\(frame.map { String(describing: $0) } ?? "<unexposed>")")
             if let frame,
                frame.contains(CGPoint(x: choice.frame.midX, y: choice.frame.midY)),
                frame.height < choice.frame.height * 3 {
