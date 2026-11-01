@@ -53,7 +53,7 @@ private struct DetailActionState: ViewModifier {
             content.accessibilityValue(value).disabled(unavailable)
         }
         #else
-        content.accessibilityRepresentation {
+        content.opacity(unavailable ? 0.55 : 1).accessibilityRepresentation {
             content.accessibilityValue(value).disabled(unavailable)
         }
         #endif

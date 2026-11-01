@@ -246,7 +246,11 @@ struct DetailView: View {
                         .padding(12).background(Theme.surface.opacity(0.95), in: Capsule()).padding(.top, 8).accessibilityIdentifier("detailStatus").allowsHitTesting(false)
                 }
             }
+            #if os(iOS)
+            .safeAreaInset(edge: .bottom, spacing: 0) { recoveryPanel }
+            #else
             .overlay(alignment: .topTrailing) { recoveryPanel }
+            #endif
             .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(state.header?.name ?? "Details")
             .announceCue(state.cue)
             .announceStatus(state.notice)
@@ -357,7 +361,9 @@ struct DetailView: View {
                     Text(state.reading ? "Previous attempt: \(reason)" : reason).foregroundStyle(.orange).selectableReading()
                 }
                 #else
-                if let reason = state.readFailure?.message ?? state.readError { Text(reason).foregroundStyle(.orange).selectableReading() }
+                if let reason = state.readFailure?.message ?? state.readError {
+                    Text(state.reading ? "Previous attempt: \(reason)" : reason).foregroundStyle(.orange).selectableReading()
+                }
                 #endif
             }.padding(12).frame(maxWidth: 440, alignment: .leading).background(Theme.surface).padding(8)
         } else if let failure = state.writeFailure {

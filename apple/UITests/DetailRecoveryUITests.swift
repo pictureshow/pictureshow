@@ -73,6 +73,9 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue(retry.hasFocus, "Failure must select the real Retry control")
         #endif
         capture("Detail recovery 03 truthful deadline and disabled action", app: app)
+        #if os(iOS)
+        assertRecoveryDoesNotCoverTitle(in: app, retry: retry, reason: reason)
+        #endif
 
         let priorReads = fixture.totalDetailReads
         activate(retry, in: app)
@@ -90,6 +93,9 @@ final class DetailRecoveryUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.3)
         XCTAssertEqual(fixture.totalDetailReads, priorReads + 1, "Repeated Select during an accepted Retry cannot start another read")
         capture("Detail recovery 04 held deliberate retry retains target", app: app)
+        #if os(iOS)
+        assertRecoveryDoesNotCoverTitle(in: app, retry: retry, reason: "Previous attempt: " + reason)
+        #endif
 
         fixture.releaseDetailReads()
         XCTAssertTrue(waitUntil(timeout: 15) { !retry.exists && play.exists && play.isEnabled })
@@ -104,6 +110,19 @@ final class DetailRecoveryUITests: XCTestCase {
         #endif
         print("F2_DETAIL_RECOVERY reads=\(fixture.totalDetailReads) retryRetained=true freshPrimaryEnabled=\(play.isEnabled) readyValue=\(play.value as? String ?? "")")
     }
+
+    #if os(iOS)
+    private func assertRecoveryDoesNotCoverTitle(in app: XCUIApplication, retry: XCUIElement, reason: String) {
+        let titleFrame = app.staticTexts["detailTitle"].frame
+        let reasonText = app.staticTexts[reason]
+        XCTAssertTrue(reasonText.exists, "A held Retry must label the retained failure as the previous attempt")
+        let recoveryFrame = retry.frame.union(reasonText.frame)
+        XCTAssertTrue(titleFrame.width > 0 && titleFrame.height > 0)
+        XCTAssertTrue(app.frame.contains(titleFrame), "The complete long title must remain in the visible viewport")
+        XCTAssertGreaterThanOrEqual(titleFrame.minY, app.navigationBars.firstMatch.frame.maxY)
+        XCTAssertFalse(titleFrame.intersects(recoveryFrame), "Recovery controls and their background cannot cover the long title")
+    }
+    #endif
 
     private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
