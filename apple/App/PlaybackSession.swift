@@ -59,6 +59,7 @@ import MediaAccessibility
     private var closeTask: Task<Void, Never>?
     private var pauseIntent = false
     private var pendingSeekTicks: Int64?
+    private var seekRevision = 0
     private var segments: [MediaSegment] = []
     private var extrasItem: MediaItem?
     private var imageCache: [URL: UIImage] = [:]
@@ -235,13 +236,18 @@ import MediaAccessibility
     }
     func seek(toTicks ticks: Int64) {
         guard !closed else { return }
+        seekRevision += 1
+        let revision = seekRevision, version = generation
         let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
         let target = min(upper, max(0, ticks)); pendingSeekTicks = target; lastSeekTime = Date()
         countdownElapsed = 0
         guard timelineReady else { positionTicks = target; return }
         player.seek(to: CMTime(seconds: Ticks.seconds(target), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] success in
             Task { @MainActor in
-                guard let self, !self.closed, success else { return }
+                // AVPlayer can finish an earlier seek after another seek or a
+                // track/episode replacement. It must not publish into that stream.
+                guard let self, !self.closed, success, self.generation == version,
+                      self.seekRevision == revision, self.pendingSeekTicks == target else { return }
                 self.pendingSeekTicks = nil; self.positionTicks = target
                 // A media Play/Pause received during the asynchronous seek is newer than
                 // the intent at seek start. Apply that current intent on completion.
