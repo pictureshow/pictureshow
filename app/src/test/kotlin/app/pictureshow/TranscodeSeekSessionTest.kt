@@ -296,7 +296,7 @@ class TranscodeSeekSessionTest {
         session.ready(assertNotNull(session.state.value.decision))
         runCurrent()
         output.snapshot = PlaybackPosition(126_000, true)
-        session.select(MediaStreamType.Audio, 2)
+        session.select(MediaStreamType.Audio, 4)
         runCurrent()
         assertEquals(2, gateway.requests.size)
         assertTrue(gateway.requests.last().enableDirectPlay)
@@ -374,6 +374,7 @@ class TranscodeSeekSessionTest {
                 mediaStreams = listOf(
                     MediaStream(type = MediaStreamType.Video, realFrameRate = 60.0),
                     MediaStream(type = MediaStreamType.Audio, index = 2, language = "en", codec = "pcm_s16le", channels = 2),
+                    MediaStream(type = MediaStreamType.Audio, index = 4, language = "en", codec = "aac", channels = 2),
                     MediaStream(type = MediaStreamType.Subtitle, index = 3, language = "en")
                 )
             ),

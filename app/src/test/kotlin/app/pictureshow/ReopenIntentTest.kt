@@ -7,6 +7,7 @@ package app.pictureshow
 
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.playback.MediaSourceInfo
+import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
@@ -36,7 +37,11 @@ class ReopenIntentTest {
                     PlayOutcome.Play(
                         PlayDecision(
                             "episode",
-                            MediaSourceInfo(id = "source"),
+                            MediaSourceInfo(
+                                id = "source",
+                                defaultSubtitleStreamIndex = 3,
+                                mediaStreams = listOf(MediaStream(type = MediaStreamType.Subtitle, index = 3, codec = "pgs"))
+                            ),
                             PlayMethod.Transcode,
                             "https://example.test/Videos/episode/master.m3u8",
                             emptyMap(),

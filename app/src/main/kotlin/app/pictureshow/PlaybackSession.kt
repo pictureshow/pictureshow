@@ -76,6 +76,9 @@ internal interface PlaybackOutput {
 
     /** Return false if the chosen server stream cannot be switched in this media source. */
     fun select(type: MediaStreamType, index: Int): Boolean
+
+    /** Record a viewer choice without changing the player or its selected loaders. */
+    fun reselect(type: MediaStreamType, index: Int) = Unit
     fun beginSeek() = Unit
     fun pause()
     fun release()
@@ -298,6 +301,19 @@ internal class PlaybackSession(
         val current = decision ?: return@enqueue
         if (type == MediaStreamType.Audio) audioChosenByViewer = true else subtitleChosenByViewer = true
         capture()
+        val activeIndex = if (type == MediaStreamType.Audio) mutable.value.audioIndex else mutable.value.subtitleIndex
+        // Compare inside the command queue, after any preceding preparation/selection completed.
+        // Keep audio recovery policy and optional subtitle retry state intact for this same track.
+        if (app.pictureshow.core.playback.TrackSelection.unchanged(activeIndex, index)) {
+            output.reselect(type, index)
+            trace(
+                "track-reselect",
+                "type=${if (type == MediaStreamType.Audio) "audio" else "subtitle"} " +
+                    "stream=${if (index < 0) "off" else index} ready=$ready positionMs=${lastPosition.milliseconds}"
+            )
+            if (ready) gateway.progress(progressInfo())
+            return@enqueue
+        }
         val nextAudio = if (type == MediaStreamType.Audio) index else mutable.value.audioIndex
         val nextSubtitle = if (type == MediaStreamType.Subtitle) index else mutable.value.subtitleIndex
         val leavingAudioRecovery = type == MediaStreamType.Audio && index != mutable.value.audioIndex && audioRecoveryRequest != null

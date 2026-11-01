@@ -25,7 +25,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 class AudioRecoverySessionTest {
-    private class Gateway : PlaybackGateway {
+    private class Gateway(private val defaultAudioIndex: Int = 1) : PlaybackGateway {
         val requests = mutableListOf<PlaybackRequest>()
         val starts = mutableListOf<PlaybackProgressInfo>()
         val stops = mutableListOf<PlaybackStopInfo>()
@@ -38,7 +38,7 @@ class AudioRecoverySessionTest {
                         "film",
                         MediaSourceInfo(
                             id = "source",
-                            defaultAudioStreamIndex = 1,
+                            defaultAudioStreamIndex = defaultAudioIndex,
                             mediaStreams = listOf(
                                 MediaStream(type = MediaStreamType.Audio, index = 1, codec = "dts"),
                                 MediaStream(type = MediaStreamType.Audio, index = 2, codec = "ac3")
@@ -194,7 +194,7 @@ class AudioRecoverySessionTest {
     }
 
     @Test fun unsupportedLocalTrackUsesServerButNextWorkingTrackRestoresDirectPolicy() = runTest {
-        val gateway = Gateway()
+        val gateway = Gateway(2)
         val output = Output()
         val session = PlaybackSession(gateway, output, backgroundScope, "en")
         session.start(0)
