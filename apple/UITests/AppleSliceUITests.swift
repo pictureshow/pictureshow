@@ -1101,7 +1101,13 @@ final class AppleSliceUITests: XCTestCase {
             let focused = app.buttons.allElementsBoundByIndex.first { $0.hasFocus }
             let description = focused.map { "id=\($0.identifier) label=\($0.label) frame=\($0.frame)" } ?? "no-accessible-focused-button"
             if description != lastFocusedDescription {
-                print("F1_TV_REVEAL step=\(step + 1) targetID=\(element.identifier) targetLabel=\(element.label) targetFrame=\(element.frame) targetHittable=\(element.isHittable) focus={\(description)}")
+                let targetDescription: String
+                if element.exists {
+                    targetDescription = "id=\(element.identifier) label=\(element.label) frame=\(element.frame) hittable=\(element.isHittable)"
+                } else {
+                    targetDescription = "AXTargetNotLoaded"
+                }
+                print("F1_TV_REVEAL step=\(step + 1) target={\(targetDescription)} focus={\(description)}")
                 lastFocusedDescription = description
             }
             #else
