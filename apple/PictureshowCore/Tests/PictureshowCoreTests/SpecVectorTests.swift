@@ -29,6 +29,10 @@ final class SpecVectorTests:XCTestCase {
     func optionalInt(_ d:[String:Any],_ key:String)->Int?{(d[key] as? NSNumber)?.intValue}
     func text(_ d:[String:Any],_ key:String,_ fallback:String="")->String{d[key] as? String ?? fallback}
     func bool(_ d:[String:Any],_ key:String,_ fallback:Bool=false)->Bool{d[key] as? Bool ?? fallback}
+    func required<T:Decodable>(_ type:T.Type,_ d:[String:Any],_ key:String)throws->T {
+        guard let value=d[key] else { throw NSError(domain:"Missing vector input \(key)",code:1) }
+        return try decode(type,value)
+    }
     func json(_ value:Any)throws->String{String(data:try JSONSerialization.data(withJSONObject:value,options:[.sortedKeys,.fragmentsAllowed]),encoding:.utf8)!}
     func errorName(_ error:Error)->String{switch error as? ClientError{case .serverRefused:return "SERVER_REFUSED";case .sourceNotFound:return "SOURCE_NOT_FOUND";case .noCompatibleSource:return "NO_COMPATIBLE_SOURCE";case .unsafeStreamURL:return "UNSAFE_STREAM_URL";default:return "UNEXPECTED_\(error)"}}
     func decisionJSON(_ d:PlayDecision,urlParts:Bool=false)->[String:Any]{["method":d.method.rawValue,"mediaSourceId":d.source.id as Any? ?? NSNull(),"url":urlParts ? parts(d.url):d.url.absoluteString as Any,"headers":d.headers,"playSessionId":d.playSessionId as Any? ?? NSNull(),"transcodeReasons":d.transcodeReasons]}
@@ -38,12 +42,25 @@ final class SpecVectorTests:XCTestCase {
         if let override=ProcessInfo.processInfo.environment["PICTURESHOW_SPEC_DIR"]{root=URL(fileURLWithPath:override)}else{var p=URL(fileURLWithPath:#filePath);for _ in 0..<5{p.deleteLastPathComponent()};root=p.appendingPathComponent("spec")}
         let vectors=root.appendingPathComponent("vectors");let files=try XCTUnwrap(FileManager.default.enumerator(at:vectors,includingPropertiesForKeys:nil)).compactMap{$0 as? URL}.filter{$0.pathExtension == "json"}.sorted{$0.path<$1.path}
         XCTAssertFalse(files.isEmpty,"No shared vectors at \(vectors.path)")
-        var ids=Set<String>();var count=0;var counts:[String:Int]=[:];var failures:[String]=[]
-        for file in files{
-            let document=try JSONSerialization.jsonObject(with:Data(contentsOf:file)) as! [String:Any]
-            XCTAssertEqual(document["schemaVersion"] as? Int,1,file.lastPathComponent);let suite=text(document,"suite");XCTAssertTrue(["reference","application","recovery"].contains(suite),"Unknown suite \(suite)")
-            let cases=try XCTUnwrap(document["cases"] as? [[String:Any]]);XCTAssertFalse(cases.isEmpty,file.path)
-            for vector in cases{let id=text(vector,"id");XCTAssertTrue(ids.insert(id).inserted,"Duplicate \(id)");do{let result=try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]);let actual=try json(result),expected=try json(vector["expected"]!);if actual != expected{failures.append("\(id)\n expected: \(expected)\n actual: \(actual)")}}catch{failures.append("\(id): \(error)")};count+=1;counts[suite,default:0]+=1}
+        // Validate every envelope and global case identity before any operation can perform mock HTTP work.
+        var ids=Set<String>()
+        let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
+            let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
+            guard try required(Int.self,document,"schemaVersion") == 1 else { throw NSError(domain:"Unknown vector schema in \(file.lastPathComponent)",code:1) }
+            let suite=try required(String.self,document,"suite")
+            guard ["reference","application","recovery"].contains(suite) else { throw NSError(domain:"Unknown vector suite \(suite)",code:1) }
+            let cases=try XCTUnwrap(document["cases"] as? [[String:Any]])
+            guard !cases.isEmpty else { throw NSError(domain:"Empty vector suite \(file.lastPathComponent)",code:1) }
+            for vector in cases {
+                let id=try required(String.self,vector,"id"),operation=try required(String.self,vector,"operation")
+                guard !id.isEmpty,!operation.isEmpty,ids.insert(id).inserted,vector["input"] is [String:Any],vector["expected"] != nil else { throw NSError(domain:"Malformed or duplicate vector \(id)",code:1) }
+            }
+            return (document,cases)
+        }
+        var count=0;var counts:[String:Int]=[:];var failures:[String]=[]
+        for (document,cases) in documents{
+            let suite=text(document,"suite")
+            for vector in cases{let id=text(vector,"id");do{let result=try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]);let actual=try json(result),expected=try json(vector["expected"]!);if actual != expected{failures.append("\(id)\n expected: \(expected)\n actual: \(actual)")}}catch{failures.append("\(id): \(error)")};count+=1;counts[suite,default:0]+=1}
         }
         print("Shared vectors: \(count) executed \(counts), \(failures.count) failures; no skipped cases.")
         XCTAssertTrue(failures.isEmpty,failures.joined(separator:"\n"))
@@ -53,6 +70,20 @@ final class SpecVectorTests:XCTestCase {
         let server=Server(url:URL(string:text(serverJSON,"url","https://media.example.test/jellyfin"))!);let account=Account(server:server,userId:text(credentials,"userId","viewer"),username:"Viewer",accessToken:text(credentials,"token","fixture-token"),deviceID:text(credentials,"deviceId",text(identity,"deviceId","install")))
         let client=JellyfinClient(deviceID:text(identity,"deviceId","install"),deviceName:text(identity,"deviceName","Fixture TV"),version:text(identity,"version","0.1.0"))
         switch operation{
+        case "external-subtitle-loading":return ["retryDelayMs":ExternalSubtitleLoading.retryDelayMs(errorCount:try required(Int.self,i,"errorCount")),"sourceOffsetMs":ExternalSubtitleLoading.sourceOffsetMs(fullTimeline:try required(Bool.self,i,"fullTimeline"),serverStartMs:try required(Int64.self,i,"serverStartMs"))]
+        case "detail-empty":return DetailAvailability.showEmptyState(itemType:try required(String?.self,i,"itemType"),loading:try required(Bool.self,i,"loading"),readSucceeded:try required(Bool.self,i,"readSucceeded"),readFailed:try required(Bool.self,i,"readFailed"),episodeCount:try required(Int.self,i,"episodeCount"),seasonCount:try required(Int.self,i,"seasonCount"))
+        case "detail-action-state":return DetailFeedback.actionDescription(currentState:try required(String?.self,i,"currentState"),pending:try required(Bool.self,i,"pending"),available:try required(Bool.self,i,"available"),ready:try required(Bool.self,i,"ready"),requested:try required(Bool.self,i,"requested")) as Any? ?? NSNull()
+        case "detail-failure-key":return DetailFeedback.failureKey(readRecovery:try required(Bool.self,i,"readRecovery"),retrying:try required(Bool.self,i,"retrying"),writeAttempt:try required(Int64?.self,i,"writeAttempt")) as Any? ?? NSNull()
+        case "detail-failure-presentation":
+            struct Step:Decodable { let key:String?;let message:String? }
+            var previous:DetailFailurePresentation?
+            return try required([Step].self,i,"steps").map { step -> Any in
+                previous=DetailFeedback.presentFailure(previous:previous,key:step.key,message:step.message)
+                return previous?.message as Any? ?? NSNull()
+            }
+        case "detail-request-priority":return DetailFeedback.requestIsUrgent(newlyAccepted:try required(Bool.self,i,"newlyAccepted"),requested:try required(Bool.self,i,"requested"),available:try required(Bool.self,i,"available"))
+        case "catalog-arrival-animation":return DetailFeedback.catalogArrivalUsesAnimation(accessibilityEnabled:try required(Bool.self,i,"accessibilityEnabled"),sourceIsPlayback:try required(Bool.self,i,"sourceIsPlayback"),destinationIsCatalog:try required(Bool.self,i,"destinationIsCatalog"))
+        case "detail-arrival-publication":return DetailFeedback.arrivalAwaitsAction(loading:try required(Bool.self,i,"loading"),contentRevealed:try required(Bool.self,i,"contentRevealed"),returningFromPlayback:try required(Bool.self,i,"returningFromPlayback"))
         case "settings":let p=try decode(PlaybackPreferences.self,i);return ["bitrateMbps":p.bitrateMbps as Any? ?? NSNull(),"passthrough":p.passthrough,"subtitleSize":p.subtitleSize.rawValue,"subtitleBackground":p.subtitleBackground.rawValue,"segmentModes":Dictionary(uniqueKeysWithValues:p.segmentModes.map{($0.key.rawValue,$0.value.rawValue)}),"maxStreamingBitrate":p.maxStreamingBitrate,"passthroughEnabled":p.passthrough]
         case "validate-bitrate":do{try PlaybackPreferences.validateBitrate(optionalInt(i,"bitrateMbps"));return ["valid":true]}catch{return ["valid":false]}
         case "default-stream":return PlaybackSelection.defaultStream(streams:try decode([MediaStream].self,i["streams"]!),type:text(i,"type"),serverIndex:optionalInt(i,"serverIndex"),preferredLanguage:text(i,"preferredLanguage"))

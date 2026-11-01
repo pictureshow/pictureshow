@@ -75,6 +75,27 @@ public enum ReferenceDeviceProfile {
         };return result
     }
     static func score(_ d:VideoDecoder)->Double { Double(d.maxWidth)*Double(d.maxHeight)*d.maxFrameRate }
+    /// Evaluate a single reported hardware Main decoder, preserving its own size, speed and level tuple.
+    static func prefersHevcTranscode(_ capabilities:DeviceCapabilities)->Bool {
+        let display=capabilities.display
+        return capabilities.videoDecoders.contains { decoder in
+            let tuples=decoder.profileCapabilities ?? []
+            let mainTuples=tuples.filter { $0.profile.caseInsensitiveCompare("Main") == .orderedSame && $0.maxBitDepth >= 8 }
+            let main=tuples.isEmpty ? decoder.profiles.contains { $0.caseInsensitiveCompare("Main") == .orderedSame } : !mainTuples.isEmpty
+            let mainLevel=tuples.isEmpty ? decoder.maxLevel : mainTuples.compactMap(\.maxLevel).min()
+            let rate=display.maxWidth>1920 || display.maxHeight>1080 ? min(decoder.maxFrameRate,decoder.rateAtSize) : decoder.maxFrameRate
+            return decoder.codec == "HEVC" && decoder.isHardware && main && decoder.maxWidth>=display.maxWidth && decoder.maxHeight>=display.maxHeight && rate>=min(30,display.maxRefreshRate) && hevcLevelCovers(mainLevel,width:display.maxWidth,height:display.maxHeight,rate:min(rate,display.maxRefreshRate))
+        }
+    }
+    static func hevcLevelCovers(_ level:CodecLevel?,width:Int,height:Int,rate:Double)->Bool {
+        guard let level else{return false}
+        let reported=(level.major*10+level.minor)*3
+        // H.265 Annex A level_idc, MaxLumaPs and MaxLumaSr; standard facts shared with the reference.
+        let limits:[(Int,Double,Double)]=[(30,36_864,552_960),(60,122_880,3_686_400),(63,245_760,7_372_800),(90,552_960,16_588_800),(93,983_040,33_177_600),(120,2_228_224,66_846_720),(123,2_228_224,133_693_440),(150,8_912_896,267_386_880),(153,8_912_896,534_773_760),(156,8_912_896,1_069_547_520),(180,35_651_584,1_069_547_520),(183,35_651_584,2_139_095_040),(186,35_651_584,4_278_190_080)]
+        guard let limit=limits.last(where:{$0.0<=reported}) else{return false}
+        let w=Double(width),h=Double(height),pixels=w*h
+        return pixels<=limit.1 && pixels*rate<=limit.2 && w*w<=8*limit.1 && h*h<=8*limit.1
+    }
     static func dominates(_ a:VideoDecoder,_ b:VideoDecoder)->Bool { a.maxWidth>=b.maxWidth && a.maxHeight>=b.maxHeight && a.maxFrameRate>=b.maxFrameRate && a.rateAtSize>=b.rateAtSize && a.depth>=b.depth && Set(a.hdr).isSuperset(of:b.hdr) && Set(a.dv).isSuperset(of:b.dv) && (a.maxLevel == nil || (b.maxLevel != nil && a.maxLevel! >= b.maxLevel!)) }
     static func rangeTypes(_ d:VideoDecoder,_ display:DisplayCapabilities)->[String] {
         let shown=Set(d.hdr).intersection(display.hdrFormats ?? []);let dolbyCodec=["HEVC","AV1"].contains(d.codec);let dolby=dolbyCodec && shown.contains("DOLBY_VISION")
@@ -124,7 +145,8 @@ public enum ReferenceDeviceProfile {
         var audio:[String:Int]=[:];for d in capabilities.audioDecoders {audio[d.codec]=max(audio[d.codec] ?? 0,d.maxChannels)};if audio["PCM"] == nil{audio["PCM"]=8}
         for p in passthrough {let codec = ["EAC3_JOC":"EAC3","DTS_HD":"DTS"][p] ?? p;audio[codec]=max(audio[codec] ?? 0,["AC3","DTS"].contains(p) ? 6:8)}
         let direct:[[String:Any]]=containers.compactMap { name,vc,ac,_ in let v=videoOrder.filter{vc.contains($0) && video[$0] != nil};let a=audioOrder.filter{ac.contains($0) && audio[$0] != nil};guard !v.isEmpty && !a.isEmpty else{return nil};return ["Container":name,"Type":"Video","VideoCodec":v.map{videoNames[$0]!}.joined(separator:","),"AudioCodec":a.map(audioName).joined(separator:",")] }
-        let vo=["H264","HEVC","AV1","VP9"].filter{video[$0] != nil && ["H264","HEVC"].contains($0)}
+        let preferred=prefersHevcTranscode(capabilities) ? ["HEVC","H264","AV1","VP9"] : ["H264","HEVC","AV1","VP9"]
+        let vo=preferred.filter{video[$0] != nil && ["H264","HEVC"].contains($0)}
         let encodeTargets = passthrough.contains(where:{$0.hasPrefix("EAC3")}) ? ["EAC3","AC3","AAC"] : (passthrough.contains("AC3") ? ["AC3","AAC","EAC3"]:["AAC","AC3","EAC3"])
         let ao=(encodeTargets+["MP3","OPUS","FLAC","ALAC","DTS","TRUEHD"]).filter{audio[$0] != nil && ["AAC","AC3","EAC3","MP3"].contains($0)}
         var conditions=[condition("Width",String(capabilities.display.maxWidth)),condition("Height",String(capabilities.display.maxHeight))]
