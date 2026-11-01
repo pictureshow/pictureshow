@@ -99,7 +99,7 @@ private struct SignInForm: View {
         ScrollView {
             VStack(alignment: .leading, spacing: compact ? 16 : 24) {
                 Label("Pictureshow", systemImage: "play.rectangle.fill").modifier(TokenFont(compact ? DesignTokens.titleSize : DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
-                Text(server?.name ?? "Your Jellyfin, beautifully at home.").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize)).foregroundStyle(Theme.muted)
+                Text(server.map { "Sign in to \($0.name)" } ?? "Your Jellyfin, beautifully at home.").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize)).foregroundStyle(Theme.muted)
                 if model.sessionEnded { Text("Your session ended. Sign in again.").foregroundStyle(.orange).accessibilityIdentifier("sessionEnded") }
                 if let server {
                     Text(server.url.host ?? "Jellyfin").foregroundStyle(Theme.muted)
@@ -110,13 +110,21 @@ private struct SignInForm: View {
                             Text("Public users").font(.headline).accessibilityAddTraits(.isHeader)
                             ScrollView(.horizontal) { HStack { ForEach(users, id: \.id) { user in Button { username = user.name; focused = "password" } label: { Text(user.name).minimumTouchTarget() }.buttonStyle(.bordered) } } }
                         }
-                        TextField("Username", text: $username).textContentType(.username).autocorrectionDisabled().focused($focused, equals: "username").submitLabel(.next).onSubmit { focused = "password" }.accessibilityLabel("Username").accessibilityIdentifier("username")
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Username").foregroundStyle(Theme.muted).accessibilityHidden(true)
+                            TextField("Username", text: $username).textContentType(.username).autocorrectionDisabled().focused($focused, equals: "username").submitLabel(.next).onSubmit { focused = "password" }.accessibilityLabel("Username").accessibilityIdentifier("username")
+                                .modifier(SignInFieldStyle(isFocused: focused == "username"))
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Password").foregroundStyle(Theme.muted).accessibilityHidden(true)
                         HStack {
                             Group { if showPassword { TextField("Password", text: $password) } else { SecureField("Password", text: $password) } }
                                 .textContentType(.password).focused($focused, equals: "password").submitLabel(.go).onSubmit { signIn(server) }.accessibilityLabel("Password").accessibilityIdentifier("password")
+                                .modifier(SignInFieldStyle(isFocused: focused == "password"))
                             Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show").minimumTouchTarget() }.accessibilityLabel(showPassword ? "Hide password" : "Show password").buttonStyle(.bordered)
                         }
-                        Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").minimumTouchTarget() }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
+                        }
+                        Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
                         if quickEnabled == true { Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").minimumTouchTarget() }.disabled(busy).accessibilityIdentifier("quickConnect") }
                         else if quickEnabled == false { Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted) }
                         else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").minimumTouchTarget() } }
@@ -128,8 +136,10 @@ private struct SignInForm: View {
                         Text("Remembered servers").font(.headline).accessibilityAddTraits(.isHeader)
                         ForEach(model.snapshot.servers, id: \.url) { saved in Button { address = saved.url.absoluteString; connect() } label: { Text(saved.name).minimumTouchTarget() }.buttonStyle(.bordered) }
                     }
+                    Text("Server address").foregroundStyle(Theme.muted).accessibilityHidden(true)
                     TextField("Server address", text: $address).textContentType(.URL).autocorrectionDisabled().focused($focused, equals: "server").submitLabel(.go).onSubmit(connect)
                         .accessibilityLabel("Server address").accessibilityHint("Enter your Jellyfin server URL, including its port or path if needed").accessibilityIdentifier("serverAddress")
+                        .modifier(SignInFieldStyle(isFocused: focused == "server"))
                         #if os(iOS)
                         .textInputAutocapitalization(.never).keyboardType(.URL)
                         #endif
@@ -141,7 +151,7 @@ private struct SignInForm: View {
                 if let message = error ?? flow.error { Text(message).foregroundStyle(.orange).accessibilityIdentifier("signInError") }
             }
             #if os(iOS)
-            .textFieldStyle(.roundedBorder)
+            .buttonBorderShape(.roundedRectangle(radius: 12))
             #endif
             .buttonStyle(ProminentActionStyle()).frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
         }
@@ -191,4 +201,19 @@ private struct SignInForm: View {
         }
     }
     private func leaveServer() { work?.cancel(); flow.clear(); server = nil; model.signInServer = nil; password = ""; users = []; quickEnabled = nil; focused = "server" }
+}
+
+/// Visible labels stay outside the editable value; the input itself remains a native
+/// field, with a consistent touch surface rather than the compact rounded-border default.
+private struct SignInFieldStyle: ViewModifier {
+    var isFocused: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        #if os(iOS)
+        content.textFieldStyle(.plain).padding(.horizontal, 12).frame(minHeight: 56)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay { RoundedRectangle(cornerRadius: 12).stroke(isFocused ? Theme.accent : Theme.muted.opacity(0.5), lineWidth: isFocused ? 2 : 1) }
+        #else
+        content
+        #endif
+    }
 }
