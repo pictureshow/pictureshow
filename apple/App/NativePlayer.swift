@@ -225,7 +225,8 @@ struct NativePlayer: UIViewControllerRepresentable {
             let stop = UIAction(title: "Back to details", image: UIImage(systemName: "stop.fill"), identifier: UIAction.Identifier("closePlayer")) { _ in close() }
             // Contextual actions are hidden while AVKit's transport is visible. Keep
             // the same continuation reachable in the native bar during that state.
-            controller.transportBarCustomMenuItems = context.coordinator.continuationTransportActions
+            let continuationMenus: [UIMenuElement] = context.coordinator.continuationTransportMenu.map { [$0] } ?? []
+            controller.transportBarCustomMenuItems = continuationMenus
                 + [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [stop]
         }
         var contextActions: [UIAction] = []
@@ -249,10 +250,16 @@ struct NativePlayer: UIViewControllerRepresentable {
         #if os(tvOS)
         private var continuationID: String?
         var continuationTransportActions: [UIAction] = []
+        #if os(tvOS)
+        var continuationTransportMenu: UIMenu?
+        #endif
         var continuationContextActions: [UIAction] = []
         func updateContinuation(_ next: MediaItem?, countdown: Int?) {
             guard let next, let countdown else {
                 continuationID = nil; continuationTransportActions = []; continuationContextActions = []
+                #if os(tvOS)
+                continuationTransportMenu = nil
+                #endif
                 return
             }
             if continuationID != next.id {
@@ -268,12 +275,21 @@ struct NativePlayer: UIViewControllerRepresentable {
                     UIAction(title: "Cancel next episode", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
                 }
                 continuationTransportActions = [play("playNextTransport"), cancel("cancelNextTransport")]
+                #if os(tvOS)
+                // AVKit renders transport actions as glyphs. A native menu keeps
+                // the next title, countdown and Cancel readable when opened.
+                continuationTransportMenu = UIMenu(title: "Next episode", image: UIImage(systemName: "forward.end.fill"),
+                                                   identifier: .init("nextEpisodeMenu"), children: continuationTransportActions)
+                #endif
                 continuationContextActions = [play("playNext"), cancel("cancelNext")]
                 actionSignature = "" // A different episode may have the same action identifiers.
             }
             // Mutate the retained action rather than replacing AVKit's focused controls
             // every second. A countdown tick must not restart contextual presentation.
             continuationContextActions.first?.title = "Play next: \(next.name) (\(countdown))"
+            #if os(tvOS)
+            continuationTransportActions.first?.title = "Play next: \(next.name) (\(countdown))"
+            #endif
         }
         func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool { close(); return false }
         func playerViewController(_ controller: AVPlayerViewController, willTransitionToVisibilityOfTransportBar visible: Bool, with coordinator: AVPlayerViewControllerAnimationCoordinator) { Task { @MainActor in session.controlsVisible = visible } }
