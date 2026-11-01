@@ -292,6 +292,51 @@ final class AppleSliceUITests: XCTestCase {
         capture("iPad HLS detail after normal Back")
         #endif
     }
+    /// Produces uncropped device-screen and paired-simctl evidence for settled iPad landscape layouts.
+    func testiPadLandscapeFullScreenNavigationEvidence() throws {
+        #if os(iOS)
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("This acceptance case runs on an iPad destination") }
+        ensureSignedIn()
+        selectHomeRoot()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+
+        let deadline = ProcessInfo.processInfo.systemUptime + 15
+        while ProcessInfo.processInfo.systemUptime < deadline && app.frame.width <= app.frame.height {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        let homeFrame = app.frame
+        print("F1_METRIC ipad_landscape_fullscreen_home orientation=\(XCUIDevice.shared.orientation) frame=\(homeFrame)")
+        XCTAssertGreaterThan(homeFrame.width, homeFrame.height, "The app window must be landscape before full-screen capture")
+        XCTAssertTrue(app.buttons["openSearch"].waitForExistence(timeout: 10))
+        captureFullScreen("iPad landscape Home full device screen")
+        print("F1_SIMCTL_CAPTURE_POINT ipad_landscape_home")
+
+        let libraries = app.buttons["Libraries"]
+        XCTAssertTrue(libraries.waitForExistence(timeout: 10))
+        activate(libraries)
+        let moviesID = try XCTUnwrap(config["libraryID"])
+        let movies = app.buttons["item-\(moviesID)"]
+        let librarySort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
+        for _ in 0..<12 where !movies.exists || librarySort.exists {
+            back()
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTAssertTrue(movies.waitForExistence(timeout: 15), "The Libraries shelf should show the configured Movies library after popping its retained route")
+        XCTAssertFalse(librarySort.exists, "The Libraries screenshot must show its root shelf, not a restored library grid")
+        captureFullScreen("iPad landscape Libraries root full device screen")
+        print("F1_SIMCTL_CAPTURE_POINT ipad_landscape_libraries")
+
+        reveal(movies); activate(movies)
+        let sort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
+        let folderID = try XCTUnwrap(config["samplesFolderID"])
+        let folder = app.buttons["item-\(folderID)"]
+        XCTAssertTrue(sort.waitForExistence(timeout: 15), "The configured Movies root should expose its catalog sort control")
+        XCTAssertTrue(folder.waitForExistence(timeout: 15), "The configured Movies root should contain its Format Lab folder")
+        captureFullScreen("iPad landscape Movies root full device screen")
+        print("F1_SIMCTL_CAPTURE_POINT ipad_landscape_movies_root")
+        #endif
+    }
     /// Optional AVKit fullscreen probe, isolated from required rotation and normal Back.
     func testiPadNativeFullscreenRoundTripIfAvailable() throws {
         #if os(iOS)
@@ -820,7 +865,8 @@ final class AppleSliceUITests: XCTestCase {
         }
         ensureSignedIn()
         try openSeriesEpisodeDetail()
-        let play = app.buttons["play"]
+        let play = app.buttons["startOver"]
+        XCTAssertTrue(play.waitForExistence(timeout: 15), "Manual Next must begin this known-duration episode from zero")
         reveal(play); activate(play)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15))
@@ -830,40 +876,40 @@ final class AppleSliceUITests: XCTestCase {
         let initial = seconds(position.label)
         XCTAssertTrue(waitForPlaybackClock(position, minimum: max(3, initial + 3), timeout: 45,
                                            metric: "tv_episode_next_initial", nativeAVKitClock: true))
-        let duration = max(1, Double(config["episodeRunSeconds"] ?? "0") ?? 0)
+        let duration = max(1, Int(config["episodeRunSeconds"] ?? "0") ?? 0)
         XCTAssertGreaterThan(duration, 0, "The adjacent episode test needs a known duration")
-        // AVKit hides its transport controls after the clock wait. Wake the native HUD just
-        // before resolving the slider instead of assuming the earlier Up is still active.
-        XCUIRemote.shared.press(.up)
-        let timeline = app.sliders.firstMatch
-        XCTAssertTrue(timeline.waitForExistence(timeout: 10), "AVPlayerViewController should expose its native playback timeline")
-        XCUIRemote.shared.press(.playPause)
-        let beforeSeek = seconds(position.label)
-        Thread.sleep(forTimeInterval: 2)
-        XCTAssertLessThanOrEqual(seconds(position.label), beforeSeek + 1,
-                                 "Pause near the start before the native timeline seek")
-        timeline.adjust(toNormalizedSliderPosition: CGFloat(max(0.0, min(1.0, (duration - 8) / duration))))
-        let nearEndTarget = max(1, Int(duration) - 15)
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= nearEndTarget }, evaluatedWith: position)
-        waitForExpectations(timeout: 25)
+        let currentName = try XCTUnwrap(config["episodeName"])
+        let expectedName = try XCTUnwrap(config["nextEpisodeName"])
+        let nearEndTarget = max(1, duration - 18)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: nearEndTarget, timeout: TimeInterval(duration + 15),
+                                           metric: "tv_episode_next_natural_final_window", nativeAVKitClock: true),
+                      "The episode clock must naturally reach the final window before looking for contextual Next")
         let nearEnd = seconds(position.label)
-        XCTAssertGreaterThanOrEqual(nearEnd, nearEndTarget, "Seeking near the end should update the native playback clock before waiting for Play next")
-        Thread.sleep(forTimeInterval: 2)
-        XCTAssertLessThanOrEqual(seconds(position.label), nearEnd + 1, "The remote Play/Pause command should hold near-end playback before the next action")
-        capture("Native TV episode near end")
+        XCTAssertGreaterThanOrEqual(nearEnd, nearEndTarget, "Playback must reach the final window naturally")
 
         let nextByID = app.descendants(matching: .any).matching(identifier: "playNext").firstMatch
-        let nextByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Play next:")).firstMatch
+        let nextActionPattern = "^Play next: \(NSRegularExpression.escapedPattern(for: expectedName)) \\([0-9]{1,2}\\)$"
+        let nextByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label MATCHES %@", nextActionPattern)).firstMatch
         let next = nextByID.waitForExistence(timeout: 1) ? nextByID : nextByTitle
+        let currentTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", currentName)).firstMatch
         let nextVisible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            nativePlayer.exists && next.exists && next.isHittable && nativePlayer.frame.contains(next.frame)
+            nativePlayer.exists && currentTitle.exists && nativePlayer.frame.contains(currentTitle.frame)
+                && self.parsedClockSeconds(position.label) != nil
+                && self.seconds(position.label) < duration - 1
+                && next.exists && next.isHittable && nativePlayer.frame.contains(next.frame)
         }, object: next)
-        XCTAssertEqual(XCTWaiter.wait(for: [nextVisible], timeout: 60), .completed,
+        let secondsRemaining = duration - nearEnd
+        XCTAssertGreaterThanOrEqual(secondsRemaining, 5, "The native contextual action must be activated before the physical end window")
+        XCTAssertEqual(XCTWaiter.wait(for: [nextVisible], timeout: TimeInterval(max(1, secondsRemaining - 2))), .completed,
                        "After the native HUD settles, AVKit should expose a visible next-episode contextual action inside the player")
-        capture("Native TV Play next action available")
+        let actionClock = try XCTUnwrap(parsedClockSeconds(position.label), "A valid native elapsed clock must be present before manual Next")
+        XCTAssertLessThan(actionClock, duration - 3, "The original episode must still be playing before manual Next is activated")
+        XCTAssertTrue(currentTitle.exists && nativePlayer.frame.contains(currentTitle.frame), "The original episode title must still be visible before manual Next")
+        XCTAssertNotNil(next.label.range(of: nextActionPattern, options: .regularExpression),
+                        "The contextual Next action must name the exact adjacent episode and expose its bounded countdown")
+        print("F1_METRIC tv_manual_next_action clock=\(actionClock) remaining=\(duration - actionClock) label=\(next.label)")
         activate(next)
 
-        let expectedName = try XCTUnwrap(config["nextEpisodeName"])
         let playerTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", expectedName)).firstMatch
         let titleChanged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             playerTitle.exists && playerTitle.frame.width > 0 && playerTitle.frame.height > 0
@@ -1779,4 +1825,5 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(hasHomeRoot(timeout: 5), "Navigation should return to Home with Search or Settings available")
     }
     private func capture(_ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
+    private func captureFullScreen(_ name: String) { let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
 }
