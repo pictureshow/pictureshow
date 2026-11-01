@@ -318,7 +318,8 @@ object DeviceProfileBuilder {
                 decoder.maxWidth >= display.maxWidth &&
                 decoder.maxHeight >= display.maxHeight &&
                 rate >= targetRate &&
-                hevcLevelCovers(mainLevel, display.maxWidth, display.maxHeight, rate)
+                // Output is bounded by display refresh; a higher decoder peak must not raise level requirements.
+                hevcLevelCovers(mainLevel, display.maxWidth, display.maxHeight, minOf(rate, display.maxRefreshRate))
         }
     }
 

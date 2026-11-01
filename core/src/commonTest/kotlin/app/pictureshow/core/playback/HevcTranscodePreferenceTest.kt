@@ -106,6 +106,19 @@ class HevcTranscodePreferenceTest {
     }
 
     @Test
+    fun mainLevelCoversDisplayRateRatherThanDecoderPeak() {
+        val display = DisplayCapabilities(1920, 1080, 60.0)
+        for (peak in listOf(300.0, 600.0)) {
+            val fast = hevc.copy(maxLevel = CodecLevel(5, 1), maxFrameRate = peak)
+            assertEquals("hevc,h264", order(fast, display = display), "Decoder peak $peak must not penalize display-rate coverage")
+            // Level 4 fits 1080p30's samples, but not 1080p60: retain the actual display-rate requirement.
+            val lowerLevel = fast.copy(maxLevel = CodecLevel(4))
+            assertEquals("h264,hevc", order(lowerLevel, display = display))
+            assertEquals("hevc,h264", order(lowerLevel, display = display.copy(maxRefreshRate = 30.0)))
+        }
+    }
+
+    @Test
     fun reportedHdrAndCompatibleDvBaseLayersRemainDirectWithInvalidAndDvOnlyGuarded() {
         val profile = DeviceProfileBuilder.build(CapabilityFixtures.reportedProjector)
         val source = Combo("mkv", "hevc", "Main 10", 10, "HDR10", "aac", 2, emptyList(), 3840, 2160, 60.0, 153)
