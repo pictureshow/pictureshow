@@ -38,7 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -48,6 +54,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.requestFocus
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -235,6 +242,73 @@ internal class PanelMediaKeyCallback(private val original: Window.Callback) : Wi
         PlaybackMediaSession.dispatchKeyEvent(event) || original.dispatchKeyEvent(event)
 }
 
+/**
+ * Own the selected arrival row before a key can reach the panel. Android can immediately re-enter
+ * during a forced owner-focus clear, followed by another parent request while the group is already
+ * active; that second request skips onEnter. Keep only the preferred row eligible during entry.
+ * User input opens all rows synchronously, before key search, pointer handling or accessibility
+ * focus actions. Window/a11y acknowledgment only opens eligibility; it never requests focus later.
+ */
+internal class PlayerPanelEntryFocus {
+    private val rows = linkedMapOf<Int, FocusRequester>()
+    private var focusedIndex: Int? = null
+    private var initialIndex: Int? = null
+    private var entered = false
+    private var entryPending = true
+
+    @Composable
+    fun Modifier.row(index: Int): Modifier {
+        val requester = remember(index) { FocusRequester() }
+        DisposableEffect(index, requester) {
+            rows[index] = requester
+            onDispose { if (rows[index] === requester) rows.remove(index) }
+        }
+        return this.focusProperties { canFocus = !entryPending || index == preferredIndex() }
+            .focusRequester(requester).onFocusChanged {
+                if (it.isFocused) {
+                    focusedIndex = index
+                    entered = true
+                }
+            }.semantics {
+                requestFocus {
+                    allowNavigation()
+                    requester.requestFocus()
+                }
+            }
+    }
+
+    private fun preferredIndex(): Int? = focusedIndex?.takeIf(rows::containsKey)
+        // Do not latch another row while the selected row is still joining the first layout.
+        ?: initialIndex?.takeIf { !entered || rows.containsKey(it) }
+        ?: rows.keys.firstOrNull()
+
+    fun requestInitial(index: Int?) {
+        index?.let(rows::get)?.requestFocus()
+    }
+
+    fun allowNavigation() {
+        entryPending = false
+    }
+
+    fun Modifier.entry(initialIndex: Int?): Modifier {
+        this@PlayerPanelEntryFocus.initialIndex = initialIndex
+        return this.onPreviewKeyEvent {
+            allowNavigation()
+            false
+        }.pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    if (awaitPointerEvent(PointerEventPass.Initial).type == PointerEventType.Press) allowNavigation()
+                }
+            }
+        }.focusProperties {
+            onEnter = { preferredIndex()?.let(rows::get)?.requestFocus() }
+        }.onFocusChanged {
+            if (!it.hasFocus) entryPending = true
+        }.focusGroup().onGloballyPositioned { if (!entered) requestInitial(initialIndex) }
+    }
+}
+
 @Composable
 internal fun TrackChoices(
     choices: List<Pair<Int, String>>,
@@ -243,7 +317,7 @@ internal fun TrackChoices(
     title: String? = null,
     footer: (@Composable () -> Unit)? = null
 ) {
-    val first = remember { FocusRequester() }
+    val entry = remember { PlayerPanelEntryFocus() }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
     val accessible = rememberAccessibilityEnabled()
@@ -255,10 +329,7 @@ internal fun TrackChoices(
     // accessibility tree once the screen reader has acknowledged this initial target.
     Column(
         (if (title != null) Modifier.background(Color(0xF510131C)).padding(32.dp) else Modifier)
-            // Redirect the window's first input-focus entry too: TV TalkBack may follow
-            // that native event before the post-window coroutine can request the row.
-            .focusProperties { onEnter = { if (initialIndex != null) first.requestFocus() } }
-            .focusGroup(),
+            .then(with(entry) { Modifier.entry(initialIndex) }),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (title !=
@@ -287,7 +358,7 @@ internal fun TrackChoices(
                     modifier = Modifier.testTag("track:$index").semantics {
                         selected = index == selectedIndex
                         traversalIndex = if (index == initialIndex) -1f else 0f
-                    }.then(if (index == initialIndex) Modifier.focusRequester(first) else Modifier)
+                    }.then(with(entry) { Modifier.row(index) })
                         .then(
                             if (!initialFocusReady && index != initialIndex) {
                                 Modifier.clearAndSetSemantics { hideFromAccessibility() }
@@ -313,16 +384,12 @@ internal fun TrackChoices(
             }
         }
     }
-    LaunchedEffect(initialIndex, windowFocused, accessible) {
+    LaunchedEffect(windowFocused, accessible) {
         if (windowFocused) {
-            if (initialIndex != null) {
-                list.scrollToItem(initialOffset)
-                androidx.compose.runtime.withFrameNanos { }
-                first.requestFocus()
-            }
             if (!initialFocusReady) {
                 awaitInitialPlayerPanelFocus(host)
                 initialFocusReady = true
+                entry.allowNavigation()
             }
         }
     }
