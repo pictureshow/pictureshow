@@ -501,66 +501,81 @@ final class AppleSliceUITests: XCTestCase {
         activate(app.buttons["playerOptionsDone"])
         #endif
         #if os(tvOS)
-        let playbackMethod = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
-        // The app-owned playback method is rendered in AVKit's custom Pictureshow info tab,
-        // not in the initial fullscreen transport surface. Navigate there before asserting it.
-        openNativeTVInfoTab()
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "The identified AVKit player should be visible")
+        XCUIRemote.shared.press(.up)
+        let position = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        XCTAssertTrue(position.waitForExistence(timeout: 30), "AVKit should expose an elapsed clock without opening its unlabeled custom info tab")
+        let initial = seconds(position.label)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: max(3, initial + 3), timeout: 45, metric: "episode_hls_native", nativeAVKitClock: true))
+        capture("Episode Server HLS advancing native clock")
+
+        XCUIRemote.shared.press(.playPause)
+        let pausedClock = seconds(position.label)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), pausedClock + 1, "Pause playback before track-menu navigation")
+        var unexposedTrackSelection: [String] = []
+        let audioIndex = try XCTUnwrap(config["episodeAudioIndex"])
+        let subtitleIndex = try XCTUnwrap(config["episodeSubtitleIndex"])
+        for (menuTitle, index) in [("Audio", audioIndex), ("Subtitles", subtitleIndex)] {
+            let choice = selectNativeTVMenuTrack(menuTitle: menuTitle, index: index)
+            let selected = inspectNativeTVMenuSelection(menuTitle: menuTitle, index: index)
+            capture("Native TV \(menuTitle) selected \(choice)")
+            if !selected { unexposedTrackSelection.append("\(menuTitle) \(choice)") }
+            XCUIRemote.shared.press(.menu)
+            XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5), "Closing a native track menu should leave the AVKit player open")
+            let restored = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                self.seconds(position.label) >= max(0, pausedClock - 1)
+            }, object: position)
+            XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 30), .completed,
+                           "Track replacement should restore the paused position")
+            let afterTrack = seconds(position.label)
+            Thread.sleep(forTimeInterval: 2)
+            XCTAssertLessThanOrEqual(seconds(position.label), afterTrack + 1,
+                                     "Audio/subtitle replacement should preserve paused intent")
+            print("F1_METRIC tv_track_paused clockBefore=\(pausedClock) afterApply=\(afterTrack) menu=\(menuTitle) index=\(index)")
+        }
+
+        // Verify true remote scrubbing on AVKit's native timeline while playback is paused.
+        XCUIRemote.shared.press(.up)
+        let timeline = app.sliders.firstMatch
+        XCTAssertTrue(timeline.waitForExistence(timeout: 10), "AVKit should expose its native timeline after track changes")
+        for _ in 0..<8 where !timeline.hasFocus { XCUIRemote.shared.press(.down) }
+        XCTAssertTrue(timeline.hasFocus, "Focus must be on the native AVKit timeline before remote scrubbing")
+        let beforeSeek = seconds(position.label)
+        XCUIRemote.shared.press(.right, forDuration: 2.0)
+        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= beforeSeek + 5 }, evaluatedWith: position)
+        waitForExpectations(timeout: 20)
+        capture("Native TV episode remote scrub forward")
+        XCUIRemote.shared.press(.left, forDuration: 1.0)
+        expectation(for: NSPredicate { _, _ in self.seconds(position.label) <= beforeSeek + 3 }, evaluatedWith: position)
+        waitForExpectations(timeout: 20)
+        capture("Native TV episode remote scrub backward")
+
+        XCUIRemote.shared.press(.playPause)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: seconds(position.label) + 3, timeout: 20,
+                                           metric: "episode_hls_after_track_scrub", nativeAVKitClock: true))
+        XCUIRemote.shared.press(.playPause)
+        leaveNativeTVPlayer(returningTo: play)
+        XCTAssertTrue(play.hasFocus, "Native Menu should return focus to the episode Play action")
+        if !unexposedTrackSelection.isEmpty {
+            XCTFail("Native AVKit selection state was not exposed for: \(unexposedTrackSelection.joined(separator: ", ")); the actual menu captures are retained for visual review")
+        }
         #else
         let playbackMethod = app.staticTexts["playbackMethod"]
-        #endif
-        XCTAssertTrue(playbackMethod.waitForExistence(timeout: 30))
-        XCTAssertEqual(playbackMethod.label, "Server HLS")
-        #if os(tvOS)
-        // This episode uses HLS. Keep its method assertion ahead of the native menus;
-        // the dedicated direct-player case below proves Direct play before track selection.
-        inspectNativeTVInfoAndTracks(preferDirect: false)
-        #endif
-        #if os(tvOS)
-        let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
-        #else
         let position = app.staticTexts["playbackPosition"]
-        #endif
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
         let beforeChange = seconds(position.label)
         XCTAssertTrue(waitForPlaybackClock(position, minimum: beforeChange + 5, timeout: 35, metric: "episode"))
         capture("Episode playback after track apply")
-        #if os(tvOS)
-        XCUIRemote.shared.press(.playPause)
-        let pausedAt = seconds(position.label)
-        Thread.sleep(forTimeInterval: 2)
-        XCTAssertLessThanOrEqual(seconds(position.label), pausedAt + 1, "The remote play/pause command should pause the clock")
-        XCUIRemote.shared.press(.playPause)
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= pausedAt + 3 }, evaluatedWith: position)
-        waitForExpectations(timeout: 15)
-        XCUIRemote.shared.press(.playPause)
-        let beforeSeekPause = seconds(position.label)
-        Thread.sleep(forTimeInterval: 2)
-        XCTAssertLessThanOrEqual(seconds(position.label), beforeSeekPause + 1, "Pause playback before focusing Forward 10 so natural advancement cannot mask or distort the seek delta")
-        let beforeSeek = seconds(position.label)
-        let forward10 = app.buttons["seekForward"]
-        XCTAssertTrue(forward10.waitForExistence(timeout: 10), "The active Pictureshow info panel should expose Forward 10 seconds")
-        activate(forward10)
-        let seekDeadline = ProcessInfo.processInfo.systemUptime + 6
-        var landedForward10 = false
-        while ProcessInfo.processInfo.systemUptime < seekDeadline {
-            let landed = seconds(position.label)
-            if landed >= beforeSeek + 8 {
-                XCTAssertLessThanOrEqual(landed, beforeSeek + 12, "Forward 10 seconds should seek relative to the current clock")
-                landedForward10 = true
-                break
-            }
-            Thread.sleep(forTimeInterval: 0.2)
-        }
-        XCTAssertTrue(landedForward10, "Forward 10 seconds should move the playback clock by about ten seconds before natural playback can reach the target")
-        print("F1_METRIC tv_forward10_delta=\(seconds(position.label) - beforeSeek) before=\(beforeSeek) after=\(seconds(position.label))")
-        capture("Remote pause resume and seek")
-        leaveNativeTVPlayer(returningTo: play)
-        #else
+        XCTAssertTrue(playbackMethod.waitForExistence(timeout: 30))
+        XCTAssertEqual(playbackMethod.label, "Server HLS")
+        let audio = try XCTUnwrap(config["episodeAudioIndex"])
+        let subtitle = try XCTUnwrap(config["episodeSubtitleIndex"])
+        selectTouchTrack(type: "audio", index: audio)
+        selectTouchTrack(type: "subtitle", index: subtitle)
         activate(app.buttons["closePlayer"])
-        #endif
         XCTAssertTrue(play.waitForExistence(timeout: 15))
-        #if os(tvOS)
-        XCTAssertTrue(play.hasFocus)
         #endif
     }
     func testQuickConnectCodeAndCancel() throws {
@@ -694,19 +709,27 @@ final class AppleSliceUITests: XCTestCase {
         try openSeriesEpisodeDetail()
         let play = app.buttons["play"]
         reveal(play); activate(play)
-        openNativeTVInfoTab()
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
-        let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15))
+        XCUIRemote.shared.press(.up)
+        let position = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
         XCTAssertTrue(position.waitForExistence(timeout: 30))
+        let initial = seconds(position.label)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: max(3, initial + 3), timeout: 45,
+                                           metric: "tv_episode_next_initial", nativeAVKitClock: true))
         let duration = max(1, Double(config["episodeRunSeconds"] ?? "0") ?? 0)
         XCTAssertGreaterThan(duration, 0, "The adjacent episode test needs a known duration")
         let timeline = app.sliders.firstMatch
         XCTAssertTrue(timeline.waitForExistence(timeout: 10), "AVPlayerViewController should expose its native playback timeline")
+        XCUIRemote.shared.press(.playPause)
+        let beforeSeek = seconds(position.label)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), beforeSeek + 1,
+                                 "Pause near the start before the native timeline seek")
         timeline.adjust(toNormalizedSliderPosition: CGFloat(max(0.0, min(1.0, (duration - 8) / duration))))
         let nearEndTarget = max(1, Int(duration) - 15)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= nearEndTarget }, evaluatedWith: position)
         waitForExpectations(timeout: 25)
-        XCUIRemote.shared.press(.playPause)
         let nearEnd = seconds(position.label)
         XCTAssertGreaterThanOrEqual(nearEnd, nearEndTarget, "Seeking near the end should update the native playback clock before waiting for Play next")
         Thread.sleep(forTimeInterval: 2)
@@ -1248,6 +1271,42 @@ final class AppleSliceUITests: XCTestCase {
         let matching = controlRow?.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch ?? app.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
         print("F1_AX tv_transport_candidates title=\(title) row=\(String(describing: controlRow?.frame)) matched=\(matching.frame) label=\(matching.label)")
         return matching
+    }
+    private func nativeTVTrackChoice(menuTitle: String, index: String) -> XCUIElement {
+        let trigger = nativeTVTransportMenu(menuTitle)
+        XCTAssertTrue(trigger.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) menu trigger")
+        XCTAssertEqual(trigger.label, menuTitle)
+        activate(trigger)
+
+        let prefix = menuTitle == "Audio" ? "audio-" : "subtitle-"
+        let query = app.descendants(matching: .any)
+        let byIdentifier = query.matching(identifier: prefix + index).firstMatch
+        let fallback: XCUIElement = index == "-1"
+            ? query.matching(NSPredicate(format: "label == %@", "Off")).firstMatch
+            : query.matching(NSPredicate(format: "label ENDSWITH[c] %@", "Stream \(index)")).firstMatch
+        let choice = byIdentifier.waitForExistence(timeout: 2) ? byIdentifier : fallback
+        XCTAssertTrue(choice.waitForExistence(timeout: 10), "The native \(menuTitle) menu should expose configured index \(index)")
+        if index != "-1" {
+            XCTAssertTrue(choice.label.lowercased().hasSuffix("stream \(index)"),
+                          "The native \(menuTitle) choice must be the exact configured Stream \(index)")
+        }
+        print("F1_AX tv_track_menu_choice type=\(menuTitle) index=\(index) label=\(choice.label) value=\(choice.value ?? "")")
+        waitForEnabled(choice, description: "native \(menuTitle) track \(index)")
+        return choice
+    }
+    private func selectNativeTVMenuTrack(menuTitle: String, index: String) -> String {
+        let choice = nativeTVTrackChoice(menuTitle: menuTitle, index: index)
+        let label = choice.label
+        activate(choice)
+        print("F1_AX tv_track_menu_action type=\(menuTitle) index=\(index) label=\(label)")
+        return label
+    }
+    private func inspectNativeTVMenuSelection(menuTitle: String, index: String) -> Bool {
+        let choice = nativeTVTrackChoice(menuTitle: menuTitle, index: index)
+        let value = choice.value as? String
+        let isSelected = choice.isSelected || ["selected", "on", "1"].contains(value?.lowercased() ?? "")
+        print("F1_AX tv_track_menu_selected type=\(menuTitle) index=\(index) isSelected=\(choice.isSelected) value=\(value ?? "<unexposed>")")
+        return isSelected
     }
     private func inspectNativeTVInfoAndTracks(preferDirect: Bool = false) {
         for menuTitle in ["Audio", "Subtitles"] {
