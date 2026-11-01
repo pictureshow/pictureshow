@@ -34,7 +34,7 @@ import MediaAccessibility
     let preferences: PlaybackPreferences
     private var statusObservation: NSKeyValueObservation?
     private var controlObservation: NSKeyValueObservation?
-    private var timeObservation: Any?
+    private var clockTask: Task<Void, Never>?
     private var endedObservation: NSObjectProtocol?
     private var selectionObservation: NSObjectProtocol?
     private var startTask: Task<Void, Never>?
@@ -152,8 +152,15 @@ import MediaAccessibility
             Task { @MainActor in await self?.recordNativeSelection(avItem) }
         }
         player.replaceCurrentItem(with: avItem)
-        timeObservation = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+        // AVPlayer's media-time observer can stop delivering callbacks when the
+        // decoder stalls. Sample on wall time so a ready-but-frozen item still
+        // reaches the waiting hint and bounded recovery deadline.
+        clockTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+                guard let self, !self.closed, self.generation == version else { return }
+                self.tick()
+            }
         }
         timeoutTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(12)) } catch { return }
@@ -241,8 +248,16 @@ import MediaAccessibility
         if !pauseIntent && (waiting || lastObservedTicks == positionTicks) {
             if stalledSince == nil { stalledSince = now }
             if now.timeIntervalSince(stalledSince!) > 12 { status = "Still waiting for playback. You can go back and try again." }
-            if now.timeIntervalSince(stalledSince!) > 45 { Task { await failed() }; stalledSince = nil }
-        } else { stalledSince = nil }
+            if now.timeIntervalSince(stalledSince!) > 45 {
+                Logger(subsystem: "app.pictureshow", category: "Playback").error("Playback clock stalled past recovery deadline")
+                Task { await failed() }; stalledSince = nil
+            }
+        } else {
+            if stalledSince != nil, error == nil, let decision {
+                status = decision.method == .directPlay ? "Direct play" : decision.method == .directStream ? "Direct stream" : "Server HLS"
+            }
+            stalledSince = nil
+        }
         lastObservedTicks = positionTicks
         if now.timeIntervalSince(lastReportTime) >= 5 { enqueueProgress(); lastReportTime = now }
         let modes = preferences.segmentModes
@@ -375,7 +390,7 @@ import MediaAccessibility
         timeoutTask?.cancel(); timeoutTask = nil
         startTask?.cancel(); await startTask?.value; startTask = nil
         statusObservation = nil; controlObservation = nil
-        if let timeObservation { player.removeTimeObserver(timeObservation); self.timeObservation = nil }
+        clockTask?.cancel(); clockTask = nil
         if let endedObservation { NotificationCenter.default.removeObserver(endedObservation); self.endedObservation = nil }
         if let selectionObservation { NotificationCenter.default.removeObserver(selectionObservation); self.selectionObservation = nil }
         player.pause(); player.replaceCurrentItem(with: nil)
