@@ -1764,7 +1764,7 @@ final class AppleSliceUITests: XCTestCase {
     private func tvSnapshotNodes(_ root: XCUIElementSnapshot) -> [XCUIElementSnapshot] {
         [root] + root.children.flatMap { tvSnapshotNodes($0) }
     }
-    private func tvPlayerSnapshot() -> TVPlayerSnapshot? {
+    private func tvPlayerSnapshot(allowNativeTabNavigation: Bool = false) -> TVPlayerSnapshot? {
         guard let root = try? app.snapshot() else { return nil }
         let nodes = tvSnapshotNodes(root)
         let playerFrame: CGRect
@@ -1773,15 +1773,30 @@ final class AppleSliceUITests: XCTestCase {
             playerFrame = player.frame
         } else {
             // AVKit's custom-info presentation temporarily omits the containing
-            // player view from AX. Require its own native tab surface AND every
-            // app-owned Info control in this same immutable tree before accepting
-            // the presentation; the app root by itself is never a player marker.
-            let required = ["AVInfoMenuCollection", "playbackMethod", "playbackPosition", "seekBackward", "seekForward"]
+            // player view from AX. The default acceptance path requires its own
+            // native tab surface AND every app-owned Info control in one tree;
+            // the app root by itself is never a player marker.
+            // During tab navigation AVKit also omits the containing player while
+            // its built-in Info tab is selected. Keep that native collection
+            // observable so a real remote move can reach the custom tab. This
+            // permits navigation only; tvInfoObservation still requires every
+            // app-owned method/clock/seek field before accepting Info.
+            let required = allowNativeTabNavigation
+                ? ["AVInfoMenuCollection"]
+                : ["AVInfoMenuCollection", "playbackMethod", "playbackPosition", "seekBackward", "seekForward"]
             guard required.allSatisfy({ identifier in
                 let matches = nodes.filter { $0.identifier == identifier }
                 return matches.count == 1 && matches[0].frame.width > 0 && matches[0].frame.height > 0
                     && root.frame.contains(matches[0].frame)
             }) else { return nil }
+            if allowNativeTabNavigation {
+                let collection = nodes.first { $0.identifier == "AVInfoMenuCollection" }!
+                let cells = tvSnapshotNodes(collection).filter {
+                    $0.elementType == .cell && $0.frame.width > 0 && $0.frame.height > 0
+                        && collection.frame.contains($0.frame)
+                }
+                guard cells.count >= 2 else { return nil }
+            }
             playerFrame = root.frame
         }
         return TVPlayerSnapshot(nodes: nodes.filter {
@@ -1876,11 +1891,14 @@ final class AppleSliceUITests: XCTestCase {
         var selected = false
         var step = 0
         while ProcessInfo.processInfo.systemUptime < deadline {
-            guard let snapshot = tvPlayerSnapshot() else {
+            guard let snapshot = tvPlayerSnapshot(allowNativeTabNavigation: true) else {
                 Thread.sleep(forTimeInterval: 0.15)
                 continue
             }
-            if let observation = tvInfoObservation(snapshot) { return finish(observation, step: "after-navigation") }
+            if tvInfoObservation(snapshot) != nil,
+               let accepted = tvPlayerSnapshot().flatMap(tvInfoObservation) {
+                return finish(accepted, step: "after-navigation")
+            }
             // Selecting is needed on some native states; after that input, wait
             // passively for content rather than closing it with more arrows.
             if selected { Thread.sleep(forTimeInterval: 0.15); continue }
@@ -1896,8 +1914,10 @@ final class AppleSliceUITests: XCTestCase {
             // AVKit may omit the custom tab's AX label. The sole configured
             // custom controller is appended after its built-in Info/Chapters tabs.
             guard cells.count >= 2, let target = cells.last, target.isEnabled else { break }
-            let focused = snapshot.nodes.filter { $0.hasFocus && $0.frame.width > 0 && $0.frame.height > 0 }
-                .min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+            let focusedCell = cells.first { $0.hasFocus }
+            let focused = focusedCell ?? snapshot.nodes.filter {
+                $0.hasFocus && $0.elementType == .cell && $0.frame.width > 0 && $0.frame.height > 0
+            }.min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
             print("F2_TV_INFO_NAV step=\(step) target=\(target.frame) focused=\(focused.map { String(describing: $0.frame) } ?? "<unexposed>") refreshes=\(refreshes)")
             step += 1
             if target.hasFocus || focused?.frame == target.frame {
@@ -1913,9 +1933,18 @@ final class AppleSliceUITests: XCTestCase {
                 XCUIRemote.shared.press(abs(dy) > 30 ? (dy > 0 ? .down : .up) : (dx > 0 ? .right : .left))
             } else {
                 focusedAt = nil; noFocus += 1
-                if noFocus % 2 == 1 { XCUIRemote.shared.press(.down) }
-                else if refreshes < 3 { refreshes += 1; XCUIRemote.shared.press(.up) }
-                else { break }
+                // Full-screen ancestors can briefly report focus while AVKit
+                // moves into a tab. They supply no directional basis. Observe
+                // that transition without sending a second Down through it.
+                if noFocus == 1 {
+                    let state = snapshot.nodes.filter {
+                        $0.identifier == "AVInfoMenuCollection" || $0.elementType == .cell || $0.hasFocus
+                    }
+                    for node in state.prefix(16) {
+                        print("F2_TV_INFO_TRANSITION type=\(node.elementType.rawValue) id=\(node.identifier) label=\(node.label) frame=\(node.frame) focus=\(node.hasFocus)")
+                    }
+                }
+                Thread.sleep(forTimeInterval: 0.15)
             }
         }
         diagnoseTVInfo(step: "missing required Info fields")
