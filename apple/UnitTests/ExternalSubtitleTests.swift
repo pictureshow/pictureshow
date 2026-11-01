@@ -16,20 +16,32 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     private static var recorded: [Recorded] = []
     private static var cancelled: [String] = []
     private static var held: [ObjectIdentifier: ExternalSubtitleHTTP] = [:]
+    private static var captionReference = "/captions/selected.vtt"
     static let caption = Data("WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nSelected caption\n".utf8)
-    static let source: [String: Any] = [
+    static var source: [String: Any] {
+        lock.lock(); let reference = captionReference; lock.unlock()
+        return [
         "Id": "source", "Container": "mp4", "SupportsDirectPlay": true,
         "DefaultAudioStreamIndex": 1, "DefaultSubtitleStreamIndex": 4,
         "MediaStreams": [
             ["Index": 0, "Type": "Video", "Codec": "h264"],
             ["Index": 1, "Type": "Audio", "Codec": "aac"],
             ["Index": 4, "Type": "Subtitle", "Codec": "vtt", "IsExternal": true,
-             "DeliveryMethod": "External", "DeliveryUrl": "/captions/selected.vtt"],
+             "DeliveryMethod": "External", "DeliveryUrl": reference],
             ["Index": 5, "Type": "Subtitle", "Codec": "vtt", "IsExternal": true,
              "DeliveryMethod": "External", "DeliveryUrl": "/captions/unselected.vtt"]
         ]
-    ]
-    static func reset(_ value: Delivery) { lock.lock(); defer { lock.unlock() }; delivery = value; recorded = []; cancelled = []; held = [:] }
+        ]
+    }
+    static func reset(_ value: Delivery, captionReference: String = "/captions/selected.vtt") {
+        lock.lock(); defer { lock.unlock() }
+        delivery = value; self.captionReference = captionReference; recorded = []; cancelled = []; held = [:]
+    }
+    // Shared resolve-24/25 append even slash-prefixed references to the configured
+    // server base. Absolute DeliveryUrl values retain their own same-origin path.
+    static func isCaptionPath(_ path: String) -> Bool {
+        path.hasPrefix("/captions/") || path.hasPrefix("/jellyfin/captions/")
+    }
     static var requests: [Recorded] { lock.lock(); defer { lock.unlock() }; return recorded }
     static var stoppedPaths: [String] { lock.lock(); defer { lock.unlock() }; return cancelled }
     static func configuration() -> URLSessionConfiguration {
@@ -57,9 +69,9 @@ private final class ExternalSubtitleHTTP: URLProtocol {
         Self.lock.lock()
         Self.recorded.append(Recorded(path: path, body: body))
         let delivery = Self.delivery
-        if path.hasPrefix("/captions/"), case .held = delivery { Self.held[ObjectIdentifier(self)] = self; Self.lock.unlock(); return }
+        if Self.isCaptionPath(path), case .held = delivery { Self.held[ObjectIdentifier(self)] = self; Self.lock.unlock(); return }
         Self.lock.unlock()
-        if path.hasPrefix("/captions/") {
+        if Self.isCaptionPath(path) {
             switch delivery {
             case .http500: respond(status: 500, data: Data("Unavailable".utf8))
             case .malformed: respond(status: 200, data: Data("WEBVTT\n\n00:broken --> invalid\nMalformed".utf8))
@@ -139,7 +151,7 @@ private final class SubtitleInertPlayer: AVPlayer {
         }
         XCTFail(message, file: file, line: line)
     }
-    private var captionRequests: [ExternalSubtitleHTTP.Recorded] { ExternalSubtitleHTTP.requests.filter { $0.path.hasPrefix("/captions/") } }
+    private var captionRequests: [ExternalSubtitleHTTP.Recorded] { ExternalSubtitleHTTP.requests.filter { ExternalSubtitleHTTP.isCaptionPath($0.path) } }
 
     func testOnlySelectedTrackLoadsAndOffTrackChangeReleaseCancelHTTP() async throws {
         ExternalSubtitleHTTP.reset(.held)
@@ -217,7 +229,7 @@ private final class SubtitleInertPlayer: AVPlayer {
         XCTAssertNil(loader.text(atFullMediaMs: 122_000))
     }
 
-    private func readySession(loader: ExternalTextSubtitles) async throws -> (PlaybackSession, SubtitleInertPlayer) {
+    private func readySession(loader: ExternalTextSubtitles, expectedCaptionPath: String = "/jellyfin/captions/selected.vtt") async throws -> (PlaybackSession, SubtitleInertPlayer) {
         let client = JellyfinClient(deviceID: "external-subtitle-test", session: URLSession(configuration: ExternalSubtitleHTTP.configuration()))
         let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "external-subtitle-test")
         var item = MediaItem(id: "movie", name: "Fixture movie", type: "Movie")
@@ -225,11 +237,30 @@ private final class SubtitleInertPlayer: AVPlayer {
         let player = SubtitleInertPlayer()
         let session = PlaybackSession(client: client, account: account, item: item, player: player, externalSubtitles: loader)
         try await session.prepare(startTicks: 0, audio: nil, subtitle: 4)
+        XCTAssertEqual(loader.selected?.url.path, expectedCaptionPath,
+                       "Selected caption resolution must honor the configured server base or absolute DeliveryUrl")
         session.ready(version: 0)
         try await eventually("Optional selected subtitles must not gate real session readiness or Start") {
             !session.waitingForVideo && ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing") }
         }
         return (session, player)
+    }
+
+    func testRelativeAndAbsoluteDeliveryURLsReachTheirExactResolvedCaptionPaths() async throws {
+        for (reference, expectedPath) in [
+            ("/captions/selected.vtt", "/jellyfin/captions/selected.vtt"),
+            ("captions/selected.vtt", "/jellyfin/captions/selected.vtt"),
+            ("https://media.example.test/captions/selected.vtt", "/captions/selected.vtt")
+        ] {
+            ExternalSubtitleHTTP.reset(.valid, captionReference: reference)
+            let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+            defer { loader.release(); clock.finish() }
+            let (session, _) = try await readySession(loader: loader, expectedCaptionPath: expectedPath)
+            try await eventually("Resolved selected caption did not load from \(expectedPath)") { !loader.loading && !loader.cues.isEmpty }
+            XCTAssertEqual(captionRequests.map(\.path), [expectedPath], "No other caption path may be prefetched")
+            XCTAssertEqual(loader.text(atFullMediaMs: 121_000), "Selected caption")
+            await session.stop(); clock.finish()
+        }
     }
 
     func testHTTP500RetriesForVirtual242SecondsWithoutGatingAVReadyOrStart() async throws {
@@ -248,7 +279,7 @@ private final class SubtitleInertPlayer: AVPlayer {
         XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("/Sessions/Playing") }.count, 1)
         await session.stop()
         try await eventually("Stopping the viewing must cancel its unresolved optional request") {
-            ExternalSubtitleHTTP.stoppedPaths.contains("/captions/selected.vtt")
+            ExternalSubtitleHTTP.stoppedPaths.contains("/jellyfin/captions/selected.vtt")
         }
         XCTAssertNil(loader.selected); XCTAssertTrue(loader.cues.isEmpty)
     }
