@@ -313,12 +313,22 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         guard let overlay = contentOverlayView else { return }
+        #if os(tvOS)
+        // videoBounds is iOS-only. Reproduce AVKit's resizeAspect geometry from
+        // the item's presentation size; unknown video never publishes a cue box.
+        let size = player?.currentItem?.presentationSize ?? .zero
+        guard size.width > 0, size.height > 0 else { caption.frame = .zero; return }
+        let width = min(overlay.bounds.width, overlay.bounds.height * size.width / size.height)
+        let height = width * size.height / size.width
+        let video = CGRect(x: overlay.bounds.midX - width / 2, y: overlay.bounds.midY - height / 2, width: width, height: height)
+        #else
         let video = overlay.convert(videoBounds, from: view).intersection(overlay.bounds)
+        #endif
         guard !video.isNull, video.width > 0, video.height > 0 else { caption.frame = .zero; return }
-        let width = video.width * 0.9
-        let height = min(video.height * 0.6, caption.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height + 8)
+        let captionWidth = video.width * 0.9
+        let captionHeight = min(video.height * 0.6, caption.sizeThatFits(CGSize(width: captionWidth, height: .greatestFiniteMagnitude)).height + 8)
         let inset = controlsVisible ? min(240, video.height * 0.35) : min(48, video.height * 0.08)
-        caption.frame = CGRect(x: video.midX - width / 2, y: max(video.minY, video.maxY - inset - height), width: width, height: height)
+        caption.frame = CGRect(x: video.midX - captionWidth / 2, y: max(video.minY, video.maxY - inset - captionHeight), width: captionWidth, height: captionHeight)
     }
 }
 
