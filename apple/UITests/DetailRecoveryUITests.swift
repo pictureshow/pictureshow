@@ -26,6 +26,14 @@ final class DetailRecoveryUITests: XCTestCase {
         let done = app.buttons["dismissSignInKeyboard"]
         if done.exists && done.isHittable { done.tap() }
         if !signIn.isHittable { app.swipeUp() }
+        #elseif os(tvOS)
+        // Menu belongs to the native keyboard only when it is actually open;
+        // otherwise the app uses it to leave this sign-in form.
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists {
+            XCUIRemote.shared.press(.menu)
+            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+        }
         #endif
         activate(signIn, in: app)
         XCTAssertTrue(app.buttons["openSettings"].waitForExistence(timeout: 15), "Synthetic sign-in must reach authenticated navigation")
@@ -98,10 +106,18 @@ final class DetailRecoveryUITests: XCTestCase {
             if element.hasFocus { XCUIRemote.shared.press(.select); return }
             let current = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }?.frame
             guard let current else { XCUIRemote.shared.press(.down); continue }
-            let dx = element.frame.midX - current.midX, dy = element.frame.midY - current.midY
-            if abs(dy) > max(20, abs(dx)) { XCUIRemote.shared.press(dy < 0 ? .up : .down) }
-            else { XCUIRemote.shared.press(dx < 0 ? .left : .right) }
+            let target = element.frame
+            let dx = target.midX - current.midX, dy = target.midY - current.midY
+            // A full-width form action is below either password-column control.
+            // Comparing center distances alone cycles Password → Show → Password.
+            let sameColumn = current.minX < target.maxX && target.minX < current.maxX
+            if abs(dy) > 20 && (sameColumn || abs(dy) > abs(dx)) {
+                XCUIRemote.shared.press(dy < 0 ? .up : .down)
+            } else {
+                XCUIRemote.shared.press(dx < 0 ? .left : .right)
+            }
         }
+        capture("Detail recovery fixture action could not receive focus", app: app)
         XCTFail("Could not focus the fixture action \(element.identifier)")
         #else
         for _ in 0..<5 where !element.isHittable { app.swipeUp() }
