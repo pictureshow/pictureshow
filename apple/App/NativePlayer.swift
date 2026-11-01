@@ -341,7 +341,13 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         guard !video.isNull, video.width > 0, video.height > 0 else { caption.frame = .zero; return }
         let captionWidth = video.width * 0.9
         let captionHeight = min(video.height * 0.6, caption.sizeThatFits(CGSize(width: captionWidth, height: .greatestFiniteMagnitude)).height + 8)
+        #if os(tvOS)
+        // AVKit's title, transport and Info tabs occupy the lower video band.
+        // Keep external text above that band while the native controls appear.
+        let inset = controlsVisible ? video.height * 0.4 : min(48, video.height * 0.08)
+        #else
         let inset = controlsVisible ? min(240, video.height * 0.35) : min(48, video.height * 0.08)
+        #endif
         caption.frame = CGRect(x: video.midX - captionWidth / 2, y: max(video.minY, video.maxY - inset - captionHeight), width: captionWidth, height: captionHeight)
     }
 }
