@@ -37,6 +37,24 @@ private struct SettingsForm: View {
     private let languages = ["", "eng", "spa", "fra", "deu", "jpn", "zho", "kor", "por", "ita", "rus", "ara", "hin"]
     private let languageNames = ["": "No preference", "eng": "English", "spa": "Spanish", "fra": "French", "deu": "German", "jpn": "Japanese", "zho": "Chinese", "kor": "Korean", "por": "Portuguese", "ita": "Italian", "rus": "Russian", "ara": "Arabic", "hin": "Hindi"]
     var body: some View {
+        #if os(tvOS)
+        // This runtime draws a native principal title over scrolled Form rows
+        // even with a visible toolbar background. Reserve a separate header
+        // viewport so the form can never scroll behind its title.
+        VStack(spacing: 0) {
+            Text("Settings").font(.title2).foregroundStyle(.white)
+                .accessibilityAddTraits(.isHeader)
+                .frame(maxWidth: .infinity).padding(.vertical, 24)
+                .background(Theme.background)
+            settingsForm
+        }.navigationTitle("Settings").toolbar(.hidden, for: .navigationBar)
+            .accessibilityIdentifier("settingsTitle").task { await load() }
+        #else
+        settingsForm.pictureshowNavigationTitle("Settings")
+            .accessibilityIdentifier("settingsTitle").task { await load() }
+        #endif
+    }
+    private var settingsForm: some View {
         Form {
             Section("Playback") {
                 Picker("Max streaming bitrate", selection: preference(\.bitrateMbps)) { ForEach(PlaybackPreferences.bitrates, id: \.self) { value in Text(value.map { "\($0) Mbps" } ?? "Auto (200 Mbps)").tag(value) } }.accessibilityIdentifier("maxBitrate")
@@ -70,7 +88,7 @@ private struct SettingsForm: View {
                 NavigationLink("About Pictureshow", value: AppRoute.information("about")).accessibilityIdentifier("openAbout")
                 NavigationLink("Troubleshooting", value: AppRoute.information("diagnostics")).accessibilityIdentifier("openDiagnostics")
             }
-        }.pictureshowNavigationTitle("Settings").accessibilityIdentifier("settingsTitle").task { await load() }
+        }
     }
     private func preference<T>(_ key: WritableKeyPath<PlaybackPreferences,T>) -> Binding<T> { Binding(get: { preferences.value[keyPath: key] }, set: { choice in preferences.update { $0[keyPath: key] = choice } }) }
     private func serverPicker(_ title: String, key: String, value: String) -> some View {

@@ -61,7 +61,13 @@ struct SearchView: View {
                         .overlay { RoundedRectangle(cornerRadius: 8).stroke(Theme.muted.opacity(0.6), lineWidth: 1) }
                         #endif
                         .onSubmit { fieldFocused = false; if let account = model.account { state.remember(account) } }
-                    if !state.query.isEmpty { Button { state.query = ""; fieldFocused = true } label: { Label("Clear", systemImage: "xmark.circle.fill").minimumTouchTarget() }.accessibilityIdentifier("clearSearch") }
+                    if !state.query.isEmpty {
+                        Button { state.query = ""; fieldFocused = true } label: { Label("Clear", systemImage: "xmark.circle.fill").minimumTouchTarget() }
+                            .accessibilityIdentifier("clearSearch")
+                            #if os(tvOS)
+                            .secondaryActionStyle()
+                            #endif
+                    }
                 }.padding(.horizontal, Theme.gutter)
                 if let error = state.storageError { Text(error).foregroundStyle(.orange).padding(.horizontal, Theme.gutter) }
                 if normalizedSearch(state.query).count < 2 {
