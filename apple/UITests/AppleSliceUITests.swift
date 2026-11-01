@@ -495,6 +495,13 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(waitForPlaybackClock(position, minimum: cue + 3, timeout: 30, metric: "tv_positive_subtitle_resume"))
         }
 
+        // The Pictureshow info tab remains selected after track inspection. Move focus onto the
+        // actual native AVKit timeline before sending remote left/right; delivered button events
+        // alone do not prove that AVKit scrubbed playback.
+        let timeline = app.sliders.firstMatch
+        XCTAssertTrue(timeline.waitForExistence(timeout: 10), "Native AVKit should expose its timeline slider")
+        for _ in 0..<8 where !timeline.hasFocus { XCUIRemote.shared.press(.down) }
+        XCTAssertTrue(timeline.hasFocus, "Focus must be on the native AVKit timeline before remote scrubbing")
         let beforeScrub = seconds(position.label)
         XCUIRemote.shared.press(.right, forDuration: 2.0)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= beforeScrub + 5 }, evaluatedWith: position)
