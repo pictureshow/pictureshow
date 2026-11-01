@@ -1657,6 +1657,24 @@ final class AppleSliceUITests: XCTestCase {
         print("F1_METRIC \(metric)_clock_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) final_position=\(lastClock) snapshot=true")
         return nil
     }
+    /// Capture one bounded, same-tree diagnostic before XCTest tears the app down.
+    /// A post-run simulator screenshot can show Home and cannot diagnose this panel.
+    private func diagnoseTVInfo(step: String) {
+        guard let root = try? app.snapshot() else {
+            print("F2_TV_INFO_DIAGNOSTIC step=\(step) snapshot=failed")
+            return
+        }
+        let identifiers: Set<String> = ["pictureshowNativePlayer", "AVInfoMenuCollection",
+                                        "playbackMethod", "playbackPosition", "seekBackward", "seekForward"]
+        let nodes = tvSnapshotNodes(root).filter { identifiers.contains($0.identifier) }
+        let playerFrame = nodes.first { $0.identifier == "pictureshowNativePlayer" }?.frame
+        print("F2_TV_INFO_DIAGNOSTIC step=\(step) appState=\(app.state) rootFrame=\(root.frame) matchedNodes=\(nodes.count)")
+        for node in nodes.prefix(16) {
+            let insidePlayer = playerFrame.map { $0.contains(node.frame) } ?? false
+            print("F2_TV_INFO_NODE step=\(step) id=\(node.identifier) label=\(node.label) frame=\(node.frame) insidePlayer=\(insidePlayer) insideRoot=\(root.frame.contains(node.frame)) enabled=\(node.isEnabled)")
+        }
+        captureFullScreen("Native TV Info \(step) before teardown")
+    }
     /// AVKit can expose the custom tab as an unlabeled cell. Navigate its actual
     /// last cell, then require method, clock and seek controls in the same tree.
     @discardableResult
@@ -1691,6 +1709,7 @@ final class AppleSliceUITests: XCTestCase {
             return nil
         }
         if observe() == nil { activateNativeTVMenuChoice(target) }
+        diagnoseTVInfo(step: "after remote tab activation")
         let deadline = ProcessInfo.processInfo.systemUptime + 15
         var lastReveal = ProcessInfo.processInfo.systemUptime
         while ProcessInfo.processInfo.systemUptime < deadline {
@@ -1704,6 +1723,7 @@ final class AppleSliceUITests: XCTestCase {
             }
             Thread.sleep(forTimeInterval: 0.35)
         }
+        diagnoseTVInfo(step: "missing required Info fields")
         XCTFail("Remote navigation should expose the app-owned method, valid clock and both seek controls together inside the native player")
         return nil
     }
