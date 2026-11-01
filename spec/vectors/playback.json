@@ -867,6 +867,60 @@
         "chosenByViewer": true
       },
       "expected": null
+    },
+    {
+      "id": "track-selection-audio-same",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 1,
+        "pickedIndex": 1
+      },
+      "expected": true
+    },
+    {
+      "id": "track-selection-subtitle-same",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 3,
+        "pickedIndex": 3
+      },
+      "expected": true
+    },
+    {
+      "id": "track-selection-off-same",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": -1,
+        "pickedIndex": -1
+      },
+      "expected": true
+    },
+    {
+      "id": "track-selection-changed-track",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 3,
+        "pickedIndex": 4
+      },
+      "expected": false
+    },
+    {
+      "id": "track-selection-queued-previous-track",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 4,
+        "pickedIndex": 3
+      },
+      "expected": false
+    },
+    {
+      "id": "track-selection-off-to-track",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": -1,
+        "pickedIndex": 3
+      },
+      "expected": false
     }
   ]
 }

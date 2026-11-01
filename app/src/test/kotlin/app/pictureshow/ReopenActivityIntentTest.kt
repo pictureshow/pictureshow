@@ -71,7 +71,11 @@ class ReopenActivityIntentTest {
                         runTimeTicks = 1_200_000_000,
                         transcodingSubProtocol = MediaStreamProtocol.Hls,
                         transcodingContainer = "ts",
-                        mediaStreams = listOf(MediaStream(type = MediaStreamType.Video, codec = "av1", realFrameRate = 60.0))
+                        defaultSubtitleStreamIndex = 3,
+                        mediaStreams = listOf(
+                            MediaStream(type = MediaStreamType.Video, codec = "av1", realFrameRate = 60.0),
+                            MediaStream(type = MediaStreamType.Subtitle, index = 3, codec = "pgs")
+                        )
                     ),
                     if (route == Route.Recovery && prepares == 1) PlayMethod.DirectPlay else PlayMethod.Transcode,
                     "https://example.test/Videos/example/master.m3u8?MaxFramerate=30",

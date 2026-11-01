@@ -435,6 +435,13 @@ internal class Media3PlaybackOutput(
         }
     }
 
+    override fun reselect(type: MediaStreamType, index: Int) {
+        if (type == MediaStreamType.Subtitle) {
+            val snapshot = position()
+            subtitleDiagnostics?.selected(index, snapshot.paused, snapshot.milliseconds)
+        }
+    }
+
     override fun select(type: MediaStreamType, index: Int): Boolean = selectTrack(type, index, true)
 
     private fun selectTrack(type: MediaStreamType, index: Int, choice: Boolean): Boolean {
