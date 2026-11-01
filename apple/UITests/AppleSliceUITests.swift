@@ -990,8 +990,8 @@ final class AppleSliceUITests: XCTestCase {
             XCUIRemote.shared.press(.select)
             print("F1_METRIC native_info_activation=remote")
         } else {
-            print("F1_METRIC native_info_activation=tap_fallback remoteFocusUnavailable=true")
-            target.tap()
+            print("F1_METRIC native_info_activation=bounded_remote_helper remoteFocusUnavailableInDirectProbe=true")
+            activate(target)
         }
         let method = app.staticTexts["playbackMethod"]
         let position = app.staticTexts["playbackPosition"]
