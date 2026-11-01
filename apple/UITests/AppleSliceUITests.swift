@@ -624,6 +624,15 @@ final class AppleSliceUITests: XCTestCase {
 
         let subtitleIndex = try XCTUnwrap(config["directSubtitleIndex"])
         XCTAssertNotEqual(subtitleIndex, "-1", "The fixture must provide a positive mov_text stream")
+        let offLabel = selectNativeTVMenuTrack(menuTitle: "Subtitles", index: "-1")
+        XCTAssertTrue(inspectNativeTVMenuSelection(menuTitle: "Subtitles", index: "-1"), "Turn subtitles Off before choosing the positive stream")
+        capture("TV subtitles Off before positive stream")
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5), "Closing the Off menu should return to the same AVKit player")
+        let afterOff = seconds(position.label)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), afterOff + 1, "Turning subtitles Off should preserve paused intent")
+
         let label = selectNativeTVMenuTrack(menuTitle: "Subtitles", index: subtitleIndex)
         let selected = inspectNativeTVMenuSelection(menuTitle: "Subtitles", index: subtitleIndex)
         capture("TV positive subtitle stream selected")
@@ -633,7 +642,7 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(seconds(position.label), max(0, paused - 1), "Subtitle replacement should restore the paused position")
         Thread.sleep(forTimeInterval: 2)
         XCTAssertLessThanOrEqual(seconds(position.label), paused + 1, "Subtitle replacement should preserve paused intent")
-        print("F1_METRIC tv_positive_subtitle_selected index=\(subtitleIndex) label=\(label) paused=\(paused)")
+        print("F1_METRIC tv_positive_subtitle_selected index=\(subtitleIndex) label=\(label) offLabel=\(offLabel) paused=\(paused)")
 
         XCUIRemote.shared.press(.playPause)
         let cue = try XCTUnwrap(config["directSubtitleCueSeconds"].flatMap(Int.init))
