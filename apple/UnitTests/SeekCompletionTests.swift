@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 import XCTest
+import Foundation
 import AVFoundation
 import PictureshowCore
 import PictureshowTransport
@@ -12,6 +13,9 @@ private final class DeferredSeekPlayer: AVPlayer {
     private var completions: [(Bool) -> Void] = []
 
     override func replaceCurrentItem(with item: AVPlayerItem?) { }
+    /// Keep wall-clock sampling from the production tick loop from injecting a decoder time
+    /// into this callback-order test; PlaybackSession's published position is authoritative.
+    override func currentTime() -> CMTime { .invalid }
 
     override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime,
                        completionHandler: @escaping (Bool) -> Void) {
@@ -128,7 +132,7 @@ private final class SeekRaceProtocol: URLProtocol {
             if player.seekTargets.count >= count { return }
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTFail("Expected (count) controlled AVPlayer seek requests, observed (player.seekTargets.count)")
+        XCTFail("Expected " + String(count) + " controlled AVPlayer seek requests, observed " + String(player.seekTargets.count))
     }
 
     private func drainMainActor() async throws {
@@ -173,7 +177,7 @@ private final class SeekRaceProtocol: URLProtocol {
         session.seek(toTicks: oldTarget)
         XCTAssertEqual(player.seekTargets.count, 1)
 
-        await session.changeTracks(audio: 0, subtitle: -1)
+        await session.changeTracks(audio: 1, subtitle: -1)
         XCTAssertEqual(session.decision?.source.id, "replacement-source")
         let replacementBody = try XCTUnwrap(SeekRaceProtocol.playbackInfoBodies.last)
         XCTAssertEqual((replacementBody["StartTimeTicks"] as? NSNumber)?.int64Value, oldTarget,
