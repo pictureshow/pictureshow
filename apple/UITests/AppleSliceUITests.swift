@@ -1746,6 +1746,7 @@ final class AppleSliceUITests: XCTestCase {
     /// All fields in these observations come from one immutable accessibility tree.
     /// Looking up attributes on live XCUIElements separately can cross a HUD transition.
     private struct TVPlayerSnapshot {
+        let bounds: CGRect
         let nodes: [XCUIElementSnapshot]
         func first(identifier: String) -> XCUIElementSnapshot? {
             nodes.first { $0.identifier == identifier }
@@ -1763,6 +1764,17 @@ final class AppleSliceUITests: XCTestCase {
     }
     private func tvSnapshotNodes(_ root: XCUIElementSnapshot) -> [XCUIElementSnapshot] {
         [root] + root.children.flatMap { tvSnapshotNodes($0) }
+    }
+    private func tvNativeInfoCells(_ collection: XCUIElementSnapshot, within bounds: CGRect) -> [XCUIElementSnapshot] {
+        tvSnapshotNodes(collection).filter { node in
+            guard node.elementType == .cell, node.frame.width > 0, node.frame.height > 0,
+                  bounds.contains(node.frame) else { return false }
+            // AVKit's first tab overhangs its collection by 4 points in the
+            // observed native layout. Preserve subtree membership and require
+            // at least 90% overlap, rather than dropping that real native cell.
+            let overlap = collection.frame.intersection(node.frame)
+            return !overlap.isNull && overlap.width * overlap.height >= node.frame.width * node.frame.height * 0.9
+        }
     }
     private func tvPlayerSnapshot(allowNativeTabNavigation: Bool = false) -> TVPlayerSnapshot? {
         guard let root = try? app.snapshot() else { return nil }
@@ -1791,15 +1803,12 @@ final class AppleSliceUITests: XCTestCase {
             }) else { return nil }
             if allowNativeTabNavigation {
                 let collection = nodes.first { $0.identifier == "AVInfoMenuCollection" }!
-                let cells = tvSnapshotNodes(collection).filter {
-                    $0.elementType == .cell && $0.frame.width > 0 && $0.frame.height > 0
-                        && collection.frame.contains($0.frame)
-                }
+                let cells = tvNativeInfoCells(collection, within: root.frame)
                 guard cells.count >= 2 else { return nil }
             }
             playerFrame = root.frame
         }
-        return TVPlayerSnapshot(nodes: nodes.filter {
+        return TVPlayerSnapshot(bounds: playerFrame, nodes: nodes.filter {
             $0.frame.width > 0 && $0.frame.height > 0 && playerFrame.contains($0.frame)
                 && root.frame.contains($0.frame)
         })
@@ -1918,13 +1927,11 @@ final class AppleSliceUITests: XCTestCase {
                 continue
             }
             guard snapshot.nodes.filter({ $0.identifier == "AVInfoMenuCollection" }).count == 1 else { break }
-            let cells = tvSnapshotNodes(collection).filter {
-                $0.elementType == .cell && $0.frame.width > 0 && $0.frame.height > 0
-                    && collection.frame.contains($0.frame)
-            }
+            let cells = tvNativeInfoCells(collection, within: snapshot.bounds)
             // AVKit may omit the custom tab's AX label. The sole configured
             // custom controller is appended after its built-in Info/Chapters tabs.
-            guard cells.count >= 2, let target = cells.last, target.isEnabled else { break }
+            guard cells.count >= 2, let target = cells.last, target.isEnabled,
+                  collection.frame.contains(target.frame) else { break }
             let focusedCell = cells.first { $0.hasFocus }
             let playerFocus = snapshot.first(identifier: "pictureshowNativePlayer") == nil ? [] : snapshot.nodes.filter {
                 $0.hasFocus && ($0.elementType == .cell || $0.elementType == .button)
