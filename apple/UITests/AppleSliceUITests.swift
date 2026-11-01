@@ -1884,7 +1884,9 @@ final class AppleSliceUITests: XCTestCase {
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "The identified native AVKit presentation should be visible before sending Menu")
         for attempt in 0..<3 where nativePlayer.exists {
-            print("F1_TV_BACK step=\(attempt + 1) playerPresent=\(nativePlayer.exists) playHittable=\(play.isHittable) playFocused=\(play.hasFocus)")
+            // The detail opener is obscured by AVKit until Menu dismisses it.
+            // Resolving its hittability/focus here can fail before the Back input.
+            print("F1_TV_BACK step=\(attempt + 1) playerPresent=\(nativePlayer.exists)")
             XCUIRemote.shared.press(.menu)
             let disappeared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: nativePlayer)
             _ = XCTWaiter.wait(for: [disappeared], timeout: 4)
