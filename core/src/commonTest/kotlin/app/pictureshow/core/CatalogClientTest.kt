@@ -41,13 +41,18 @@ class CatalogClientTest {
     private fun page(vararg items: String, total: Int = items.size, start: Int = 0) =
         """{"Items":[${items.joinToString(",")}],"TotalRecordCount":$total,"StartIndex":$start}"""
 
-    private fun TestScope.client(body: String, inspect: (io.ktor.client.request.HttpRequestData) -> Unit = {}): JellyfinClient {
+    private fun TestScope.client(
+        body: String,
+        detailProjection: Boolean = false,
+        inspect: (io.ktor.client.request.HttpRequestData) -> Unit = {}
+    ): JellyfinClient {
         val http = HttpClient(MockEngine) {
             engine {
                 dispatcher = StandardTestDispatcher(testScheduler)
                 addHandler { request ->
                     inspect(request)
-                    respond(body, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                    val responseBody = if (detailProjection && request.url.parameters["ids"] != null) page(body) else body
+                    respond(responseBody, headers = headersOf(HttpHeaders.ContentType, "application/json"))
                 }
             }
         }
@@ -78,15 +83,23 @@ class CatalogClientTest {
         assertEquals(60, movies.value.startIndex)
         val shows = assertIs<ClientResult.Success<ItemPage>>(client(page(series)).items(account, BrowseQuery("view-b"))).value
         assertEquals(8, shows.items.single().userData.unplayedItemCount)
-        val detail = assertIs<ClientResult.Success<MediaItem>>(client(movie).item(account, "film-a")).value
+        val detail = assertIs<ClientResult.Success<MediaItem>>(
+            client(movie, detailProjection = true).item(account, "film-a")
+        ).value
         assertEquals(2025, detail.productionYear)
         assertEquals("PG", detail.officialRating)
         assertEquals(7.6, detail.communityRating)
         assertEquals(72000000000, detail.runTimeTicks)
         assertEquals(listOf("Clockwork fiction"), detail.genres)
         assertEquals("A glassmaker charts an invented sky.", detail.overview)
-        assertEquals("Series", assertIs<ClientResult.Success<MediaItem>>(client(series).item(account, "series-a")).value.type)
-        assertEquals(2, assertIs<ClientResult.Success<MediaItem>>(client(episode).item(account, "episode-a")).value.indexNumber)
+        assertEquals(
+            "Series",
+            assertIs<ClientResult.Success<MediaItem>>(client(series, detailProjection = true).item(account, "series-a")).value.type
+        )
+        assertEquals(
+            2,
+            assertIs<ClientResult.Success<MediaItem>>(client(episode, detailProjection = true).item(account, "episode-a")).value.indexNumber
+        )
     }
 
     @Test

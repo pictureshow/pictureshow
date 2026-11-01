@@ -35,6 +35,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -145,8 +146,11 @@ class CaptionSubtitlesTest {
                 val delivery = if (codec == "pgssub") "Encode" else "External"
                 assertEquals(delivery, outcome.decision.mediaSource.mediaStreams.last().deliveryMethod?.name)
                 gateway.prepare(PlaybackRequest(subtitleStreamIndex = -1))
-                assertEquals(3, sent.size, "Explicit Off must bypass the caption preference")
-                assertEquals(-1, sent.last().getValue("SubtitleStreamIndex").jsonPrimitive.intOrNull)
+                // An unbound explicit choice discovers the preferred source, then reissues Off bound to it.
+                assertEquals(4, sent.size, "Explicit Off must bypass the caption preference")
+                assertNull(sent[2]["MediaSourceId"]?.jsonPrimitive?.contentOrNull)
+                assertEquals("source", sent.last().getValue("MediaSourceId").jsonPrimitive.content)
+                sent.drop(2).forEach { assertEquals(-1, it.getValue("SubtitleStreamIndex").jsonPrimitive.intOrNull) }
             } finally {
                 http.close()
             }

@@ -41,6 +41,7 @@ import io.ktor.http.headersOf
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
@@ -265,6 +266,49 @@ class ReferenceParityVectorsTest {
                 )
             }
             "validateBitrate" -> invalidOrValue { JsonPrimitive(PlaybackSettings(input.int("value")).maxStreamingBitrate) }
+            "homeRows" -> JsonArray(
+                assembleHome(
+                    json.decodeFromJsonElement(input.getValue("views")),
+                    json.decodeFromJsonElement(input.getValue("resume")),
+                    json.decodeFromJsonElement(input.getValue("nextUp")),
+                    json.decodeFromJsonElement(input.getValue("latest"))
+                ).map { row ->
+                    obj(
+                        "key" to JsonPrimitive(row.key),
+                        "title" to JsonPrimitive(row.title),
+                        "items" to array(row.items.map { it.id }),
+                        "library" to JsonPrimitive(row.library),
+                        "wide" to JsonPrimitive(row.wide)
+                    )
+                }
+            )
+            "timelineThroughTrackSwitch" -> {
+                val responses = input.getValue("responses").jsonArray
+                val positions = input.getValue("positionsMs").jsonArray.map { it.jsonPrimitive.long }
+                val decisions = responses.map { response ->
+                    assertIs<PlayOutcome.Play>(
+                        PlayDecisions.decide(
+                            server,
+                            input.text("itemId"),
+                            json.decodeFromJsonElement(response),
+                            identity.forAccount(account),
+                            account.accessToken
+                        )
+                    ).decision
+                }
+                obj(
+                    "initialSeekMs" to JsonArray(listOf(input.long("startMs"), positions[1]).map(::JsonPrimitive)),
+                    "positionTicks" to JsonArray(
+                        positions.mapIndexed { index, position ->
+                            JsonPrimitive(
+                                PlaybackReports(decisions[if (index < 2) 0 else 1])
+                                    .progress(position.milliseconds, false, null, null).positionTicks
+                            )
+                        }
+                    ),
+                    "sessions" to array(decisions.map { requireNotNull(it.playSessionId) })
+                )
+            }
             "http" -> http(input, account, identity, dispatcher)
             else -> error("Unknown parity operation: $operation")
         }
@@ -338,6 +382,11 @@ class ReferenceParityVectorsTest {
                         subtitleStreamIndex = input.optionalInt("subtitleStreamIndex")
                     )
                 )
+                "configuration" -> UserConfigurationClient(client, identity).configuration(account)
+                "saveConfiguration" -> UserConfigurationClient(client, identity).saveConfiguration(
+                    account,
+                    UserConfiguration(input.getValue("fields").jsonObject)
+                )
                 "stopEncoding" -> playback.stopEncoding(account, input.text("playSessionId"))
                 "reportStart" -> playback.reportStart(account, json.decodeFromJsonElement(input.getValue("body")))
                 "reportProgress" -> playback.reportProgress(account, json.decodeFromJsonElement(input.getValue("body")))
@@ -349,6 +398,7 @@ class ReferenceParityVectorsTest {
                 is ClientResult.Success -> {
                     val fields = mutableMapOf<String, JsonElement>("kind" to JsonPrimitive("success"))
                     if (result.value is PlayOutcome) fields["outcome"] = decisionJson(result.value)
+                    if (result.value is UserConfiguration) fields["configuration"] = result.value.fields
                     if (result.value is MediaItem) fields["resumeTicks"] = JsonPrimitive(result.value.userData.playbackPositionTicks)
                     JsonObject(fields)
                 }

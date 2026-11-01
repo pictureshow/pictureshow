@@ -66,7 +66,7 @@ class DetailResumeHttpTest {
     }
 
     @Test
-    fun emptyBatchCannotReplaceDetailsWithAnotherItemsState() = runTest {
+    fun missingBatchItemCannotPublishAmbiguousPrimaryState() = runTest {
         val http = HttpClient(MockEngine) {
             engine {
                 dispatcher = StandardTestDispatcher(testScheduler)
@@ -85,17 +85,14 @@ class DetailResumeHttpTest {
         try {
             val client = JellyfinClient(http, ClientIdentity("TV", "device"))
             val account = Account(Server("server", "Test", "https://example.test", "12.0"), User("viewer", "Viewer"), "token")
-            assertEquals(
-                1200000000L,
-                assertIs<ClientResult.Success<MediaItem>>(client.item(account, "film")).value.userData.playbackPositionTicks
-            )
+            assertEquals(ErrorKind.INVALID_RESPONSE, assertIs<ClientResult.Failure>(client.item(account, "film")).error.kind)
         } finally {
             http.close()
         }
     }
 
     @Test
-    fun unavailableBatchKeepsUsableDetailsButRevokedCredentialsStillExpire() = runTest {
+    fun unavailableBatchRequiresRetryAndRevokedCredentialsStillExpire() = runTest {
         val account = Account(Server("server", "Test", "https://example.test", "12.0"), User("viewer", "Viewer"), "token")
         for (status in listOf(io.ktor.http.HttpStatusCode.ServiceUnavailable, io.ktor.http.HttpStatusCode.Unauthorized)) {
             val http = HttpClient(MockEngine) {
@@ -118,7 +115,7 @@ class DetailResumeHttpTest {
                 if (status == io.ktor.http.HttpStatusCode.Unauthorized) {
                     assertEquals(ErrorKind.EXPIRED, assertIs<ClientResult.Failure>(result).error.kind)
                 } else {
-                    assertEquals("Available details", assertIs<ClientResult.Success<MediaItem>>(result).value.overview)
+                    assertEquals(ErrorKind.SERVER, assertIs<ClientResult.Failure>(result).error.kind)
                 }
             } finally {
                 http.close()
