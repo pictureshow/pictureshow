@@ -1848,51 +1848,78 @@ final class AppleSliceUITests: XCTestCase {
         }
         captureFullScreen("Native TV Info \(step) before teardown")
     }
-    /// AVKit can expose the custom tab as an unlabeled cell. Navigate its actual
-    /// last cell, then require method, clock and seek controls in the same tree.
+    /// Navigate AVKit's final custom Info tab from one immutable tree per input.
+    /// Repeated live element queries can outlast the HUD before the first key.
     @discardableResult
     private func openNativeTVInfoTab() -> TVInfoObservation? {
-        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
-        guard nativePlayer.waitForExistence(timeout: 15) else {
-            XCTFail("The identified native player should contain the custom info surface")
-            return nil
-        }
-        func observe() -> TVInfoObservation? { tvPlayerSnapshot().flatMap(tvInfoObservation) }
-        func log(_ observation: TVInfoObservation, step: String) {
+        func finish(_ observation: TVInfoObservation, step: String) -> TVInfoObservation {
             print("F1_AX tv_info_content_visible step=\(step) method=\(observation.method) position=\(observation.clock) seekFrames=\(observation.backFrame),\(observation.forwardFrame) snapshot=true")
-        }
-        if let observation = observe() {
-            log(observation, step: "already-visible")
+            captureFullScreen("Native TV Info \(step)")
             return observation
         }
+        let initialDeadline = ProcessInfo.processInfo.systemUptime + 5
+        var initial = tvPlayerSnapshot()
+        while initial == nil && ProcessInfo.processInfo.systemUptime < initialDeadline {
+            Thread.sleep(forTimeInterval: 0.15)
+            initial = tvPlayerSnapshot()
+        }
+        guard let initial else {
+            XCTFail("The identified native player must exist before opening Info")
+            return nil
+        }
+        if let observation = tvInfoObservation(initial) { return finish(observation, step: "already-visible") }
         XCUIRemote.shared.press(.up)
-        let collection = app.collectionViews["AVInfoMenuCollection"]
-        guard collection.waitForExistence(timeout: 10) else {
-            XCTFail("AVKit should expose its native info-menu collection")
-            return nil
-        }
-        let count = collection.cells.count
-        guard count >= 2 else {
-            XCTFail("AVKit should expose its built-in Info tab and custom Pictureshow tab")
-            return nil
-        }
-        let target = collection.cells.element(boundBy: count - 1)
-        guard target.waitForExistence(timeout: 10) else {
-            XCTFail("AVKit should expose the final custom info tab")
-            return nil
-        }
-        if observe() == nil { activateNativeTVMenuChoice(target, revealed: { observe() != nil }) }
-        diagnoseTVInfo(step: "after remote tab activation")
         let deadline = ProcessInfo.processInfo.systemUptime + 15
+        var refreshes = 0
+        var noFocus = 0
+        var focusedAt: TimeInterval?
+        var selected = false
+        var step = 0
         while ProcessInfo.processInfo.systemUptime < deadline {
-            if let observation = observe() {
-                log(observation, step: "after-navigation")
-                return observation
+            guard let snapshot = tvPlayerSnapshot() else {
+                Thread.sleep(forTimeInterval: 0.15)
+                continue
             }
-            Thread.sleep(forTimeInterval: 0.35)
+            if let observation = tvInfoObservation(snapshot) { return finish(observation, step: "after-navigation") }
+            // Selecting is needed on some native states; after that input, wait
+            // passively for content rather than closing it with more arrows.
+            if selected { Thread.sleep(forTimeInterval: 0.15); continue }
+            guard let collection = snapshot.first(identifier: "AVInfoMenuCollection") else {
+                guard refreshes < 3 else { break }
+                refreshes += 1; XCUIRemote.shared.press(.up)
+                continue
+            }
+            let cells = tvSnapshotNodes(collection).filter {
+                $0.elementType == .cell && $0.frame.width > 0 && $0.frame.height > 0
+                    && collection.frame.contains($0.frame)
+            }
+            // AVKit may omit the custom tab's AX label. The sole configured
+            // custom controller is appended after its built-in Info/Chapters tabs.
+            guard cells.count >= 2, let target = cells.last, target.isEnabled else { break }
+            let focused = snapshot.nodes.filter { $0.hasFocus && $0.frame.width > 0 && $0.frame.height > 0 }
+                .min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+            print("F2_TV_INFO_NAV step=\(step) target=\(target.frame) focused=\(focused.map { String(describing: $0.frame) } ?? "<unexposed>") refreshes=\(refreshes)")
+            step += 1
+            if target.hasFocus || focused?.frame == target.frame {
+                noFocus = 0
+                if let focusedAt, ProcessInfo.processInfo.systemUptime - focusedAt >= 1 {
+                    XCUIRemote.shared.press(.select); selected = true
+                } else if focusedAt == nil { focusedAt = ProcessInfo.processInfo.systemUptime }
+                Thread.sleep(forTimeInterval: 0.15)
+            } else if let focused {
+                focusedAt = nil; noFocus = 0
+                let dx = target.frame.midX - focused.frame.midX
+                let dy = target.frame.midY - focused.frame.midY
+                XCUIRemote.shared.press(abs(dy) > 30 ? (dy > 0 ? .down : .up) : (dx > 0 ? .right : .left))
+            } else {
+                focusedAt = nil; noFocus += 1
+                if noFocus % 2 == 1 { XCUIRemote.shared.press(.down) }
+                else if refreshes < 3 { refreshes += 1; XCUIRemote.shared.press(.up) }
+                else { break }
+            }
         }
         diagnoseTVInfo(step: "missing required Info fields")
-        XCTFail("Remote navigation should expose the app-owned method, valid clock and both seek controls together inside the native player")
+        XCTFail("Remote navigation must expose method, actual clock and both seek controls together in the native player")
         return nil
     }
     private func diagnoseTVManualNext(step: String) {
