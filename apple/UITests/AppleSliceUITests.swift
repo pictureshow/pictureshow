@@ -444,7 +444,13 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(["srt", "subrip", "vtt", "webvtt"].contains(codec), "This case requires an actual external SRT/VTT fixture, never embedded mov_text")
         XCTAssertGreaterThan(cue, 2)
         XCTAssertGreaterThanOrEqual(cueEnd - cue, 3, "The configured cue must allow a bounded real-time pause and capture")
+        #if os(iOS)
+        app.terminate()
+        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["directID"])
+        app.launch()
+        #else
         _ = try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
+        #endif
         let play = try zeroPositionPlayAction()
         reveal(play); activate(play)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
@@ -471,17 +477,51 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertLessThan(seconds(position.label), duration, "A viewing that reached EOS before Pause is not a valid paused-caption setup")
         }
         #if os(iOS)
-        func touchNativeTransport(_ label: String) {
+        func touchNativeTransport(_ label: String) throws {
+            let opposite = label == "Pause" ? "Play" : "Pause"
             let control = nativePlayer.buttons.matching(NSPredicate(format: "label ==[c] %@", label)).firstMatch
-            if !control.exists || !control.isHittable {
-                // This is the native video frame, not the app/supplemental strip center.
-                nativePlayer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let achieved = nativePlayer.buttons.matching(NSPredicate(format: "label ==[c] %@", opposite)).firstMatch
+            let videoFrame = nativePlayer.frame
+            func usable(_ button: XCUIElement) -> Bool {
+                button.exists && button.isHittable && videoFrame.contains(button.frame)
             }
-            XCTAssertTrue(control.waitForExistence(timeout: 5), "The real AVKit video should expose its \(label) control")
-            XCTAssertTrue(nativePlayer.frame.contains(control.frame), "Transport activation must stay inside the identified native video")
+            func failTransport(_ reason: String) throws -> Never {
+                var controls: [String] = []
+                if let snapshot = try? nativePlayer.snapshot() {
+                    func collect(_ node: XCUIElementSnapshot) {
+                        if node.elementType == .button && ["Pause", "Play"].contains(node.label) {
+                            controls.append("\(node.label):\(node.frame)")
+                        }
+                        node.children.forEach(collect)
+                    }
+                    collect(snapshot)
+                }
+                print("F2_AX external_native_transport requested=\(label) nativeFrame=\(videoFrame) method=\(method.label) clock=\(position.label) controls=\(controls.joined(separator: " | "))")
+                capture("External text native transport failure")
+                XCTFail(reason)
+                throw NSError(domain: "External native transport", code: 1)
+            }
+            // The opposite action positively identifies the state we want. A reveal
+            // can expose it without requiring another toggle of the native player.
+            if usable(achieved) { return }
+            if !usable(control) {
+                // Revealing at the center can itself hit AVKit's Play/Pause button.
+                nativePlayer.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.35)).tap()
+                let deadline = ProcessInfo.processInfo.systemUptime + 5
+                while ProcessInfo.processInfo.systemUptime < deadline && !usable(achieved) && !usable(control) {
+                    Thread.sleep(forTimeInterval: 0.2)
+                }
+            }
+            if usable(achieved) { return }
+            guard usable(control) else {
+                try failTransport("The real AVKit video must expose a hittable, contained \(label) or \(opposite) control")
+            }
             activate(control)
+            guard achieved.waitForExistence(timeout: 5), usable(achieved) else {
+                try failTransport("The native \(label) action must expose its contained, hittable \(opposite) state")
+            }
         }
-        touchNativeTransport("Pause")
+        try touchNativeTransport("Pause")
         #else
         XCUIRemote.shared.press(.playPause)
         #endif
@@ -557,7 +597,7 @@ final class AppleSliceUITests: XCTestCase {
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
         #else
-        touchNativeTransport("Play")
+        try touchNativeTransport("Play")
         #endif
         let inCue = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard let value = self.parsedClockSeconds(position.label) else { return false }
@@ -567,7 +607,7 @@ final class AppleSliceUITests: XCTestCase {
         #if os(tvOS)
         XCUIRemote.shared.press(.playPause)
         #else
-        touchNativeTransport("Pause")
+        try touchNativeTransport("Pause")
         #endif
         Thread.sleep(forTimeInterval: 1)
         let cuePosition = seconds(position.label)
