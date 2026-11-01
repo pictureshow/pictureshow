@@ -1162,8 +1162,13 @@ final class AppleSliceUITests: XCTestCase {
 
             let visitKey = "\(focusKey)|\(axis)|\(String(describing: direction))"
             if visitedFocusDirections.contains(visitKey) {
-                direction = verticalDirection
-                axis = "vertical-cycle-break"
+                if axis.hasPrefix("horizontal") {
+                    direction = verticalDirection
+                    axis = "vertical-cycle-break"
+                } else {
+                    direction = dx > 0 ? .right : .left
+                    axis = "horizontal-cycle-break"
+                }
             }
             visitedFocusDirections.insert("\(focusKey)|\(axis)|\(String(describing: direction))")
             print("F1_TV_NAV focus=\(focusKey) focusFrame=\(refreshedFrame.map { String(describing: $0) } ?? "<none>") targetID=\(element.identifier) targetLabel=\(element.label) targetFrame=\(element.frame) direction=\(axis):\(String(describing: direction))")
