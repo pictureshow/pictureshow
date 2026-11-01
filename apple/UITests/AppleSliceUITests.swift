@@ -657,6 +657,11 @@ final class AppleSliceUITests: XCTestCase {
     private func openSampleDetail(id: String, key: String) throws -> XCUIElement {
         let button = app.buttons["item-\(id)"]
         if !sampleFolderOpen {
+            #if os(iOS)
+            // Each test launch can restore a different root tab from NavigationMemory. Start
+            // catalog traversal from Home before opening the configured library hierarchy.
+            selectHomeRoot()
+            #endif
             for key in ["libraryID", "samplesFolderID"] {
                 if let containerID = config[key] {
                     let container = app.buttons["item-\(containerID)"]
