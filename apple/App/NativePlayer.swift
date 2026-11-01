@@ -98,7 +98,10 @@ private struct PlayerActionStyle: ButtonStyle {
 private func trackName(_ stream: MediaStream, indexFirst: Bool = false) -> String {
     var parts = [stream.label]
     let lower = stream.label.lowercased()
-    if let language = stream.language, let name = Locale.current.localizedString(forLanguageCode: language), !lower.contains(name.lowercased()), !lower.contains(language.lowercased()) { parts.append(name) }
+    let labelTokens = lower.split { !$0.isLetter && !$0.isNumber && $0 != "-" }
+    // Short language codes must be whole tokens: "en" inside "Commentary"
+    // does not tell a viewer that the track is English.
+    if let language = stream.language, let name = Locale.current.localizedString(forLanguageCode: language), !lower.contains(name.lowercased()), !labelTokens.contains(Substring(language.lowercased())) { parts.append(name) }
     if let codec = stream.codec, !lower.contains(codec.lowercased()) { parts.append(codec.uppercased()) }
     if let channels = stream.channels, !lower.contains("\(channels) channel") { parts.append("\(channels) channels") }
     if stream.isForced && (!lower.contains("forced") || lower.contains("non-forced") || lower.contains("non forced")) { parts.append("Forced") }
