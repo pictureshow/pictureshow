@@ -1073,6 +1073,11 @@ final class AppleSliceUITests: XCTestCase {
         let back10 = app.descendants(matching: .any).matching(identifier: "seekBackward").firstMatch
         let forward10 = app.descendants(matching: .any).matching(identifier: "seekForward").firstMatch
         func safeLabel(_ element: XCUIElement) -> String { element.exists ? element.label : "<not exposed>" }
+        func isClockLabel(_ value: String) -> Bool {
+            let parts = value.split(separator: ":", omittingEmptySubsequences: false)
+            return (parts.count == 2 || parts.count == 3)
+                && parts.allSatisfy { Int($0) != nil }
+        }
         func visibleInPlayer(_ element: XCUIElement) -> Bool {
             guard element.exists else { return false }
             let frame = element.frame
@@ -1080,7 +1085,7 @@ final class AppleSliceUITests: XCTestCase {
         }
         func infoContentIsVisible() -> Bool {
             nativePlayer.exists && visibleInPlayer(method) && visibleInPlayer(position)
-                && !safeLabel(method).isEmpty && seconds(safeLabel(position)) != nil
+                && !safeLabel(method).isEmpty && isClockLabel(safeLabel(position))
                 && visibleInPlayer(back10) && visibleInPlayer(forward10)
         }
         if infoContentIsVisible() {
