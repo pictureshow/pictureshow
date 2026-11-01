@@ -654,6 +654,8 @@ final class AppleSliceUITests: XCTestCase {
         capture("TV subtitles Off before positive stream")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5), "Closing the Off menu should return to the same AVKit player")
+        XCTAssertTrue(waitForPlaybackWaitingToClear(timeout: 45, metric: "tv_subtitle_off"),
+                      "Do not accept the retained clock until the Off replacement has left its waiting state")
         XCTAssertTrue(waitForPausedClockNear(position, target: paused, tolerance: 1, timeout: 45,
                                              metric: "tv_subtitle_off_restore"), "Turning subtitles Off should restore the paused position after native readiness")
         let afterOff = seconds(position.label)
@@ -667,6 +669,8 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(selected, "The native subtitle menu should expose the selected positive stream")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForPlaybackWaitingToClear(timeout: 45, metric: "tv_positive_subtitle"),
+                      "Do not accept the retained clock until the positive subtitle replacement has left its waiting state")
         XCTAssertTrue(waitForPausedClockNear(position, target: paused, tolerance: 1, timeout: 45,
                                              metric: "tv_positive_subtitle_restore"), "Subtitle replacement should restore the paused position after native readiness")
         Thread.sleep(forTimeInterval: 2)
@@ -1188,6 +1192,30 @@ final class AppleSliceUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.25)
         }
         print("F1_METRIC \(metric)_restore_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) target=\(target) final_position=\(lastLabel)")
+        return false
+    }
+    /// Track replacement can leave the old AVKit clock visible while the new item is still waiting.
+    /// Require the app-owned waiting overlay to be gone before treating that clock as restored.
+    private func waitForPlaybackWaitingToClear(timeout: TimeInterval, metric: String) -> Bool {
+        let waiting = app.descendants(matching: .any).matching(identifier: "playbackWaiting").firstMatch
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + timeout
+        var observed = false
+        var clearSamples = 0
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if waiting.exists {
+                observed = true
+                clearSamples = 0
+            } else {
+                clearSamples += 1
+                if clearSamples >= 2 {
+                    print("F1_METRIC \(metric)_waiting_clear_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) observed=\(observed)")
+                    return true
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        print("F1_METRIC \(metric)_waiting_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) observed=\(observed) stillVisible=\(waiting.exists)")
         return false
     }
     private func hasHomeRoot(timeout: TimeInterval = 1) -> Bool {
