@@ -352,7 +352,13 @@ struct DetailView: View {
                 .buttonStyle(ProminentActionStyle()).focused($focused, equals: "detailRetry").accessibilityFocused($accessibilityFocused, equals: "detailRetry")
                 .id("detailRetry").accessibilityIdentifier("detailRetry")
                 .accessibilityValue(state.reading || state.fresh ? "Loading item. Please wait." : "Retry. Loading failed. \(state.readFailure?.message ?? state.readError ?? "")")
-                if let reason = state.readFailure?.message ?? state.readError { Text(reason).foregroundStyle(.orange).selectableReading() }
+                if let reason = state.readFailure?.message ?? state.readError {
+                    #if os(tvOS)
+                    Text(state.reading ? "Previous attempt: \(reason)" : reason).foregroundStyle(.orange).selectableReading()
+                    #else
+                    Text(reason).foregroundStyle(.orange).selectableReading()
+                    #endif
+                }
             }.padding(12).frame(maxWidth: 440, alignment: .leading).background(Theme.surface).padding(8)
         } else if let failure = state.writeFailure {
             VStack(alignment: .leading, spacing: 8) {

@@ -46,7 +46,13 @@ private struct DetailActionState: ViewModifier {
     func body(content: Content) -> some View {
         // Keep the native input node in the focus chain while exposing its real
         // availability to assistive technology. The action also guards activation.
-        content.accessibilityRepresentation {
+        content
+            #if os(tvOS)
+            // The stable action stays focusable during recovery, but should not
+            // look available while its activation is guarded.
+            .opacity(unavailable ? 0.55 : 1)
+            #endif
+            .accessibilityRepresentation {
             content.accessibilityValue(value).disabled(unavailable)
         }
     }
