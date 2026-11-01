@@ -44,6 +44,17 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "70DC73B93047CC193762BBB0"
+               BuildableName = "Pictureshow-tvOS-UnitTests.xctest"
+               BlueprintName = "Pictureshow-tvOS-UnitTests"
+               ReferencedContainer = "container:Pictureshow.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "02536E9F2D377AB93E0A3742"
                BuildableName = "Pictureshow-tvOS-UITests.xctest"
                BlueprintName = "Pictureshow-tvOS-UITests"

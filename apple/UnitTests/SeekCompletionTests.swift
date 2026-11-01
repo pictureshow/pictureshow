@@ -4,7 +4,11 @@ import Foundation
 import AVFoundation
 import PictureshowCore
 import PictureshowTransport
+#if os(tvOS)
+@testable import Pictureshow_tvOS
+#else
 @testable import Pictureshow_iOS
+#endif
 
 /// Delivers AVPlayer seek completions only when a test asks, making callback order
 /// deterministic without decoding media or depending on a simulator clock.

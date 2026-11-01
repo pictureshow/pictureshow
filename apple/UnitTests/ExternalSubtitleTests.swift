@@ -4,7 +4,11 @@ import XCTest
 import Foundation
 import AVFoundation
 import PictureshowCore
+#if os(tvOS)
+@testable import Pictureshow_tvOS
+#else
 @testable import Pictureshow_iOS
+#endif
 
 /// Real URLSession transport, isolated to an in-process fixture. Held responses are
 /// cancelled by URLSession; no public host or actual network connection is used.

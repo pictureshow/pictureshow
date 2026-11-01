@@ -77,6 +77,18 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.pictureshow.unittests
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Pictureshow-iOS.app/Pictureshow-iOS
         BUNDLE_LOADER: $(TEST_HOST)
+  Pictureshow-tvOS-UnitTests:
+    type: bundle.unit-test
+    platform: tvOS
+    sources: [UnitTests]
+    dependencies:
+      - target: Pictureshow-tvOS
+      - package: PictureshowCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pictureshow.unittests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Pictureshow-tvOS.app/Pictureshow-tvOS
+        BUNDLE_LOADER: $(TEST_HOST)
   Pictureshow-iOS-UITests:
     type: bundle.ui-testing
     platform: iOS
@@ -109,4 +121,4 @@ schemes:
       targets:
         Pictureshow-tvOS: all
     test:
-      targets: [Pictureshow-tvOS-UITests]
+      targets: [Pictureshow-tvOS-UnitTests, Pictureshow-tvOS-UITests]

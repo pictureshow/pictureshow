@@ -2,7 +2,11 @@
 // Copyright (c) Legitimate LLC.
 import XCTest
 import PictureshowCore
+#if os(tvOS)
+@testable import Pictureshow_tvOS
+#else
 @testable import Pictureshow_iOS
+#endif
 
 private final class DetailFixtureProtocol: URLProtocol {
     static var itemType = "Movie"

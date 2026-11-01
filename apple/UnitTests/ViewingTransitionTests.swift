@@ -2,7 +2,11 @@
 import XCTest
 import AVFoundation
 import PictureshowCore
+#if os(tvOS)
+@testable import Pictureshow_tvOS
+#else
 @testable import Pictureshow_iOS
+#endif
 
 private final class ViewingProtocol: URLProtocol {
     static var requests: [URLRequest] = []

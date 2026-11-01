@@ -20,6 +20,8 @@
 		4134BF6FC32CBF75EC40869A /* TouchLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765E38AC82431E160D1B39E1 /* TouchLayout.swift */; };
 		4F18E5FF869E22FC934B7269 /* PictureshowCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8CA8FE97305ABE653712A622 /* PictureshowCore */; };
 		52394F3A0C4E4E0873BCAF8A /* AppleSliceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98193AB8CC2DAA971427E2A9 /* AppleSliceUITests.swift */; };
+		622F855DDADAC3B253F362E4 /* ExternalSubtitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56FE63259AE08297E52AFE5 /* ExternalSubtitleTests.swift */; };
+		669059F7570857EFA5274AD3 /* AccountStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C91A71C6A0E4957660B0A18 /* AccountStorageTests.swift */; };
 		6882A07567BE1173DDBBA97B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D979FD5F6655B17B01A6E075 /* SettingsView.swift */; };
 		6C4FC39FFE12312F7A625E5A /* NativePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED20D6B4E0FF0CBFDE61285F /* NativePlayer.swift */; };
 		6C903B48798CB4B7D4BA728C /* DetailRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE682A4DF76AD816EAEF225 /* DetailRecoveryUITests.swift */; };
@@ -36,6 +38,10 @@
 		AA4BA9DB243741B7F7ECDCBF /* AppleSliceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98193AB8CC2DAA971427E2A9 /* AppleSliceUITests.swift */; };
 		B2048C739BE03E29989CCDD9 /* MPL-2.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */; };
 		B2616443BCD3E4A216E92641 /* CatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FA85AA82A654E61D1D5117 /* CatalogViews.swift */; };
+		B54C92FC2DFAE4BE908B45D4 /* PictureshowCore in Frameworks */ = {isa = PBXBuildFile; productRef = 49D0410601D8FCD3A1D975E7 /* PictureshowCore */; };
+		B6921203A1231A93B4B310E0 /* SeekCompletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */; };
+		C6BB2D3BEA9518BA11806195 /* ViewingTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7F3A78BB15FA4AEFB04E9A4 /* ViewingTransitionTests.swift */; };
+		C78525B8A9EB0825A8397A21 /* DetailFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 568A0082C54DC943B674078C /* DetailFeedbackTests.swift */; };
 		CD6F489A8C19086A9F6627F6 /* InformationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C48F9E81301BFC98EA5ECA /* InformationView.swift */; };
 		D36A4FB3F17462FB3ADE04F5 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EFF6EA64F7BD056F729018B /* DetailView.swift */; };
 		D7968D9FA93C3B6FA9F7C315 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414DE71D03568307C1B5DF0A /* SearchView.swift */; };
@@ -54,6 +60,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		01A4FE71DBB16FAD8CC6FEC5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 750B31A6107509307C6DADA9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0D29C131340D3A13DE625493;
+			remoteInfo = "Pictureshow-tvOS";
+		};
 		705AD912240C089835AE1D32 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 750B31A6107509307C6DADA9 /* Project object */;
@@ -84,6 +97,7 @@
 		11E0148B4068A19A5C78D094 /* Pictureshow-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CD5723AAA6FA2FF9EFD6B8F /* Pictureshow-iOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F8E5103DB47A19B32019DE1 /* PictureshowCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PictureshowCore; path = PictureshowCore; sourceTree = SOURCE_ROOT; };
+		34041B02E6C67E565ADC964B /* Pictureshow-tvOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-tvOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		414DE71D03568307C1B5DF0A /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		4336B9D9C705C912361FA47C /* ExternalTextSubtitles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalTextSubtitles.swift; sourceTree = "<group>"; };
 		4EFF6EA64F7BD056F729018B /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
@@ -110,6 +124,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		1920501EB590EBB7712C1D16 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B54C92FC2DFAE4BE908B45D4 /* PictureshowCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		46F28BFADB20DAEB1B91EF5C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -146,6 +168,7 @@
 				1CD5723AAA6FA2FF9EFD6B8F /* Pictureshow-iOS-UnitTests.xctest */,
 				B92A34BA8BB93A38445D9B43 /* Pictureshow-iOS.app */,
 				D1767EBD427D72A530BF7231 /* Pictureshow-tvOS-UITests.xctest */,
+				34041B02E6C67E565ADC964B /* Pictureshow-tvOS-UnitTests.xctest */,
 				88F7FE50A883C1081639AA99 /* Pictureshow-tvOS.app */,
 			);
 			name = Products;
@@ -264,6 +287,26 @@
 			productReference = 88F7FE50A883C1081639AA99 /* Pictureshow-tvOS.app */;
 			productType = "com.apple.product-type.application";
 		};
+		70DC73B93047CC193762BBB0 /* Pictureshow-tvOS-UnitTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A3630F45820D53DF891C491A /* Build configuration list for PBXNativeTarget "Pictureshow-tvOS-UnitTests" */;
+			buildPhases = (
+				580CFC9FAD08AA051647801F /* Sources */,
+				1920501EB590EBB7712C1D16 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				979F4CE7AD7891CD9F8BD6D2 /* PBXTargetDependency */,
+			);
+			name = "Pictureshow-tvOS-UnitTests";
+			packageProductDependencies = (
+				49D0410601D8FCD3A1D975E7 /* PictureshowCore */,
+			);
+			productName = "Pictureshow-tvOS-UnitTests";
+			productReference = 34041B02E6C67E565ADC964B /* Pictureshow-tvOS-UnitTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		D813E60306EF9E7FAE81087D /* Pictureshow-iOS-UITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 186CD83DC58E087BB6880BF0 /* Build configuration list for PBXNativeTarget "Pictureshow-iOS-UITests" */;
@@ -361,6 +404,7 @@
 				EA54E30974AD33CBAB703B44 /* Pictureshow-iOS */,
 				0D29C131340D3A13DE625493 /* Pictureshow-tvOS */,
 				FC8131414846F2E00190B045 /* Pictureshow-iOS-UnitTests */,
+				70DC73B93047CC193762BBB0 /* Pictureshow-tvOS-UnitTests */,
 				D813E60306EF9E7FAE81087D /* Pictureshow-iOS-UITests */,
 				02536E9F2D377AB93E0A3742 /* Pictureshow-tvOS-UITests */,
 			);
@@ -387,6 +431,18 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		580CFC9FAD08AA051647801F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				669059F7570857EFA5274AD3 /* AccountStorageTests.swift in Sources */,
+				C78525B8A9EB0825A8397A21 /* DetailFeedbackTests.swift in Sources */,
+				622F855DDADAC3B253F362E4 /* ExternalSubtitleTests.swift in Sources */,
+				B6921203A1231A93B4B310E0 /* SeekCompletionTests.swift in Sources */,
+				C6BB2D3BEA9518BA11806195 /* ViewingTransitionTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		605AB8576ECAFCC6B9B48037 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -467,6 +523,11 @@
 			target = EA54E30974AD33CBAB703B44 /* Pictureshow-iOS */;
 			targetProxy = 705AD912240C089835AE1D32 /* PBXContainerItemProxy */;
 		};
+		979F4CE7AD7891CD9F8BD6D2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0D29C131340D3A13DE625493 /* Pictureshow-tvOS */;
+			targetProxy = 01A4FE71DBB16FAD8CC6FEC5 /* PBXContainerItemProxy */;
+		};
 		9828BA8488748B89495552FF /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = EA54E30974AD33CBAB703B44 /* Pictureshow-iOS */;
@@ -509,6 +570,22 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pictureshow-iOS.app/Pictureshow-iOS";
+			};
+			name = Debug;
+		};
+		2212EB24251A915439A9C639 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pictureshow.unittests;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pictureshow-tvOS.app/Pictureshow-tvOS";
 			};
 			name = Debug;
 		};
@@ -763,6 +840,22 @@
 			};
 			name = Release;
 		};
+		D35FCE6593462409803F9BAF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.pictureshow.unittests;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pictureshow-tvOS.app/Pictureshow-tvOS";
+			};
+			name = Release;
+		};
 		EDC8EC7F3BA48D9F6364EE58 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -809,6 +902,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		A3630F45820D53DF891C491A /* Build configuration list for PBXNativeTarget "Pictureshow-tvOS-UnitTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2212EB24251A915439A9C639 /* Debug */,
+				D35FCE6593462409803F9BAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		D1EF9455ECE90D6EFA3E7978 /* Build configuration list for PBXNativeTarget "Pictureshow-iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -850,6 +952,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		49D0410601D8FCD3A1D975E7 /* PictureshowCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PictureshowCore;
+		};
 		8BC88131B14D3FDC4B03C068 /* PictureshowTransport */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PictureshowTransport;

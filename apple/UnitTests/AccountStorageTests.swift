@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 import XCTest
 import PictureshowCore
+#if os(tvOS)
+@testable import Pictureshow_tvOS
+#else
 @testable import Pictureshow_iOS
+#endif
 
 final class AccountStorageTests: XCTestCase {
     /// Run the production simulator loader against an isolated directory. A fresh
