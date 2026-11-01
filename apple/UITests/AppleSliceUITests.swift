@@ -94,19 +94,19 @@ final class AppleSliceUITests: XCTestCase {
         let libraryID = try XCTUnwrap(config["libraryID"])
         let library = app.buttons["item-\(libraryID)"]
         let librarySort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
-        let directID = try XCTUnwrap(config["directID"])
-        let knownMovie = app.buttons["item-\(directID)"]
-        if librarySort.waitForExistence(timeout: 2), knownMovie.exists {
+        let samplesFolderID = try XCTUnwrap(config["samplesFolderID"])
+        let configuredSamplesFolder = app.buttons["item-\(samplesFolderID)"]
+        if librarySort.waitForExistence(timeout: 2), configuredSamplesFolder.waitForExistence(timeout: 2) {
             // NavigationMemory keeps each tab's own stack; the Libraries tab may restore the
-            // previously visited movie grid instead of its root shelf. Identify that grid by
-            // the configured movie card rather than a generic sort control alone.
-            capture("Restored movie library")
+            // previously visited Movies root instead of its library shelf. The immediate
+            // samples folder identifies that root; the configured direct item is nested inside it.
+            capture("Restored Movies root")
         } else {
             if librarySort.exists { back() }
             reveal(library); activate(library)
             XCTAssertTrue(librarySort.waitForExistence(timeout: 15), "Opening the Movies library should expose its sort controls")
-            XCTAssertTrue(knownMovie.waitForExistence(timeout: 15), "The opened library must contain the configured movie before it is identified as Movies")
-            capture("Movie library")
+            XCTAssertTrue(configuredSamplesFolder.waitForExistence(timeout: 15), "The opened Movies root must contain the configured immediate samples folder")
+            capture("Movies root")
         }
         returnHome()
         #endif
