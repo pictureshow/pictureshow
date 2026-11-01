@@ -1064,14 +1064,18 @@ final class AppleSliceUITests: XCTestCase {
         let cancelByID = app.descendants(matching: .any).matching(identifier: "cancelNextTransport").firstMatch
         let cancelByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel next episode")).firstMatch
         func currentEpisodeAction(_ snapshot: TVPlayerSnapshot) -> (clock: Int, next: XCUIElementSnapshot, cancel: XCUIElementSnapshot)? {
-            let next = snapshot.nodes.filter {
+            let nextChoices = snapshot.nodes.filter {
                 $0.label.range(of: nextActionPattern, options: .regularExpression) != nil && $0.isEnabled
             }
-            let cancel = snapshot.nodes.filter { $0.label == "Cancel next episode" && $0.isEnabled }
+            let transportNext = nextChoices.filter { $0.identifier == "playNextTransport" }
+            let next = transportNext.isEmpty ? nextChoices : transportNext
+            let cancelChoices = snapshot.nodes.filter { $0.label == "Cancel next episode" && $0.isEnabled }
+            let transportCancel = cancelChoices.filter { $0.identifier == "cancelNextTransport" }
+            let cancel = transportCancel.isEmpty ? cancelChoices : transportCancel
             guard snapshot.nodes.contains(where: { $0.label == currentName }),
                   let clock = snapshot.first(identifier: "AXElapsedTime").flatMap({ parsedClockSeconds($0.label) }),
                   clock >= nearEndTarget, clock < duration - 3,
-                  next.count == 1, !cancel.isEmpty,
+                  next.count == 1, cancel.count == 1,
                   let countdown = next[0].label.split(separator: "(").last?.dropLast(),
                   let countdownSeconds = Int(countdown), countdownSeconds > 0 else { return nil }
             return (clock, next[0], cancel[0])
