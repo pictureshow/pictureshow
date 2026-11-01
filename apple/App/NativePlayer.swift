@@ -294,6 +294,8 @@ private struct SeekOptions: View {
             // This HStack shares one List row. Independent button styles prevent the
             // automatic row action from activating both opposing seek controls.
             .buttonStyle(.borderless)
+            #else
+            .secondaryActionStyle()
             #endif
         }
         .onAppear { target = Ticks.seconds(session.positionTicks) }
