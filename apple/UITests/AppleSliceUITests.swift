@@ -2256,25 +2256,32 @@ final class AppleSliceUITests: XCTestCase {
         label.range(of: "^(selected,\\s*)?Stream \(NSRegularExpression.escapedPattern(for: index))(\\s·|$)",
                     options: [.regularExpression, .caseInsensitive]) != nil
     }
-    /// Begin every paired frame on the same selected Info page, then clear its
-    /// pane, tab header and HUD with the observed three native Back transitions.
-    /// Never send the fourth Back here: that is the separate player dismissal.
+    /// Clear Info while retaining the native HUD for all three paired frames.
+    /// Fully hidden controls did not respond to the simulator's remote Up input;
+    /// a positive native clock/focus keeps this comparison navigable and timed.
     private func captureNativeTVExternalSubtitlePreview(_ name: String, pausedSeconds: Int) {
         guard let initial = tvPlayerSnapshot(), tvInfoObservation(initial) != nil else {
             XCTFail("Each caption preview must start from the identified custom Info page")
             return
         }
-        for step in 0..<3 {
-            guard tvPlayerSnapshot() != nil else {
-                XCTFail("Caption preview must retain the identified player before Back")
-                return
+        print("F2_TV_CAPTION_PREVIEW backStep=1 retainNativeHUD=true")
+        XCUIRemote.shared.press(.menu)
+        let deadline = ProcessInfo.processInfo.systemUptime + 3
+        var exposedHUD = false
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if let video = tvPlayerSnapshot(), video.first(identifier: "pictureshowNativePlayer") != nil,
+               tvInfoObservation(video) == nil,
+               let clock = video.first(identifier: "AXElapsedTime"), parsedClockSeconds(clock.label) == pausedSeconds,
+               video.nodes.contains(where: { $0.elementType == .cell && $0.hasFocus }) {
+                exposedHUD = true
+                print("F2_TV_CAPTION_PREVIEW nativeHUDClock=\(clock.label) infoAbsent=true nativeCellFocused=true snapshot=true")
+                break
             }
-            print("F2_TV_CAPTION_PREVIEW backStep=\(step + 1)")
-            XCUIRemote.shared.press(.menu)
-            Thread.sleep(forTimeInterval: 1.5)
+            Thread.sleep(forTimeInterval: 0.1)
         }
-        guard let video = tvPlayerSnapshot(), tvInfoObservation(video) == nil else {
-            XCTFail("Caption comparison must show the video without the custom Info panel")
+        guard exposedHUD else {
+            diagnoseTVInfo(step: "caption preview missing native HUD")
+            XCTFail("Caption comparison requires the actual paused native HUD without the custom Info panel")
             return
         }
         captureFullScreen(name)
