@@ -80,14 +80,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -578,12 +579,12 @@ fun CatalogGrid(
     val firstSort = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
+    // Grid headings/card focus provide context. A navigation destination is not a pane:
+    // late pane events from this departing grid would speak its title over detail focus.
     Column(
         modifier = Modifier.fillMaxSize().background(
             CatalogBackground
-        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup().semantics {
-            if (restored) paneTitle = state.parent.name
-        },
+        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CatalogHeading(state.parent.name)
@@ -847,6 +848,7 @@ fun CatalogDetail(
     // This composition owns the consumer, so navigation cancels any work not yet started.
     var commandGeneration by remember { mutableIntStateOf(0) }
     var readyQueuedTargets by remember { mutableStateOf(emptySet<String>()) }
+    var requestCueTarget by remember { mutableStateOf<String?>(null) }
     val freshCommands = remember { kotlinx.coroutines.channels.Channel<DetailCommand>(32) }
     val latestError by rememberUpdatedState(state.error)
     val latestLifecycle by rememberUpdatedState(lifecycleState)
@@ -877,8 +879,22 @@ fun CatalogDetail(
         }
     }
     var waitHadRequest by remember { mutableStateOf(false) }
-    val recoveryReason = (recoveryMessage ?: state.error ?: "The server has not finished loading. Retry to reload the item.") +
+    val rawRecoveryReason = (state.error ?: recoveryMessage ?: "The server has not finished loading. Retry to reload the item.") +
         if (waitHadRequest && pendingExpired) " The previous request expired and will not run." else ""
+    var previousFailure by remember { mutableStateOf<app.pictureshow.core.DetailFailurePresentation?>(null) }
+    val failureKey = app.pictureshow.core.detailFailureKey(
+        readRecovery = recoveryActive,
+        retrying = retryWorking,
+        writeAttempt = state.writeAttempt.takeIf { !showRecovery && state.error != null }
+    )
+    val presentedFailure = app.pictureshow.core.presentDetailFailure(
+        previousFailure,
+        failureKey,
+        if (showRecovery) rawRecoveryReason else state.error
+    )
+    SideEffect { previousFailure = presentedFailure }
+    val recoveryReason = presentedFailure?.message ?: rawRecoveryReason
+    val writeFailure = presentedFailure?.message?.takeIf { failureKey?.startsWith("write:") == true }
     SideEffect {
         // Snapshot the whole published reason, including an expired intent. Settlement
         // clears the recovery model immediately; that must not announce a different error.
@@ -890,7 +906,7 @@ fun CatalogDetail(
             onRetry()
         }
     }
-    fun queueFresh(command: () -> Unit): Boolean {
+    fun queueFresh(target: String, command: () -> Unit): Boolean {
         val generation = commandGeneration
         val accepted = !pendingExpired &&
             !expiryReported &&
@@ -899,7 +915,10 @@ fun CatalogDetail(
                     commandNotice = "The request could not be saved. Try again."
                 }
             } == true
-        if (accepted) waitHadRequest = true
+        if (accepted) {
+            waitHadRequest = true
+            requestCueTarget = target
+        }
         if (!accepted) {
             commandNotice = "The request expired. Try again when the item loads."
             pendingExpired = true
@@ -934,6 +953,7 @@ fun CatalogDetail(
             commandNotice = "The request could not be saved. Try again."
         } else {
             readyQueuedTargets = readyQueuedTargets + target
+            if (latestBusy) requestCueTarget = target
             commandNotice = null
         }
     }
@@ -1025,6 +1045,7 @@ fun CatalogDetail(
     val pendingActions = if (pendingEnabled) {
         PendingDetailActions(
             available = !pendingExpired && !expiryReported,
+            requestedTargets = pendingQueuedTargets + if (playQueued != null) setOf("primary", "from-start") else emptySet(),
             playLabel = when {
                 pendingExpired || expiryReported -> "Play unavailable"
                 playQueued == "resume" -> "Play requested"
@@ -1058,7 +1079,7 @@ fun CatalogDetail(
             onPlay = {
                 pendingViewerMoved = true
                 if (playQueued == null) {
-                    val accepted = queueFresh {
+                    val accepted = queueFresh("primary") {
                         if (latestPlaybackReady) {
                             val fresh = latestPlayItem
                             if (fresh != null) {
@@ -1074,7 +1095,7 @@ fun CatalogDetail(
             onFromStart = {
                 pendingViewerMoved = true
                 if (playQueued == null) {
-                    val accepted = queueFresh {
+                    val accepted = queueFresh("from-start") {
                         val fresh = latestPlayItem
                         if (latestPlaybackReady && fresh != null) {
                             latestOnPlay(fresh, false)
@@ -1089,7 +1110,7 @@ fun CatalogDetail(
                 pendingViewerMoved = true
                 if ("played" !in pendingQueuedTargets) {
                     val wanted = pendingItem?.isWatched != true
-                    if (queueFresh {
+                    if (queueFresh("played") {
                             val fresh = latestItem
                             if (latestPlaybackReady &&
                                 !latestBusy &&
@@ -1109,7 +1130,7 @@ fun CatalogDetail(
                 pendingViewerMoved = true
                 if ("favorite" !in pendingQueuedTargets) {
                     val wanted = pendingItem?.userData?.isFavorite != true
-                    if (queueFresh {
+                    if (queueFresh("favorite") {
                             val fresh = latestItem
                             if (latestPlaybackReady &&
                                 !latestBusy &&
@@ -1129,6 +1150,7 @@ fun CatalogDetail(
         null
     }
     fun headerFocus(target: String, focused: Boolean) {
+        if (!focused && requestCueTarget == target) requestCueTarget = null
         if (focused) {
             headerInputTarget = target
             if (playbackWaiting) pendingTarget(target)
@@ -1221,319 +1243,361 @@ fun CatalogDetail(
                 }.focusTarget()
             )
         }
-        LazyColumn(
-            state = list,
-            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail")
-                // A returning page must expose its restored input target before TalkBack can
-                // choose a heading or overview as a replacement for the departing player.
-                .then(
-                    if (lifecycleState != Lifecycle.State.RESUMED ||
-                        (
-                            !recoveryActive &&
-                                state.error == null &&
-                                (
-                                    (playItem != null && !semanticsRevealed && !pendingSemanticsRevealed) ||
-                                        (pendingEnabled && !pendingSemanticsRevealed)
-                                    )
-                            )
-                    ) {
-                        Modifier.clearAndSetSemantics { hideFromAccessibility() }
-                    } else {
-                        Modifier
-                    }
-                ).accessibilityGroup().onPreviewKeyEvent {
-                    if (it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) {
-                        // Own the complete Select gesture that started on Retry. Moving
-                        // input focus must not deliver its repeats/UP to the fresh Play.
-                        if (it.type == KeyEventType.KeyDown &&
-                            it.nativeKeyEvent.repeatCount == 0 &&
-                            !(retryFocused && showRecovery)
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = list,
+                modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail")
+                    // A returning page must expose its restored input target before TalkBack can
+                    // choose a heading or overview as a replacement for the departing player.
+                    .then(
+                        if (lifecycleState != Lifecycle.State.RESUMED ||
+                            (
+                                !recoveryActive &&
+                                    state.error == null &&
+                                    (
+                                        app.pictureshow.core.detailArrivalAwaitsAction(
+                                            state.loading,
+                                            semanticsRevealed || pendingSemanticsRevealed,
+                                            playbackWaiting
+                                        ) ||
+                                            (playItem != null && !semanticsRevealed && !pendingSemanticsRevealed) ||
+                                            (pendingEnabled && !pendingSemanticsRevealed)
+                                        )
+                                )
                         ) {
-                            recoverySelectKey = null
+                            Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                        } else {
+                            Modifier
                         }
-                        if ((retryFocused && showRecovery) || recoverySelectKey == it.key) {
-                            if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0 && recoverySelectKey == null) {
-                                recoverySelectKey = it.key
-                                requestReadRetry()
-                            } else if (it.type == KeyEventType.KeyUp && recoverySelectKey == it.key) {
+                    ).accessibilityGroup().onPreviewKeyEvent {
+                        if (it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) {
+                            // Own the complete Select gesture that started on Retry. Moving
+                            // input focus must not deliver its repeats/UP to the fresh Play.
+                            if (it.type == KeyEventType.KeyDown &&
+                                it.nativeKeyEvent.repeatCount == 0 &&
+                                !(retryFocused && showRecovery)
+                            ) {
                                 recoverySelectKey = null
                             }
-                            return@onPreviewKeyEvent true
+                            if ((retryFocused && showRecovery) || recoverySelectKey == it.key) {
+                                if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0 && recoverySelectKey == null) {
+                                    recoverySelectKey = it.key
+                                    requestReadRetry()
+                                } else if (it.type == KeyEventType.KeyUp && recoverySelectKey == it.key) {
+                                    recoverySelectKey = null
+                                }
+                                return@onPreviewKeyEvent true
+                            }
                         }
-                    }
-                    if (it.type == KeyEventType.KeyDown) {
-                        focusInputRevision++
-                        if (!playbackWaiting) commandNotice = null
-                        if (playbackWaiting &&
-                            it.key in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)
-                        ) {
-                            pendingViewerMoved = true
+                        if (it.type == KeyEventType.KeyDown) {
+                            focusInputRevision++
+                            if (!playbackWaiting) commandNotice = null
+                            if (playbackWaiting &&
+                                it.key in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)
+                            ) {
+                                pendingViewerMoved = true
+                            }
+                            // A viewer's first move owns focus even during the brief visible handoff.
+                            if (semanticsRevealed) restored = true
                         }
-                        // A viewer's first move owns focus even during the brief visible handoff.
-                        if (semanticsRevealed) restored = true
-                    }
-                    if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && pendingActions != null) {
-                        if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) pendingActions.onPlay()
-                        true
-                    } else if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) &&
-                        !recoveryActive &&
-                        state.error == null &&
-                        !state.loading &&
-                        playItem != null
-                    ) {
-                        if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
-                            onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
-                        }
-                        true
-                    } else if (it.type == KeyEventType.KeyDown &&
-                        it.key in listOf(Key.DirectionUp, Key.DirectionDown) &&
-                        hasActions &&
-                        !playbackWaiting &&
-                        !recoveryActive
-                    ) {
-                        val index = sections.indexOfFirst { section -> section.first == selectedSection }
-                        val target = index + if (it.key == Key.DirectionUp) -1 else 1
-                        if (headerFocused &&
-                            focusManager.moveFocus(if (it.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
-                        ) {
+                        if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && pendingActions != null) {
+                            if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) pendingActions.onPlay()
                             true
-                        } else if (target < sections.size) {
-                            moveSection(target)
+                        } else if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) &&
+                            !recoveryActive &&
+                            state.error == null &&
+                            !state.loading &&
+                            playItem != null
+                        ) {
+                            if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
+                                onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
+                            }
                             true
+                        } else if (it.type == KeyEventType.KeyDown &&
+                            it.key in listOf(Key.DirectionUp, Key.DirectionDown) &&
+                            hasActions &&
+                            !playbackWaiting &&
+                            !recoveryActive
+                        ) {
+                            val index = sections.indexOfFirst { section -> section.first == selectedSection }
+                            val target = index + if (it.key == Key.DirectionUp) -1 else 1
+                            if (headerFocused &&
+                                focusManager.moveFocus(if (it.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                            ) {
+                                true
+                            } else if (target < sections.size) {
+                                moveSection(target)
+                                true
+                            } else {
+                                false
+                            }
                         } else {
                             false
                         }
-                    } else {
-                        false
-                    }
-                },
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item(key = "body") {
-                Box(Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
-                        if (item != null && headerItem != null) {
-                            val backdrop = if (headerItem.backdropImageTags.isNotEmpty() ||
-                                headerItem.parentBackdropImageTags.isNotEmpty()
-                            ) {
-                                headerItem.copy(imageTags = emptyMap())
-                            } else {
-                                headerItem
-                            }
-                            CatalogArtwork(
-                                backdrop,
-                                state.account,
-                                wide = true,
-                                modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
-                                alignment = BiasAlignment(0f, -.5f)
-                            )
-                            CatalogHeading(headerItem.name)
-                            if (headerItem.type == "Episode") {
-                                Text(
-                                    listOfNotNull(
-                                        headerItem.seriesName,
-                                        episodeLabel(headerItem).takeIf {
-                                            it.isNotBlank()
-                                        }
-                                    ).joinToString(" · ")
+                    },
+                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                item(key = "body") {
+                    Box(Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
+                            if (item != null && headerItem != null) {
+                                val backdrop = if (headerItem.backdropImageTags.isNotEmpty() ||
+                                    headerItem.parentBackdropImageTags.isNotEmpty()
+                                ) {
+                                    headerItem.copy(imageTags = emptyMap())
+                                } else {
+                                    headerItem
+                                }
+                                CatalogArtwork(
+                                    backdrop,
+                                    state.account,
+                                    wide = true,
+                                    modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
+                                    alignment = BiasAlignment(0f, -.5f)
                                 )
-                            }
-                            val metadata = listOfNotNull(
-                                headerItem.productionYear?.toString(),
-                                headerItem.officialRating,
-                                headerItem.communityRating?.let(::communityRatingLabel),
-                                headerItem.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
-                            )
-                            if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
-                            val container = item.type in listOf("Series", "Season")
-                            if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
-                                DetailActions(
-                                    if (recoveryActive) headerItem else item, playItem, state.busy, initial,
-                                    if (playbackLayout) {
-                                        { queueReadyMutation(true) }
-                                    } else {
-                                        onPlayed
-                                    },
-                                    if (playbackLayout) {
-                                        { queueReadyMutation(false) }
-                                    } else {
-                                        onFavorite
-                                    },
-                                    onPlay,
-                                    playedFocus, favoriteFocus, pendingActions, ::headerFocus,
-                                    stableLayout =
-                                    playbackLayout || playbackWaiting,
-                                    readyQueuedTargets = readyQueuedTargets,
-                                    fromStartFocus = fromStartFocus,
-                                    blocked = recoveryActive || (playbackWaiting && pendingActions == null)
-                                ) {
-                                    if (trackSelection) selectedSection = "header"
-                                }
-                            }
-                            headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
-                            if (headerItem.genres.isNotEmpty()) Text(headerItem.genres.joinToString(" · "), color = CatalogMuted)
-                            if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
-                                DetailActions(
-                                    if (recoveryActive) headerItem else item, playItem, state.busy, initial,
-                                    if (playbackLayout) {
-                                        { queueReadyMutation(true) }
-                                    } else {
-                                        onPlayed
-                                    },
-                                    if (playbackLayout) {
-                                        { queueReadyMutation(false) }
-                                    } else {
-                                        onFavorite
-                                    },
-                                    onPlay,
-                                    playedFocus, favoriteFocus, pendingActions, ::headerFocus,
-                                    stableLayout =
-                                    playbackLayout || playbackWaiting,
-                                    readyQueuedTargets = readyQueuedTargets,
-                                    fromStartFocus = fromStartFocus,
-                                    blocked = recoveryActive || (playbackWaiting && pendingActions == null)
-                                ) {
-                                    if (trackSelection) selectedSection = "header"
-                                }
-                            }
-                            // Add authoritative metadata below the published header instead of
-                            // inserting lines above its focused buttons or reader text nodes.
-                            if (!playbackWaiting && playbackHeader != null) {
-                                val additions = buildList {
-                                    if (item.name != headerItem.name) add(item.name)
-                                    if (item.productionYear != headerItem.productionYear) item.productionYear?.let { add(it.toString()) }
-                                    if (item.officialRating != headerItem.officialRating) item.officialRating?.let { add(it) }
-                                    if (item.communityRating != headerItem.communityRating) {
-                                        item.communityRating?.let { add(communityRatingLabel(it)) }
-                                    }
-                                    if (item.runTimeTicks != headerItem.runTimeTicks) {
-                                        item.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)?.let { add(it) }
-                                    }
-                                    if (item.overview != headerItem.overview) {
-                                        item.overview?.takeIf(String::isNotBlank)?.let { add(it) }
-                                    }
-                                    if (item.genres != headerItem.genres && item.genres.isNotEmpty()) {
-                                        add(item.genres.joinToString(" · "))
-                                    }
-                                }
-                                if (additions.isNotEmpty()) {
+                                CatalogHeading(headerItem.name)
+                                if (headerItem.type == "Episode") {
                                     Text(
-                                        "More details",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.semantics { heading() }
+                                        listOfNotNull(
+                                            headerItem.seriesName,
+                                            episodeLabel(headerItem).takeIf {
+                                                it.isNotBlank()
+                                            }
+                                        ).joinToString(" · ")
                                     )
-                                    additions.forEach { Text(it) }
+                                }
+                                val metadata = listOfNotNull(
+                                    headerItem.productionYear?.toString(),
+                                    headerItem.officialRating,
+                                    headerItem.communityRating?.let(::communityRatingLabel),
+                                    headerItem.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
+                                )
+                                if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
+                                val container = item.type in listOf("Series", "Season")
+                                if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
+                                    DetailActions(
+                                        if (recoveryActive) headerItem else item, playItem, state.busy, initial,
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(true) }
+                                        } else {
+                                            onPlayed
+                                        },
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(false) }
+                                        } else {
+                                            onFavorite
+                                        },
+                                        onPlay,
+                                        playedFocus, favoriteFocus, pendingActions, ::headerFocus,
+                                        stableLayout =
+                                        playbackLayout || playbackWaiting,
+                                        readyQueuedTargets = readyQueuedTargets,
+                                        requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
+                                        fromStartFocus = fromStartFocus,
+                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null)
+                                    ) {
+                                        if (trackSelection) selectedSection = "header"
+                                    }
+                                }
+                                headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
+                                if (headerItem.genres.isNotEmpty()) Text(headerItem.genres.joinToString(" · "), color = CatalogMuted)
+                                if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
+                                    DetailActions(
+                                        if (recoveryActive) headerItem else item, playItem, state.busy, initial,
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(true) }
+                                        } else {
+                                            onPlayed
+                                        },
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(false) }
+                                        } else {
+                                            onFavorite
+                                        },
+                                        onPlay,
+                                        playedFocus, favoriteFocus, pendingActions, ::headerFocus,
+                                        stableLayout =
+                                        playbackLayout || playbackWaiting,
+                                        readyQueuedTargets = readyQueuedTargets,
+                                        requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
+                                        fromStartFocus = fromStartFocus,
+                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null)
+                                    ) {
+                                        if (trackSelection) selectedSection = "header"
+                                    }
+                                }
+                                // Add authoritative metadata below the published header instead of
+                                // inserting lines above its focused buttons or reader text nodes.
+                                if (!playbackWaiting && playbackHeader != null) {
+                                    val additions = buildList {
+                                        if (item.name != headerItem.name) add(item.name)
+                                        if (item.productionYear != headerItem.productionYear) {
+                                            item.productionYear?.let { add(it.toString()) }
+                                        }
+                                        if (item.officialRating != headerItem.officialRating) item.officialRating?.let { add(it) }
+                                        if (item.communityRating != headerItem.communityRating) {
+                                            item.communityRating?.let { add(communityRatingLabel(it)) }
+                                        }
+                                        if (item.runTimeTicks != headerItem.runTimeTicks) {
+                                            item.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)?.let { add(it) }
+                                        }
+                                        if (item.overview != headerItem.overview) {
+                                            item.overview?.takeIf(String::isNotBlank)?.let { add(it) }
+                                        }
+                                        if (item.genres != headerItem.genres && item.genres.isNotEmpty()) {
+                                            add(item.genres.joinToString(" · "))
+                                        }
+                                    }
+                                    if (additions.isNotEmpty()) {
+                                        Text(
+                                            "More details",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.semantics { heading() }
+                                        )
+                                        additions.forEach { Text(it) }
+                                    }
+                                }
+                                if (state.loading &&
+                                    !playbackWaiting
+                                ) {
+                                    Text(
+                                        if (item.type in
+                                            listOf("Series", "Season")
+                                        ) {
+                                            "Loading episodes…"
+                                        } else {
+                                            "Loading item…"
+                                        }
+                                    )
                                 }
                             }
-                            if (state.loading &&
-                                !playbackWaiting
+                        }
+                        // An overlay has no layout footprint: status publication, changed wording and
+                        // removal cannot move the hero or the reader's selected action underneath it.
+                        if (showRecovery) {
+                            Column(
+                                Modifier.align(Alignment.TopEnd).width(420.dp).background(CatalogBackground).padding(12.dp)
+                                    .accessibilityGroup(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text(
-                                    if (item.type in
-                                        listOf("Series", "Season")
-                                    ) {
-                                        "Loading episodes…"
-                                    } else {
-                                        "Loading item…"
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    // An overlay has no layout footprint: status publication, changed wording and
-                    // removal cannot move the hero or the reader's selected action underneath it.
-                    if (showRecovery || state.error != null) {
-                        Column(
-                            Modifier.align(Alignment.TopEnd).width(420.dp).background(CatalogBackground).padding(12.dp)
-                                .accessibilityGroup(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (showRecovery) {
-                                Button(
-                                    onClick = ::requestReadRetry,
-                                    modifier = Modifier.width(200.dp).heightIn(min = 72.dp).focusRequester(retry)
-                                        .testTag("detail:retry").onFocusChanged { retryFocused = it.isFocused }
-                                        .detailFocusDiagnostic("retry").semantics {
-                                            // TalkBack TV speaks state before the button label. Lead with
-                                            // Retry so a long reason cannot defer the usable action cue.
-                                            // Focus/state events suffice; a live region queues duplicate
-                                            // loading cues behind which a fresh-action announcement waits.
-                                            stateDescription = if (retryWorking || recoveryHandoff) {
-                                                "Loading item. Please wait."
-                                            } else {
-                                                "Retry. Loading failed. $recoveryReason"
+                                if (showRecovery) {
+                                    Button(
+                                        onClick = ::requestReadRetry,
+                                        modifier = Modifier.width(200.dp).heightIn(min = 72.dp).focusRequester(retry)
+                                            .testTag("detail:retry").onFocusChanged { retryFocused = it.isFocused }
+                                            .detailFocusDiagnostic("retry").semantics {
+                                                // TalkBack TV speaks state before the button label. Lead with
+                                                // Retry so a long reason cannot defer the usable action cue.
+                                                // Focus/state events suffice; a live region queues duplicate
+                                                // loading cues behind which a fresh-action announcement waits.
+                                                stateDescription = if (retryWorking || recoveryHandoff) {
+                                                    "Loading item. Please wait."
+                                                } else {
+                                                    "Retry. Loading failed. $recoveryReason"
+                                                }
                                             }
-                                        }
-                                ) { Text(if (retryWorking || recoveryHandoff) "Retrying…" else "Retry") }
-                                Text(
-                                    if (recoveryHandoff) recoveryHandoffMessage ?: recoveryReason else recoveryReason,
-                                    color = Color(0xFFFFCCB8),
-                                    modifier = Modifier.testTag("detail:read-error")
-                                )
-                            } else {
-                                CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
-                                commandNotice?.let { StatusLine(it) }
+                                    ) { Text(if (retryWorking || recoveryHandoff) "Retrying…" else "Retry") }
+                                    Text(
+                                        if (recoveryHandoff) recoveryHandoffMessage ?: recoveryReason else recoveryReason,
+                                        color = Color(0xFFFFCCB8),
+                                        modifier = Modifier.testTag("detail:read-error")
+                                    )
+                                }
                             }
-                        }
-                    } else if (commandNotice != null || (playbackWaiting && state.error == null)) {
-                        val status = commandNotice ?: when {
-                            state.readSucceeded && !state.loading && !state.playbackReportFinished -> "Item loaded. Saving progress…"
-                            state.playbackReportFinished -> "Loading item…"
-                            else -> "Saving progress…"
-                        }
-                        Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
-                            if (pendingEnabled && commandNotice == null && !state.readSucceeded) {
-                                Text(status, modifier = Modifier.clearAndSetSemantics {})
-                            } else {
-                                StatusLine(status)
+                        } else if (commandNotice != null || (playbackWaiting && state.error == null)) {
+                            val status = commandNotice ?: when {
+                                state.readSucceeded && !state.loading && !state.playbackReportFinished -> "Item loaded. Saving progress…"
+                                state.playbackReportFinished -> "Loading item…"
+                                else -> "Saving progress…"
+                            }
+                            Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
+                                if (commandNotice == null) {
+                                    // Passive phases remain readable, without queuing speech ahead
+                                    // of the focused request, failure or Ready state.
+                                    // Before the read succeeds, preserve the existing hidden status;
+                                    // after it succeeds, retain its readable focus surface and geometry.
+                                    if (pendingEnabled && !state.readSucceeded) {
+                                        Text(status, modifier = Modifier.clearAndSetSemantics {})
+                                    } else {
+                                        StatusLine(status, announce = false)
+                                    }
+                                } else {
+                                    StatusLine(status)
+                                }
                             }
                         }
                     }
                 }
-            }
-            sections.forEach { (section, items) ->
-                item(key = section) {
-                    DetailRow(
-                        title = when (section) {
-                            "next" -> "Next up"
-                            "seasons" -> "Seasons"
-                            else -> "Episodes"
-                        },
-                        section = section,
-                        items = items,
-                        account = state.account,
-                        onOpen = if (section == "seasons") onSeason else onOpen,
-                        wide = section != "seasons",
-                        selectedId = if (section == "seasons") state.selectedSeasonId else null,
-                        onFocusRested = if (section == "seasons") {
-                            { season -> if (trackSelection) onSeason(season) }
-                        } else {
-                            null
-                        },
-                        rowState = rowStates.getValue(section),
-                        requests = requests,
-                        onFocus = { focused ->
-                            if (trackSelection) {
-                                selectedSection = section
-                                selectedId = focused.id
-                                rowSelections = rowSelections + (section to focused.id)
+                sections.forEach { (section, items) ->
+                    item(key = section) {
+                        DetailRow(
+                            title = when (section) {
+                                "next" -> "Next up"
+                                "seasons" -> "Seasons"
+                                else -> "Episodes"
+                            },
+                            section = section,
+                            items = items,
+                            account = state.account,
+                            onOpen = if (section == "seasons") onSeason else onOpen,
+                            wide = section != "seasons",
+                            selectedId = if (section == "seasons") state.selectedSeasonId else null,
+                            onFocusRested = if (section == "seasons") {
+                                { season -> if (trackSelection) onSeason(season) }
+                            } else {
+                                null
+                            },
+                            rowState = rowStates.getValue(section),
+                            requests = requests,
+                            onFocus = { focused ->
+                                if (trackSelection) {
+                                    selectedSection = section
+                                    selectedId = focused.id
+                                    rowSelections = rowSelections + (section to focused.id)
+                                }
                             }
+                        )
+                    }
+                }
+                if (app.pictureshow.core.showDetailEmptyState(
+                        item?.type,
+                        state.loading,
+                        state.readSucceeded,
+                        state.readFailed,
+                        state.episodes.size,
+                        state.seasons.size
+                    )
+                ) {
+                    item(key = "empty") { Text("No episodes are available.") }
+                }
+            }
+            if (writeFailure != null) {
+                Column(
+                    Modifier.align(Alignment.TopEnd).padding(horizontal = 48.dp, vertical = 32.dp)
+                        .width(420.dp).background(CatalogBackground).padding(12.dp)
+                        .then(
+                            if (lifecycleState != Lifecycle.State.RESUMED) {
+                                Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                            } else {
+                                Modifier
+                            }
+                        ).accessibilityGroup(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // This one failure event reaches the reader even when a lower action owns
+                    // focus. Keep the visible reason and spoken reason on the same stable node.
+                    Text(
+                        "Change failed. $writeFailure",
+                        color = Color(0xFFFFCCB8),
+                        modifier = Modifier.testTag("detail:write-error").semantics {
+                            contentDescription = "Change failed. $writeFailure Retry is available."
+                            liveRegion = LiveRegionMode.Assertive
                         }
                     )
+                    Button(onClick = onRetry, modifier = Modifier.focusRequester(retry).testTag("detail:write-retry")) { Text("Retry") }
                 }
-            }
-            if (app.pictureshow.core.showDetailEmptyState(
-                    item?.type,
-                    state.loading,
-                    state.readSucceeded,
-                    state.readFailed,
-                    state.episodes.size,
-                    state.seasons.size
-                )
-            ) {
-                item(key = "empty") { Text("No episodes are available.") }
             }
         }
     }
@@ -1838,6 +1902,7 @@ private data class DetailCommand(val generation: Int, val mutationTarget: String
 
 private data class PendingDetailActions(
     val available: Boolean,
+    val requestedTargets: Set<String>,
     val playLabel: String,
     val fromStartLabel: String,
     val playedLabel: String,
@@ -1864,6 +1929,7 @@ private fun DetailActions(
     onHeaderFocus: (String, Boolean) -> Unit = { _, _ -> },
     stableLayout: Boolean = false,
     readyQueuedTargets: Set<String> = emptySet(),
+    requestCueTarget: String? = null,
     fromStartFocus: FocusRequester? = null,
     blocked: Boolean = false,
     onFocus: () -> Unit
@@ -1912,6 +1978,28 @@ private fun DetailActions(
     ) {
         val position = playItem?.userData?.playbackPositionTicks ?: 0
         val suffix = if (pending != null) "-pending" else ""
+        val labels = mapOf(
+            "primary" to (pending?.playLabel ?: if (position > 0) resumeLabel(position) else "Play"),
+            "from-start" to (pending?.fromStartLabel ?: "Play from start"),
+            "played" to (
+                pending?.playedLabel ?: if ("played" in readyQueuedTargets) {
+                    "Watched change requested"
+                } else if (item.isWatched) {
+                    "Mark unwatched"
+                } else {
+                    "Mark watched"
+                }
+                ),
+            "favorite" to (
+                pending?.favoriteLabel ?: if ("favorite" in readyQueuedTargets) {
+                    "Favorite change requested"
+                } else if (item.userData.isFavorite) {
+                    "Unfavorite"
+                } else {
+                    "Favorite"
+                }
+                )
+        )
 
         fun actionModifier(target: String, tag: String, click: () -> Unit): Modifier {
             val childBringIntoView = childBringIntoViews.getValue(target)
@@ -1940,16 +2028,31 @@ private fun DetailActions(
                 }.testTag("detail:$tag$suffix").semantics {
                     // Keep Material input focus/geometry while exposing the real availability
                     // to services. Compose omits click actions for disabled semantics.
-                    if (pending?.available == false) {
-                        disabled()
-                        stateDescription = "Unavailable while saving progress."
-                    } else if (!blocked && pending == null && stableLayout) {
-                        stateDescription = when (target) {
-                            "played" -> if (item.isWatched) "Ready. Watched" else "Ready. Unwatched"
-                            "favorite" -> if (item.userData.isFavorite) "Ready. Favorite" else "Ready. Not favorite"
-                            else -> "Ready"
-                        }
+                    if (pending?.available == false) disabled()
+                    val currentState = when (target) {
+                        "played" -> if (item.isWatched) "Watched" else "Unwatched"
+                        "favorite" -> if (item.userData.isFavorite) "Favorite" else "Not favorite"
+                        else -> null
                     }
+                    val requested = target in readyQueuedTargets || target in pending?.requestedTargets.orEmpty()
+                    // A newly accepted request must beat the previous focus speech. Ordinary
+                    // state-description events queue behind it and can be dropped by the next key.
+                    // Priority ends when focus leaves; revisiting an already queued action is quiet.
+                    if (app.pictureshow.core.detailRequestFeedbackIsUrgent(
+                            requestCueTarget == target,
+                            requested,
+                            pending?.available != false
+                        )
+                    ) {
+                        liveRegion = LiveRegionMode.Assertive
+                    }
+                    app.pictureshow.core.detailActionDescription(
+                        currentState,
+                        pending != null,
+                        pending?.available != false,
+                        !blocked && pending == null && stableLayout,
+                        requested
+                    )?.let { stateDescription = it }
                 }.onPreviewKeyEvent {
                     // Handle pending Select at DOWN, before a fresh callback can replace it.
                     // Activity's handoff owns the matching UP/repeats, even across completion.
@@ -1990,7 +2093,7 @@ private fun DetailActions(
                                 Modifier
                             }
                         )
-                ) { Text(pending?.playLabel ?: if (position > 0) resumeLabel(position) else "Play") }
+                ) { Text(labels.getValue("primary")) }
             }
         }
         if (!stableLayout && position > 0) {
@@ -2023,18 +2126,9 @@ private fun DetailActions(
                         .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                         .then(actionModifier("played", "played", click)).semantics {
                             toggleableState = ToggleableState(item.isWatched)
-                            stateDescription = if (item.isWatched) "Watched" else "Unwatched"
                         }
                 ) {
-                    Text(
-                        pending?.playedLabel ?: if ("played" in readyQueuedTargets) {
-                            "Watched change requested"
-                        } else if (item.isWatched) {
-                            "Mark unwatched"
-                        } else {
-                            "Mark watched"
-                        }
-                    )
+                    Text(labels.getValue("played"))
                 }
             }
         }
@@ -2057,18 +2151,9 @@ private fun DetailActions(
                         .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                         .then(actionModifier("favorite", "favorite", click)).semantics {
                             toggleableState = ToggleableState(item.userData.isFavorite)
-                            stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite"
                         }
                 ) {
-                    Text(
-                        pending?.favoriteLabel ?: if ("favorite" in readyQueuedTargets) {
-                            "Favorite change requested"
-                        } else if (item.userData.isFavorite) {
-                            "Unfavorite"
-                        } else {
-                            "Favorite"
-                        }
-                    )
+                    Text(labels.getValue("favorite"))
                 }
             }
         }
@@ -2084,7 +2169,7 @@ private fun DetailActions(
                         enabled = !blocked && (pending != null || playItem != null),
                         modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                             .then(actionModifier("from-start", "from-start", click))
-                    ) { Text(pending?.fromStartLabel ?: "Play from start") }
+                    ) { Text(labels.getValue("from-start")) }
                 }
             }
         }

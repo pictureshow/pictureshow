@@ -362,9 +362,19 @@ internal fun Pictureshow(
         if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
         consumeSearchEntry()
     }
+    val accessibleNavigation = rememberAccessibilityEnabled()
     NavHost(
         navController = nav,
         startDestination = "waiting",
+        enterTransition = {
+            catalogEnterTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route)
+        },
+        exitTransition = {
+            catalogExitTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route)
+        },
+        // Pop/player return retains the existing transition and focus handoff timing.
+        popEnterTransition = { catalogEnterTransition(false, null, null) },
+        popExitTransition = { catalogExitTransition(false, null, null) },
         modifier = Modifier.fillMaxSize().catalogSearchKey(
             enabled = state.snapshot.currentAccount?.expired == false && isCatalogSearchRoute(backStackEntry?.destination?.route),
             onSearch = {
@@ -964,7 +974,7 @@ internal fun QuickConnectCode(code: String, announce: ((String) -> Unit)? = null
 }
 
 @Composable
-internal fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface) {
+internal fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface, announce: Boolean = true) {
     val restoring = LocalRestoringConfirmationFocus.current
     // Focus changes must not look like content updates to a live region. Keep the text on
     // its own semantics node; the focusable container reads its non-actionable child.
@@ -975,7 +985,11 @@ internal fun StatusLine(message: String, color: Color = MaterialTheme.colorSchem
             if (restoring) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
         ).readableFocus().padding(12.dp)
     ) {
-        Text(message, color = color, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Text(
+            message,
+            color = color,
+            modifier = if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier
+        )
     }
 }
 

@@ -358,7 +358,9 @@ data class CatalogDetailState(
     val readFailed: Boolean = false,
     // An authoritative read may succeed before the playback report finishes.
     val readSucceeded: Boolean = false,
-    val readAttempt: Long = 0
+    val readAttempt: Long = 0,
+    // Presentation identity survives a fast optimistic/error round trip coalesced by StateFlow.
+    val writeAttempt: Long = 0
 )
 
 class CatalogDetailViewModel(private val account: Account, private val original: MediaItem, private val session: CatalogSession) :
@@ -563,7 +565,9 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         if (watched && item.isEmptyContainer) return
         val old = item.userData
         val optimistic = if (watched) old.copy(played = !old.played) else old.copy(isFavorite = !old.isFavorite)
-        mutableState.update { it.copy(item = item.copy(userData = optimistic), busy = true, error = null) }
+        mutableState.update {
+            it.copy(item = item.copy(userData = optimistic), busy = true, error = null, writeAttempt = it.writeAttempt + 1)
+        }
         action = viewModelScope.launch {
             val result = session.call(account) {
                 if (watched) played(account, item.id, !old.played) else favorite(account, item.id, !old.isFavorite)
