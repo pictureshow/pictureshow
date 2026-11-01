@@ -31,10 +31,12 @@ private final class DeferredSeekPlayer: AVPlayer {
 private final class SeekRaceProtocol: URLProtocol {
     static var playbackInfoCount = 0
     static var playbackInfoBodies: [[String: Any]] = []
+    static var includeNextEpisode = false
 
-    static func reset() {
+    static func reset(includeNext: Bool = false) {
         playbackInfoCount = 0
         playbackInfoBodies = []
+        includeNextEpisode = includeNext
     }
 
     private static func requestBody(_ request: URLRequest) -> [String: Any]? {
@@ -76,8 +78,14 @@ private final class SeekRaceProtocol: URLProtocol {
             ]
         } else if path.hasSuffix("/Items/first") || path.hasSuffix("/Items/next") {
             body = ["Id": path.hasSuffix("/Items/first") ? "first" : "next", "Type": "Episode", "Chapters": []]
-        } else if path.contains("MediaSegments") || path.hasSuffix("/Episodes") {
+        } else if path.contains("MediaSegments") {
             body = ["Items": []]
+        } else if path.hasSuffix("/Episodes") {
+            let episodes: [[String: Any]] = Self.includeNextEpisode ? [
+                ["Id": "first", "Name": "First", "Type": "Episode", "SeriesId": "series"],
+                ["Id": "next", "Name": "Next", "Type": "Episode", "SeriesId": "series"]
+            ] : []
+            body = ["Items": episodes]
         }
 
         do {
@@ -105,8 +113,8 @@ private final class SeekRaceProtocol: URLProtocol {
         player = nil
     }
 
-    private func makeReadySession() async throws {
-        SeekRaceProtocol.reset()
+    private func makeReadySession(includeNextEpisode: Bool = false) async throws {
+        SeekRaceProtocol.reset(includeNext: includeNextEpisode)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SeekRaceProtocol.self]
         let client = JellyfinClient(deviceID: "seek-race-device", session: URLSession(configuration: configuration))
@@ -121,10 +129,11 @@ private final class SeekRaceProtocol: URLProtocol {
         try await session.prepare(startTicks: 0, audio: nil, subtitle: -1)
         session.ready(version: 0)
         for _ in 0..<100 {
-            if !session.waitingForVideo { return }
+            if !session.waitingForVideo,
+               (!includeNextEpisode || session.nextItem != nil) { return }
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTFail("The test session did not become timeline-ready")
+        XCTFail("The test session did not become timeline-ready and load its requested next item")
     }
 
     private func waitForSeekCount(_ count: Int) async throws {
@@ -204,6 +213,52 @@ private final class SeekRaceProtocol: URLProtocol {
         XCTAssertEqual(player.seekTargets.count, 4)
 
         player.completeSeek(at: 3, success: true)
+        try await drainMainActor()
+        XCTAssertEqual(session.positionTicks, latest)
+        await session.stop()
+    }
+
+    /// Advancing creates a new viewing at zero. A late callback from the previous episode
+    /// must neither trigger a startup seek on the next item nor erase its new pending target.
+    func testLateOldSeekCannotLeakIntoNextViewing() async throws {
+        try await makeReadySession(includeNextEpisode: true)
+        XCTAssertEqual(session.nextItem?.id, "next")
+        let oldTarget = Ticks.from(seconds: 50)
+        session.seek(toTicks: oldTarget)
+        XCTAssertEqual(player.seekTargets.count, 1)
+
+        await session.advance()
+        XCTAssertEqual(session.item.id, "next")
+        XCTAssertEqual(session.decision?.itemID, "next")
+        XCTAssertEqual(session.decision?.startTicks, 0)
+        let nextPlaybackBody = try XCTUnwrap(SeekRaceProtocol.playbackInfoBodies.last)
+        XCTAssertEqual((nextPlaybackBody["StartTimeTicks"] as? NSNumber)?.int64Value, 0,
+                       "A new episode must negotiate from its own beginning")
+        session.ready(version: 1)
+        var resolvedUnexpectedStartupSeek = false
+        for _ in 0..<100 {
+            if player.seekTargets.count > 1, !resolvedUnexpectedStartupSeek {
+                // Let a pre-fix inherited startup seek finish so the test fails by assertion,
+                // not by leaving ready() suspended on the controlled player.
+                player.completeSeek(at: 1, success: true)
+                resolvedUnexpectedStartupSeek = true
+            }
+            if !session.waitingForVideo { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(session.waitingForVideo)
+        XCTAssertEqual(player.seekTargets.count, 1, "The next episode must start at zero without seeking to the old episode's pending target")
+        XCTAssertEqual(session.positionTicks, 0)
+
+        let newTarget = Ticks.from(seconds: 20)
+        session.seek(toTicks: newTarget)
+        XCTAssertEqual(player.seekTargets.count, 2)
+        player.completeSeek(at: 0, success: true)
+        try await drainMainActor()
+        XCTAssertEqual(session.positionTicks, 0, "The old viewing callback must not publish into the next episode")
+        let latest = session.seek(by: 5)
+        XCTAssertEqual(latest, newTarget + Ticks.from(seconds: 5), "The old viewing callback must not clear the next episode's pending seek")
+        player.completeSeek(at: player.seekTargets.count - 1, success: true)
         try await drainMainActor()
         XCTAssertEqual(session.positionTicks, latest)
         await session.stop()
