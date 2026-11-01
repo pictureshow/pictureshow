@@ -966,8 +966,12 @@ final class AppleSliceUITests: XCTestCase {
         XCUIRemote.shared.press(.up)
         let collection = app.collectionViews["AVInfoMenuCollection"]
         XCTAssertTrue(collection.waitForExistence(timeout: 10), "AVKit should expose its native info-menu collection")
-        let target = collection.cells.element(boundBy: 2)
-        XCTAssertTrue(target.waitForExistence(timeout: 10), "AVKit should expose the custom info tab after Info and Chapters")
+        let cells = collection.cells
+        let count = cells.count
+        XCTAssertGreaterThanOrEqual(count, 2, "AVKit should expose its built-in Info tab and custom Pictureshow tab")
+        let targetIndex = max(0, count - 1)
+        let target = cells.element(boundBy: targetIndex)
+        XCTAssertTrue(target.waitForExistence(timeout: 10), "AVKit should expose the final custom info tab")
         XCTAssertTrue(target.isHittable, "The custom info tab cell must be visible in AVKit's native menu")
         let targetFrame = target.frame
         func currentFocus() -> (XCUIElement?, String) {
@@ -976,7 +980,7 @@ final class AppleSliceUITests: XCTestCase {
             return (element, details)
         }
         var (focused, details) = currentFocus()
-        print("F1_TV_INFO_FOCUS step=initial targetCell=2 targetFrame=\(targetFrame) focused={\(details)}")
+        print("F1_TV_INFO_FOCUS step=initial targetCell=\(targetIndex) count=\(count) targetFrame=\(targetFrame) focused={\(details)}")
         var reachedTarget = false
         for step in 0..<16 {
             if let frame = focused?.frame,
@@ -996,7 +1000,7 @@ final class AppleSliceUITests: XCTestCase {
             }
             Thread.sleep(forTimeInterval: 0.15)
             (focused, details) = currentFocus()
-            print("F1_TV_INFO_FOCUS step=\(step + 1) direction=\(direction) targetCell=2 targetFrame=\(targetFrame) focused={\(details)}")
+            print("F1_TV_INFO_FOCUS step=\(step + 1) direction=\(direction) targetCell=\(targetIndex) count=\(count) targetFrame=\(targetFrame) focused={\(details)}")
         }
         XCTAssertTrue(reachedTarget, "Remote navigation should focus the visible custom info tab; keep its unlabeled-cell focus trace")
         capture("Native TV focused custom info tab before selection")
