@@ -580,7 +580,11 @@ final class AppleSliceUITests: XCTestCase {
         while seconds(position.label) > 0 && rewindPresses < 7 {
             let before = seconds(position.label)
             let target = max(0, before - 10)
+            #if os(tvOS)
+            activateNativeTVInfoAction(identifier: "seekBackward")
+            #else
             reveal(back10); activate(back10)
+            #endif
             XCTAssertTrue(waitForPausedClockNear(position, target: target, tolerance: target == 0 ? 0 : 1, timeout: 15,
                                                  metric: "external_back10_\(rewindPresses + 1)"),
                           "Each real Back 10 action must move the observed paused player clock toward zero")
@@ -1980,6 +1984,38 @@ final class AppleSliceUITests: XCTestCase {
             if choice.hasFocus { XCUIRemote.shared.press(.select); return }
         }
         XCTFail("Native AVKit menu focus did not reach configured choice \(choice.label)")
+    }
+    /// Info changes its native AX tree while focus moves. Resolve the target and
+    /// focused surface together, without keeping indexed XCUIElement handles.
+    private func activateNativeTVInfoAction(identifier: String) {
+        for step in 0..<20 {
+            guard let snapshot = tvPlayerSnapshot(),
+                  let target = snapshot.first(identifier: identifier), target.elementType == .button,
+                  target.isEnabled, target.frame.width > 0, target.frame.height > 0 else {
+                XCTFail("The current native Info snapshot must contain enabled \(identifier)")
+                return
+            }
+            let focused = snapshot.nodes.filter { $0.hasFocus && $0.frame.width > 0 && $0.frame.height > 0 }
+                .min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+            if target.hasFocus || focused.map({
+                $0.frame.contains(CGPoint(x: target.frame.midX, y: target.frame.midY))
+                    && $0.frame.height < target.frame.height * 3
+            }) == true {
+                XCUIRemote.shared.press(.select)
+                return
+            }
+            guard let focused else {
+                XCTFail("The current native Info snapshot must identify focus before moving to \(identifier)")
+                return
+            }
+            let dx = target.frame.midX - focused.frame.midX
+            let dy = target.frame.midY - focused.frame.midY
+            let direction: XCUIRemote.Button = abs(dy) > 30 ? (dy > 0 ? .down : .up) : (dx > 0 ? .right : .left)
+            print("F2_TV_INFO_FOCUS step=\(step) target=\(identifier) targetFrame=\(target.frame) focused=\(focused.frame)")
+            XCUIRemote.shared.press(direction)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTFail("Native Info focus did not reach \(identifier)")
     }
     private func inspectNativeTVMenuSelection(menuTitle: String, index: String) -> Bool {
         let choice = nativeTVTrackChoice(menuTitle: menuTitle, index: index)
