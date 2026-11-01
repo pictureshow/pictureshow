@@ -125,3 +125,25 @@ of spaces is allowed for API queries while missing or duplicated values fail. Re
 `{kind:failure,errorKind}`; detail success additionally returns `resumeTicks`, prepare success additionally returns
 `outcome`. Response lists are explicit and ordered; an unexpected extra request fails. Catalog 401 maps to EXPIRED,
 while playback 401 maps to INVALID_CREDENTIALS in the reference.
+
+`native-regressions.json` adds source binding (including explicit Off and encoded bitmap captions), full-source HLS
+positions through an internal track replacement, healthy home-row preservation when another shelf is absent, and
+configuration HTTP preservation. `homeRows` invokes production row assembly with unsuccessful sections represented
+as empty arrays; runtime error presentation is a separate UI check. `timelineThroughTrackSwitch` consumes two actual
+PlaybackInfo responses and reports observed absolute positions, retaining the new session identity without adding
+resume time a second time. These fixtures do not establish decoder output or native lifecycle delivery.
+
+The source-binding fixtures initially failed Android's reference on 2026-10-31: its unbound explicit track request
+could return a different default on Jellyfin 12. The production prepare path now discovers the preferred source and
+reissues explicit selections bound to that source. It does not open the first response's stream URL, so the discovery
+step starts no encoder. The final decision retains the bound response's session; ordinary cleanup uses that account
+and session. The committed expectations were kept unchanged through the red-to-green fix.
+
+The `native.catalog.projection-503.*` cases require a failed UserData batch projection to fail the complete detail
+read for Movie, Episode and Video, as it already does for containers. Android and the initial Apple port returned
+primary detail on a non-401 playable projection failure, contradicting CAT-08/11/13 freshness/Retry requirements:
+Jellyfin 12's primary projection may carry ambiguous resume/watched state. Both implementations now propagate the
+failure. The primary metadata remains available to the UI's retained presentation, but the API does not label its
+user state authoritative. The `native.catalog.projection-missing.*` cases also require INVALID_RESPONSE when a
+successful batch contains no matching item (empty array or only another ID). That is missing authoritative UserData,
+not a usable fallback. Both implementations require a matching item before completing the detail read.

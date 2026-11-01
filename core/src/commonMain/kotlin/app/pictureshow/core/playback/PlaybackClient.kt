@@ -66,16 +66,35 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         playback: PlaybackRequest = PlaybackRequest()
     ): ClientResult<PlayOutcome> {
         val body = playbackInfoRequest(account, capabilities, playback)
-        return when (val info = playbackInfo(account, itemId, body)) {
-            is ClientResult.Failure -> info
+        var info = playbackInfo(account, itemId, body)
+        var boundSourceId = playback.mediaSourceId
+        // Jellyfin 12 applies explicit track indices only to a bound MediaSourceId. The first
+        // response discovers the server's preferred source; no media URL is opened here, so it
+        // cannot start an encoder. Keep the second response's source and play-session identity.
+        if (info is ClientResult.Success &&
+            info.value.errorCode == null &&
+            boundSourceId == null &&
+            (playback.audioStreamIndex != null || playback.subtitleStreamIndex != null)
+        ) {
+            val sources = info.value.mediaSources
+            val preferred = sources.firstOrNull {
+                it.supportsDirectPlay || it.supportsDirectStream || !it.transcodingUrl.isNullOrBlank()
+            } ?: sources.firstOrNull()
+            preferred?.id?.takeIf(String::isNotBlank)?.let { sourceId ->
+                boundSourceId = sourceId
+                info = playbackInfo(account, itemId, body.copy(mediaSourceId = sourceId))
+            }
+        }
+        return when (val result = info) {
+            is ClientResult.Failure -> result
             is ClientResult.Success -> ClientResult.Success(
                 PlayDecisions.decide(
                     account.server,
                     itemId,
-                    info.value,
+                    result.value,
                     identity.forAccount(account),
                     account.accessToken,
-                    playback.mediaSourceId
+                    boundSourceId
                 ).let { outcome ->
                     if (playback.requireVideoStreamCopy && outcome is PlayOutcome.Play) {
                         AudioOnlyRecovery.preserveVideo(outcome.decision, playback.subtitleStreamIndex)

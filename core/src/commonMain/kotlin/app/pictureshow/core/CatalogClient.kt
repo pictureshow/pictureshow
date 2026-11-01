@@ -101,18 +101,12 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         // projection as catalog grids and Continue watching, including parent counts.
         // Scope it to this item without a row limit; keep the full detail metadata.
         return when (val batch = request<ItemPage>(account, "Items", mapOf("ids" to id))) {
-            // Parent counts need the list projection; surfacing its failure allows an explicit
-            // retry instead of presenting a successful detail page with known-ambiguous counts.
-            is ClientResult.Failure -> if (batch.error.kind == ErrorKind.EXPIRED ||
-                detail.value.type !in listOf("Movie", "Episode", "Video")
-            ) {
-                batch
-            } else {
-                detail
-            }
-            is ClientResult.Success -> ClientResult.Success(
-                batch.value.items.firstOrNull { it.id == id }?.let { detail.value.copy(userData = it.userData) } ?: detail.value
-            )
+            // Playable resume/watched state is just as sensitive as parent counts. The primary
+            // projection may be ambiguous, so any failed batch read must retain the Retry barrier.
+            is ClientResult.Failure -> batch
+            is ClientResult.Success -> batch.value.items.firstOrNull { it.id == id }?.let {
+                ClientResult.Success(detail.value.copy(userData = it.userData))
+            } ?: catalogFailure(ErrorKind.INVALID_RESPONSE, "The server did not return this item's current state. Try again.")
         }
     }
 
