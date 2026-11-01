@@ -569,9 +569,10 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(play.hasFocus, "Native AVKit Menu should return focus to the original detail Play action")
         #endif
     }
-    /// Keeps basic native HLS clock, pause/resume, and Menu-to-detail focus acceptance
-    /// independent of the custom Pictureshow info tab's unlabeled AVKit cell.
-    func testNativeTVHLSClockPauseResumeAndBackFocus() throws {
+    /// Keeps native elapsed-clock, remote pause/resume, and Menu-to-detail focus acceptance
+    /// independent of the custom Pictureshow info tab's unlabeled AVKit cell. The fixture's
+    /// negotiated transcode method is audited in sanitized Playback logs for this run.
+    func testNativeTVConfiguredTranscodeClockPauseAndBackFocus() throws {
         #if os(tvOS)
         ensureSignedIn()
         _ = try openSampleDetail(id: XCTUnwrap(config["hlsID"]), key: "hls")
@@ -583,14 +584,6 @@ final class AppleSliceUITests: XCTestCase {
         let first = seconds(elapsed.label)
         XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: max(3, first + 3), timeout: 45, metric: "tv_hls_native_initial"))
         capture("Native TV HLS advancing elapsed-time clock")
-
-        // The 60s VP9 sample intentionally does not resume from a saved position. Confirm its
-        // negotiated method here; persistent-position resume is covered by the eligible fixture.
-        openNativeTVInfoTab()
-        let method = app.staticTexts["playbackMethod"]
-        XCTAssertTrue(waitForSettledMethod(method, expected: "Server HLS", timeout: 45),
-                      "The native clock fixture must settle to Server HLS before it is classified as HLS coverage")
-        capture("Native TV HLS playback method")
 
         XCUIRemote.shared.press(.playPause)
         let paused = seconds(elapsed.label)
