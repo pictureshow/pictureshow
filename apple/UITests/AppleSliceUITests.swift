@@ -1776,7 +1776,7 @@ final class AppleSliceUITests: XCTestCase {
             return app.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
         }
         let matching = controlRow.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
-        guard matching.exists else {
+        guard matching.waitForExistence(timeout: 5) else {
             captureFullScreen("Native TV missing \(title) transport control before teardown")
             XCTFail("AVKit should expose the exact native \(title) transport control")
             return matching
