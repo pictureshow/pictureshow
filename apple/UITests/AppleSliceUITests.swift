@@ -719,6 +719,9 @@ final class AppleSliceUITests: XCTestCase {
                                            metric: "tv_episode_next_initial", nativeAVKitClock: true))
         let duration = max(1, Double(config["episodeRunSeconds"] ?? "0") ?? 0)
         XCTAssertGreaterThan(duration, 0, "The adjacent episode test needs a known duration")
+        // AVKit hides its transport controls after the clock wait. Wake the native HUD just
+        // before resolving the slider instead of assuming the earlier Up is still active.
+        XCUIRemote.shared.press(.up)
         let timeline = app.sliders.firstMatch
         XCTAssertTrue(timeline.waitForExistence(timeout: 10), "AVPlayerViewController should expose its native playback timeline")
         XCUIRemote.shared.press(.playPause)
@@ -1305,9 +1308,36 @@ final class AppleSliceUITests: XCTestCase {
     private func selectNativeTVMenuTrack(menuTitle: String, index: String) -> String {
         let choice = nativeTVTrackChoice(menuTitle: menuTitle, index: index)
         let label = choice.label
-        activate(choice)
+        activateNativeTVMenuChoice(choice)
         print("F1_AX tv_track_menu_action type=\(menuTitle) index=\(index) label=\(label)")
         return label
+    }
+    private func activateNativeTVMenuChoice(_ choice: XCUIElement) {
+        // AVKit rebuilds its native menu accessibility tree while the transport HUD changes.
+        // Avoid app-wide allElementsBoundByIndex snapshots here: XCTest can invalidate an
+        // indexed element between enumeration and its hasFocus read. Track actions are cells,
+        // so query the live focused cell directly and navigate within that native surface.
+        XCTAssertTrue(choice.waitForExistence(timeout: 10))
+        XCTAssertTrue(choice.isEnabled, "The settled native AVKit menu choice should be enabled")
+        let focusedCellQuery = app.cells.matching(NSPredicate(format: "hasFocus == true"))
+        for _ in 0..<20 {
+            if choice.hasFocus { XCUIRemote.shared.press(.select); return }
+            let focusedCell = focusedCellQuery.firstMatch
+            let frame = focusedCell.exists ? focusedCell.frame : focusedFrame()
+            if let frame,
+               frame.contains(CGPoint(x: choice.frame.midX, y: choice.frame.midY)),
+               frame.height < choice.frame.height * 3 {
+                XCUIRemote.shared.press(.select)
+                return
+            }
+            let dx = frame.map { choice.frame.midX - $0.midX } ?? 0
+            let dy = frame.map { choice.frame.midY - $0.midY } ?? 100
+            let direction: XCUIRemote.Button = abs(dy) > 30 ? (dy > 0 ? .down : .up) : (dx > 0 ? .right : .left)
+            XCUIRemote.shared.press(direction)
+            Thread.sleep(forTimeInterval: 0.15)
+            if choice.hasFocus { XCUIRemote.shared.press(.select); return }
+        }
+        XCTFail("Native AVKit menu focus did not reach configured choice \(choice.label)")
     }
     private func inspectNativeTVMenuSelection(menuTitle: String, index: String) -> Bool {
         let choice = nativeTVTrackChoice(menuTitle: menuTitle, index: index)
