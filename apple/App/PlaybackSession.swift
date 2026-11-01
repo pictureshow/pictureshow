@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Legitimate LLC.
 import SwiftUI
+import Combine
 import AVKit
 import PictureshowCore
 import PictureshowTransport
@@ -29,6 +30,10 @@ import MediaAccessibility
     @Published var panelOpen = false
     @Published var controlsVisible = false
     @Published private(set) var subtitleDelayMs = 0
+    let externalSubtitles: ExternalTextSubtitles
+    @Published private(set) var subtitleCue: String?
+    @Published private(set) var subtitleStatus: String?
+    private var subtitleObservation: AnyCancellable?
     private let client: JellyfinClient
     private let account: Account
     let preferences: PlaybackPreferences
@@ -77,10 +82,16 @@ import MediaAccessibility
     private var stalledSince: Date?
     private var lastObservedTicks: Int64 = 0
 
-    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer()) {
+    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer(), externalSubtitles: ExternalTextSubtitles? = nil) {
         self.client = client; self.account = account; self.item = item; self.preferences = preferences; self.player = player
+        self.externalSubtitles = externalSubtitles ?? ExternalTextSubtitles()
+        subtitleObservation = self.externalSubtitles.$loading.combineLatest(self.externalSubtitles.$unavailable)
+            .map { loading, unavailable -> String? in
+                if unavailable { return "Subtitles are unavailable. Retrying while video continues." }
+                return loading ? "Loading selected subtitles. Video playback can continue." : nil
+            }.removeDuplicates().sink { [weak self] in self?.subtitleStatus = $0 }
         player.allowsExternalPlayback = true
-        player.appliesMediaSelectionCriteriaAutomatically = false
+
     }
     func prepare(startTicks: Int64, audio: Int?, subtitle: Int?, forceHLS: Bool = false, forceVideoTranscode: Bool = false) async throws {
         guard !closed else { throw CancellationError() }
@@ -97,17 +108,33 @@ import MediaAccessibility
             captionLanguage = language
             if let source = decision?.source ?? item.mediaSources.first { selectedSubtitle = Captions.index(source: source, preferredLanguage: language) }
         }
+        let knownSource = decision?.source ?? item.mediaSources.first
+        let requestedSubtitle = selectedSubtitle ?? knownSource?.defaultSubtitleStreamIndex
+        var usesExternalText = externalTextStream(requestedSubtitle, source: knownSource) != nil
+        if usesExternalText { selectedSubtitle = requestedSubtitle }
         var next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
             audioIndex: audio, subtitleIndex: selectedSubtitle, forceTranscode: forceVideoTranscode,
-            mediaSourceID: decision?.source.id ?? item.mediaSources.first?.id, preferences: preferences, forceHLS: forceHLS || audio != nil)
+            mediaSourceID: decision?.source.id ?? item.mediaSources.first?.id, preferences: preferences, forceHLS: forceHLS || audio != nil, externalTextSubtitle: usesExternalText)
         guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
         // Episode/list responses need not contain streams. Apply captions to the fresh
         // negotiated source, never to the previous episode's metadata.
         if let captionLanguage, let preferred = Captions.index(source: next.source, preferredLanguage: captionLanguage), next.subtitleIndex != preferred {
             let sourceID = next.source.id
+            usesExternalText = externalTextStream(preferred, source: next.source) != nil
             next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
                 audioIndex: audio, subtitleIndex: preferred, forceTranscode: forceVideoTranscode,
-                mediaSourceID: sourceID, preferences: preferences, forceHLS: forceHLS || audio != nil)
+                mediaSourceID: sourceID, preferences: preferences, forceHLS: forceHLS || audio != nil, externalTextSubtitle: usesExternalText)
+        }
+        guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
+        // A discovery response may be the first place external stream metadata
+        // exists. Negotiate A/V with captions Off before opening its URL; optional
+        // text extraction must never become part of the A/V asset's READY path.
+        if !usesExternalText, externalTextStream(next.subtitleIndex, source: next.source) != nil {
+            usesExternalText = true
+            next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
+                audioIndex: audio, subtitleIndex: next.subtitleIndex, forceTranscode: forceVideoTranscode,
+                mediaSourceID: next.source.id, preferences: preferences, forceHLS: forceHLS || audio != nil,
+                externalTextSubtitle: true)
         }
         guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
         let url: URL
@@ -115,6 +142,7 @@ import MediaAccessibility
                                              token: account.accessToken, requiredHeaders: next.headers) }
         catch { try? await client.stopEncoding(account: account, decision: next); throw error }
         decision = next; positionTicks = startTicks
+        selectExternalText(for: next)
         // Session identifiers support scoped encoder cleanup after an interrupted pilot.
         // Never log the asset URL, request headers or viewer credential.
         Logger(subsystem: "app.pictureshow", category: "Playback").notice("Negotiated viewing=\(self.viewingID.uuidString, privacy: .public) playSession=\(next.playSessionId ?? "none", privacy: .public) item=\(next.itemID, privacy: .public) source=\(next.source.id ?? "none", privacy: .public) method=\(String(describing: next.method), privacy: .public)")
@@ -155,6 +183,10 @@ import MediaAccessibility
         selectionObservation = NotificationCenter.default.addObserver(forName: AVPlayerItem.mediaSelectionDidChangeNotification, object: avItem, queue: .main) { [weak self] _ in
             Task { @MainActor in await self?.recordNativeSelection(avItem) }
         }
+        // AVKit can fail while opening auxiliary QuickTime tracks if automatic
+        // selection was disabled before attachment. Keep its startup selection
+        // enabled for every new item; apply explicit choices only after READY.
+        player.appliesMediaSelectionCriteriaAutomatically = true
         player.replaceCurrentItem(with: avItem)
         #if DEBUG
         Logger(subsystem: "app.pictureshow", category: "Playback").debug("Attached item status=\(avItem.status.rawValue) viewing=\(self.viewingID.uuidString, privacy: .public)")
@@ -196,8 +228,9 @@ import MediaAccessibility
     func ready(version: Int) {
         guard !timelineReady, startTask == nil, !closed, generation == version, let decision else { return }
         startTask = Task { [weak self] in
-            guard let self else { return }
-            if decision.subtitleIndex == -1, decision.method != .transcode,
+            guard let self, !Task.isCancelled, !self.closed, self.generation == version else { return }
+            self.player.appliesMediaSelectionCriteriaAutomatically = false
+            if (decision.subtitleIndex == -1 || self.externalSubtitles.selected != nil), decision.method != .transcode,
                let avItem = self.player.currentItem,
                let group = try? await avItem.asset.loadMediaSelectionGroup(for: .legible) {
                 guard !Task.isCancelled, !self.closed, self.generation == version,
@@ -293,6 +326,7 @@ import MediaAccessibility
     private func tick() {
         guard timelineReady, !closed else { return }
         positionTicks = currentTicks
+        subtitleCue = externalSubtitles.text(atFullMediaMs: positionTicks / 10_000)
         let now = Date(), elapsed = min(1, now.timeIntervalSince(lastTickTime)); lastTickTime = now
         let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         if !pauseIntent && (waiting || lastObservedTicks == positionTicks) {
@@ -390,6 +424,7 @@ import MediaAccessibility
             if !closed { error = "Progress could not be saved. Go back to details and retry saving progress before continuing." }
             switching = false; return
         }
+        externalSubtitles.release(); subtitleCue = nil
         item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil
         viewingID = UUID(); started = false; stopped = false; completionCommitted = false; fallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
@@ -433,6 +468,7 @@ import MediaAccessibility
     private func enqueueProgress() { if started, !stopped, let decision { enqueueReport(decision: decision, kind: "progress", ticks: currentTicks, paused: pauseIntent) } }
     func beginClosing() {
         guard !closed else { return }; closed = true; generation += 1; player.pause()
+        externalSubtitles.release(); subtitleCue = nil
         closeTask = Task { [self] in await finishViewing(); terminal = true }
     }
     func stop() async { beginClosing(); await closeTask?.value }
@@ -485,7 +521,17 @@ import MediaAccessibility
         await reportTail?.value; status = "Stopped"; waitingForVideo = false
     }
     func changeTracks(audio: Int?, subtitle: Int?, forceVideoTranscode: Bool = false) async {
-        guard !changingTracks, !closed else { return }; changingTracks = true
+        guard !changingTracks, !closed else { return }
+        if !forceVideoTranscode, var current = decision, audio == current.audioIndex,
+           externalSubtitles.selected != nil || current.subtitleIndex == -1,
+           subtitle == -1 || externalTextStream(subtitle, source: current.source) != nil {
+            current.subtitleIndex = subtitle; decision = current
+            selectExternalText(for: current); subtitleCue = externalSubtitles.text(atFullMediaMs: currentTicks / 10_000)
+            enqueueProgress()
+            return // A text choice does not replace, pause or seek the A/V item.
+        }
+        changingTracks = true
+        externalSubtitles.select(nil); subtitleCue = nil
         let position = pendingSeekTicks ?? currentTicks
         enqueueProgress(); await reportTail?.value; await releaseStream()
         guard !closed else { changingTracks = false; return }
@@ -493,6 +539,41 @@ import MediaAccessibility
         do { try await prepare(startTicks: position, audio: audio, subtitle: subtitle, forceHLS: true, forceVideoTranscode: forceVideoTranscode) }
         catch { self.error = "Could not apply the selected tracks. Go back and try again." }
         changingTracks = false
+    }
+    private func externalTextStream(_ index: Int?, source: MediaSource?) -> MediaStream? {
+        source?.mediaStreams.first { stream in
+            stream.index == index && stream.type == "Subtitle"
+                && (stream.isExternal || stream.isExternalURL || stream.deliveryMethod?.lowercased() == "external")
+                && ["srt", "subrip", "vtt", "webvtt"].contains(stream.codec?.lowercased() ?? "")
+                && stream.deliveryMethod?.lowercased() != "encode"
+        }
+    }
+    private func selectExternalText(for decision: PlayDecision) {
+        guard let stream = externalTextStream(decision.subtitleIndex, source: decision.source),
+              let sourceID = decision.source.id else { externalSubtitles.select(nil); subtitleCue = nil; return }
+        do {
+            let reference: URL
+            if let delivery = stream.deliveryURL, !delivery.isEmpty {
+                reference = try ServerURLs.resolve(server: account.server, reference: delivery)
+            } else {
+                reference = try ServerURLs.endpoint(account.server,
+                    path: "Videos/\(ServerURLs.encode(item.id))/\(ServerURLs.encode(sourceID))/Subtitles/\(stream.index)/Stream.vtt",
+                    query: [URLQueryItem(name: "StartPositionTicks", value: "0"), URLQueryItem(name: "CopyTimestamps", value: "true")])
+            }
+            let url = try ServerPlaybackURL.make(decisionURL: reference, server: account.server.url, token: account.accessToken)
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let rebased = query.contains { $0.name.lowercased() == "copytimestamps" && $0.value?.lowercased() == "false" }
+            let originTicks = query.first { $0.name.lowercased() == "startpositionticks" }?.value.flatMap(Int64.init) ?? 0
+            // AVPlayer uses full-media time on both static and VOD HLS paths. Only
+            // server-rebased text needs its extraction origin added back.
+            let originMs = rebased ? max(0, originTicks / 10_000) : 0
+            let format = reference.pathExtension.lowercased() == "vtt" ? "vtt" : (stream.codec ?? "vtt")
+            externalSubtitles.select(.init(id: "\(item.id)|\(sourceID)|\(stream.index)|\(originMs)", url: url, format: format, originMs: originMs))
+        } catch {
+            // An unsafe optional subtitle route cannot fail the negotiated video.
+            externalSubtitles.select(nil); subtitleCue = nil
+            extrasError = "This subtitle address is unavailable. Video playback can continue."
+        }
     }
     private func failed() async {
         guard !changingTracks, !closed else { return }
@@ -507,6 +588,7 @@ import MediaAccessibility
         guard let avItem, player.currentItem === avItem, timelineReady, !closed, var value = decision, value.method != .transcode else { return }
         for type in ["Audio", "Subtitle"] {
             if type == "Audio", player.isMuted, value.audioIndex == -1 { continue }
+            if type == "Subtitle", externalSubtitles.selected != nil { continue }
             let characteristic: AVMediaCharacteristic = type == "Audio" ? .audible : .legible
             guard let group = try? await avItem.asset.loadMediaSelectionGroup(for: characteristic) else { continue }
             let option = avItem.currentMediaSelection.selectedMediaOption(in: group)

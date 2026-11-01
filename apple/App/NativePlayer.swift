@@ -65,6 +65,7 @@ struct PlayerScreen: View {
             }
         }
         .background(.black)
+        .announceStatus(session.subtitleStatus)
         .onDisappear { session.beginClosing() }
         .onChange(of: session.terminal) { _, value in if value, session.error == nil { finish() } }
         .onChange(of: scenePhase) { _, value in if value != .active { session.backgrounded() } }
@@ -146,6 +147,7 @@ struct PlayerOptions: View {
                         track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
                         ForEach(streams("Subtitle")) { track(trackName($0), index: $0.index, type: "Subtitle", selected: subtitle == $0.index) }
                         Text(session.subtitleTimingExplanation).font(.caption)
+                        if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
                     }
                     if let error = session.extrasError { Text(error) }
                 }
@@ -178,8 +180,8 @@ struct PlayerOptions: View {
 struct NativePlayer: UIViewControllerRepresentable {
     @ObservedObject var session: PlaybackSession
     var close: () -> Void
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
+    func makeUIViewController(context: Context) -> PictureshowPlayerViewController {
+        let controller = PictureshowPlayerViewController()
         controller.player = session.player; controller.delegate = context.coordinator
         controller.showsPlaybackControls = true; controller.videoGravity = .resizeAspect
         controller.allowsPictureInPicturePlayback = false
@@ -195,10 +197,13 @@ struct NativePlayer: UIViewControllerRepresentable {
         updateUIViewController(controller, context: context)
         return controller
     }
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+    func updateUIViewController(_ controller: PictureshowPlayerViewController, context: Context) {
         context.coordinator.close = close
+        controller.showSubtitle(session.subtitleCue, controlsVisible: session.controlsVisible, preferences: session.preferences)
         #if os(tvOS)
-        let signature = "\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
+        let continuation = session.nextCountdown != nil ? session.nextItem : nil
+        context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown)
+        let signature = "\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
         if context.coordinator.menuSignature != signature {
             context.coordinator.menuSignature = signature
             func tracks(_ type: String) -> UIMenu {
@@ -218,18 +223,21 @@ struct NativePlayer: UIViewControllerRepresentable {
                 UIAction(title: chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name, subtitle: clock(chapter.startTicks)) { _ in session.seek(toTicks: chapter.startTicks) }
             })
             let stop = UIAction(title: "Back to details", image: UIImage(systemName: "stop.fill"), identifier: UIAction.Identifier("closePlayer")) { _ in close() }
-            controller.transportBarCustomMenuItems = [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [stop]
+            // Contextual actions are hidden while AVKit's transport is visible. Keep
+            // the same continuation reachable in the native bar during that state.
+            controller.transportBarCustomMenuItems = context.coordinator.continuationTransportActions
+                + [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [stop]
         }
         var contextActions: [UIAction] = []
         if let segment = session.skipSegment, session.preferences.segmentModes[segment.type] != .automatic {
             contextActions.append(UIAction(title: "Skip \(segment.type.rawValue)", identifier: .init("skipSegment")) { _ in session.skip() })
         }
-        if let next = session.nextItem, let countdown = session.nextCountdown {
-            contextActions.append(UIAction(title: "Play next: \(next.name) (\(countdown))", identifier: .init("playNext")) { _ in Task { await session.advance() } })
-            contextActions.append(UIAction(title: "Cancel next episode", identifier: .init("cancelNext")) { _ in session.cancelContinuation() })
+        contextActions += context.coordinator.continuationContextActions
+        let actionSignature = (session.skipSegment?.id ?? "") + "|" + contextActions.map { $0.identifier.rawValue }.joined(separator: "|")
+        if context.coordinator.actionSignature != actionSignature {
+            context.coordinator.actionSignature = actionSignature
+            controller.contextualActions = contextActions
         }
-        let actionSignature = contextActions.map { $0.title }.joined(separator: "|")
-        if context.coordinator.actionSignature != actionSignature { context.coordinator.actionSignature = actionSignature; controller.contextualActions = contextActions }
         #endif
     }
     func makeCoordinator() -> Coordinator { Coordinator(session: session, close: close) }
@@ -239,10 +247,78 @@ struct NativePlayer: UIViewControllerRepresentable {
         var menuSignature = "", actionSignature = ""
         init(session: PlaybackSession, close: @escaping () -> Void) { self.session = session; self.close = close }
         #if os(tvOS)
+        private var continuationID: String?
+        var continuationTransportActions: [UIAction] = []
+        var continuationContextActions: [UIAction] = []
+        func updateContinuation(_ next: MediaItem?, countdown: Int?) {
+            guard let next, let countdown else {
+                continuationID = nil; continuationTransportActions = []; continuationContextActions = []
+                return
+            }
+            if continuationID != next.id {
+                continuationID = next.id
+                func play(_ identifier: String) -> UIAction {
+                    UIAction(title: "Play next: \(next.name)", image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
+                        guard let self, self.session.nextItem?.id == next.id, self.session.nextCountdown != nil else { return }
+                        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Manual next activated item=\(next.id, privacy: .public) ticks=\(self.session.positionTicks)")
+                        Task { await self.session.advance() }
+                    }
+                }
+                func cancel(_ identifier: String) -> UIAction {
+                    UIAction(title: "Cancel next episode", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
+                }
+                continuationTransportActions = [play("playNextTransport"), cancel("cancelNextTransport")]
+                continuationContextActions = [play("playNext"), cancel("cancelNext")]
+                actionSignature = "" // A different episode may have the same action identifiers.
+            }
+            // Mutate the retained action rather than replacing AVKit's focused controls
+            // every second. A countdown tick must not restart contextual presentation.
+            continuationContextActions.first?.title = "Play next: \(next.name) (\(countdown))"
+        }
         func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool { close(); return false }
         func playerViewController(_ controller: AVPlayerViewController, willTransitionToVisibilityOfTransportBar visible: Bool, with coordinator: AVPlayerViewControllerAnimationCoordinator) { Task { @MainActor in session.controlsVisible = visible } }
         func playerViewController(_ controller: AVPlayerViewController, timeToSeekAfterUserNavigatedFrom oldTime: CMTime, to targetTime: CMTime) -> CMTime { Task { @MainActor in session.nativeSeekBegan(targetTime.seconds) }; return targetTime }
         #endif
+    }
+}
+
+/// Optional plain-text captions live in AVKit's video overlay, never in its asset.
+/// Loading failure cannot hold the transport or change its media clock.
+final class PictureshowPlayerViewController: AVPlayerViewController {
+    private let caption = UILabel()
+    private var controlsVisible = false
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        caption.numberOfLines = 0; caption.textAlignment = .center
+        caption.textColor = .white; caption.isUserInteractionEnabled = false
+        caption.isAccessibilityElement = false // Clock/cue ticks are not announcements.
+        contentOverlayView?.addSubview(caption)
+    }
+    func showSubtitle(_ text: String?, controlsVisible: Bool, preferences: PlaybackPreferences) {
+        loadViewIfNeeded()
+        caption.text = text; caption.isHidden = text == nil
+        self.controlsVisible = controlsVisible
+        #if os(tvOS)
+        let base: CGFloat = 34
+        #else
+        let base: CGFloat = 22
+        #endif
+        caption.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: base * CGFloat(preferences.subtitleSize.scale ?? 1)))
+        caption.backgroundColor = preferences.subtitleBackground == .box ? UIColor.black.withAlphaComponent(0.8) : .clear
+        caption.layer.shadowColor = UIColor.black.cgColor
+        caption.layer.shadowOpacity = preferences.subtitleBackground == .none ? 0 : 1
+        caption.layer.shadowRadius = 2; caption.layer.shadowOffset = CGSize(width: 1, height: 1)
+        view.setNeedsLayout()
+    }
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let overlay = contentOverlayView else { return }
+        let video = overlay.convert(videoBounds, from: view).intersection(overlay.bounds)
+        guard !video.isNull, video.width > 0, video.height > 0 else { caption.frame = .zero; return }
+        let width = video.width * 0.9
+        let height = min(video.height * 0.6, caption.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height + 8)
+        let inset = controlsVisible ? min(240, video.height * 0.35) : min(48, video.height * 0.08)
+        caption.frame = CGRect(x: video.midX - width / 2, y: max(video.minY, video.maxY - inset - height), width: width, height: height)
     }
 }
 
@@ -254,6 +330,7 @@ private struct PlaybackInformation: View {
                 Text(session.item.name).font(.title2).accessibilityAddTraits(.isHeader)
                 HStack { Text(session.status).accessibilityIdentifier("playbackMethod"); Text(clock(session.positionTicks)).accessibilityIdentifier("playbackPosition") }
                 Text(session.subtitleTimingExplanation).font(.caption)
+                if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
                 SeekOptions(session: session)
                 if let warning = session.reportError ?? session.extrasError { Text(warning).foregroundStyle(.orange) }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(24)

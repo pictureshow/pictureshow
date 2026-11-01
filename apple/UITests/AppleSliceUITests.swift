@@ -890,10 +890,13 @@ final class AppleSliceUITests: XCTestCase {
         let nearEnd = seconds(position.label)
         XCTAssertGreaterThanOrEqual(nearEnd, nearEndTarget, "Playback must reach the final window naturally")
 
-        let nextByID = app.descendants(matching: .any).matching(identifier: "playNext").firstMatch
-        let nextActionPattern = "^Play next: \(NSRegularExpression.escapedPattern(for: expectedName)) \\([0-9]{1,2}\\)$"
+        // Native contextual actions intentionally disappear while transport is
+        // visible. The same credits action must remain remote-reachable in the bar.
+        XCUIRemote.shared.press(.up)
+        let nextByID = app.descendants(matching: .any).matching(identifier: "playNextTransport").firstMatch
+        let nextActionPattern = "^Play next: \(NSRegularExpression.escapedPattern(for: expectedName))( \\([0-9]{1,2}\\))?$"
         let nextByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label MATCHES %@", nextActionPattern)).firstMatch
-        let next = nextByID.waitForExistence(timeout: 1) ? nextByID : nextByTitle
+        let next = nextByID.exists ? nextByID : nextByTitle
         let currentTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", currentName)).firstMatch
         let nextVisible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             nativePlayer.exists && currentTitle.exists && nativePlayer.frame.contains(currentTitle.frame)
