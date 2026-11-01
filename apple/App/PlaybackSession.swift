@@ -467,7 +467,7 @@ import MediaAccessibility
     }
     func changeTracks(audio: Int?, subtitle: Int?, forceVideoTranscode: Bool = false) async {
         guard !changingTracks, !closed else { return }; changingTracks = true
-        let position = currentTicks
+        let position = pendingSeekTicks ?? currentTicks
         enqueueProgress(); await reportTail?.value; await releaseStream()
         guard !closed else { changingTracks = false; return }
         pendingSeekTicks = position
