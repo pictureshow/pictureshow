@@ -31,11 +31,13 @@ private final class DeferredSeekPlayer: AVPlayer {
 private final class SeekRaceProtocol: URLProtocol {
     static var playbackInfoCount = 0
     static var playbackInfoBodies: [[String: Any]] = []
+    static var startReportBodies: [[String: Any]] = []
     static var includeNextEpisode = false
 
     static func reset(includeNext: Bool = false) {
         playbackInfoCount = 0
         playbackInfoBodies = []
+        startReportBodies = []
         includeNextEpisode = includeNext
     }
 
@@ -84,6 +86,8 @@ private final class SeekRaceProtocol: URLProtocol {
                 "MediaSources": [mediaSource],
                 "PlaySessionId": "fixture-session-\(Self.playbackInfoCount)"
             ]
+        } else if path.hasSuffix("/Sessions/Playing") {
+            if let report = Self.requestBody(request) { Self.startReportBodies.append(report) }
         } else if path.hasSuffix("/Items/first") || path.hasSuffix("/Items/next") {
             body = ["Id": path.hasSuffix("/Items/first") ? "first" : "next", "Type": "Episode", "Chapters": []]
         } else if path.contains("MediaSegments") {
@@ -121,7 +125,7 @@ private final class SeekRaceProtocol: URLProtocol {
         player = nil
     }
 
-    private func makeReadySession(includeNextEpisode: Bool = false) async throws {
+    private func makePreparedSession(startTicks: Int64, includeNextEpisode: Bool = false) async throws {
         SeekRaceProtocol.reset(includeNext: includeNextEpisode)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SeekRaceProtocol.self]
@@ -134,7 +138,11 @@ private final class SeekRaceProtocol: URLProtocol {
         item.mediaSources = [MediaSource(id: "first-source", supportsDirectPlay: true)]
         player = DeferredSeekPlayer()
         session = PlaybackSession(client: client, account: account, item: item, player: player)
-        try await session.prepare(startTicks: 0, audio: nil, subtitle: -1)
+        try await session.prepare(startTicks: startTicks, audio: nil, subtitle: -1)
+    }
+
+    private func makeReadySession(includeNextEpisode: Bool = false) async throws {
+        try await makePreparedSession(startTicks: 0, includeNextEpisode: includeNextEpisode)
         session.ready(version: 0)
         for _ in 0..<100 {
             if !session.waitingForVideo,
@@ -150,6 +158,15 @@ private final class SeekRaceProtocol: URLProtocol {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTFail("Expected " + String(count) + " controlled AVPlayer seek requests, observed " + String(player.seekTargets.count))
+    }
+
+    private func waitForStartReport() async throws -> [String: Any] {
+        for _ in 0..<100 {
+            if let report = SeekRaceProtocol.startReportBodies.first { return report }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        throw NSError(domain: "SeekCompletionTests", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: "PlaybackSession did not send its initial start report"])
     }
 
     private func drainMainActor() async throws {
@@ -183,6 +200,45 @@ private final class SeekRaceProtocol: URLProtocol {
         player.completeSeek(at: 2, success: true)
         try await drainMainActor()
         XCTAssertEqual(session.positionTicks, latest)
+        await session.stop()
+    }
+
+    /// If a viewer seeks while the startup/resume seek is in flight, readiness must
+    /// apply the newer target before publishing ready or reporting the viewing start.
+    func testSeekDuringInitialReadySeekUsesNewestTarget() async throws {
+        let startupTarget = Ticks.from(seconds: 12)
+        let viewerTarget = Ticks.from(seconds: 47)
+        try await makePreparedSession(startTicks: startupTarget)
+        session.ready(version: 0)
+        try await waitForSeekCount(1)
+        XCTAssertEqual(player.seekTargets[0].seconds, Ticks.seconds(startupTarget), accuracy: 0.001)
+
+        session.seek(toTicks: viewerTarget)
+        XCTAssertEqual(session.positionTicks, viewerTarget,
+                       "A viewer seek during startup should become the authoritative pending position")
+
+        player.completeSeek(at: 0, success: true)
+        try await waitForSeekCount(2)
+        guard player.seekTargets.count >= 2 else {
+            // The current implementation can finish readiness using only the captured
+            // stale target. Keep this regression as a reported test failure, not an index trap.
+            await session.stop()
+            return
+        }
+        let newestAVTarget = player.seekTargets[1]
+        XCTAssertEqual(newestAVTarget.seconds, Ticks.seconds(viewerTarget), accuracy: 0.001,
+                       "Readiness must seek to the newer viewer target after the stale startup target completes")
+        player.completeSeek(at: 1, success: true)
+        for _ in 0..<100 {
+            if !session.waitingForVideo { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(session.waitingForVideo, "Readiness should finish after the newest target lands")
+        XCTAssertEqual(session.positionTicks, viewerTarget)
+
+        let startReport = try await waitForStartReport()
+        XCTAssertEqual((startReport["PositionTicks"] as? NSNumber)?.int64Value, viewerTarget,
+                       "The server start report must use the newest viewer seek, not the stale resume target")
         await session.stop()
     }
 
