@@ -3,6 +3,7 @@
 import XCTest
 import Foundation
 import AVFoundation
+import UIKit
 import PictureshowCore
 #if os(tvOS)
 @testable import Pictureshow_tvOS
@@ -156,7 +157,49 @@ private final class SubtitleInertPlayer: AVPlayer {
     }
 }
 
+#if os(tvOS)
+/// A fixed presentation size makes the real controller's resize-aspect layout
+/// testable without decoding video or starting a media clock.
+private final class SubtitleSizedPlayerItem: AVPlayerItem {
+    override var presentationSize: CGSize { CGSize(width: 1920, height: 1080) }
+}
+#endif
+
 @MainActor final class ExternalSubtitleTests: XCTestCase {
+    #if os(tvOS)
+    func testExternalSubtitleLayoutClearsNativeTVHUDAndKeepsHiddenControlsPlacement() throws {
+        let controller = PictureshowPlayerViewController()
+        controller.player = AVPlayer(playerItem: SubtitleSizedPlayerItem(asset: AVMutableComposition()))
+        defer { controller.player = nil }
+        controller.loadViewIfNeeded()
+        let video = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        controller.view.frame = video
+        let overlay = try XCTUnwrap(controller.contentOverlayView)
+        overlay.frame = video
+        let cue = "Fixture external subtitle"
+        let preferences = PlaybackPreferences(subtitleSize: .normal, subtitleBackground: .box)
+
+        controller.showSubtitle(cue, controlsVisible: true, preferences: preferences)
+        controller.viewDidLayoutSubviews()
+        XCTAssertEqual(overlay.bounds, video, "The test must exercise the full 1920×1080 video viewport")
+        let caption = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first { $0.text == cue })
+        XCTAssertFalse(caption.isHidden)
+        XCTAssertTrue(caption.frame.width > 0 && caption.frame.height > 0)
+        XCTAssertTrue(video.contains(caption.frame))
+        XCTAssertLessThanOrEqual(caption.frame.maxY, 648,
+                                 "External subtitle overlaps native TV HUD: the bottom 40% must remain clear while controls are visible")
+
+        controller.showSubtitle(cue, controlsVisible: false, preferences: preferences)
+        controller.viewDidLayoutSubviews()
+        XCTAssertEqual(caption.text, cue)
+        XCTAssertFalse(caption.isHidden)
+        XCTAssertTrue(caption.frame.width > 0 && caption.frame.height > 0)
+        XCTAssertTrue(video.contains(caption.frame))
+        XCTAssertEqual(caption.frame.maxY, 1032, accuracy: 1,
+                       "Hiding native controls must restore captions near the ordinary bottom margin")
+    }
+    #endif
+
     private func asset(_ name: String = "selected", originMs: Int64 = 0) -> ExternalTextSubtitles.Asset {
         .init(id: name, url: URL(string: "https://media.example.test/captions/\(name).vtt")!, format: "vtt", originMs: originMs)
     }
