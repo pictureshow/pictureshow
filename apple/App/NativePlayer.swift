@@ -301,6 +301,14 @@ struct NativePlayer: UIViewControllerRepresentable {
 final class PictureshowPlayerViewController: AVPlayerViewController {
     private let caption = UILabel()
     private var controlsVisible = false
+    #if os(tvOS)
+    private(set) var informationVisible = false
+    func setInformationVisible(_ visible: Bool) {
+        guard informationVisible != visible else { return }
+        informationVisible = visible
+        viewIfLoaded?.setNeedsLayout()
+    }
+    #endif
     override func viewDidLoad() {
         super.viewDidLoad()
         caption.numberOfLines = 0; caption.textAlignment = .center

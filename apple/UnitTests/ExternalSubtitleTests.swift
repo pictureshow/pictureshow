@@ -197,6 +197,21 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertTrue(video.contains(caption.frame))
         XCTAssertEqual(caption.frame.maxY, 1032, accuracy: 1,
                        "Hiding native controls must restore captions near the ordinary bottom margin")
+
+        controller.setInformationVisible(true)
+        controller.viewDidLayoutSubviews()
+        XCTAssertTrue(controller.informationVisible)
+        XCTAssertFalse(caption.isHidden)
+        XCTAssertTrue(caption.frame.width > 0 && caption.frame.height > 0)
+        XCTAssertTrue(video.contains(caption.frame))
+        XCTAssertLessThanOrEqual(caption.frame.maxY, 486,
+                                 "External subtitle overlaps expanded TV Info: the bottom 55% must remain clear while Info is visible")
+
+        controller.setInformationVisible(false)
+        controller.viewDidLayoutSubviews()
+        XCTAssertFalse(controller.informationVisible)
+        XCTAssertEqual(caption.frame.maxY, 1032, accuracy: 1,
+                       "Closing Info with native controls hidden must restore the ordinary bottom margin")
     }
     #endif
 
