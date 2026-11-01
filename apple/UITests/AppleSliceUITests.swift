@@ -1022,7 +1022,6 @@ final class AppleSliceUITests: XCTestCase {
                 lastObservedSeconds = currentSeconds
                 lastAdvanceAt = now
             } else if lastObservedSeconds == nil {
-                if nativeAVKitClock && nativeRefreshRequested && currentSeconds != nil { nativeClockAdvancedAfterRefresh = true }
                 lastObservedSeconds = currentSeconds
             }
             if let currentSeconds, currentSeconds >= minimum, (!nativeAVKitClock || nativeClockAdvancedAfterRefresh) {
