@@ -114,7 +114,7 @@ import MediaAccessibility
                                              token: account.accessToken, requiredHeaders: next.headers) }
         catch { try? await client.stopEncoding(account: account, decision: next); throw error }
         decision = next; positionTicks = startTicks
-        status = next.method == .directPlay ? "Direct play" : next.method == .directStream ? "Direct stream" : "Server HLS"
+        status = playbackMethodStatus
         player.isMuted = audio == -1
         let avItem = AVPlayerItem(url: url)
         var textAttributes: [String: Any] = [:]
@@ -167,11 +167,7 @@ import MediaAccessibility
         }
         timeoutTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(12)) } catch { return }
-            guard let self, !self.timelineReady, self.generation == version, !self.closed else { return }
-            #if DEBUG
-            Logger(subsystem: "app.pictureshow", category: "Playback").notice("Playback startup waiting itemStatus=\(self.player.currentItem?.status.rawValue ?? -1) controlStatus=\(self.player.timeControlStatus.rawValue) startTask=\(self.startTask != nil) paused=\(self.pauseIntent) viewing=\(self.viewingID.uuidString, privacy: .public)")
-            #endif
-            self.status = "Still waiting for playback. You can go back and try again."
+            guard let self, self.showStartupWaitHint(version: version) else { return }
             do { try await Task.sleep(for: .seconds(33)) } catch { return }
             guard !self.timelineReady, self.generation == version, !self.closed else { return }
             self.error = "Playback took too long. Go back to details and try again."
@@ -179,8 +175,22 @@ import MediaAccessibility
         }
         if extrasTask == nil { loadExtras() }
     }
-    private func ready(version: Int) {
-        guard !timelineReady, startTask == nil, !closed, let decision else { return }
+    private var playbackMethodStatus: String {
+        guard let decision else { return "Preparing playback…" }
+        return decision.method == .directPlay ? "Direct play" : decision.method == .directStream ? "Direct stream" : "Server HLS"
+    }
+    /// Explicit readiness/deadline events allow hosted tests to exercise delayed
+    /// startup without requiring a real decoder or waiting for wall-clock deadlines.
+    @discardableResult func showStartupWaitHint(version: Int) -> Bool {
+        guard !timelineReady, generation == version, !closed else { return false }
+        #if DEBUG
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Playback startup waiting itemStatus=\(player.currentItem?.status.rawValue ?? -1) controlStatus=\(player.timeControlStatus.rawValue) startTask=\(startTask != nil) paused=\(pauseIntent) viewing=\(viewingID.uuidString, privacy: .public)")
+        #endif
+        status = "Still waiting for playback. You can go back and try again."
+        return true
+    }
+    func ready(version: Int) {
+        guard !timelineReady, startTask == nil, !closed, generation == version, let decision else { return }
         startTask = Task { [weak self] in
             guard let self else { return }
             let target = self.pendingSeekTicks ?? decision.startTicks
@@ -192,6 +202,7 @@ import MediaAccessibility
             if decision.subtitleIndex == -1, decision.method != .transcode,
                let group = try? await self.player.currentItem?.asset.loadMediaSelectionGroup(for: .legible) { self.player.currentItem?.select(nil, in: group) }
             self.pendingSeekTicks = nil; self.timelineReady = true; self.waitingForVideo = false
+            self.status = self.playbackMethodStatus
             self.timeoutTask?.cancel(); self.timeoutTask = nil
             self.isPaused = self.pauseIntent
             if self.pauseIntent { self.player.pause() } else { self.player.play() }
@@ -259,8 +270,8 @@ import MediaAccessibility
                 Task { await failed() }; stalledSince = nil
             }
         } else {
-            if stalledSince != nil, error == nil, let decision {
-                status = decision.method == .directPlay ? "Direct play" : decision.method == .directStream ? "Direct stream" : "Server HLS"
+            if stalledSince != nil, error == nil {
+                status = playbackMethodStatus
             }
             stalledSince = nil
         }

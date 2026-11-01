@@ -104,6 +104,26 @@ private final class InertViewingPlayer: AVPlayer {
         XCTAssertNil(session.reportError)
         XCTAssertEqual(ViewingProtocol.requests.filter { $0.url!.path.hasSuffix("UserPlayedItems/first") }.count, 2)
     }
+    /// A slow asset can become ready after the twelve-second waiting hint. The hint
+    /// must clear, and initial/new readiness notifications must still emit one Start.
+    func testDelayedReadinessRestoresMethodAndStartsOnlyOnce() async throws {
+        try await setupViewing()
+        XCTAssertTrue(session.showStartupWaitHint(version: 0))
+        XCTAssertTrue(session.status.contains("Still waiting"))
+        session.ready(version: -1) // A stale decoder must not consume the startup guard.
+        session.ready(version: 0)
+        session.ready(version: 0)
+        for _ in 0..<100 {
+            if ViewingProtocol.requests.contains(where: { $0.url!.path.hasSuffix("Sessions/Playing") }) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(session.status, "Direct play")
+        XCTAssertFalse(session.waitingForVideo)
+        XCTAssertFalse(session.showStartupWaitHint(version: 0), "A late deadline must not overwrite ready playback")
+        XCTAssertEqual(session.status, "Direct play")
+        XCTAssertEqual(ViewingProtocol.requests.filter { $0.url!.path.hasSuffix("Sessions/Playing") }.count, 1)
+        await session.stop()
+    }
     func testReadingChunksRetainLicenseFormattingAndJSONIndentation() {
         let text = "License\n=======\n\n1. Definitions\n--------------\n\n1.1. Café and 👩🏽‍💻.\n\n" + String(repeating: "A clause with words and  spaces. ", count: 80) + "\n\n{\n  \"Profile\": [\n    1, 2\n  ]\n}\n"
         let blocks = ReadingChunks.blocks(text, maxCharacters: 80)
