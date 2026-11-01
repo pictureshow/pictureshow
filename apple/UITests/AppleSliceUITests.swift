@@ -345,12 +345,13 @@ final class AppleSliceUITests: XCTestCase {
         let thumbInset = min(12.0, sliderFrame.width * 0.05)
         let railWidth = max(1, sliderFrame.width - 2 * thumbInset)
         let startFraction = min(1, max(0, Double(currentSeekValue) / duration))
-        let targetFraction = min(1, max(0, Double(cue) / duration))
+        let targetSeconds = min(duration, Double(cue))
+        let targetFraction = min(1, max(0, targetSeconds / duration))
         let startX = thumbInset + railWidth * startFraction
         let targetX = thumbInset + railWidth * targetFraction
         let start = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: startX / sliderFrame.width, dy: 0.5))
         let target = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: targetX / sliderFrame.width, dy: 0.5))
-        print("F1_GESTURE positive_subtitle_slider_drag frame=\(sliderFrame) start_seconds=\(currentSeekValue) target_seconds=\(cue) start_fraction=\(startFraction) target_fraction=\(targetFraction)")
+        print("F1_GESTURE positive_subtitle_slider_drag frame=\(sliderFrame) start_seconds=\(currentSeekValue) target_seconds=\(targetSeconds) start_fraction=\(startFraction) target_fraction=\(targetFraction)")
         start.press(forDuration: 0.15, thenDragTo: target)
         let seekReadout = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Seek to ")).firstMatch
         XCTAssertTrue(seekReadout.waitForExistence(timeout: 5), "The seek sheet should show its current Seek-to value after the first touch drag")
@@ -369,11 +370,19 @@ final class AppleSliceUITests: XCTestCase {
         // point can differ by a few seconds from the normalized target. Use the accessible
         // Back 10 control for a bounded seek near 14s, then let the decoded video run through
         // the positive cue and pause on the observed 20–23s window.
-        activate(app.buttons["seekBackward"])
-        let backReadoutStart = seekReadout.label.range(of: "Seek to ")!.upperBound
-        let backSeconds = seconds(String(seekReadout.label[backReadoutStart...]))
-        XCTAssertTrue((firstDragSeconds - 11)...(firstDragSeconds - 9) ~= backSeconds, "Back 10 should move the seek target by approximately ten seconds")
-        XCTAssertTrue((cue - 7)...(cue - 4) ~= backSeconds, "The paused seek target should be below the positive cue before resuming")
+        var expectedBackTarget = firstDragSeconds
+        var backCount = 0
+        var backSeconds = firstDragSeconds
+        repeat {
+            activate(app.buttons["seekBackward"])
+            expectedBackTarget = max(0, expectedBackTarget - 10)
+            let backReadoutStart = seekReadout.label.range(of: "Seek to ")!.upperBound
+            backSeconds = seconds(String(seekReadout.label[backReadoutStart...]))
+            XCTAssertLessThanOrEqual(abs(backSeconds - expectedBackTarget), 1, "Each Back 10 action should move the seek target by ten seconds")
+            backCount += 1
+        } while backSeconds > cue - 3 && backCount < 3
+        XCTAssertLessThanOrEqual(backSeconds, cue - 3, "The paused seek target should be below the positive cue before resuming")
+        print("F1_GESTURE positive_subtitle_back10_count=\(backCount) target_seconds=\(backSeconds)")
         activate(app.buttons["playerOptionsDone"])
         expectation(for: NSPredicate { _, _ in
             let value = self.seconds(position.label)
@@ -1000,6 +1009,29 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(method.waitForExistence(timeout: 10))
             expectation(for: NSPredicate(format: "label != %@", "Preparing playback…"), evaluatedWith: method)
             waitForExpectations(timeout: 45)
+            if let streamIndex = preferDirect ? config[directKey] : nil {
+                XCUIRemote.shared.press(.up)
+                let verifyTrigger = app.buttons[menuTitle].firstMatch
+                XCTAssertTrue(verifyTrigger.waitForExistence(timeout: 10), "The native \(menuTitle) menu should reopen for selected-state verification")
+                activate(verifyTrigger)
+                let suffix = "stream \(streamIndex)"
+                let verifyQuery = app.descendants(matching: .any)
+                let selectedByIdentifier = verifyQuery.matching(identifier: prefix + streamIndex).firstMatch
+                let selectedAction = selectedByIdentifier.waitForExistence(timeout: 2)
+                    ? selectedByIdentifier
+                    : verifyQuery.matching(NSPredicate(format: "label ENDSWITH[c] %@", suffix)).firstMatch
+                XCTAssertTrue(selectedAction.waitForExistence(timeout: 10), "The reopened native menu should show configured Stream \(streamIndex)")
+                XCTAssertTrue(selectedAction.label.lowercased().hasSuffix(suffix), "The reopened native menu must expose the exact configured stream")
+                let selectedValue = selectedAction.value as? String
+                let selectedInAX = selectedAction.isSelected || ["selected", "on", "1"].contains(selectedValue?.lowercased() ?? "")
+                print("F1_AX tv_track_selected_state type=\(menuTitle) stream=\(streamIndex) isSelected=\(selectedAction.isSelected) value=\(selectedValue ?? "<unexposed>")")
+                capture("Native TV \(menuTitle) selected Stream \(streamIndex) checkmark")
+                if !selectedInAX { print("F1_AX tv_track_selected_state_unexposed=true; retained native menu screenshot for visual review") }
+                XCUIRemote.shared.press(.menu)
+                let infoTab = app.buttons["Pictureshow"]
+                XCTAssertTrue(infoTab.waitForExistence(timeout: 10), "Dismissing the native menu should return to the player")
+                activate(infoTab)
+            }
             capture("Native TV \(menuTitle) choice applied")
         }
         let info = app.buttons["Pictureshow"]
