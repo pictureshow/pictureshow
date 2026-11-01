@@ -14,9 +14,15 @@ import PictureshowTransport
 /// deterministic without decoding media or depending on a simulator clock.
 private final class DeferredSeekPlayer: AVPlayer {
     private(set) var seekTargets: [CMTime] = []
+    private(set) var itemReplacementCount = 0
+    private(set) var transportCommandCount = 0
     private var completions: [(Bool) -> Void] = []
 
-    override func replaceCurrentItem(with item: AVPlayerItem?) { }
+    override func replaceCurrentItem(with item: AVPlayerItem?) {
+        if item != nil { itemReplacementCount += 1 }
+    }
+    override func play() { transportCommandCount += 1; super.play() }
+    override func pause() { transportCommandCount += 1; super.pause() }
     /// Keep wall-clock sampling from the production tick loop from injecting a decoder time
     /// into this callback-order test; PlaybackSession's published position is authoritative.
     override func currentTime() -> CMTime { .invalid }
@@ -76,9 +82,11 @@ private final class SeekRaceProtocol: URLProtocol {
                 ?? (itemID == "next" ? "next-source" : "first-source")
             var mediaSource: [String: Any] = [
                 "Id": source,
+                "DefaultAudioStreamIndex": 1,
                 "MediaStreams": [
                     ["Index": 0, "Type": "Video", "Codec": "h264"],
-                    ["Index": 1, "Type": "Audio", "Codec": "aac"]
+                    ["Index": 1, "Type": "Audio", "Codec": "aac"],
+                    ["Index": 2, "Type": "Audio", "Codec": "aac"]
                 ]
             ]
             if playbackRequest?["EnableDirectPlay"] as? Bool == true {
@@ -271,23 +279,57 @@ private final class SeekRaceProtocol: URLProtocol {
         try await makeReadySession()
         let oldTarget = Ticks.from(seconds: 50)
         session.seek(toTicks: oldTarget)
-        XCTAssertEqual(player.seekTargets.count, 1)
+        session.seek(toTicks: oldTarget)
+        XCTAssertEqual(player.seekTargets.count, 2)
+        guard player.seekTargets.count == 2 else { await session.stop(); return }
 
         let originalPlaySessionID = try XCTUnwrap(session.decision?.playSessionId)
+        XCTAssertEqual(session.decision?.audioIndex, 1)
+        XCTAssertEqual(session.decision?.subtitleIndex, -1)
+        let originalRequestCount = SeekRaceProtocol.playbackInfoCount
+        let originalReplacementCount = player.itemReplacementCount
+        let committedPosition = session.positionTicks
         await session.changeTracks(audio: 1, subtitle: -1)
+        XCTAssertEqual(SeekRaceProtocol.playbackInfoCount, originalRequestCount,
+                       "Same-audio Off to Off must not renegotiate the A/V stream")
+        XCTAssertEqual(player.itemReplacementCount, originalReplacementCount,
+                       "Same-audio Off to Off must retain the current A/V asset")
+        XCTAssertEqual(session.decision?.playSessionId, originalPlaySessionID)
+        XCTAssertEqual(player.seekTargets.count, 2, "A no-op track choice must not issue another seek")
+        XCTAssertEqual(session.positionTicks, committedPosition,
+                       "A no-op track choice must not commit the pending seek early")
+
+        await session.changeTracks(audio: 2, subtitle: -1)
+        XCTAssertEqual(SeekRaceProtocol.playbackInfoCount, originalRequestCount + 1,
+                       "A real alternate audio track must negotiate a replacement decision")
+        XCTAssertEqual(player.itemReplacementCount, originalReplacementCount + 1)
+        XCTAssertEqual(session.decision?.audioIndex, 2,
+                       "The replacement decision must select the actual alternate audio stream")
         XCTAssertEqual(session.decision?.source.id, "first-source",
                        "A same-item track replacement must honor the requested MediaSourceId")
         XCTAssertNotEqual(session.decision?.playSessionId, originalPlaySessionID,
                           "The replacement decoder should own a fresh play-session identifier")
         let replacementBody = try XCTUnwrap(SeekRaceProtocol.playbackInfoBodies.last)
+        XCTAssertEqual((replacementBody["AudioStreamIndex"] as? NSNumber)?.intValue, 2,
+                       "The replacement request must ask the server for alternate audio index 2")
         XCTAssertEqual(replacementBody["MediaSourceId"] as? String, "first-source",
                        "The same-item track request must remain bound to the original media source")
         XCTAssertEqual((replacementBody["StartTimeTicks"] as? NSNumber)?.int64Value, oldTarget,
                        "Track replacement must negotiate from the newest pending seek, not the old decoder clock")
         XCTAssertEqual(session.decision?.startTicks, oldTarget)
         session.ready(version: 1)
-        try await waitForSeekCount(2) // readiness seeks to the replacement's requested start
+        try await waitForSeekCount(3) // readiness seeks to the replacement's requested start
+        XCTAssertEqual(player.seekTargets.count, 3)
+        guard player.seekTargets.count == 3 else { await session.stop(); return }
+        let replacementTransportCount = player.transportCommandCount
+        // This old callback has the same seek revision and pending target as the
+        // replacement's startup. Only its decoder generation makes it stale.
         player.completeSeek(at: 1, success: true)
+        try await drainMainActor()
+        XCTAssertTrue(session.waitingForVideo, "An old decoder callback must not finish replacement readiness")
+        XCTAssertEqual(player.transportCommandCount, replacementTransportCount,
+                       "An old decoder must not issue Play/Pause into the waiting replacement")
+        player.completeSeek(at: 2, success: true)
         for _ in 0..<100 {
             if !session.waitingForVideo { break }
             try await Task.sleep(for: .milliseconds(10))
@@ -296,16 +338,18 @@ private final class SeekRaceProtocol: URLProtocol {
         XCTAssertEqual(session.positionTicks, oldTarget, "The replacement stream should publish its negotiated start position")
         let replacementTarget = Ticks.from(seconds: 20)
         session.seek(toTicks: replacementTarget)
-        XCTAssertEqual(player.seekTargets.count, 3)
+        XCTAssertEqual(player.seekTargets.count, 4)
+        guard player.seekTargets.count == 4 else { await session.stop(); return }
 
         player.completeSeek(at: 0, success: true)
         try await drainMainActor()
         XCTAssertEqual(session.positionTicks, oldTarget, "A stale callback must not replace the negotiated start position")
         let latest = session.seek(by: 5)
         XCTAssertEqual(latest, replacementTarget + Ticks.from(seconds: 5), "The old callback must not erase the replacement stream's pending seek")
-        XCTAssertEqual(player.seekTargets.count, 4)
+        XCTAssertEqual(player.seekTargets.count, 5)
+        guard player.seekTargets.count == 5 else { await session.stop(); return }
 
-        player.completeSeek(at: 3, success: true)
+        player.completeSeek(at: 4, success: true)
         try await drainMainActor()
         XCTAssertEqual(session.positionTicks, latest)
         await session.stop()
