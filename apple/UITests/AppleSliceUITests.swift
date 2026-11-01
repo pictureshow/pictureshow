@@ -2257,15 +2257,15 @@ final class AppleSliceUITests: XCTestCase {
                     options: [.regularExpression, .caseInsensitive]) != nil
     }
     /// Bracket each Info-free video frame with the same actual paused Info clock.
-    /// One Menu retains the native transport surface for the observed Up path;
-    /// pixels, rather than AX focus proxies, establish cue/control visibility.
+    /// One Menu uses the observed reopen path; pixels, rather than AX focus
+    /// proxies, establish cue/control visibility in the Info-free frame.
     private func captureNativeTVExternalSubtitlePreview(_ name: String, pausedSeconds: Int) {
         guard let initial = tvPlayerSnapshot(), let before = tvInfoObservation(initial),
               before.method == "Direct play", parsedClockSeconds(before.clock) == pausedSeconds else {
             XCTFail("Each caption preview must start from Direct Info at the actual paused caption clock")
             return
         }
-        print("F2_TV_CAPTION_PREVIEW backStep=1 retainNativeHUD=true")
+        print("F2_TV_CAPTION_PREVIEW backStep=1 requireInfoFreePlayer=true")
         XCUIRemote.shared.press(.menu)
         Thread.sleep(forTimeInterval: 0.25)
         let deadline = ProcessInfo.processInfo.systemUptime + 2
