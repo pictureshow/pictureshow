@@ -216,9 +216,14 @@ final class AppleSliceUITests: XCTestCase {
         capture("iPad landscape Libraries root")
         let libraryID = try XCTUnwrap(config["libraryID"])
         let movieLibrary = app.buttons["item-\(libraryID)"]
-        reveal(movieLibrary); activate(movieLibrary)
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch.waitForExistence(timeout: 15))
-        capture("iPad landscape movie library")
+        let librarySort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
+        if librarySort.waitForExistence(timeout: 2) {
+            capture("iPad landscape restored movie library")
+        } else {
+            reveal(movieLibrary); activate(movieLibrary)
+            XCTAssertTrue(librarySort.waitForExistence(timeout: 15))
+            capture("iPad landscape movie library")
+        }
         returnHome()
         let search = app.buttons["openSearch"]
         activate(search)
@@ -517,39 +522,49 @@ final class AppleSliceUITests: XCTestCase {
         var unexposedTrackSelection: [String] = []
         let audioIndex = try XCTUnwrap(config["episodeAudioIndex"])
         let subtitleIndex = try XCTUnwrap(config["episodeSubtitleIndex"])
-        for (menuTitle, index) in [("Audio", audioIndex), ("Subtitles", subtitleIndex)] {
-            let choice = selectNativeTVMenuTrack(menuTitle: menuTitle, index: index)
-            let selected = inspectNativeTVMenuSelection(menuTitle: menuTitle, index: index)
-            capture("Native TV \(menuTitle) selected \(choice)")
-            if !selected { unexposedTrackSelection.append("\(menuTitle) \(choice)") }
-            XCUIRemote.shared.press(.menu)
-            XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5), "Closing a native track menu should leave the AVKit player open")
-            let restored = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                self.seconds(position.label) >= max(0, pausedClock - 1)
-            }, object: position)
-            XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 30), .completed,
-                           "Track replacement should restore the paused position")
-            let afterTrack = seconds(position.label)
-            Thread.sleep(forTimeInterval: 2)
-            XCTAssertLessThanOrEqual(seconds(position.label), afterTrack + 1,
-                                     "Audio/subtitle replacement should preserve paused intent")
-            print("F1_METRIC tv_track_paused clockBefore=\(pausedClock) afterApply=\(afterTrack) menu=\(menuTitle) index=\(index)")
+        for (menuTitle, configuredIndex) in [("Audio", audioIndex), ("Subtitles", subtitleIndex)] {
+            let indices = menuTitle == "Audio" && configuredIndex != "-1" ? ["-1", configuredIndex] : [configuredIndex]
+            for index in indices {
+                let choice = selectNativeTVMenuTrack(menuTitle: menuTitle, index: index)
+                let selected = inspectNativeTVMenuSelection(menuTitle: menuTitle, index: index)
+                capture("Native TV \(menuTitle) selected \(choice)")
+                if !selected { unexposedTrackSelection.append("\(menuTitle) \(choice)") }
+                XCUIRemote.shared.press(.menu)
+                XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5), "Closing a native track menu should leave the AVKit player open")
+                let restored = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    self.seconds(position.label) >= max(0, pausedClock - 1)
+                }, object: position)
+                XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 30), .completed,
+                               "Track replacement should restore the paused position")
+                let afterTrack = seconds(position.label)
+                Thread.sleep(forTimeInterval: 2)
+                XCTAssertLessThanOrEqual(seconds(position.label), afterTrack + 1,
+                                         "Audio/subtitle replacement should preserve paused intent")
+                print("F1_METRIC tv_track_paused clockBefore=\(pausedClock) afterApply=\(afterTrack) menu=\(menuTitle) index=\(index)")
+            }
         }
 
-        // Verify true remote scrubbing on AVKit's native timeline while playback is paused.
+        // Verify remote scrubbing from the playback position itself; tvOS AVKit does not
+        // consistently publish a native Slider to XCTest on this presentation.
         XCUIRemote.shared.press(.up)
-        let timeline = app.sliders.firstMatch
-        XCTAssertTrue(timeline.waitForExistence(timeout: 10), "AVKit should expose its native timeline after track changes")
-        for _ in 0..<8 where !timeline.hasFocus { XCUIRemote.shared.press(.down) }
-        XCTAssertTrue(timeline.hasFocus, "Focus must be on the native AVKit timeline before remote scrubbing")
-        let beforeSeek = seconds(position.label)
-        XCUIRemote.shared.press(.right, forDuration: 2.0)
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= beforeSeek + 5 }, evaluatedWith: position)
-        waitForExpectations(timeout: 20)
+        let beforeForward = seconds(position.label)
+        XCUIRemote.shared.press(.right, forDuration: 1.0)
+        let forwardDeadline = ProcessInfo.processInfo.systemUptime + 12
+        while ProcessInfo.processInfo.systemUptime < forwardDeadline && seconds(position.label) < beforeForward + 5 {
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        let afterForward = seconds(position.label)
+        print("F1_METRIC tv_native_right_seek before=\(beforeForward) after=\(afterForward)")
+        XCTAssertGreaterThanOrEqual(afterForward, beforeForward + 5, "The native Right remote action should advance paused playback")
         capture("Native TV episode remote scrub forward")
         XCUIRemote.shared.press(.left, forDuration: 1.0)
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) <= beforeSeek + 3 }, evaluatedWith: position)
-        waitForExpectations(timeout: 20)
+        let backwardDeadline = ProcessInfo.processInfo.systemUptime + 12
+        while ProcessInfo.processInfo.systemUptime < backwardDeadline && seconds(position.label) > afterForward - 5 {
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        let afterBackward = seconds(position.label)
+        print("F1_METRIC tv_native_left_seek afterForward=\(afterForward) after=\(afterBackward)")
+        XCTAssertLessThanOrEqual(afterBackward, afterForward - 5, "The native Left remote action should return to an earlier position")
         capture("Native TV episode remote scrub backward")
 
         XCUIRemote.shared.press(.playPause)
@@ -576,6 +591,51 @@ final class AppleSliceUITests: XCTestCase {
         selectTouchTrack(type: "subtitle", index: subtitle)
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(play.waitForExistence(timeout: 15))
+        #endif
+    }
+    func testTVPositiveSubtitleStreamAndCue() throws {
+        #if os(tvOS)
+        ensureSignedIn()
+        _ = try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
+        capture("TV positive-caption movie detail")
+        let play = app.buttons["play"]
+        reveal(play); activate(play)
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15))
+        let position = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
+        let initial = seconds(position.label)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: max(2, initial + 2), timeout: 45,
+                                           metric: "tv_positive_subtitle_initial", nativeAVKitClock: true))
+        XCUIRemote.shared.press(.playPause)
+        let paused = seconds(position.label)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), paused + 1, "Pause before the positive subtitle replacement")
+
+        let subtitleIndex = try XCTUnwrap(config["directSubtitleIndex"])
+        XCTAssertNotEqual(subtitleIndex, "-1", "The fixture must provide a positive mov_text stream")
+        let label = selectNativeTVMenuTrack(menuTitle: "Subtitles", index: subtitleIndex)
+        let selected = inspectNativeTVMenuSelection(menuTitle: "Subtitles", index: subtitleIndex)
+        capture("TV positive subtitle stream selected")
+        XCTAssertTrue(selected, "The native subtitle menu should expose the selected positive stream")
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(seconds(position.label), max(0, paused - 1), "Subtitle replacement should restore the paused position")
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), paused + 1, "Subtitle replacement should preserve paused intent")
+        print("F1_METRIC tv_positive_subtitle_selected index=\(subtitleIndex) label=\(label) paused=\(paused)")
+
+        XCUIRemote.shared.press(.playPause)
+        let cue = try XCTUnwrap(config["directSubtitleCueSeconds"].flatMap(Int.init))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: cue, timeout: 35,
+                                           metric: "tv_positive_subtitle_cue", nativeAVKitClock: true))
+        let cueClock = seconds(position.label)
+        XCTAssertGreaterThanOrEqual(cueClock, cue)
+        XCTAssertLessThanOrEqual(cueClock, cue + 2, "Capture the configured cue window, not a later timestamp")
+        capture("TV positive subtitle cue at \(cueClock) seconds")
+        leaveNativeTVPlayer(returningTo: play)
+        XCTAssertTrue(play.hasFocus, "Menu should return from positive subtitle playback to the original detail")
+        XCTAssertTrue(app.staticTexts["detailTitle"].exists)
         #endif
     }
     func testQuickConnectCodeAndCancel() throws {
@@ -1287,19 +1347,19 @@ final class AppleSliceUITests: XCTestCase {
         let trigger = nativeTVTransportMenu(menuTitle)
         XCTAssertTrue(trigger.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) menu trigger")
         XCTAssertEqual(trigger.label, menuTitle)
-        activate(trigger)
+        activateNativeTVMenuChoice(trigger)
 
         let prefix = menuTitle == "Audio" ? "audio-" : "subtitle-"
         let query = app.descendants(matching: .any)
         let byIdentifier = query.matching(identifier: prefix + index).firstMatch
         let fallback: XCUIElement = index == "-1"
-            ? query.matching(NSPredicate(format: "label == %@", "Off")).firstMatch
-            : query.matching(NSPredicate(format: "label ENDSWITH[c] %@", "Stream \(index)")).firstMatch
+            ? query.matching(NSPredicate(format: "label MATCHES[c] %@", "^(selected,\\s*)?Off$")).firstMatch
+            : query.matching(NSPredicate(format: "label MATCHES[c] %@", "^(selected,\\s*)?Stream \(index)(\\s·|$).*" )).firstMatch
         let choice = byIdentifier.waitForExistence(timeout: 2) ? byIdentifier : fallback
         XCTAssertTrue(choice.waitForExistence(timeout: 10), "The native \(menuTitle) menu should expose configured index \(index)")
         if index != "-1" {
-            XCTAssertTrue(choice.label.lowercased().hasSuffix("stream \(index)"),
-                          "The native \(menuTitle) choice must be the exact configured Stream \(index)")
+            XCTAssertTrue(nativeTVTrackLabel(choice.label, matchesStream: index),
+                          "The native \(menuTitle) choice must begin with the exact configured Stream \(index)")
         }
         print("F1_AX tv_track_menu_choice type=\(menuTitle) index=\(index) label=\(choice.label) value=\(choice.value ?? "")")
         waitForNativeTVMenuEnabled(choice, description: "native \(menuTitle) track \(index)")
@@ -1343,6 +1403,7 @@ final class AppleSliceUITests: XCTestCase {
         let choice = nativeTVTrackChoice(menuTitle: menuTitle, index: index)
         let value = choice.value as? String
         let isSelected = choice.isSelected || ["selected", "on", "1"].contains(value?.lowercased() ?? "")
+            || choice.label.range(of: "^selected,\\s*", options: [.regularExpression, .caseInsensitive]) != nil
         print("F1_AX tv_track_menu_selected type=\(menuTitle) index=\(index) isSelected=\(choice.isSelected) value=\(value ?? "<unexposed>")")
         return isSelected
     }
@@ -1352,7 +1413,7 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(trigger.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) transport menu")
             XCTAssertEqual(trigger.label, menuTitle, "The native AVKit transport menu should expose its visible label")
             print("F1_AX tv_transport_menu_label=\(trigger.label)")
-            activate(trigger)
+            activateNativeTVMenuChoice(trigger)
             capture("Native TV \(menuTitle) transport menu")
             let prefix = menuTitle == "Audio" ? "audio-" : "subtitle-"
             let directKey = menuTitle == "Audio" ? "directAudioIndex" : "directSubtitleIndex"
@@ -1365,18 +1426,18 @@ final class AppleSliceUITests: XCTestCase {
                 // AVKit may expose native UIAction menu entries by their visible title rather
                 // than the action identifier. NativePlayer includes “Stream N” in each title.
                 if let streamIndex = preferDirect ? config[directKey] : nil {
-                    action = actionQuery.matching(NSPredicate(format: "label ENDSWITH[c] %@", "Stream \(streamIndex)")).firstMatch
+                    action = actionQuery.matching(NSPredicate(format: "label MATCHES[c] %@", "^(selected,\\s*)?Stream \(streamIndex)(\\s·|$).*" )).firstMatch
                 } else {
                     action = actionQuery.matching(NSPredicate(format: "label CONTAINS[c] %@", "Stream ")).firstMatch
                 }
             }
             XCTAssertTrue(action.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) menu items")
             if let streamIndex = preferDirect ? config[directKey] : nil {
-                XCTAssertTrue(action.label.lowercased().hasSuffix("stream \(streamIndex)"),
+                XCTAssertTrue(nativeTVTrackLabel(action.label, matchesStream: streamIndex),
                               "The native \(menuTitle) choice must match configured Stream \(streamIndex), not a similarly numbered stream")
             }
             print("F1_AX tv_track_action_label type=\(menuTitle) label=\(action.label) value=\(action.value ?? "")")
-            activate(action)
+            activateNativeTVMenuChoice(action)
             openNativeTVInfoTab()
             let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
             XCTAssertTrue(position.waitForExistence(timeout: 20), "The AVKit info tab should report the playback clock after track replacement")
@@ -1387,17 +1448,17 @@ final class AppleSliceUITests: XCTestCase {
             if let streamIndex = preferDirect ? config[directKey] : nil {
                 let verifyTrigger = nativeTVTransportMenu(menuTitle)
                 XCTAssertTrue(verifyTrigger.waitForExistence(timeout: 10), "The native \(menuTitle) menu should reopen for selected-state verification")
-                activate(verifyTrigger)
-                let suffix = "stream \(streamIndex)"
+                activateNativeTVMenuChoice(verifyTrigger)
                 let verifyQuery = app.descendants(matching: .any)
                 let selectedByIdentifier = verifyQuery.matching(identifier: prefix + streamIndex).firstMatch
                 let selectedAction = selectedByIdentifier.waitForExistence(timeout: 2)
                     ? selectedByIdentifier
-                    : verifyQuery.matching(NSPredicate(format: "label ENDSWITH[c] %@", suffix)).firstMatch
+                    : verifyQuery.matching(NSPredicate(format: "label MATCHES[c] %@", "^(selected,\\s*)?Stream \(streamIndex)(\\s·|$).*" )).firstMatch
                 XCTAssertTrue(selectedAction.waitForExistence(timeout: 10), "The reopened native menu should show configured Stream \(streamIndex)")
-                XCTAssertTrue(selectedAction.label.lowercased().hasSuffix(suffix), "The reopened native menu must expose the exact configured stream")
+                XCTAssertTrue(nativeTVTrackLabel(selectedAction.label, matchesStream: streamIndex), "The reopened native menu must expose the exact configured stream")
                 let selectedValue = selectedAction.value as? String
                 let selectedInAX = selectedAction.isSelected || ["selected", "on", "1"].contains(selectedValue?.lowercased() ?? "")
+                    || selectedAction.label.range(of: "^selected,\\s*", options: [.regularExpression, .caseInsensitive]) != nil
                 print("F1_AX tv_track_selected_state type=\(menuTitle) stream=\(streamIndex) isSelected=\(selectedAction.isSelected) value=\(selectedValue ?? "<unexposed>")")
                 capture("Native TV \(menuTitle) selected Stream \(streamIndex) checkmark")
                 if !selectedInAX { print("F1_AX tv_track_selected_state_unexposed=true; retained native menu screenshot for visual review") }
@@ -1411,6 +1472,10 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch.exists)
         capture("Native TV Pictureshow info panel")
+    }
+    private func nativeTVTrackLabel(_ label: String, matchesStream index: String) -> Bool {
+        label.range(of: "^(selected,\\s*)?Stream \(NSRegularExpression.escapedPattern(for: index))(\\s·|$)",
+                    options: [.regularExpression, .caseInsensitive]) != nil
     }
     private func leaveNativeTVPlayer(returningTo play: XCUIElement) {
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
