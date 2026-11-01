@@ -569,6 +569,45 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(play.hasFocus, "Native AVKit Menu should return focus to the original detail Play action")
         #endif
     }
+    /// Keeps basic native HLS clock, pause/resume, and Menu-to-detail focus acceptance
+    /// independent of the custom Pictureshow info tab's unlabeled AVKit cell.
+    func testNativeTVHLSClockResumeAndBackFocus() throws {
+        #if os(tvOS)
+        ensureSignedIn()
+        _ = try openSampleDetail(id: XCTUnwrap(config["hlsID"]), key: "hls")
+        let play = app.buttons["play"]
+        reveal(play); activate(play)
+        XCUIRemote.shared.press(.up)
+        let elapsed = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        XCTAssertTrue(elapsed.waitForExistence(timeout: 30), "Native AVKit should expose elapsed time for the HLS fixture")
+        let first = seconds(elapsed.label)
+        XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: max(3, first + 3), timeout: 45, metric: "tv_hls_native_initial"))
+        capture("Native TV HLS advancing elapsed-time clock")
+
+        XCUIRemote.shared.press(.playPause)
+        let paused = seconds(elapsed.label)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(elapsed.label), paused + 1, "Native remote Play/Pause should stop the AVKit elapsed-time clock")
+        capture("Native TV HLS paused by remote")
+        XCUIRemote.shared.press(.playPause)
+        XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: paused + 3, timeout: 30, metric: "tv_hls_native_resumed"))
+        capture("Native TV HLS elapsed time after remote resume")
+
+        leaveNativeTVPlayer(returningTo: play)
+        XCTAssertTrue(play.hasFocus, "Native Menu should return to HLS detail and restore its Play action focus")
+        let savedClock = seconds(elapsed.label)
+        capture("Native TV HLS returned to detail")
+        activate(play)
+        XCUIRemote.shared.press(.up)
+        let reopenedClock = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        XCTAssertTrue(reopenedClock.waitForExistence(timeout: 60), "Reopening the HLS item should restore native AVKit controls")
+        XCTAssertTrue(waitForPlaybackClock(reopenedClock, minimum: savedClock + 2, timeout: 60, metric: "tv_hls_native_reopened"))
+        capture("Native TV HLS reopened after detail resume")
+        leaveNativeTVPlayer(returningTo: play)
+        XCTAssertTrue(play.hasFocus, "The second Menu return should restore focus to the original detail Play action")
+        XCTAssertTrue(app.staticTexts["detailTitle"].exists, "The native player should close back to the same HLS detail")
+        #endif
+    }
     /// Crosses a Jellyfin episode boundary through the native contextual action, so the
     /// following item must receive a new decision/source while the prior viewing stops once.
     func testNativeTVManualNextStartsAdjacentEpisodeSource() throws {
@@ -959,9 +998,8 @@ final class AppleSliceUITests: XCTestCase {
     }
     #endif
     #if os(tvOS)
-    /// The native custom tab is visible by title, but its AVKit AX cell can be unlabeled.
-    /// Give the remote a bounded chance to focus the final info cell, then use its visible hit
-    /// target if tvOS focus stays in unrelated controls. The fallback is reported separately.
+    /// AVKit exposes its native tab row through AVInfoMenuCollection. The cells can have no AX
+    /// labels, so move Down into the row, then Right across its live cells to the custom last tab.
     private func openNativeTVInfoTab() {
         if app.staticTexts["playbackMethod"].exists, app.staticTexts["playbackMethod"].isHittable { return }
         XCUIRemote.shared.press(.up)
@@ -973,33 +1011,37 @@ final class AppleSliceUITests: XCTestCase {
         let targetIndex = max(0, count - 1)
         let target = cells.element(boundBy: targetIndex)
         XCTAssertTrue(target.waitForExistence(timeout: 10), "AVKit should expose the final custom info tab")
-        XCTAssertTrue(target.isHittable, "The custom info tab cell must be visible in AVKit's native menu")
-        let targetFrame = target.frame
-        func trace(_ step: String) {
-            print("F1_TV_INFO_FOCUS step=\(step) targetCell=\(targetIndex)/\(count) targetLabel=\(target.label) targetID=\(target.identifier) targetHasFocus=\(target.hasFocus) targetFrame=\(target.frame)")
+        func cellTrace(_ step: String) -> Int? {
+            let currentCells = cells.allElementsBoundByIndex
+            let focusedIndex = currentCells.firstIndex(where: \.hasFocus)
+            let descriptions = currentCells.enumerated().map { index, cell in
+                "\(index):label=\(cell.label) id=\(cell.identifier) focus=\(cell.hasFocus) frame=\(cell.frame)"
+            }
+            print("F1_TV_INFO_FOCUS step=\(step) targetCell=\(targetIndex)/\(count) targetFrame=\(target.frame) focusedIndex=\(focusedIndex.map { String($0) } ?? "none") cells={\(descriptions.joined(separator: " | "))}")
+            return focusedIndex
         }
-        trace("initial")
-        var remoteFocusedTarget = target.hasFocus
-        for step in 0..<4 where !remoteFocusedTarget {
+        var focusedIndex = cellTrace("before-down")
+        if focusedIndex == nil {
             XCUIRemote.shared.press(.down)
-            Thread.sleep(forTimeInterval: 0.15)
-            remoteFocusedTarget = target.hasFocus
-            trace("down-\(step + 1)")
+            Thread.sleep(forTimeInterval: 0.2)
+            focusedIndex = cellTrace("after-down")
         }
-        if remoteFocusedTarget {
-            XCUIRemote.shared.press(.select)
-            print("F1_METRIC native_info_activation=remote")
-        } else {
-            print("F1_METRIC native_info_activation=bounded_remote_helper remoteFocusUnavailableInDirectProbe=true")
-            activate(target)
+        for step in 0..<count where !target.hasFocus {
+            let directionRight = focusedIndex.map { $0 < targetIndex } ?? true
+            XCUIRemote.shared.press(directionRight ? .right : .left)
+            Thread.sleep(forTimeInterval: 0.2)
+            focusedIndex = cellTrace("horizontal-\(step + 1)-\(directionRight ? "right" : "left")")
         }
+        XCTAssertTrue(target.hasFocus, "Remote Right/Left should focus the final custom AVKit info tab")
+        capture("Native TV focused custom info tab before selection")
+        XCUIRemote.shared.press(.select)
         let method = app.staticTexts["playbackMethod"]
         let position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(method.waitForExistence(timeout: 15), "Selecting the custom info tab should expose Pictureshow playback status")
         XCTAssertTrue(method.isHittable, "Playback status must be visible after selecting the custom info tab")
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The Pictureshow info tab should expose the playback clock")
         XCTAssertTrue(position.isHittable, "Playback position must be visible after selecting the custom info tab")
-        print("F1_AX tv_info_tab_visible_title=Pictureshow axLabel=unexposed targetCellHasFocus=\(target.hasFocus) targetFrame=\(targetFrame)")
+        print("F1_AX tv_info_tab_visible_title=Pictureshow axLabel=unexposed focusedCellHasFocus=\(target.hasFocus) targetFrame=\(target.frame)")
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
         XCUIRemote.shared.press(.up)
