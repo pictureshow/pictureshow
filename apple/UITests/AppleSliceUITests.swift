@@ -64,8 +64,14 @@ final class AppleSliceUITests: XCTestCase {
     /// separate direct-decoder gate fails on the simulator's media stack.
     func testServerHLSAndResume() throws {
         ensureSignedIn()
+        #if os(tvOS)
+        // The short VP9 fixture is covered by the independent native clock/Menu case. Run the
+        // resume-eligible long item alone here so a replay-from-zero case cannot mask its result.
+        try playAndResume(id: XCTUnwrap(config["resumeID"]), expected: "Server HLS", key: "resume")
+        #else
         try playAndResume(id: XCTUnwrap(config["hlsID"]), expected: "Server HLS", key: "hls")
         try playAndResume(id: XCTUnwrap(config["resumeID"]), expected: "Server HLS", key: "resume")
+        #endif
     }
     /// Covers the non-player navigation surfaces added by the native follow-up without relying
     /// on screenshots as semantic evidence. The private config names a visible demo-library item.
@@ -582,7 +588,7 @@ final class AppleSliceUITests: XCTestCase {
         let elapsed = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
         XCTAssertTrue(elapsed.waitForExistence(timeout: 30), "Native AVKit should expose elapsed time for the HLS fixture")
         let first = seconds(elapsed.label)
-        XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: max(3, first + 3), timeout: 45, metric: "tv_hls_native_initial"))
+        XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: max(3, first + 3), timeout: 45, metric: "tv_hls_native_initial", nativeAVKitClock: true))
         capture("Native TV HLS advancing elapsed-time clock")
 
         XCUIRemote.shared.press(.playPause)
@@ -591,7 +597,7 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertLessThanOrEqual(seconds(elapsed.label), paused + 1, "Native remote Play/Pause should stop the AVKit elapsed-time clock")
         capture("Native TV HLS paused by remote")
         XCUIRemote.shared.press(.playPause)
-        XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: paused + 3, timeout: 30, metric: "tv_hls_native_resumed"))
+        XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: paused + 3, timeout: 30, metric: "tv_hls_native_resumed", nativeAVKitClock: true))
         capture("Native TV HLS elapsed time after remote resume")
 
         let lastClock = seconds(elapsed.label)
@@ -662,6 +668,7 @@ final class AppleSliceUITests: XCTestCase {
         activate(play)
         let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
         #if os(tvOS)
+        let isNativeTranscodeClock = key != "direct"
         let position: XCUIElement
         if key == "direct" {
             openNativeTVInfoTab()
@@ -677,16 +684,17 @@ final class AppleSliceUITests: XCTestCase {
         }
         XCTAssertTrue(position.waitForExistence(timeout: 30), "The native player should expose an accessibility clock")
         #else
+        let isNativeTranscodeClock = false
         let position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
         XCTAssertTrue(waitForSettledMethod(method, expected: expected, timeout: 45), "The playback method should settle to \(expected)")
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
         #endif
         capture("\(expected) initial preparation")
-        XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 35, metric: key))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 35, metric: key, nativeAVKitClock: isNativeTranscodeClock))
         // Respect the server's minimum video duration and watched percentage for resume.
         let minimum = max(Int(config[key + "ResumeSeconds"] ?? "6") ?? 6, seconds(position.label) + 6)
-        XCTAssertTrue(waitForPlaybackClock(position, minimum: minimum, timeout: TimeInterval(minimum + 35), metric: key + "_resume"))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: minimum, timeout: TimeInterval(minimum + 35), metric: key + "_resume", nativeAVKitClock: isNativeTranscodeClock))
         #if os(iOS)
         XCTAssertTrue(app.buttons["playerTracks"].exists)
         #endif
@@ -698,9 +706,27 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         XCTAssertTrue(play.waitForExistence(timeout: 15))
         let eligible = config[key + "ResumeEligible"] != "false"
+        var savedResumeSeconds = 0
         if eligible {
-            expectation(for: NSPredicate(format: "label CONTAINS %@", "Resume from"), evaluatedWith: play)
+            expectation(for: NSPredicate(format: "label BEGINSWITH %@", "Resume from "), evaluatedWith: play)
             waitForExpectations(timeout: 15)
+            let savedLabel = play.label
+            let prefix = "Resume from "
+            guard savedLabel.hasPrefix(prefix) else {
+                XCTFail("The eligible resume fixture must expose a Resume from timestamp, got: \(savedLabel)")
+                return
+            }
+            let rawTime = String(savedLabel.dropFirst(prefix.count))
+            let fields = rawTime.split(separator: ":").compactMap { Int($0) }
+            guard fields.count == rawTime.split(separator: ":").count,
+                  fields.count == 2 || fields.count == 3,
+                  fields.allSatisfy({ $0 >= 0 && $0 < 60 }),
+                  let first = fields.first else {
+                XCTFail("The eligible resume label must contain valid mm:ss or hh:mm:ss components: \(savedLabel)")
+                return
+            }
+            savedResumeSeconds = fields.count == 2 ? first * 60 + fields[1] : first * 3600 + fields[1] * 60 + fields[2]
+            XCTAssertGreaterThan(savedResumeSeconds, 0, "The saved resume timestamp must be positive")
         }
         #if os(tvOS)
         XCTAssertTrue(play.hasFocus, "Back should restore focus to the detail Play action")
@@ -720,12 +746,12 @@ final class AppleSliceUITests: XCTestCase {
         #else
         XCTAssertTrue(method.waitForExistence(timeout: 30))
         #endif
-        let resumeMinimum = eligible ? max(2, seconds(saved.replacingOccurrences(of: "Resume from ", with: "")) + 2) : 2
+        let resumeMinimum = eligible ? savedResumeSeconds + 2 : 2
         // A reopened HLS stream has a 45-second startup deadline; allow 15 more seconds for
         // AVKit's status and accessible clock to surface. Keep the earlier 30-second failure
         // artifacts separate, and retain this finite 60-second metric.
         let resumedTimeout: TimeInterval = key == "hls" ? 60 : 30
-        let resumed = waitForPlaybackClock(position, minimum: resumeMinimum, timeout: resumedTimeout, metric: key + "_resumed")
+        let resumed = waitForPlaybackClock(position, minimum: resumeMinimum, timeout: resumedTimeout, metric: key + "_resumed", nativeAVKitClock: isNativeTranscodeClock)
         if !resumed && key == "hls" { capture("HLS replay state after bounded 60-second wait") }
         XCTAssertTrue(resumed)
         capture("\(expected) \(eligible ? "resumed" : "replayed short sample") after \(saved)")
@@ -925,17 +951,28 @@ final class AppleSliceUITests: XCTestCase {
     /// Reveal controls only while the clock itself is missing or empty. Tapping the center of an
     /// already-present AVKit player can pause playback, so a clock below the target is never a
     /// reason to synthesize a reveal tap.
-    private func waitForPlaybackClock(_ position: XCUIElement, minimum: Int, timeout: TimeInterval, metric: String) -> Bool {
+    private func waitForPlaybackClock(_ position: XCUIElement, minimum: Int, timeout: TimeInterval, metric: String, nativeAVKitClock: Bool = false) -> Bool {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let deadline = startedAt + timeout
-        var lastRevealAt: TimeInterval = 0
+        var lastRevealAt = startedAt
+        var lastObservedSeconds: Int?
+        var lastAdvanceAt = startedAt
         while ProcessInfo.processInfo.systemUptime < deadline {
-            if position.exists, !position.label.isEmpty, seconds(position.label) >= minimum {
-                print("F1_METRIC \(metric)_clock_advanced_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) seconds=\(seconds(position.label))")
+            let now = ProcessInfo.processInfo.systemUptime
+            let exists = position.exists
+            let label = exists ? position.label : ""
+            let currentSeconds = label.isEmpty ? nil : seconds(label)
+            let isHittable = exists && position.isHittable
+            if let currentSeconds, currentSeconds != lastObservedSeconds {
+                lastObservedSeconds = currentSeconds
+                lastAdvanceAt = now
+            }
+            if let currentSeconds, currentSeconds >= minimum, (!nativeAVKitClock || isHittable) {
+                print("F1_METRIC \(metric)_clock_advanced_ms=\(Int((now - startedAt) * 1000)) seconds=\(currentSeconds) hittable=\(isHittable)")
                 return true
             }
-            let now = ProcessInfo.processInfo.systemUptime
-            let needsReveal = !position.exists || position.label.isEmpty
+            let staleNativeClock = nativeAVKitClock && now - lastAdvanceAt >= 2
+            let needsReveal = !exists || label.isEmpty || (nativeAVKitClock && !isHittable) || staleNativeClock
             if needsReveal, now - lastRevealAt >= 3 {
                 #if os(tvOS)
                 XCUIRemote.shared.press(.up)
@@ -945,11 +982,12 @@ final class AppleSliceUITests: XCTestCase {
                 else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
                 #endif
                 lastRevealAt = now
+                if nativeAVKitClock { print("F1_METRIC \(metric)_clock_reveal_up stale=\(staleNativeClock) hittable=\(isHittable) label=\(label)") }
             }
             Thread.sleep(forTimeInterval: 0.35)
         }
         let finalLabel = position.exists ? position.label : "<missing>"
-        print("F1_METRIC \(metric)_clock_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) final_position=\(finalLabel)")
+        print("F1_METRIC \(metric)_clock_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)) final_position=\(finalLabel) hittable=\(position.exists && position.isHittable)")
         return false
     }
     #if os(iOS)
