@@ -22,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
@@ -146,8 +147,8 @@ class TranscodeSeekSessionTest {
         runCurrent()
         assertEquals(2_260_000_000L, gateway.progresses.last().positionTicks)
         assertTrue(gateway.progresses.last().isPaused)
-        assertEquals(2, gateway.progresses.last().audioStreamIndex)
-        assertEquals(3, gateway.progresses.last().subtitleStreamIndex)
+        assertNull(gateway.progresses.last().audioStreamIndex)
+        assertNull(gateway.progresses.last().subtitleStreamIndex)
         session.close()
         runCurrent()
     }

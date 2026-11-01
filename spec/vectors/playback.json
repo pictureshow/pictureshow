@@ -795,6 +795,78 @@
       },
       "expected": false,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "report-track-automatic-caption",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-automatic-off",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": -1,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-automatic-audio-fallback",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 2,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-viewer-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": true
+      },
+      "expected": 3
+    },
+    {
+      "id": "report-track-viewer-off",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": -1,
+        "chosenByViewer": true
+      },
+      "expected": -1
+    },
+    {
+      "id": "report-track-viewer-same-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": true
+      },
+      "expected": 3
+    },
+    {
+      "id": "report-track-carried-automatic-index",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 5,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-viewer-no-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": null,
+        "chosenByViewer": true
+      },
+      "expected": null
     }
   ]
 }

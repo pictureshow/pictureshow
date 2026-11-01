@@ -131,6 +131,10 @@ class ReferenceParityVectorsTest {
                 deviceId = credentials.optionalText("deviceId")
             )
         return when (operation) {
+            "report-track-index" -> app.pictureshow.core.playback.TrackSelectionReporting.index(
+                input["selectedIndex"]?.jsonPrimitive?.intOrNull,
+                input.bool("chosenByViewer")
+            )?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull
             "subtitle-selection-local" -> JsonPrimitive(
                 app.pictureshow.core.playback.ExternalSubtitleLoading.canSelectLocally(
                     input.bool("transcoding"),
