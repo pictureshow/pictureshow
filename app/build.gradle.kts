@@ -19,8 +19,8 @@ android {
         applicationId = "app.pictureshow"
         minSdk = 23
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.3.0-rc21"
+        versionCode = 24
+        versionName = "0.3.0-rc22"
     }
     buildTypes {
         getByName("release") {
