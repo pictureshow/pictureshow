@@ -908,6 +908,9 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(secondsRemaining, 5, "The native contextual action must be activated before the physical end window")
         XCTAssertEqual(XCTWaiter.wait(for: [nextVisible], timeout: TimeInterval(max(1, secondsRemaining - 2))), .completed,
                        "After the native HUD settles, AVKit should expose a visible next-episode contextual action inside the player")
+        // Capture before the final fresh clock/title guards so attachment latency
+        // cannot turn physical EOS into a false manual-activation pass.
+        capture("Native TV manual Next available before activation")
         let actionClock = try XCTUnwrap(parsedClockSeconds(position.label), "A valid native elapsed clock must be present before manual Next")
         XCTAssertLessThan(actionClock, duration - 3, "The original episode must still be playing before manual Next is activated")
         XCTAssertTrue(currentTitle.exists && nativePlayer.frame.contains(currentTitle.frame), "The original episode title must still be visible before manual Next")
