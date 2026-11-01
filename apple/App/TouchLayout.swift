@@ -46,7 +46,12 @@ extension View {
     /// UINavigationBarAppearance setters assert in the supported tvOS runtime.
     @ViewBuilder func pictureshowNavigationTitle(_ title: String) -> some View {
         #if os(tvOS)
-        navigationTitle(title).toolbar {
+        navigationTitle(title)
+            // Keep scrolled Form/List rows behind an opaque native bar instead
+            // of letting their text show through the principal title.
+            .toolbarBackground(Theme.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
             ToolbarItem(placement: .principal) {
                 Text(title).font(.title2).foregroundStyle(.white).lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
