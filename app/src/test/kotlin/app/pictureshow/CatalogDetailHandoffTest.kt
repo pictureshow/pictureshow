@@ -666,7 +666,7 @@ class CatalogDetailHandoffTest {
         }
     }
 
-    @Test fun ordinaryDetailArrivalKeepsItsEmptyHostFocusEvent() = assertHostFilterScope(pending = false)
+    @Test fun anOrdinaryHostFocusFilterExpiresAtTheRequestBudget() = assertHostFilterScope(pending = false)
 
     @Test fun aPlaybackHostFocusFilterExpiresAtTheRequestBudget() = assertHostFilterScope(pending = true)
 
@@ -702,10 +702,8 @@ class CatalogDetailHandoffTest {
                     event.recycle()
                 }
             }
-            if (pending) {
-                assertFalse(forwarded())
-                org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(30_001))
-            }
+            assertFalse(forwarded())
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(30_001))
             assertTrue(forwarded())
         }
     }

@@ -750,7 +750,7 @@ class CatalogDetailReadRecoveryTest {
         compose.onNodeWithText("Mark unwatched").assertExists()
     }
 
-    @Test fun aDisabledSeasonActionKeepsItsPublishedLabelUntilTheFreshRead() {
+    @Test fun aFailedSeasonActionKeepsItsUnknownValueNeutralUntilTheFreshRead() {
         val season = MediaItem("season", "Invented season", "Season", seriesId = "series", childCount = 1)
         val episode = MediaItem("episode", "Invented episode", "Episode")
         val state = mutableStateOf(CatalogDetailState(account, season, loading = true, playbackPending = true, episodes = listOf(episode)))
@@ -766,7 +766,8 @@ class CatalogDetailReadRecoveryTest {
                 error = "Episodes unavailable"
             )
         }
-        compose.onNodeWithText("Mark watched").assertExists()
+        compose.onNodeWithTag("detail:played", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Mark watched").assertDoesNotExist()
         compose.onNodeWithText("Mark unwatched").assertDoesNotExist()
         compose.runOnIdle { state.value = state.value.copy(playbackPending = false, readFailed = false, error = null) }
         advanceFrames(12)
@@ -828,7 +829,8 @@ class CatalogDetailReadRecoveryTest {
         compose.onNodeWithTag("detail:play-pending").assertIsFocused()
         compose.onNodeWithText("Watched change requested").assertDoesNotExist()
         compose.onNodeWithText("Mark watched when ready").assertDoesNotExist()
-        compose.onNodeWithText("Watched unavailable").assertExists()
+        compose.onNodeWithTag("detail:played-pending", useUnmergedTree = true).assertExists()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Watched")))
         compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("The request expired. Try again when the item loads.").assertExists()
         compose.runOnIdle {

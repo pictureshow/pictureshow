@@ -3,17 +3,48 @@
  */
 package app.pictureshow.core
 
-/**
- * Complement the action label without repeating it. The label describes pending/requested intent;
- * its accepted live-region cue supplies delivery priority. State describes actual value or readiness.
- */
-fun detailActionDescription(currentState: String?, pending: Boolean, available: Boolean, ready: Boolean, requested: Boolean): String? =
-    when {
-        !available -> "Unavailable while saving progress."
-        requested || pending -> currentState
-        ready -> listOfNotNull("Ready", currentState).joinToString(". ")
-        else -> currentState
+/** Actual toggle value only. Availability is supplied by the native disabled semantics. */
+fun detailActionDescription(currentState: String?, available: Boolean): String? = currentState.takeIf { available }
+
+/** A disabled placeholder names the action without claiming an unknown toggle direction. */
+fun detailHeldActionLabel(target: String): String = when (target) {
+    "primary" -> "Play"
+    "from-start" -> "Play from start"
+    "played" -> "Watched"
+    else -> "Favorite"
+}
+
+/** Visible placeholder wording is independent of the single native disabled cue. */
+fun detailUnavailableActionLabel(target: String): String =
+    if (target == "from-start") "Start unavailable" else "${detailHeldActionLabel(target)} unavailable"
+
+/** Construction owns the first read; only a later lifecycle return needs another one. */
+class DetailReadLifecycle {
+    private var hasResumed = false
+
+    fun resumed(): Boolean {
+        val refresh = hasResumed
+        hasResumed = true
+        return refresh
     }
+}
+
+/** A readiness transition belongs to the same selected control, never to later focus visits. */
+class DetailReadyFeedback {
+    private var wasHeld = false
+    private var previousFocus: String? = null
+
+    fun update(held: Boolean, focused: String?, resumed: Boolean, usable: Boolean = true): String? {
+        val sameFocus = focused != null && focused == previousFocus
+        val cue = "Ready".takeIf { wasHeld && !held && usable && sameFocus && resumed }
+        // A fresh empty container cannot make its selected Play usable. Preserve only
+        // that existing hold until it becomes usable or selection leaves; ordinary busy
+        // controls never start a new held episode.
+        wasHeld = held || (wasHeld && !usable && sameFocus)
+        previousFocus = focused
+        return cue
+    }
+}
 
 /** Transport generations do not start a new visible error. Only Retry or settlement releases it. */
 fun detailFailureKey(readRecovery: Boolean, retrying: Boolean, writeAttempt: Long?): String? = when {
@@ -47,3 +78,19 @@ fun catalogArrivalUsesAnimation(accessibilityEnabled: Boolean, sourceIsPlayback:
 /** Keep an initial read's static metadata from becoming the reader's replacement focus. */
 fun detailArrivalAwaitsAction(loading: Boolean, contentRevealed: Boolean, returningFromPlayback: Boolean): Boolean =
     loading && !contentRevealed && !returningFromPlayback
+
+/** Publish arrival actions before static metadata can become the reader's fallback target. */
+fun detailMetadataAwaitsHandoff(hasActions: Boolean, handoffFinished: Boolean, returningFromPlayback: Boolean, failed: Boolean): Boolean =
+    hasActions && !handoffFinished && !returningFromPlayback && !failed
+
+/** The host's empty focus record cannot identify the ordinary page's selected virtual action. */
+fun detailSuppressesEmptyHostFocus(
+    ordinaryArrivalWithActions: Boolean,
+    handoffFinished: Boolean,
+    returningFromPlayback: Boolean,
+    recoveryHandoff: Boolean,
+    failed: Boolean
+): Boolean = recoveryHandoff || (!handoffFinished && (returningFromPlayback || (ordinaryArrivalWithActions && !failed)))
+
+/** Once the first handoff finishes, a later lifecycle pause is not another arrival. */
+fun detailArrivalStillPending(wasPending: Boolean, handoffFinished: Boolean): Boolean = wasPending && !handoffFinished

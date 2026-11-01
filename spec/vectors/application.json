@@ -2414,10 +2414,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": false,
-        "available": true,
-        "ready": false,
-        "requested": false
+        "available": true
       },
       "expected": null
     },
@@ -2426,10 +2423,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": "Watched",
-        "pending": false,
-        "available": true,
-        "ready": false,
-        "requested": false
+        "available": true
       },
       "expected": "Watched"
     },
@@ -2438,10 +2432,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": "Not favorite",
-        "pending": false,
-        "available": true,
-        "ready": false,
-        "requested": false
+        "available": true
       },
       "expected": "Not favorite"
     },
@@ -2450,10 +2441,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": true,
-        "available": true,
-        "ready": false,
-        "requested": false
+        "available": true
       },
       "expected": null
     },
@@ -2462,10 +2450,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": true,
-        "available": true,
-        "ready": false,
-        "requested": false
+        "available": true
       },
       "expected": null
     },
@@ -2474,10 +2459,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": true,
-        "available": true,
-        "ready": false,
-        "requested": true
+        "available": true
       },
       "expected": null
     },
@@ -2486,10 +2468,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": true,
-        "available": true,
-        "ready": false,
-        "requested": true
+        "available": true
       },
       "expected": null
     },
@@ -2498,10 +2477,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": "Watched",
-        "pending": true,
-        "available": true,
-        "ready": false,
-        "requested": true
+        "available": true
       },
       "expected": "Watched"
     },
@@ -2510,10 +2486,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": "Not favorite",
-        "pending": true,
-        "available": true,
-        "ready": false,
-        "requested": true
+        "available": true
       },
       "expected": "Not favorite"
     },
@@ -2522,10 +2495,7 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": "Watched",
-        "pending": false,
-        "available": true,
-        "ready": true,
-        "requested": true
+        "available": true
       },
       "expected": "Watched"
     },
@@ -2534,72 +2504,54 @@
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": true,
-        "available": false,
-        "ready": false,
-        "requested": true
+        "available": false
       },
-      "expected": "Unavailable while saving progress."
+      "expected": null
     },
     {
       "id": "detail.feedback.held-watched",
       "operation": "detail-action-state",
       "input": {
         "currentState": "Watched",
-        "pending": true,
-        "available": false,
-        "ready": false,
-        "requested": false
+        "available": false
       },
-      "expected": "Unavailable while saving progress."
+      "expected": null
     },
     {
       "id": "detail.feedback.ready-primary",
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": false,
-        "available": true,
-        "ready": true,
-        "requested": false
+        "available": true
       },
-      "expected": "Ready"
+      "expected": null
     },
     {
       "id": "detail.feedback.ready-start",
       "operation": "detail-action-state",
       "input": {
         "currentState": null,
-        "pending": false,
-        "available": true,
-        "ready": true,
-        "requested": false
+        "available": true
       },
-      "expected": "Ready"
+      "expected": null
     },
     {
       "id": "detail.feedback.ready-watched",
       "operation": "detail-action-state",
       "input": {
         "currentState": "Unwatched",
-        "pending": false,
-        "available": true,
-        "ready": true,
-        "requested": false
+        "available": true
       },
-      "expected": "Ready. Unwatched"
+      "expected": "Unwatched"
     },
     {
       "id": "detail.feedback.ready-favorite",
       "operation": "detail-action-state",
       "input": {
         "currentState": "Favorite",
-        "pending": false,
-        "available": true,
-        "ready": true,
-        "requested": false
+        "available": true
       },
-      "expected": "Ready. Favorite"
+      "expected": "Favorite"
     },
     {
       "id": "detail.feedback.reason-refinement",
@@ -2930,6 +2882,506 @@
         "writeAttempt": null
       },
       "expected": null
+    },
+    {
+      "id": "detail.feedback.held-label.primary",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "primary"
+      },
+      "expected": "Play"
+    },
+    {
+      "id": "detail.feedback.held-label.from-start",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "from-start"
+      },
+      "expected": "Play from start"
+    },
+    {
+      "id": "detail.feedback.held-label.played",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "played"
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.held-label.favorite",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "favorite"
+      },
+      "expected": "Favorite"
+    },
+    {
+      "id": "detail.feedback.transition.initial-ready",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.selected-settle-once",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.peer-settle",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": null,
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": null,
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.new-focus-at-settle",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.inactive-settle",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.second-hold",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "played",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true
+          },
+          {
+            "held": true,
+            "focused": "played",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null,
+        "Ready"
+      ]
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.primary",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "primary"
+      },
+      "expected": "Play unavailable"
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.from-start",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "from-start"
+      },
+      "expected": "Start unavailable"
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.played",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "played"
+      },
+      "expected": "Watched unavailable"
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.favorite",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "favorite"
+      },
+      "expected": "Favorite unavailable"
+    },
+    {
+      "id": "detail.read.initial-resume-and-real-returns",
+      "operation": "detail-read-lifecycle",
+      "input": {
+        "resumes": [
+          true,
+          true,
+          true
+        ]
+      },
+      "expected": [
+        false,
+        true,
+        true
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.unusable-settlement",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false
+          },
+          {
+            "held": false,
+            "focused": "favorite",
+            "resumed": true,
+            "usable": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.later-usable",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "usable": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        "Ready"
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.ordinary-busy",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "usable": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "usable": false
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "usable": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.unfocused-primary",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "failed": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.focused-primary",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": true,
+        "returningFromPlayback": false,
+        "failed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.failed-read",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "failed": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.no-actions",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": false,
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "failed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.playback-return",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": false,
+        "returningFromPlayback": true,
+        "failed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.ordinary-waiting",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.host-focus.ordinary-finished",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": true,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.ordinary-failed",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": true,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.no-actions",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.playback-waiting",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": true,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.host-focus.playback-failed",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": true,
+        "recoveryHandoff": false,
+        "failed": true,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.host-focus.recovery-handoff",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": true,
+        "returningFromPlayback": false,
+        "recoveryHandoff": true,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.completed-handoff-does-not-restart-on-lifecycle-pause",
+      "operation": "detail-arrival-pending",
+      "input": {
+        "restored": [
+          false,
+          false,
+          true,
+          false,
+          false
+        ]
+      },
+      "expected": [
+        true,
+        true,
+        false,
+        false,
+        false
+      ]
     }
   ]
 }

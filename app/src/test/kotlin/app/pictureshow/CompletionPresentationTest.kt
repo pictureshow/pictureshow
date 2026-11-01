@@ -55,14 +55,14 @@ class CompletionPresentationTest {
         compose.onNodeWithText("Resume from 0:30").assertDoesNotExist()
         compose.runOnIdle { state.value = state.value.copy(error = "Could not load watch state.") }
         compose.onNodeWithText("Saving progress…").assertDoesNotExist()
-        // Recovery retains last-published wording/slots, not authoritative watch state. Stale actions stay disabled.
-        compose.onNodeWithText("Mark watched").assertIsNotEnabled()
+        // Recovery keeps the action slots and guards; an unknown watch value uses a neutral label.
+        compose.onNodeWithTag("detail:played", useUnmergedTree = true).assertIsNotEnabled()
         compose.onNodeWithText("Retry").assertIsFocused()
         compose.onNodeWithText("Retry").performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle { kotlin.test.assertEquals(1, retries) }
         compose.onNodeWithText("Retrying…").assertIsFocused().assertIsDisplayed()
         compose.onNodeWithText("Could not load watch state.").assertIsDisplayed()
-        compose.onNodeWithText("Mark watched").assertIsNotEnabled()
+        compose.onNodeWithTag("detail:played", useUnmergedTree = true).assertIsNotEnabled()
         compose.onNodeWithText("Saving progress…").assertDoesNotExist()
         compose.runOnIdle {
             state.value =

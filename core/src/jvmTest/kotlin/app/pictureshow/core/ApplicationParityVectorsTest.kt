@@ -81,11 +81,56 @@ class ApplicationParityVectorsTest {
                     )
                     "detail-action-state" -> detailActionDescription(
                         input["currentState"]?.jsonPrimitive?.contentOrNull,
-                        input.getValue("pending").jsonPrimitive.booleanOrNull!!,
-                        input.getValue("available").jsonPrimitive.booleanOrNull!!,
-                        input.getValue("ready").jsonPrimitive.booleanOrNull!!,
-                        input.getValue("requested").jsonPrimitive.booleanOrNull!!
+                        input.getValue("available").jsonPrimitive.booleanOrNull!!
                     )?.let(::JsonPrimitive) ?: JsonNull
+                    "detail-arrival-pending" -> {
+                        var pending = true
+                        JsonArray(
+                            input.getValue("restored").jsonArray.map {
+                                pending = detailArrivalStillPending(pending, it.jsonPrimitive.booleanOrNull!!)
+                                JsonPrimitive(pending)
+                            }
+                        )
+                    }
+                    "detail-host-focus-handoff" -> JsonPrimitive(
+                        detailSuppressesEmptyHostFocus(
+                            input.getValue("ordinaryArrivalWithActions").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("handoffFinished").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("returningFromPlayback").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("recoveryHandoff").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("failed").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-metadata-handoff" -> JsonPrimitive(
+                        detailMetadataAwaitsHandoff(
+                            input.getValue("hasActions").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("handoffFinished").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("returningFromPlayback").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("failed").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-held-label" -> JsonPrimitive(detailHeldActionLabel(input.getValue("target").jsonPrimitive.content))
+                    "detail-unavailable-label" -> JsonPrimitive(
+                        detailUnavailableActionLabel(input.getValue("target").jsonPrimitive.content)
+                    )
+                    "detail-read-lifecycle" -> {
+                        val lifecycle = DetailReadLifecycle()
+                        JsonArray(input.getValue("resumes").jsonArray.map { JsonPrimitive(lifecycle.resumed()) })
+                    }
+                    "detail-ready-feedback" -> {
+                        val feedback = DetailReadyFeedback()
+                        JsonArray(
+                            input.getValue("steps").jsonArray.map { step ->
+                                val fields = step.jsonObject
+                                feedback.update(
+                                    fields.getValue("held").jsonPrimitive.booleanOrNull!!,
+                                    fields["focused"]?.jsonPrimitive?.contentOrNull,
+                                    fields.getValue("resumed").jsonPrimitive.booleanOrNull!!,
+                                    fields["usable"]?.jsonPrimitive?.booleanOrNull ?: true
+                                )?.let(::JsonPrimitive) ?: JsonNull
+                            }
+                        )
+                    }
                     "detail-failure-key" -> detailFailureKey(
                         input.getValue("readRecovery").jsonPrimitive.booleanOrNull!!,
                         input.getValue("retrying").jsonPrimitive.booleanOrNull!!,

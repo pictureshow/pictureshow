@@ -709,6 +709,10 @@ fun CatalogDetail(
     onPendingQueueExpired: (() -> Boolean)? = null
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    DisposableEffect(Unit) {
+        detailTiming("composition-first")
+        onDispose { }
+    }
     val reportFocus by rememberUpdatedState(onFocusRestored)
     val focusHost = LocalView.current
     val list = rememberLazyListState()
@@ -717,6 +721,7 @@ fun CatalogDetail(
     var selectedSection by rememberSaveable { mutableStateOf("header") }
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
+    var arrivalPending by remember { mutableStateOf(true) }
     var playbackReturn by remember { mutableStateOf(state.playbackPending) }
     var playbackLayout by rememberSaveable { mutableStateOf(state.playbackPending) }
     var playbackHeader by remember { mutableStateOf<MediaItem?>(null) }
@@ -771,7 +776,6 @@ fun CatalogDetail(
     // same recovery node until that read settles too; readiness still uses the model.
     val recoveryHandoff = !recoveryActive && recoveryFocusOwned && state.error == null && !state.readFailed
     val showRecovery = recoveryActive || recoveryHandoff
-    PlaybackExitFocusEvents(((playbackReturn || playbackWaiting) && !restored) || recoveryHandoff)
     val pendingControlsLive = !recoveryActive &&
         playbackWaiting &&
         lifecycleState == Lifecycle.State.RESUMED &&
@@ -780,6 +784,7 @@ fun CatalogDetail(
         headerInputTarget != null &&
         state.error == null
     SideEffect {
+        arrivalPending = app.pictureshow.core.detailArrivalStillPending(arrivalPending, restored)
         if (!showRecovery) retryFocused = false
         if (readFailure && state.error != null) recoveryMessage = state.error
         if (readSettled) {
@@ -1047,19 +1052,19 @@ fun CatalogDetail(
             available = !pendingExpired && !expiryReported,
             requestedTargets = pendingQueuedTargets + if (playQueued != null) setOf("primary", "from-start") else emptySet(),
             playLabel = when {
-                pendingExpired || expiryReported -> "Play unavailable"
+                pendingExpired || expiryReported -> app.pictureshow.core.detailUnavailableActionLabel("primary")
                 playQueued == "resume" -> "Play requested"
                 playQueued == "start" -> "Start already requested"
                 else -> "Play when ready"
             },
             fromStartLabel = when {
-                pendingExpired || expiryReported -> "Start unavailable"
+                pendingExpired || expiryReported -> app.pictureshow.core.detailUnavailableActionLabel("from-start")
                 playQueued == "start" -> "Start requested"
                 playQueued == "resume" -> "Play already requested"
                 else -> "Play from start when ready"
             },
             playedLabel = if (pendingExpired || expiryReported) {
-                "Watched unavailable"
+                app.pictureshow.core.detailUnavailableActionLabel("played")
             } else if ("played" in pendingQueuedTargets) {
                 "Watched change requested"
             } else if (pendingItem?.isWatched == true) {
@@ -1068,7 +1073,7 @@ fun CatalogDetail(
                 "Mark watched when ready"
             },
             favoriteLabel = if (pendingExpired || expiryReported) {
-                "Favorite unavailable"
+                app.pictureshow.core.detailUnavailableActionLabel("favorite")
             } else if ("favorite" in pendingQueuedTargets) {
                 "Favorite change requested"
             } else if (pendingItem?.userData?.isFavorite == true) {
@@ -1230,6 +1235,22 @@ fun CatalogDetail(
                 }
         }
     }
+    val arrivalMetadataHidden = app.pictureshow.core.detailMetadataAwaitsHandoff(
+        hasActions,
+        restored || !arrivalPending,
+        playbackLayout || playbackWaiting,
+        recoveryActive || state.error != null || state.readFailed
+    )
+    val arrivalMetadataSemantics = if (arrivalMetadataHidden) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+    PlaybackExitFocusEvents(
+        app.pictureshow.core.detailSuppressesEmptyHostFocus(
+            hasActions && arrivalPending,
+            restored,
+            playbackReturn || playbackWaiting,
+            recoveryHandoff,
+            recoveryActive || state.error != null
+        )
+    )
     CompositionLocalProvider(LocalBringIntoViewSpec provides detailBringIntoView) {
         if (!restored) {
             // Hold input away from hidden semantics. focusTarget adds no accessibility node.
@@ -1357,7 +1378,7 @@ fun CatalogDetail(
                                     modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
                                     alignment = BiasAlignment(0f, -.5f)
                                 )
-                                CatalogHeading(headerItem.name)
+                                CatalogHeading(headerItem.name, modifier = arrivalMetadataSemantics)
                                 if (headerItem.type == "Episode") {
                                     Text(
                                         listOfNotNull(
@@ -1365,7 +1386,8 @@ fun CatalogDetail(
                                             episodeLabel(headerItem).takeIf {
                                                 it.isNotBlank()
                                             }
-                                        ).joinToString(" · ")
+                                        ).joinToString(" · "),
+                                        modifier = arrivalMetadataSemantics
                                     )
                                 }
                                 val metadata = listOfNotNull(
@@ -1374,7 +1396,13 @@ fun CatalogDetail(
                                     headerItem.communityRating?.let(::communityRatingLabel),
                                     headerItem.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
                                 )
-                                if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
+                                if (metadata.isNotEmpty()) {
+                                    Text(
+                                        metadata.joinToString(" · "),
+                                        color = CatalogMuted,
+                                        modifier = arrivalMetadataSemantics
+                                    )
+                                }
                                 val container = item.type in listOf("Series", "Season")
                                 if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
                                     DetailActions(
@@ -1401,8 +1429,14 @@ fun CatalogDetail(
                                         if (trackSelection) selectedSection = "header"
                                     }
                                 }
-                                headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
-                                if (headerItem.genres.isNotEmpty()) Text(headerItem.genres.joinToString(" · "), color = CatalogMuted)
+                                headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it, modifier = arrivalMetadataSemantics) }
+                                if (headerItem.genres.isNotEmpty()) {
+                                    Text(
+                                        headerItem.genres.joinToString(" · "),
+                                        color = CatalogMuted,
+                                        modifier = arrivalMetadataSemantics
+                                    )
+                                }
                                 if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
                                     DetailActions(
                                         if (recoveryActive) headerItem else item, playItem, state.busy, initial,
@@ -1600,6 +1634,12 @@ fun CatalogDetail(
                 }
             }
         }
+    }
+    LaunchedEffect(lifecycleState, state.loading, state.readSucceeded, semanticsRevealed, pendingSemanticsRevealed, restored) {
+        detailTiming(
+            "publication",
+            "loading=${state.loading} succeeded=${state.readSucceeded} revealed=$semanticsRevealed pendingRevealed=$pendingSemanticsRevealed restored=$restored metadataHidden=$arrivalMetadataHidden lifecycle=$lifecycleState"
+        )
     }
     LaunchedEffect(
         lifecycleState,
@@ -1847,7 +1887,9 @@ fun CatalogDetail(
             // produces no Focused property change for Compose's accessibility delegate. Clearing
             // owner focus cannot help on TV: View.clearFocus synchronously refocuses the first item.
             semanticsRevealed = true
+            detailTiming("focus-publish")
             repeat(2) { withFrameNanos { } }
+            detailTiming("focus-request")
             var handoffTarget = "viewer"
             var handoffFocused = playbackContentFocused(focusHost) == true
             if (focusInputRevision == inputBeforeRestore) {
@@ -1936,6 +1978,26 @@ private fun DetailActions(
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
+    val feedbackHost = LocalView.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
+    val readiness = remember { app.pictureshow.core.DetailReadyFeedback() }
+    var focusedTarget by remember { mutableStateOf<String?>(null) }
+    // Observe selection during composition: reads made only inside SideEffect do not
+    // subscribe this group to the focus callback's state changes.
+    val readyTarget = focusedTarget
+    val readyUsable = when (readyTarget) {
+        "primary", "from-start" -> playItem != null
+        "played" -> !item.isEmptyContainer && (stableLayout || !busy)
+        "favorite" -> stableLayout || !busy
+        else -> false
+    }
+    SideEffect {
+        readiness.update(blocked || pending != null, readyTarget, lifecycle == Lifecycle.State.RESUMED, readyUsable)
+            ?.takeUnless { playbackReaderOnText(feedbackHost) }?.let {
+                @Suppress("DEPRECATION")
+                feedbackHost.announceForAccessibility(it)
+            }
+    }
     var focused by remember { mutableStateOf(false) }
     var scrolling by remember { mutableStateOf<Job?>(null) }
     val focusMargin = with(LocalDensity.current) { 8.dp.toPx() }
@@ -1943,6 +2005,7 @@ private fun DetailActions(
         listOf("primary", "played", "favorite", "from-start").associateWith { BringIntoViewRequester() }
     }
     val focusedChildren = remember { mutableSetOf<String>() }
+    val firstLayoutRecorded = remember { booleanArrayOf(false) }
     fun revealFocusedBounds(coordinates: LayoutCoordinates, requester: BringIntoViewRequester) {
         if (scrolling?.isActive == true) return
         val top = coordinates.positionInRoot().y
@@ -1963,6 +2026,10 @@ private fun DetailActions(
             focused = it.hasFocus
             if (it.hasFocus) onFocus()
         }.onGloballyPositioned { coordinates ->
+            if (!firstLayoutRecorded[0]) {
+                firstLayoutRecorded[0] = true
+                detailTiming("actions-first-layout")
+            }
             // Ordinary headers may gain metadata after focus. Returning headers freeze it and
             // reserve slots, so check their focused child instead: an unfocused second row must
             // not scroll an already-visible primary upward. Child checks also cover later errors
@@ -1982,7 +2049,9 @@ private fun DetailActions(
             "primary" to (pending?.playLabel ?: if (position > 0) resumeLabel(position) else "Play"),
             "from-start" to (pending?.fromStartLabel ?: "Play from start"),
             "played" to (
-                pending?.playedLabel ?: if ("played" in readyQueuedTargets) {
+                pending?.playedLabel ?: if (blocked) {
+                    app.pictureshow.core.detailUnavailableActionLabel("played")
+                } else if ("played" in readyQueuedTargets) {
                     "Watched change requested"
                 } else if (item.isWatched) {
                     "Mark unwatched"
@@ -1991,7 +2060,9 @@ private fun DetailActions(
                 }
                 ),
             "favorite" to (
-                pending?.favoriteLabel ?: if ("favorite" in readyQueuedTargets) {
+                pending?.favoriteLabel ?: if (blocked) {
+                    app.pictureshow.core.detailUnavailableActionLabel("favorite")
+                } else if ("favorite" in readyQueuedTargets) {
                     "Favorite change requested"
                 } else if (item.userData.isFavorite) {
                     "Unfavorite"
@@ -2000,6 +2071,10 @@ private fun DetailActions(
                 }
                 )
         )
+
+        // The parent supplies the plain action name and native disabled property.
+        // Keep this wording visible without also merging it into TalkBack's label.
+        val labelSemantics = if (blocked || pending?.available == false) Modifier.clearAndSetSemantics {} else Modifier
 
         fun actionModifier(target: String, tag: String, click: () -> Unit): Modifier {
             val childBringIntoView = childBringIntoViews.getValue(target)
@@ -2022,13 +2097,25 @@ private fun DetailActions(
                     }
                 )
                 .onFocusChanged {
-                    if (it.isFocused) focusedChildren.add(target) else focusedChildren.remove(target)
+                    if (it.isFocused) {
+                        focusedChildren.add(target)
+                        focusedTarget = target
+                    } else {
+                        focusedChildren.remove(target)
+                        if (focusedTarget == target) focusedTarget = null
+                    }
                     onHeaderFocus(target, it.isFocused)
                     if (BuildConfig.DEBUG && it.isFocused) PlaybackDiagnostics.write("detail-focus target=$target")
+                    if (it.isFocused) detailTiming("focus-acquired", "target=$target")
                 }.testTag("detail:$tag$suffix").semantics {
                     // Keep Material input focus/geometry while exposing the real availability
                     // to services. Compose omits click actions for disabled semantics.
                     if (pending?.available == false) disabled()
+                    val available = !blocked && pending?.available != false
+                    if (!available) {
+                        contentDescription = app.pictureshow.core.detailHeldActionLabel(target)
+                        role = Role.Button
+                    }
                     val currentState = when (target) {
                         "played" -> if (item.isWatched) "Watched" else "Unwatched"
                         "favorite" -> if (item.userData.isFavorite) "Favorite" else "Not favorite"
@@ -2048,10 +2135,7 @@ private fun DetailActions(
                     }
                     app.pictureshow.core.detailActionDescription(
                         currentState,
-                        pending != null,
-                        pending?.available != false,
-                        !blocked && pending == null && stableLayout,
-                        requested
+                        available
                     )?.let { stateDescription = it }
                 }.onPreviewKeyEvent {
                     // Handle pending Select at DOWN, before a fresh callback can replace it.
@@ -2093,7 +2177,7 @@ private fun DetailActions(
                                 Modifier
                             }
                         )
-                ) { Text(labels.getValue("primary")) }
+                ) { Text(labels.getValue("primary"), modifier = labelSemantics) }
             }
         }
         if (!stableLayout && position > 0) {
@@ -2125,10 +2209,10 @@ private fun DetailActions(
                         )
                         .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                         .then(actionModifier("played", "played", click)).semantics {
-                            toggleableState = ToggleableState(item.isWatched)
+                            if (!blocked && pending?.available != false) toggleableState = ToggleableState(item.isWatched)
                         }
                 ) {
-                    Text(labels.getValue("played"))
+                    Text(labels.getValue("played"), modifier = labelSemantics)
                 }
             }
         }
@@ -2150,10 +2234,10 @@ private fun DetailActions(
                         )
                         .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                         .then(actionModifier("favorite", "favorite", click)).semantics {
-                            toggleableState = ToggleableState(item.userData.isFavorite)
+                            if (!blocked && pending?.available != false) toggleableState = ToggleableState(item.userData.isFavorite)
                         }
                 ) {
-                    Text(labels.getValue("favorite"))
+                    Text(labels.getValue("favorite"), modifier = labelSemantics)
                 }
             }
         }
@@ -2169,7 +2253,7 @@ private fun DetailActions(
                         enabled = !blocked && (pending != null || playItem != null),
                         modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                             .then(actionModifier("from-start", "from-start", click))
-                    ) { Text(labels.getValue("from-start")) }
+                    ) { Text(labels.getValue("from-start"), modifier = labelSemantics) }
                 }
             }
         }
@@ -2374,11 +2458,11 @@ internal fun CatalogArtwork(
 }
 
 @Composable
-private fun CatalogHeading(title: String, large: Boolean = true) {
+private fun CatalogHeading(title: String, modifier: Modifier = Modifier, large: Boolean = true) {
     Text(
         title,
         style = if (large) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineSmall,
-        modifier = Modifier.semantics { heading() }
+        modifier = modifier.semantics { heading() }
     )
 }
 

@@ -56,6 +56,28 @@ class CatalogRetryBudgetTest {
         Dispatchers.resetMain()
     }
 
+    @Test fun firstResumeKeepsTheInitialReadButARealReturnStartsAFreshRead() = runTest(dispatcher) {
+        val initial = CompletableDeferred<ClientResult<MediaItem>>()
+        var reads = 0
+        service.detailBlock = {
+            reads++
+            if (reads == 1) initial.await() else ClientResult.Success(item.copy(name = "Fresh on return"))
+        }
+        val vm = CatalogDetailViewModel(account, item, session).also { store.put("detail", it) }
+        runCurrent()
+        assertEquals(1, reads)
+        vm.resumed()
+        runCurrent()
+        assertEquals(1, reads, "Initial RESUMED must not cancel the destination's in-flight read")
+        initial.complete(ClientResult.Success(item))
+        runCurrent()
+        assertEquals(item, vm.state.value.item)
+        vm.resumed()
+        runCurrent()
+        assertEquals(2, reads, "A real return still refreshes authoritative data")
+        assertEquals("Fresh on return", vm.state.value.item?.name)
+    }
+
     @Test fun backgroundRefreshInheritsTheRetryDeadlineAndASecondRetryWorks() = backgroundReplacement(true)
 
     @Test fun retainedContainerRefreshKeepsRetryWorkingAndInheritsItsDeadline() = backgroundReplacement(false)
