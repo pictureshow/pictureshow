@@ -1648,8 +1648,9 @@ final class AppleSliceUITests: XCTestCase {
         return TVInfoObservation(method: method.label, clock: clock.label,
                                  backFrame: back.frame, forwardFrame: forward.frame)
     }
-    /// Up is a real AVKit reveal input. It keeps the HUD available without pausing,
-    /// seeking, accepting a stale cached clock, or substituting an app/session timer.
+    /// Up reveals AVKit's elapsed-time HUD without pausing or seeking. The custom
+    /// Info tab already exposes its own clock; Up would leave that selected panel.
+    /// Every observation still comes from the current immutable native tree.
     private func waitForTVPlayerClock(identifier: String, minimum: Int, maximum: Int? = nil,
                                       timeout: TimeInterval, metric: String, expectedMethod: String? = nil,
                                       requiredTitle: String? = nil) -> TVClockObservation? {
@@ -1659,7 +1660,7 @@ final class AppleSliceUITests: XCTestCase {
         var lastClock = "<not exposed>"
         while ProcessInfo.processInfo.systemUptime < deadline {
             let now = ProcessInfo.processInfo.systemUptime
-            if now - lastReveal >= 2 {
+            if identifier == "AXElapsedTime", now - lastReveal >= 2 {
                 XCUIRemote.shared.press(.up)
                 lastReveal = ProcessInfo.processInfo.systemUptime
             }
