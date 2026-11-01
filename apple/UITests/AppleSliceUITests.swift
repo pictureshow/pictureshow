@@ -1003,10 +1003,17 @@ final class AppleSliceUITests: XCTestCase {
             print("F1_TV_INFO_FOCUS step=\(step + 1) direction=\(direction) targetCell=\(targetIndex) count=\(count) targetFrame=\(targetFrame) focused={\(details)}")
         }
         XCTAssertTrue(reachedTarget, "Remote navigation should focus the visible custom info tab; keep its unlabeled-cell focus trace")
+        let focusedOnTarget = target.hasFocus || focused.map { $0.frame.intersects(targetFrame) } == true
+        print("F1_TV_INFO_FOCUS selectedCandidate targetCellHasFocus=\(target.hasFocus) focusedFrameMatches=\(focusedOnTarget) targetFrame=\(targetFrame)")
+        XCTAssertTrue(focusedOnTarget, "The selected remote focus must overlap the final custom info cell")
         capture("Native TV focused custom info tab before selection")
         XCUIRemote.shared.press(.select)
-        XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 15), "Selecting the custom info tab should expose Pictureshow playback status")
-        XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 10), "The Pictureshow info tab should expose the playback clock")
+        let method = app.staticTexts["playbackMethod"]
+        let position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(method.waitForExistence(timeout: 15), "Selecting the custom info tab should expose Pictureshow playback status")
+        XCTAssertTrue(method.isHittable, "Playback status must be visible after selecting the custom info tab")
+        XCTAssertTrue(position.waitForExistence(timeout: 10), "The Pictureshow info tab should expose the playback clock")
+        XCTAssertTrue(position.isHittable, "Playback position must be visible after selecting the custom info tab")
         print("F1_AX tv_info_tab_visible_title=Pictureshow axLabel=unexposed focusedCellFrame=\(target.frame)")
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
