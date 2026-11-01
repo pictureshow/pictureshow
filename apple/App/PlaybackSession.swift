@@ -127,7 +127,7 @@ import MediaAccessibility
         let title = AVMutableMetadataItem(); title.identifier = .commonIdentifierTitle; title.value = item.name as NSString; title.extendedLanguageTag = "und"
         let description = AVMutableMetadataItem(); description.identifier = .commonIdentifierDescription; description.value = (item.overview ?? item.seriesName ?? "") as NSString; description.extendedLanguageTag = "und"
         avItem.externalMetadata = [title, description]
-        statusObservation = avItem.observe(\.status, options: [.new]) { [weak self] observed, _ in
+        statusObservation = avItem.observe(\.status, options: [.initial, .new]) { [weak self] observed, _ in
             Task { @MainActor in
                 guard let self, self.player.currentItem === observed, self.generation == version, !self.closed else { return }
                 if observed.status == .readyToPlay { self.ready(version: version) }
@@ -152,6 +152,9 @@ import MediaAccessibility
             Task { @MainActor in await self?.recordNativeSelection(avItem) }
         }
         player.replaceCurrentItem(with: avItem)
+        #if DEBUG
+        Logger(subsystem: "app.pictureshow", category: "Playback").debug("Attached item status=\(avItem.status.rawValue) viewing=\(self.viewingID.uuidString, privacy: .public)")
+        #endif
         // AVPlayer's media-time observer can stop delivering callbacks when the
         // decoder stalls. Sample on wall time so a ready-but-frozen item still
         // reaches the waiting hint and bounded recovery deadline.
@@ -165,6 +168,9 @@ import MediaAccessibility
         timeoutTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(12)) } catch { return }
             guard let self, !self.timelineReady, self.generation == version, !self.closed else { return }
+            #if DEBUG
+            Logger(subsystem: "app.pictureshow", category: "Playback").notice("Playback startup waiting itemStatus=\(self.player.currentItem?.status.rawValue ?? -1) controlStatus=\(self.player.timeControlStatus.rawValue) startTask=\(self.startTask != nil) paused=\(self.pauseIntent) viewing=\(self.viewingID.uuidString, privacy: .public)")
+            #endif
             self.status = "Still waiting for playback. You can go back and try again."
             do { try await Task.sleep(for: .seconds(33)) } catch { return }
             guard !self.timelineReady, self.generation == version, !self.closed else { return }
