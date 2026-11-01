@@ -137,8 +137,14 @@ private final class ExternalSubtitleHTTP: URLProtocol {
 
 private final class SubtitleInertPlayer: AVPlayer {
     private(set) var replacements = 0
+    private(set) var automaticCriteriaAtAttachment: [Bool] = []
     private(set) var seekTargets: [CMTime] = []
-    override func replaceCurrentItem(with item: AVPlayerItem?) { if item != nil { replacements += 1 } }
+    override func replaceCurrentItem(with item: AVPlayerItem?) {
+        if item != nil {
+            replacements += 1
+            automaticCriteriaAtAttachment.append(appliesMediaSelectionCriteriaAutomatically)
+        }
+    }
     override func currentTime() -> CMTime { .invalid }
     override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime, completionHandler: @escaping (Bool) -> Void) {
         seekTargets.append(time); completionHandler(true)
@@ -274,6 +280,40 @@ private final class SubtitleInertPlayer: AVPlayer {
 
     func testHTTP500RetriesForVirtual242SecondsWithoutGatingAVReadyOrStart() async throws {
         try await assertOptionalFailureDoesNotGateAV(.http500)
+    }
+
+    /// Exercise app ordering around real prepare/Ready/track-replacement calls.
+    /// The spy never attaches an item, so these assertions inspect the app's
+    /// automatic-selection contract without decoder or AVKit startup assumptions.
+    func testEveryAssetAttachesWithAutomaticCriteriaBeforeItsOwnReady() async throws {
+        ExternalSubtitleHTTP.reset(.valid)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, player) = try await readySession(loader: loader, expectedCaptionPath: nil, subtitleIndex: -1)
+        XCTAssertEqual(player.automaticCriteriaAtAttachment, [true], "The first asset must not inherit disabled automatic selection")
+        XCTAssertFalse(player.appliesMediaSelectionCriteriaAutomatically, "Explicit track ownership begins after current Ready")
+
+        for (audioIndex, version) in [(-1, 1), (1, 2)] {
+            await session.changeTracks(audio: audioIndex, subtitle: -1)
+            XCTAssertEqual(player.automaticCriteriaAtAttachment, Array(repeating: true, count: version + 1),
+                           "A track replacement must re-enable startup criteria after the prior Ready disabled them")
+            XCTAssertTrue(session.waitingForVideo)
+            XCTAssertTrue(player.appliesMediaSelectionCriteriaAutomatically, "The replacement has not received its own Ready")
+
+            session.ready(version: version - 1)
+            await Task.yield()
+            XCTAssertTrue(player.appliesMediaSelectionCriteriaAutomatically, "A stale Ready must not disable criteria for the replacement generation")
+            XCTAssertTrue(session.waitingForVideo)
+
+            session.ready(version: version)
+            try await eventually("The current replacement Ready did not settle") { !session.waitingForVideo }
+            XCTAssertFalse(player.appliesMediaSelectionCriteriaAutomatically, "Current Ready can take explicit track ownership")
+            XCTAssertNil(session.error)
+        }
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 3)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("/Sessions/Playing") }.count, 1,
+                       "Track replacements remain inside one viewing")
+        await session.stop()
     }
     /// DeliveryMethod describes the server's proposed playback delivery, not the
     /// external source's extractability. A known text sidecar remains optional
