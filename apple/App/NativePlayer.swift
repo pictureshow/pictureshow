@@ -306,5 +306,9 @@ private struct SeekOptions: View {
             hidePreview = true
         }
     }
-    private func adjust(_ delta: Double) { target = min(session.durationSeconds ?? .greatestFiniteMagnitude, max(0, target + delta)); session.seek(toTicks: Ticks.from(seconds: target)) }
+    private func adjust(_ delta: Double) {
+        // The panel may have stayed open while video advanced. Relative buttons
+        // follow the current/pending player position, not the old preview target.
+        target = Ticks.seconds(session.seek(by: delta))
+    }
 }

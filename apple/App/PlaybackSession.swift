@@ -227,7 +227,12 @@ import MediaAccessibility
     }
     func nativeSeekBegan(_ seconds: Double) { lastSeekTime = Date(); countdownElapsed = 0 }
     func backgrounded() { pauseIntent = true; isPaused = true; player.pause(); enqueueProgress() }
-    func seek(by seconds: Double) { seek(toTicks: Ticks.adding(pendingSeekTicks ?? currentTicks, Ticks.from(seconds: seconds))) }
+    @discardableResult func seek(by seconds: Double) -> Int64 {
+        let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
+        let target = min(upper, max(0, Ticks.adding(pendingSeekTicks ?? currentTicks, Ticks.from(seconds: seconds))))
+        seek(toTicks: target)
+        return target
+    }
     func seek(toTicks ticks: Int64) {
         guard !closed else { return }
         let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
