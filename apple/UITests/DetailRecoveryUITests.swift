@@ -36,7 +36,18 @@ final class DetailRecoveryUITests: XCTestCase {
         }
         #endif
         activate(signIn, in: app)
+        #if os(iOS)
+        // The detail launch hook already opens the fixture film after sign-in;
+        // the Home-only settings toolbar is absent on this pushed destination.
+        let settingsTab = app.tabBars.buttons["Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 15), "Synthetic sign-in must reach the authenticated tab shell")
+        XCTAssertTrue(settingsTab.isEnabled && settingsTab.isHittable)
+        let settingsFrame = settingsTab.frame
+        XCTAssertTrue(settingsFrame.width > 0 && settingsFrame.height > 0 && app.frame.contains(settingsFrame))
+        XCTAssertEqual(app.staticTexts["detailTitle"].label, "A fixture film with a deliberately long wrapping title for lower-action viewport verification")
+        #else
         XCTAssertTrue(app.buttons["openSettings"].waitForExistence(timeout: 15), "Synthetic sign-in must reach authenticated navigation")
+        #endif
         // Relaunch through the existing detail hook after normal account persistence.
         app.terminate(); app.launch()
         let play = app.buttons["play"]
