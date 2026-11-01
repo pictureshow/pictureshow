@@ -1926,12 +1926,15 @@ final class AppleSliceUITests: XCTestCase {
             // custom controller is appended after its built-in Info/Chapters tabs.
             guard cells.count >= 2, let target = cells.last, target.isEnabled else { break }
             let focusedCell = cells.first { $0.hasFocus }
-            let focused = focusedCell ?? snapshot.nodes.filter {
+            let playerFocus = snapshot.first(identifier: "pictureshowNativePlayer") == nil ? [] : snapshot.nodes.filter {
                 $0.hasFocus && ($0.elementType == .cell || $0.elementType == .button)
                     && $0.frame.width > 0 && $0.frame.height > 0
                     && $0.frame.width < collection.frame.width
                     && $0.frame.height < collection.frame.height * 2
-            }.min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+            }
+            let focused = focusedCell ?? playerFocus.min {
+                $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height
+            }
             print("F2_TV_INFO_NAV step=\(step) target=\(target.frame) focused=\(focused.map { String(describing: $0.frame) } ?? "<unexposed>") refreshes=\(refreshes)")
             step += 1
             if target.hasFocus || focused?.frame == target.frame {
