@@ -170,7 +170,7 @@ struct DetailView: View {
                         .padding(12).background(Theme.surface.opacity(0.95), in: Capsule()).padding(.top, 8).accessibilityIdentifier("detailStatus").allowsHitTesting(false)
                 }
             }
-            .background(Theme.background.ignoresSafeArea()).navigationTitle(state.header?.name ?? "Details")
+            .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(state.header?.name ?? "Details")
             .announceStatus(state.readError ?? state.writeError ?? model.playbackSaveError ?? state.notice)
             .task(id: id) { state.appear(); state.refresh(id: id, model: model) }
             .onAppear { state.appear(); state.refresh(id: id, model: model); focused = opener }

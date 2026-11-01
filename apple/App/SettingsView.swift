@@ -70,7 +70,7 @@ private struct SettingsForm: View {
                 NavigationLink("About Pictureshow", value: AppRoute.information("about")).accessibilityIdentifier("openAbout")
                 NavigationLink("Troubleshooting", value: AppRoute.information("diagnostics")).accessibilityIdentifier("openDiagnostics")
             }
-        }.navigationTitle("Settings").accessibilityIdentifier("settingsTitle").task { await load() }
+        }.pictureshowNavigationTitle("Settings").accessibilityIdentifier("settingsTitle").task { await load() }
     }
     private func preference<T>(_ key: WritableKeyPath<PlaybackPreferences,T>) -> Binding<T> { Binding(get: { preferences.value[keyPath: key] }, set: { choice in preferences.update { $0[keyPath: key] = choice } }) }
     private func serverPicker(_ title: String, key: String, value: String) -> some View {

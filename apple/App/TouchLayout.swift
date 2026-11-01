@@ -44,3 +44,21 @@ extension View {
         #endif
     }
 }
+
+
+extension View {
+    /// Keep the platform navigation bar and provide explicit TV title ink. Global
+    /// UINavigationBarAppearance setters assert in the supported tvOS runtime.
+    @ViewBuilder func pictureshowNavigationTitle(_ title: String) -> some View {
+        #if os(tvOS)
+        navigationTitle(title).toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(title).font(.title2).foregroundStyle(.white).lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+            }
+        }
+        #else
+        navigationTitle(title)
+        #endif
+    }
+}

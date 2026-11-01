@@ -33,7 +33,7 @@ struct HomeView: View {
                 HStack { NavigationLink(value: AppRoute.accounts) { Text("Switch user").minimumTouchTarget() }.accessibilityIdentifier("openAccounts"); Button { Task { await model.signOut() } } label: { Text("Sign out").minimumTouchTarget() }.accessibilityIdentifier("signOut") }.buttonStyle(.bordered).padding(Theme.gutter)
             }.padding(.vertical, 24)
         }
-        .background(Theme.background.ignoresSafeArea()).navigationTitle("Pictureshow")
+        .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle("Pictureshow")
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -183,7 +183,7 @@ struct LibrariesView: View {
     @EnvironmentObject private var model: AppModel
     var open: (MediaItem) -> Void
     var body: some View {
-        ScrollView { VStack(alignment: .leading) { if let row = model.rows.first(where: { $0.library }) { CatalogShelf(title: "Your libraries", items: row.items, wide: true, open: open) } else if model.loading { ProgressView("Loading libraries…") } else { Text("No libraries available."); Button { Task { await model.loadHome() } } label: { Text("Refresh").minimumTouchTarget() } } }.padding(.vertical, 24) }.navigationTitle("Libraries").background(Theme.background.ignoresSafeArea())
+        ScrollView { VStack(alignment: .leading) { if let row = model.rows.first(where: { $0.library }) { CatalogShelf(title: "Your libraries", items: row.items, wide: true, open: open) } else if model.loading { ProgressView("Loading libraries…") } else { Text("No libraries available."); Button { Task { await model.loadHome() } } label: { Text("Refresh").minimumTouchTarget() } } }.padding(.vertical, 24) }.pictureshowNavigationTitle("Libraries").background(Theme.background.ignoresSafeArea())
     }
 }
 
@@ -241,7 +241,7 @@ struct LibraryView: View {
                     if page.loading { ProgressView("Loading titles…") }
                     if page.next < page.total && !page.loading { Button { Task { await load() } } label: { Text("Load more").minimumTouchTarget() } }
                 }.padding(Theme.gutter)
-            }.background(Theme.background.ignoresSafeArea()).navigationTitle(name)
+            }.background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(name)
                 .task(id: id) { if page.items.isEmpty { await load(reset: true) } }
                 .onChange(of: sort) { _, _ in Task { await load(reset: true) } }
                 .onChange(of: descending) { _, _ in Task { await load(reset: true) } }

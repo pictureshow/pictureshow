@@ -74,7 +74,7 @@ struct SearchView: View {
                     ForEach(SearchKind.allCases, id: \.rawValue) { kind in if let items = state.groups[kind], !items.isEmpty { CatalogShelf(title: kind.title, items: items, wide: kind == .episodes, open: { item in if let account = model.account { state.remember(account) }; open(item) }) } }
                 }
             }.padding(.vertical, 24)
-        }.navigationTitle("Search").background(Theme.background.ignoresSafeArea())
+        }.pictureshowNavigationTitle("Search").background(Theme.background.ignoresSafeArea())
             .task(id: state.query) { await state.search(model: model) }
             .task { if let account = model.account { state.loadHistory(account) } }
     }

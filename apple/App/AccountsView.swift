@@ -32,7 +32,7 @@ struct AccountsView: View {
                 }
                 Button { model.beginSignIn(); dismiss() } label: { Label("Add a server", systemImage: "plus").minimumTouchTarget() }.accessibilityIdentifier("addServer")
             }.buttonStyle(.bordered).padding(Theme.gutter).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
-        }.navigationTitle("Accounts").background(Theme.background.ignoresSafeArea())
+        }.pictureshowNavigationTitle("Accounts").background(Theme.background.ignoresSafeArea())
             .sheet(item: $removal, onDismiss: { }) { request in RemovalConfirmation(request: request, cancel: { focused = request.opener; removal = nil }, commit: {
                 do { try model.remove(account: request.account, server: request.server); removal = nil; error = nil }
                 catch { self.error = error.localizedDescription; throw error }

@@ -80,7 +80,7 @@ private struct DiagnosticsView: View {
 struct ReadingPage<Content: View>: View {
     let title: String
     @ViewBuilder var content: () -> Content
-    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 24, content: content).frame(maxWidth: 900, alignment: .leading).padding(Theme.gutter).frame(maxWidth: .infinity) }.navigationTitle(title).background(Theme.background.ignoresSafeArea()) }
+    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 24, content: content).frame(maxWidth: 900, alignment: .leading).padding(Theme.gutter).frame(maxWidth: .infinity) }.pictureshowNavigationTitle(title).background(Theme.background.ignoresSafeArea()) }
 }
 struct ReadingChunks: View {
     let text: String
