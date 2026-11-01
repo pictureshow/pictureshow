@@ -1094,6 +1094,14 @@ final class AppleSliceUITests: XCTestCase {
             if element.hasFocus { XCUIRemote.shared.press(.select); return }
             let focused = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
             let current = focused?.frame ?? focusedFrame()
+            // SwiftUI Form and List rows may expose focus on their containing cell rather than
+            // the nested Button. Select the cell when it already contains the target control.
+            if let current,
+               current.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)),
+               current.height < element.frame.height * 3 {
+                XCUIRemote.shared.press(.select)
+                return
+            }
             let focusKey = focused.map { "\($0.elementType.rawValue):\($0.identifier):\($0.label)" }
                 ?? current.map { "frame:\($0)" }
                 ?? "<no-focus-exposed>"
