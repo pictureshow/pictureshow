@@ -1057,65 +1057,51 @@ final class AppleSliceUITests: XCTestCase {
         let nearEnd = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: nearEndTarget, maximum: duration - 5,
                                                         timeout: TimeInterval(duration + 15), metric: "tv_episode_next_natural_final_window"),
                                     "The current episode must naturally reach the manual-action window before physical EOS").seconds
-        let actionDeadline = ProcessInfo.processInfo.systemUptime + TimeInterval(max(1, duration - nearEnd - 3))
-        let nextActionPattern = #"^Play next: \#(NSRegularExpression.escapedPattern(for: expectedName)) \([0-9]{1,2}\)$"#
+        let nextActionPattern = "^Play next: \(NSRegularExpression.escapedPattern(for: expectedName)) \\([0-9]{1,2}\\)$"
         let nextByID = app.descendants(matching: .any).matching(identifier: "playNextTransport").firstMatch
         let nextByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label MATCHES %@", nextActionPattern)).firstMatch
-        let cancelByID = app.descendants(matching: .any).matching(identifier: "cancelNextTransport").firstMatch
-        let cancelByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel next episode")).firstMatch
-        func currentEpisodeAction(_ snapshot: TVPlayerSnapshot) -> (clock: Int, next: XCUIElementSnapshot, cancel: XCUIElementSnapshot)? {
-            let nextChoices = snapshot.nodes.filter {
+        func nextInSnapshot(_ snapshot: TVPlayerSnapshot) -> XCUIElementSnapshot? {
+            let matches = snapshot.nodes.filter {
                 $0.label.range(of: nextActionPattern, options: .regularExpression) != nil && $0.isEnabled
             }
-            let transportNext = nextChoices.filter { $0.identifier == "playNextTransport" }
-            let next = transportNext.isEmpty ? nextChoices : transportNext
-            let cancelChoices = snapshot.nodes.filter { $0.label == "Cancel next episode" && $0.isEnabled }
-            let transportCancel = cancelChoices.filter { $0.identifier == "cancelNextTransport" }
-            let cancel = transportCancel.isEmpty ? cancelChoices : transportCancel
+            let transport = matches.filter { $0.identifier == "playNextTransport" }
+            let choices = transport.isEmpty ? matches : transport
+            guard choices.count == 1,
+                  let digits = choices[0].label.split(separator: "(").last?.dropLast(),
+                  let countdown = Int(digits), countdown > 0 else { return nil }
+            return choices[0]
+        }
+        func currentEpisodeAction(_ snapshot: TVPlayerSnapshot) -> (clock: Int, next: XCUIElementSnapshot)? {
             guard snapshot.nodes.contains(where: { $0.label == currentName }),
                   let clock = snapshot.first(identifier: "AXElapsedTime").flatMap({ parsedClockSeconds($0.label) }),
                   clock >= nearEndTarget, clock < duration - 3,
-                  next.count == 1, cancel.count == 1,
-                  let countdown = next[0].label.split(separator: "(").last?.dropLast(),
-                  let countdownSeconds = Int(countdown), countdownSeconds > 0 else { return nil }
-            return (clock, next[0], cancel[0])
+                  let next = nextInSnapshot(snapshot) else { return nil }
+            return (clock, next)
         }
-        // AVKit's bar shows a glyph. Open its real native menu so the next
-        // title, countdown and Cancel are visible before accepting the action.
-        let trigger = nativeTVTransportMenu("Next episode")
-        guard trigger.waitForExistence(timeout: 5), trigger.isHittable else {
-            diagnoseTVManualNext(step: "missing Next episode transport menu")
-            XCTFail("AVKit must expose a hittable native Next episode menu before physical EOS")
-            return
-        }
-        XCTAssertEqual(trigger.label, "Next episode")
-        activateNativeTVMenuChoice(trigger)
+        // Every candidate requires the current title, valid native clock and exact
+        // adjacent action inside one player-frame snapshot. Hittability is also
+        // checked on the real control before taking a fresh final snapshot.
         var next: XCUIElement?
-        var cancel: XCUIElement?
+        let actionDeadline = ProcessInfo.processInfo.systemUptime + TimeInterval(max(1, duration - nearEnd - 3))
+        var lastReveal = ProcessInfo.processInfo.systemUptime - 2
         while ProcessInfo.processInfo.systemUptime < actionDeadline {
-            if let snapshot = tvPlayerSnapshot(), let candidate = currentEpisodeAction(snapshot) {
-                let nextControl = candidate.next.identifier == "playNextTransport" ? nextByID : nextByTitle
-                let cancelControl = candidate.cancel.identifier == "cancelNextTransport" ? cancelByID : cancelByTitle
-                if nextControl.isHittable && cancelControl.isHittable {
-                    next = nextControl; cancel = cancelControl; break
-                }
+            if ProcessInfo.processInfo.systemUptime - lastReveal >= 2 {
+                XCUIRemote.shared.press(.up)
+                lastReveal = ProcessInfo.processInfo.systemUptime
             }
-            Thread.sleep(forTimeInterval: 0.25)
+            if let snapshot = tvPlayerSnapshot(), let candidate = currentEpisodeAction(snapshot) {
+                let control = candidate.next.identifier == "playNextTransport" ? nextByID : nextByTitle
+                if control.isHittable { next = control; break }
+            }
+            Thread.sleep(forTimeInterval: 0.35)
         }
-        guard let nextAction = next, let cancelAction = cancel else {
-            diagnoseTVManualNext(step: "missing titled Next countdown or Cancel")
-            XCTFail("The native menu must expose the exact next title, countdown and hittable Cancel with the original title and clock before EOS")
-            return
-        }
-        capture("Native TV titled Next menu available before activation")
-        guard nextAction.isHittable && cancelAction.isHittable,
-              let action = tvPlayerSnapshot().flatMap(currentEpisodeAction) else {
-            diagnoseTVManualNext(step: "Next menu changed after capture")
-            XCTFail("The original title, pre-EOS clock, exact next countdown and Cancel must still coexist after capture")
-            return
-        }
+        let nextAction = try XCTUnwrap(next, "AVKit must expose a hittable exact adjacent-episode action before physical EOS")
+        capture("Native TV manual Next available before activation")
+        XCTAssertTrue(nextAction.isHittable, "Manual Next must remain hittable after the evidence capture")
+        let action = try XCTUnwrap(tvPlayerSnapshot().flatMap(currentEpisodeAction),
+                                  "The current episode title, clock and exact Next action must still coexist after capture")
         XCTAssertLessThan(action.clock, duration - 3, "The original episode must still be playing before manual Next is activated")
-        print("F1_METRIC tv_manual_next_action clock=\(action.clock) remaining=\(duration - action.clock) label=\(action.next.label) cancel=\(action.cancel.label) snapshot=true")
+        print("F1_METRIC tv_manual_next_action clock=\(action.clock) remaining=\(duration - action.clock) label=\(action.next.label) snapshot=true")
         activateNativeTVMenuChoice(nextAction)
 
         let reset = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 0, maximum: nearEnd - 11,

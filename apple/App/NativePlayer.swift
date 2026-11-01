@@ -225,7 +225,7 @@ struct NativePlayer: UIViewControllerRepresentable {
             let stop = UIAction(title: "Back to details", image: UIImage(systemName: "stop.fill"), identifier: UIAction.Identifier("closePlayer")) { _ in close() }
             // Contextual actions are hidden while AVKit's transport is visible. Keep
             // the same continuation reachable in the native bar during that state.
-            let continuationMenus: [UIMenuElement] = context.coordinator.continuationTransportMenu.map { [$0] } ?? []
+            let continuationMenus: [UIMenuElement] = context.coordinator.continuationTransportActions
             controller.transportBarCustomMenuItems = continuationMenus
                 + [tracks("Audio"), tracks("Subtitle")] + (session.chapters.isEmpty ? [] : [chapters]) + [stop]
         }
@@ -250,43 +250,31 @@ struct NativePlayer: UIViewControllerRepresentable {
         #if os(tvOS)
         private var continuationID: String?
         var continuationTransportActions: [UIAction] = []
-        #if os(tvOS)
-        var continuationTransportMenu: UIMenu?
-        #endif
         var continuationContextActions: [UIAction] = []
         func updateContinuation(_ next: MediaItem?, countdown: Int?) {
             guard let next, let countdown else {
                 continuationID = nil; continuationTransportActions = []; continuationContextActions = []
-                #if os(tvOS)
-                continuationTransportMenu = nil
-                #endif
                 return
             }
             if continuationID != next.id {
                 continuationID = next.id
                 func play(_ identifier: String) -> UIAction {
-                    UIAction(title: "Play next: \(next.name)", image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
+                    UIAction(title: "\(identifier == "playNext" ? "Next" : "Play next"): \(next.name) (\(countdown))", image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
                         guard let self, self.session.nextItem?.id == next.id, self.session.nextCountdown != nil else { return }
                         Logger(subsystem: "app.pictureshow", category: "Playback").notice("Manual next activated item=\(next.id, privacy: .public) ticks=\(self.session.positionTicks)")
                         Task { await self.session.advance() }
                     }
                 }
                 func cancel(_ identifier: String) -> UIAction {
-                    UIAction(title: "Cancel next episode", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
+                    UIAction(title: identifier == "cancelNext" ? "Cancel next" : "Cancel next episode", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
                 }
                 continuationTransportActions = [play("playNextTransport"), cancel("cancelNextTransport")]
-                #if os(tvOS)
-                // AVKit renders transport actions as glyphs. A native menu keeps
-                // the next title, countdown and Cancel readable when opened.
-                continuationTransportMenu = UIMenu(title: "Next episode", image: UIImage(systemName: "forward.end.fill"),
-                                                   identifier: .init("nextEpisodeMenu"), children: continuationTransportActions)
-                #endif
                 continuationContextActions = [play("playNext"), cancel("cancelNext")]
                 actionSignature = "" // A different episode may have the same action identifiers.
             }
             // Mutate the retained action rather than replacing AVKit's focused controls
             // every second. A countdown tick must not restart contextual presentation.
-            continuationContextActions.first?.title = "Play next: \(next.name) (\(countdown))"
+            continuationContextActions.first?.title = "Next: \(next.name) (\(countdown))"
             #if os(tvOS)
             continuationTransportActions.first?.title = "Play next: \(next.name) (\(countdown))"
             #endif
