@@ -138,7 +138,7 @@ private struct SignInForm: View {
                             else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").frame(maxWidth: .infinity).minimumTouchTarget() } }
                             else { Text("Checking Quick Connect…").foregroundStyle(Theme.muted) }
                             Button { leaveServer() } label: { Text("Change server").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy)
-                        }.buttonStyle(.bordered).foregroundStyle(.primary)
+                        }.buttonStyle(.bordered).touchSecondaryInk()
                     }
                 } else {
                     if !model.snapshot.servers.isEmpty {

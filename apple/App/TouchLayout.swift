@@ -26,6 +26,21 @@ extension View {
 /// light lavender accent. Setting this inside the style affects button labels only.
 struct ProminentActionStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
+        #if os(tvOS)
+        // Native tvOS buttons choose contrasting ink as their focus fill changes.
+        Button(configuration).buttonStyle(.borderedProminent)
+        #else
         Button(configuration).buttonStyle(.borderedProminent).foregroundStyle(Theme.background)
+        #endif
+    }
+}
+
+extension View {
+    @ViewBuilder func touchSecondaryInk() -> some View {
+        #if os(iOS)
+        foregroundStyle(.primary)
+        #else
+        self
+        #endif
     }
 }

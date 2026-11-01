@@ -12,11 +12,19 @@ enum DesignTokens {
     static let field = Color(red: 0.12549020, green: 0.14901961, blue: 0.20784314, opacity: 1.00000000)
     static let outline = Color(red: 0.45490196, green: 0.47843137, blue: 0.55686275, opacity: 1.00000000)
     static let surface = Color(red: 0.12549020, green: 0.13725490, blue: 0.18823529, opacity: 1.00000000)
+    #if os(tvOS)
+    static let displaySize: CGFloat = 64.0
+    static let titleSize: CGFloat = 44.0
+    static let bodySize: CGFloat = 32.0
+    static let labelSize: CGFloat = 32.0
+    static let captionSize: CGFloat = 24.0
+    #else
     static let displaySize: CGFloat = 32.0
     static let titleSize: CGFloat = 22.0
     static let bodySize: CGFloat = 16.0
     static let labelSize: CGFloat = 16.0
     static let captionSize: CGFloat = 12.0
+    #endif
 }
 
 struct TokenFont: ViewModifier {

@@ -15,11 +15,12 @@ struct HomeView: View {
                 if model.loading { ProgressView("Loading your library…").padding(.horizontal, Theme.gutter) }
                 if let error = model.homeError { ErrorNotice(error: error) { Task { await model.loadHome() } }.padding(.horizontal, Theme.gutter) }
                 if !model.loading && model.rows.isEmpty && model.homeError == nil { Text("Your server has no videos yet.").foregroundStyle(Theme.muted).padding(.horizontal, Theme.gutter) }
-                ForEach(model.rows) { row in CatalogShelf(title: row.title, items: row.items, wide: row.wide || row.library, open: open) }
+                ForEach(model.rows) { row in CatalogShelf(title: row.title, items: row.items, wide: row.wide || row.library, initiallyFocused: row.id == model.rows.first(where: { !$0.items.isEmpty })?.id, open: open) }
                 HStack { NavigationLink(value: AppRoute.accounts) { Text("Switch user").minimumTouchTarget() }.accessibilityIdentifier("openAccounts"); Button { Task { await model.signOut() } } label: { Text("Sign out").minimumTouchTarget() }.accessibilityIdentifier("signOut") }.buttonStyle(.bordered).padding(Theme.gutter)
             }.padding(.vertical, 24)
         }
         .background(Theme.background.ignoresSafeArea()).navigationTitle("Pictureshow")
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if let showSearch { Button(action: showSearch) { Label("Search", systemImage: "magnifyingglass").minimumTouchTarget() }.accessibilityIdentifier("openSearch") }
@@ -44,6 +45,7 @@ struct CatalogShelf: View {
     let items: [MediaItem]
     var wide = false
     var horizontalInset: CGFloat = Theme.gutter
+    var initiallyFocused = false
     var open: (MediaItem) -> Void
     @FocusState private var focused: String?
     @State private var opener: String?
@@ -60,7 +62,13 @@ struct CatalogShelf: View {
                         }
                     }.padding(.horizontal, horizontalInset).padding(.vertical, 14)
                 }.scrollClipDisabled().televisionFocusSection()
-                    .onAppear { if opener == nil { opener = UserDefaults.standard.string(forKey: memoryKey) }; if let opener, items.contains(where: { $0.id == opener }) { proxy.scrollTo(opener, anchor: .center); focused = opener } }
+                    .onAppear {
+                        if opener == nil { opener = UserDefaults.standard.string(forKey: memoryKey) }
+                        if let opener, items.contains(where: { $0.id == opener }) { proxy.scrollTo(opener, anchor: .center); focused = opener }
+                        #if os(tvOS)
+                        if focused == nil && initiallyFocused { focused = items.first?.id }
+                        #endif
+                    }
                     .onChange(of: focused) { _, value in if let value { withAnimation { proxy.scrollTo(value, anchor: .center) } } }
             }
         }

@@ -18,8 +18,8 @@ enum Theme {
     static let accent = DesignTokens.accent
     #if os(tvOS)
     static let gutter: CGFloat = 48
-    static let cardWidth: CGFloat = 144
-    static let wideCardWidth: CGFloat = 240
+    static let cardWidth: CGFloat = 288
+    static let wideCardWidth: CGFloat = 480
     #else
     static let gutter: CGFloat = 20
     static let cardWidth: CGFloat = 136

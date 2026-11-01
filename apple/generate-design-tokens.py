@@ -13,8 +13,13 @@ for name,key in colors.items():
     h = tokens[key]['value'].removeprefix('#')
     rgba = [int(h[i:i+2], 16)/255 for i in (0,2,4,6)]
     lines.append(f'    static let {name} = Color(red: {rgba[0]:.8f}, green: {rgba[1]:.8f}, blue: {rgba[2]:.8f}, opacity: {rgba[3]:.8f})')
-for role,key in [('display','headlineLarge'),('title','titleLarge'),('body','bodyLarge'),('label','titleMedium'),('caption','bodySmall')]:
-    v=tokens['type.touch.'+key]['value']
-    lines.append(f'    static let {role}Size: CGFloat = {v["fontSize"]}')
+# Adapt the shared TV type roles to tvOS's native living-room point scale.
+# The 2x mapping keeps the 12sp caption role at a legible 24pt on television.
+for platform, scale in [('tv', 2), ('touch', 1)]:
+    lines.append('    #if os(tvOS)' if platform == 'tv' else '    #else')
+    for role,key in [('display','headlineLarge'),('title','titleLarge'),('body','bodyLarge'),('label','titleMedium'),('caption','bodySmall')]:
+        v=tokens['type.'+platform+'.'+key]['value']
+        lines.append(f'    static let {role}Size: CGFloat = {v["fontSize"] * scale}')
+lines.append('    #endif')
 lines += ['}', '', 'struct TokenFont: ViewModifier {', '    @ScaledMetric private var size: CGFloat', '    let weight: Font.Weight', '    init(_ size: CGFloat, weight: Font.Weight = .regular) { _size = ScaledMetric(wrappedValue: size); self.weight = weight }', '    func body(content: Content) -> some View { content.font(.system(size: size, weight: weight)) }', '}', '']
 (root/'App/DesignTokens.swift').write_text('\n'.join(lines))
