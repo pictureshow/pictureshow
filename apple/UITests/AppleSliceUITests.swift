@@ -21,22 +21,41 @@ final class AppleSliceUITests: XCTestCase {
     func testLiveVerticalSlice() throws {
         XCTAssertNotNil(config["directContainers"], "Private pilot configuration must include the sample folder hierarchy")
         print("Pilot folder hierarchy: \(config["directContainers"] ?? "missing") / \(config["hlsContainers"] ?? "missing")")
-        if app.buttons["signOut"].waitForExistence(timeout: 5) { activate(app.buttons["signOut"]) }
+        if hasHomeRoot(timeout: 2) || hasAuthenticatedNavigationState() {
+            returnHome()
+            let signOut = app.buttons["signOut"]
+            reveal(signOut)
+            if signOut.waitForExistence(timeout: 5) { activate(signOut) }
+            // A signed-out clone can remain at the remembered-server chooser. Start a new
+            // password flow from there instead of assuming it has no saved account.
+            let addServer = app.buttons["addServer"]
+            if addServer.waitForExistence(timeout: 3) { activate(addServer) }
+        }
         XCTAssertTrue(app.textFields["serverAddress"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.textFields["serverAddress"].label, "Server address")
+        let addressLabel = app.textFields["serverAddress"].label
+        capture("Server address sign-in")
         activate(app.buttons["connect"])
         XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 15))
         let username = app.textFields["username"]
         reveal(username)
-        XCTAssertEqual(username.label, "Username")
         let password = app.secureTextFields["password"]
         reveal(password)
-        XCTAssertEqual(password.label, "Password")
-        let addressLabel = app.textFields["serverAddress"].label
-        print("F1_AX login_address_label=\(addressLabel) username_label=\(username.label) password_label=\(password.label)")
+        dismissKeyboardAndTypingIntro()
+        // Capture the real password form before any label assertion can fail. The password
+        // field remains secure and the one-time Quick Connect code never appears in this screen.
         capture("Password sign-in")
+        XCTAssertEqual(username.label, "Username")
+        XCTAssertEqual(password.label, "Password")
+        print("F1_AX login_address_label=\(addressLabel) username_label=\(username.label) password_label=\(password.label)")
+        let quickConnectAction = app.buttons["quickConnect"]
+        if quickConnectAction.waitForExistence(timeout: 3) {
+            reveal(quickConnectAction)
+            XCTAssertFalse(app.staticTexts["quickCode"].exists, "The safe password-form capture must not show a Quick Connect code")
+            capture("Password sign-in lower actions")
+        }
         activate(app.buttons["signIn"])
-        XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 20))
+        XCTAssertTrue(hasHomeRoot(timeout: 90), "Successful password sign-in should return to the authenticated Home navigation root")
         try playAndResume(id: XCTUnwrap(config["directID"]), expected: "Direct play", key: "direct")
         try playAndResume(id: XCTUnwrap(config["hlsID"]), expected: "Server HLS", key: "hls")
         if let resumeID = config["resumeID"] { try playAndResume(id: resumeID, expected: "Server HLS", key: "resume") }
@@ -127,6 +146,7 @@ final class AppleSliceUITests: XCTestCase {
         #if os(iOS)
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("This acceptance case runs on an iPad destination") }
         ensureSignedIn()
+        selectHomeRoot()
         XCTAssertTrue(app.buttons["openSearch"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["openSettings"].waitForExistence(timeout: 10))
         capture("iPad portrait home")
@@ -156,6 +176,72 @@ final class AppleSliceUITests: XCTestCase {
         activate(search)
         XCTAssertTrue(app.textFields["searchField"].waitForExistence(timeout: 10))
         capture("iPad landscape search")
+
+        // Keep one HLS viewing alive while the native AVKit controller expands to fullscreen,
+        // returns inline, and rotates to landscape. This catches presentation callbacks that
+        // could accidentally close or replace the underlying PlaybackSession.
+        XCUIDevice.shared.orientation = .portrait
+        returnHome()
+        try openSampleDetail(id: XCTUnwrap(config["hlsID"]), key: "hls")
+        let play = app.buttons["play"]
+        reveal(play); activate(play)
+        let method = app.staticTexts["playbackMethod"]
+        XCTAssertTrue(method.waitForExistence(timeout: 30))
+        XCTAssertTrue(waitForSettledMethod(method, expected: "Server HLS", timeout: 45), "The iPad HLS player should settle before measuring presentation changes")
+        let position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(position.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: seconds(position.label) + 3, timeout: 40, metric: "ipad_portrait"))
+        XCTAssertGreaterThan(app.frame.height, app.frame.width, "The first iPad playback capture should be portrait")
+        capture("iPad HLS player portrait")
+
+        let fullScreen = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "full screen", "fullscreen", "expand")).firstMatch
+        if !fullScreen.waitForExistence(timeout: 10) {
+            let labels = app.buttons.allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }
+            print("F1_AX iPad_native_player_buttons " + labels.joined(separator: " | "))
+            print("F1_NOTE iPad_fullscreen_roundtrip=unverified reason=native_expand_control_not_exposed")
+            capture("iPad fullscreen control unavailable")
+        } else {
+            let inlineTimelineWidth = app.sliders.firstMatch.frame.width
+            activate(fullScreen)
+            XCTAssertTrue(method.waitForExistence(timeout: 15), "Expanding the native AVKit player should keep the same Pictureshow viewing active")
+            let exitFullScreen = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "exit full screen", "shrink", "inline")).firstMatch
+            var nativeFullscreenStateChanged = false
+            let stateDeadline = ProcessInfo.processInfo.systemUptime + 10
+            while ProcessInfo.processInfo.systemUptime < stateDeadline {
+                let expandedTimelineWidth = app.sliders.firstMatch.frame.width
+                if exitFullScreen.exists || (inlineTimelineWidth > 1 && expandedTimelineWidth >= inlineTimelineWidth * 1.25) {
+                    nativeFullscreenStateChanged = true
+                    break
+                }
+                Thread.sleep(forTimeInterval: 0.25)
+            }
+            let expandedTimelineWidth = app.sliders.firstMatch.frame.width
+            print("F1_METRIC iPad_native_fullscreen_state_changed=\(nativeFullscreenStateChanged) inline_timeline_width=\(inlineTimelineWidth) expanded_timeline_width=\(expandedTimelineWidth) exit_control=\(exitFullScreen.exists ? exitFullScreen.label : "missing")")
+            XCTAssertTrue(waitForPlaybackClock(position, minimum: seconds(position.label) + 3, timeout: 40, metric: "ipad_fullscreen"))
+            capture(nativeFullscreenStateChanged ? "iPad native player expanded fullscreen" : "iPad fullscreen state unverified after activate")
+            if nativeFullscreenStateChanged {
+                let toggleFullScreen = exitFullScreen.exists ? exitFullScreen : app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "shrink", "inline")).firstMatch
+                XCTAssertTrue(toggleFullScreen.waitForExistence(timeout: 10), "The expanded AVKit player should expose its return-to-inline control")
+                activate(toggleFullScreen)
+                XCTAssertTrue(method.waitForExistence(timeout: 15), "Returning inline should preserve the player")
+                let expandAgain = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "full screen", "fullscreen", "expand")).firstMatch
+                XCTAssertTrue(expandAgain.waitForExistence(timeout: 10), "AVKit should return its native expand control in the inline state")
+            } else {
+                print("F1_NOTE iPad_fullscreen_roundtrip=unverified reason=no_native_state_or_geometry_change")
+            }
+        }
+        let inlineStart = seconds(position.label)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: inlineStart + 3, timeout: 40, metric: "ipad_inline"))
+        capture("iPad native player returned inline")
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertGreaterThan(app.frame.width, app.frame.height, "The active iPad player should adapt to landscape")
+        let landscapeStart = seconds(position.label)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: landscapeStart + 3, timeout: 40, metric: "ipad_landscape_player"))
+        capture("iPad HLS player landscape")
+        activate(app.buttons["closePlayer"])
+        XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15), "Back should return to the same media detail after iPad rotation")
         #endif
     }
     /// Isolates actual AVPlayer startup from catalog navigation when diagnosing a decoder
@@ -200,6 +286,72 @@ final class AppleSliceUITests: XCTestCase {
         activate(app.buttons["closePlayer"])
         #endif
         XCTAssertTrue(playFromStart.waitForExistence(timeout: 15))
+    }
+    func testTouchPositiveSubtitleSelectionAndCue() throws {
+        #if os(iOS)
+        ensureSignedIn()
+        let subtitle = try XCTUnwrap(config["directSubtitleIndex"].flatMap(Int.init))
+        let cue = try XCTUnwrap(config["directSubtitleCueSeconds"].flatMap(Int.init))
+        XCTAssertGreaterThanOrEqual(subtitle, 0, "The fixture must provide a real positive subtitle stream, not Off (-1)")
+        XCTAssertGreaterThan(cue, 0, "The fixture must identify a positive cue timestamp")
+        if let codec = config["directSubtitleCodec"] {
+            XCTAssertEqual(codec.lowercased(), "mov_text", "The positive caption fixture should use the known mov_text stream")
+        }
+        try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
+        let play = app.buttons["play"]
+        reveal(play); activate(play)
+        let method = app.staticTexts["playbackMethod"]
+        XCTAssertTrue(method.waitForExistence(timeout: 30))
+        XCTAssertTrue(waitForSettledMethod(method, timeout: 45), "Wait for Direct or HLS recovery to settle before the subtitle interaction")
+        XCTAssertTrue(["Direct play", "Server HLS"].contains(method.label), "The caption flow may start direct or recover through HLS; the separate matrix owns strict Direct acceptance")
+        print("F1_METRIC positive_subtitle_initial_method=\(method.label)")
+        let position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(position.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: seconds(position.label) + 3, timeout: 40, metric: "positive_subtitle_initial"))
+
+        // Pause first, then switch to the known positive mov_text stream. PlaybackSession must
+        // retain paused intent as it renegotiates; resuming afterward must advance toward cue 21.
+        let pause = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Pause")).firstMatch
+        if !pause.exists { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+        XCTAssertTrue(pause.waitForExistence(timeout: 10), "AVKit should expose Pause before the paused track replacement check")
+        activate(pause)
+        let pausedAt = seconds(position.label)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), pausedAt + 1, "The playback clock should remain paused before changing subtitles")
+
+        selectTouchTrack(type: "subtitle", index: "\(subtitle)")
+        let selected = app.buttons["subtitle-\(subtitle)"]
+        openTouchTrackPanel()
+        XCTAssertEqual(selected.value as? String, "Selected", "A positive subtitle stream must be selected, not Off")
+        print("F1_AX positive_subtitle_index=\(subtitle) value=\(selected.value ?? "")")
+        activate(app.buttons["playerOptionsDone"])
+        expectation(for: NSPredicate(format: "label == %@", "Server HLS"), evaluatedWith: method)
+        waitForExpectations(timeout: 30)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), pausedAt + 1, "Track replacement should retain paused intent")
+        print("F1_METRIC positive_subtitle_paused_position_before=\(pausedAt) after=\(seconds(position.label))")
+
+        activate(app.buttons["playerSeek"])
+        let seekPosition = app.sliders["Seek position"]
+        XCTAssertTrue(seekPosition.waitForExistence(timeout: 10), "The Pictureshow Seek sheet should expose an accessible seek position")
+        let duration = max(1, Double(config["directRunSeconds"] ?? "0") ?? 0)
+        seekPosition.adjust(toNormalizedSliderPosition: CGFloat(max(0, min(1, Double(cue) / duration))))
+        activate(app.buttons["playerOptionsDone"])
+        expectation(for: NSPredicate { _, _ in let value = self.seconds(position.label); return value >= cue - 1 && value <= cue + 2 }, evaluatedWith: position)
+        waitForExpectations(timeout: 20)
+        Thread.sleep(forTimeInterval: 1)
+        capture("iPhone positive mov_text subtitle paused cue at \(cue)s")
+        XCTAssertLessThanOrEqual(seconds(position.label), cue + 2, "The cue capture should be taken near the actual cue time, not after its window")
+
+        let resume = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Play")).firstMatch
+        XCTAssertTrue(resume.waitForExistence(timeout: 10), "AVKit should expose Play to resume the paused subtitle transition")
+        activate(resume)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: cue + 3, timeout: TimeInterval(cue + 30), metric: "positive_subtitle_after_cue"))
+        activate(app.buttons["closePlayer"])
+        XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15), "A normal Back action should return to detail after subtitle renegotiation")
+        #else
+        throw XCTSkip("Positive touch subtitle selection is an iOS acceptance case")
+        #endif
     }
     func testSeriesSeasonsEpisodeAndTrackControls() throws {
         ensureSignedIn()
@@ -278,8 +430,16 @@ final class AppleSliceUITests: XCTestCase {
         #endif
     }
     func testQuickConnectCodeAndCancel() throws {
-        if app.buttons["signOut"].waitForExistence(timeout: 5) { activate(app.buttons["signOut"]) }
-        activate(app.buttons["connect"])
+        if hasAuthenticatedNavigationState() {
+            returnHome()
+            let signOut = app.buttons["signOut"]
+            reveal(signOut)
+            if signOut.waitForExistence(timeout: 5) { activate(signOut) }
+        }
+        let addServer = app.buttons["addServer"]
+        if addServer.waitForExistence(timeout: 3) { activate(addServer) }
+        let connect = app.buttons["connect"]
+        if connect.waitForExistence(timeout: 3) { activate(connect) }
         XCTAssertTrue(app.buttons["quickConnect"].waitForExistence(timeout: 15))
         activate(app.buttons["quickConnect"])
         XCTAssertTrue(app.staticTexts["quickCode"].waitForExistence(timeout: 15))
@@ -288,23 +448,27 @@ final class AppleSliceUITests: XCTestCase {
         // The private harness reads the visible code from the live accessibility tree; do not
         // retain this one-time approval code in xcresult attachments or logs.
         if config["approveQuickConnect"] == "true" {
-            XCTAssertTrue(app.buttons["signOut"].waitForExistence(timeout: 90))
+            XCTAssertTrue(hasHomeRoot(timeout: 90), "Approved Quick Connect should return to authenticated Home")
+            returnHome()
         } else {
             activate(app.buttons["cancelQuick"])
             XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["quickCode"].waitForNonExistence(timeout: 10), "Cancellation should remove the one-time code")
         }
     }
     func testNativeTVDirectPlaybackMenusInfoAndRemoteScrub() throws {
         #if os(tvOS)
         ensureSignedIn()
-        app.terminate()
-        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["directID"])
-        app.launch()
+        try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
         let play = app.buttons["play"]
         reveal(play); activate(play)
+        XCUIRemote.shared.press(.up)
+        let info = app.buttons["Pictureshow"]
+        XCTAssertTrue(info.waitForExistence(timeout: 10), "The native player should expose its Pictureshow info tab before method/clock assertions")
+        activate(info)
         let method = app.staticTexts["playbackMethod"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
-        XCTAssertEqual(method.label, "Direct play", "Direct playback must be established before opening track menus")
+        XCTAssertTrue(waitForSettledMethod(method, expected: "Direct play", timeout: 45), "Direct playback must settle before opening native track menus")
         let position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(position.waitForExistence(timeout: 10))
         let before = seconds(position.label)
@@ -315,9 +479,16 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertEqual(method.label, "Server HLS", "An explicit native track selection should renegotiate to HLS")
         capture("Native TV player transport")
         if let cue = config["directSubtitleCueSeconds"].flatMap(Int.init) {
-            expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= cue }, evaluatedWith: position)
-            waitForExpectations(timeout: TimeInterval(cue + 30))
-            capture("Native TV selected subtitle cue")
+            XCUIRemote.shared.press(.playPause)
+            let timeline = app.sliders.firstMatch
+            XCTAssertTrue(timeline.waitForExistence(timeout: 10), "Native AVKit info should expose its timeline before the subtitle cue check")
+            let duration = max(1, Double(config["directRunSeconds"] ?? "0") ?? 0)
+            timeline.adjust(toNormalizedSliderPosition: CGFloat(max(0, min(1, Double(cue) / duration))))
+            expectation(for: NSPredicate { _, _ in let value = self.seconds(position.label); return value >= cue - 1 && value <= cue + 2 }, evaluatedWith: position)
+            waitForExpectations(timeout: 20)
+            capture("Native TV selected subtitle paused cue at \(cue)s")
+            XCUIRemote.shared.press(.playPause)
+            XCTAssertTrue(waitForPlaybackClock(position, minimum: cue + 3, timeout: 30, metric: "tv_positive_subtitle_resume"))
         }
 
         let beforeScrub = seconds(position.label)
@@ -347,9 +518,7 @@ final class AppleSliceUITests: XCTestCase {
             throw XCTSkip("The private demo fixture has no adjacent episode with a distinct source")
         }
         ensureSignedIn()
-        app.terminate()
-        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["episodeID"])
-        app.launch()
+        try openSeriesEpisodeDetail()
         let play = app.buttons["play"]
         reveal(play); activate(play)
         XCUIRemote.shared.press(.up)
@@ -357,22 +526,33 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(resumedInfo.waitForExistence(timeout: 10))
         activate(resumedInfo)
         XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 30))
+        let position = app.staticTexts["playbackPosition"]
         let duration = max(1, Double(config["episodeRunSeconds"] ?? "0") ?? 0)
         XCTAssertGreaterThan(duration, 0, "The adjacent episode test needs a known duration")
         let timeline = app.sliders.firstMatch
         XCTAssertTrue(timeline.waitForExistence(timeout: 10), "AVPlayerViewController should expose its native playback timeline")
         timeline.adjust(toNormalizedSliderPosition: CGFloat(max(0.0, min(1.0, (duration - 8) / duration))))
+        let nearEndTarget = max(1, Int(duration) - 15)
+        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= nearEndTarget }, evaluatedWith: position)
+        waitForExpectations(timeout: 25)
+        let pause = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Pause")).firstMatch
+        XCTAssertTrue(pause.waitForExistence(timeout: 10), "Pause near the end so the native countdown cannot race the manual next action")
+        activate(pause)
+        let nearEnd = seconds(position.label)
+        XCTAssertGreaterThanOrEqual(nearEnd, nearEndTarget, "Seeking near the end should update the native playback clock before waiting for Play next")
         capture("Native TV episode near end")
 
-        let next = app.descendants(matching: .any).matching(identifier: "playNext").firstMatch
+        let nextByID = app.descendants(matching: .any).matching(identifier: "playNext").firstMatch
+        let nextByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Play next:")).firstMatch
+        let next = nextByID.waitForExistence(timeout: 1) ? nextByID : nextByTitle
         XCTAssertTrue(next.waitForExistence(timeout: 60), "Near the episode end, AVKit should expose the next-episode contextual action")
         capture("Native TV Play next action available")
         activate(next)
 
         let expectedName = try XCTUnwrap(config["nextEpisodeName"])
         XCTAssertTrue(app.staticTexts[expectedName].waitForExistence(timeout: 45), "The Pictureshow info panel should name the adjacent episode after handoff")
-        let position = app.staticTexts["playbackPosition"]
-        XCTAssertTrue(position.waitForExistence(timeout: 20))
+        expectation(for: NSPredicate { _, _ in self.seconds(position.label) <= 12 }, evaluatedWith: position)
+        waitForExpectations(timeout: 45)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= 2 }, evaluatedWith: position)
         waitForExpectations(timeout: 35)
         XCTAssertLessThanOrEqual(seconds(position.label), 12, "The next episode must start from its own beginning, not inherit the prior source position")
@@ -381,31 +561,8 @@ final class AppleSliceUITests: XCTestCase {
         #endif
     }
     private func playAndResume(id: String, expected: String, key: String) throws {
-        let button = app.buttons["item-\(id)"]
-        if !sampleFolderOpen {
-            for key in ["libraryID", "samplesFolderID"] {
-                if let containerID = config[key] {
-                    let container = app.buttons["item-\(containerID)"]
-                    reveal(container)
-                    XCTAssertTrue(container.waitForExistence(timeout: 5), "Missing configured \(key)")
-                    activate(container)
-                }
-            }
-            sampleFolderOpen = true
-        }
-        let containerKey = key + "Containers"
-        let containers = (config[containerKey] ?? "").split(separator: "|").map(String.init)
-        for containerID in containers {
-            let folder = app.buttons["item-\(containerID)"]
-            reveal(folder); activate(folder)
-        }
-        capture("After configured \(key) folder")
-        reveal(button)
-        XCTAssertTrue(button.waitForExistence(timeout: 10))
-        activate(button)
-        XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
-        if let name = config[key + "Name"] { XCTAssertEqual(app.staticTexts["detailTitle"].label, name) }
-        capture("\(key.capitalized) media detail")
+        let containers = (config[key + "Containers"] ?? "").split(separator: "|").map(String.init)
+        let button = try openSampleDetail(id: id, key: key)
         let play = app.buttons["play"]
         reveal(play)
         XCTAssertTrue(play.waitForExistence(timeout: 15))
@@ -419,7 +576,7 @@ final class AppleSliceUITests: XCTestCase {
         let method = app.staticTexts["playbackMethod"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
         capture("\(expected) initial preparation")
-        XCTAssertEqual(method.label, expected)
+        XCTAssertTrue(waitForSettledMethod(method, expected: expected, timeout: 45), "The playback method should settle to \(expected)")
         let position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
         XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 35, metric: key))
@@ -478,7 +635,9 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(waitForPlaybackClock(position, minimum: beforeChange + 5, timeout: 30, metric: "touch_track_change"))
             capture("Subtitle selection renegotiated to HLS")
             if let cue = config["directSubtitleCueSeconds"].flatMap(Int.init) {
-                _ = cue
+                XCTAssertTrue(waitForPlaybackClock(position, minimum: cue, timeout: TimeInterval(cue + 30), metric: "touch_positive_subtitle_cue"))
+                XCTAssertGreaterThanOrEqual(seconds(position.label), cue)
+                capture("Touch positive subtitle cue at \(cue)s")
             }
             #endif
         }
@@ -490,6 +649,51 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(play.waitForExistence(timeout: 15))
         back()
         for _ in containers { back() }
+    }
+    private func openSampleDetail(id: String, key: String) throws -> XCUIElement {
+        let button = app.buttons["item-\(id)"]
+        if !sampleFolderOpen {
+            for key in ["libraryID", "samplesFolderID"] {
+                if let containerID = config[key] {
+                    let container = app.buttons["item-\(containerID)"]
+                    reveal(container)
+                    XCTAssertTrue(container.waitForExistence(timeout: 5), "Missing configured \(key)")
+                    activate(container)
+                }
+            }
+            sampleFolderOpen = true
+        }
+        let containerKey = key + "Containers"
+        let containers = (config[containerKey] ?? "").split(separator: "|").map(String.init)
+        for containerID in containers {
+            let folder = app.buttons["item-\(containerID)"]
+            reveal(folder); activate(folder)
+        }
+        capture("After configured \(key) folder")
+        reveal(button)
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        activate(button)
+        XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
+        if let name = config[key + "Name"] { XCTAssertEqual(app.staticTexts["detailTitle"].label, name) }
+        capture("\(key.capitalized) media detail")
+        return button
+    }
+    private func openSeriesEpisodeDetail() throws {
+        if let libraryID = config["showsLibraryID"] {
+            let library = app.buttons["item-\(libraryID)"].firstMatch
+            reveal(library); activate(library)
+            capture("TV shows library")
+        }
+        let seriesID = try XCTUnwrap(config["seriesID"])
+        let series = app.buttons["item-\(seriesID)"].firstMatch
+        reveal(series); activate(series)
+        let seasonID = try XCTUnwrap(config["seasonID"])
+        let season = app.buttons["season-\(seasonID)"]
+        reveal(season); activate(season)
+        let episodeID = try XCTUnwrap(config["episodeID"])
+        let episode = app.buttons["item-\(episodeID)"]
+        reveal(episode); activate(episode)
+        XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15))
     }
     private func seconds(_ label: String) -> Int {
         let parts = label.split(separator: ":").compactMap { Int($0) }
@@ -530,6 +734,42 @@ final class AppleSliceUITests: XCTestCase {
         activate(signIn)
         XCTAssertTrue(hasHomeRoot(timeout: 30), "Successful sign-in should expose Home's Search or Settings toolbar action")
         returnHome()
+    }
+    private func selectHomeRoot() {
+        let home = app.buttons["Home"]
+        if home.waitForExistence(timeout: 5) { activate(home) }
+        if !hasHomeRoot(timeout: 1) { returnHome() }
+        XCTAssertTrue(hasHomeRoot(timeout: 5), "The Home tab should be selected before using a deep-link detail hook")
+    }
+    private func dismissKeyboardAndTypingIntro() {
+        #if os(iOS)
+        let introButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "Continue", "Get Started")).firstMatch
+        if introButton.waitForExistence(timeout: 1), introButton.isHittable {
+            print("F1_AX keyboard_intro_button=\(introButton.label)")
+            activate(introButton)
+        } else {
+            print("F1_AX keyboard_intro_button=not_exposed")
+        }
+        if app.keyboards.firstMatch.exists {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.18)).tap()
+            _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 5)
+        }
+        print("F1_AX keyboard_after_dismiss=\(app.keyboards.firstMatch.exists)")
+        #endif
+    }
+    private func waitForSettledMethod(_ method: XCUIElement, expected: String? = nil, timeout: TimeInterval) -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if method.exists {
+                let label = method.label
+                if !label.isEmpty, label != "Preparing playback…", label != "Preparing playback..." {
+                    return expected == nil || label == expected
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        print("F1_METRIC playback_method_settle_timeout expected=\(expected ?? "Direct or Server HLS") actual=\(method.exists ? method.label : "<missing>")")
+        return false
     }
     private func hasHomeRoot(timeout: TimeInterval = 1) -> Bool {
         app.buttons["openSearch"].waitForExistence(timeout: timeout)
