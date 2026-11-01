@@ -95,7 +95,7 @@ private struct PlayerActionStyle: ButtonStyle {
 }
 #endif
 
-private func trackName(_ stream: MediaStream) -> String {
+private func trackName(_ stream: MediaStream, indexFirst: Bool = false) -> String {
     var parts = [stream.label]
     let lower = stream.label.lowercased()
     if let language = stream.language, let name = Locale.current.localizedString(forLanguageCode: language), !lower.contains(name.lowercased()), !lower.contains(language.lowercased()) { parts.append(name) }
@@ -103,7 +103,10 @@ private func trackName(_ stream: MediaStream) -> String {
     if let channels = stream.channels, !lower.contains("\(channels) channel") { parts.append("\(channels) channels") }
     if stream.isForced && (!lower.contains("forced") || lower.contains("non-forced") || lower.contains("non forced")) { parts.append("Forced") }
     if stream.isHearingImpaired && !lower.contains("hearing impaired") && !lower.contains("sdh") { parts.append("Hearing impaired") }
-    parts.append("Stream \(stream.index)")
+    // AVKit's TV popover truncates long track titles. Keep the distinguishing
+    // stream number visible there while preserving the full spoken metadata.
+    if indexFirst { parts.insert("Stream \(stream.index)", at: 0) }
+    else { parts.append("Stream \(stream.index)") }
     return parts.joined(separator: " · ")
 }
 private func clock(_ ticks: Int64) -> String { Catalog.resumeLabel(ticks).replacingOccurrences(of: "Resume from ", with: "") }
@@ -200,7 +203,7 @@ struct NativePlayer: UIViewControllerRepresentable {
                     Task { await session.changeTracks(audio: type == "Audio" ? -1 : session.decision?.audioIndex, subtitle: type == "Subtitle" ? -1 : session.decision?.subtitleIndex) }
                 }
                 let actions = values.map { stream in
-                    UIAction(title: trackName(stream), subtitle: nil, identifier: UIAction.Identifier("\(type.lowercased())-\(stream.index)"), attributes: session.changingTracks ? [.disabled] : [], state: selected == stream.index ? .on : .off) { _ in
+                    UIAction(title: trackName(stream, indexFirst: true), subtitle: nil, identifier: UIAction.Identifier("\(type.lowercased())-\(stream.index)"), attributes: session.changingTracks ? [.disabled] : [], state: selected == stream.index ? .on : .off) { _ in
                         Task { await session.changeTracks(audio: type == "Audio" ? stream.index : session.decision?.audioIndex, subtitle: type == "Subtitle" ? stream.index : session.decision?.subtitleIndex) }
                     }
                 }
