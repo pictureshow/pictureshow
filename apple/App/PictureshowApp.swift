@@ -8,6 +8,21 @@ import CryptoKit
 
 @main struct PictureshowApp: App {
     @StateObject private var model = AppModel()
+    init() {
+        #if os(tvOS)
+        // tvOS navigation titles do not reliably inherit SwiftUI's preferred
+        // scheme. Configure both resting and scrolled native bar appearances.
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(Theme.background)
+        appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+        let bar = UINavigationBar.appearance()
+        bar.standardAppearance = appearance
+        bar.scrollEdgeAppearance = appearance
+        bar.compactAppearance = appearance
+        #endif
+    }
     var body: some Scene { WindowGroup { RootView().environmentObject(model).preferredColorScheme(.dark).tint(Theme.accent).controlSize(.large).minimumTouchListRows() } }
 }
 
