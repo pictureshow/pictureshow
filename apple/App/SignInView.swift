@@ -160,6 +160,15 @@ private struct SignInForm: View {
             .buttonStyle(ProminentActionStyle()).frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
         }
         .background(Theme.background.ignoresSafeArea())
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focused = nil }.accessibilityIdentifier("dismissSignInKeyboard")
+            }
+        }
+        #endif
         .task {
             server = model.signInServer ?? flow.attempt?.server ?? model.snapshot.servers.last; username = model.signInUsername
             if let server { await loadOptions(server); if flow.attempt != nil { flow.poll(model: model) } }
