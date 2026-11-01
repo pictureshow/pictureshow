@@ -519,6 +519,7 @@ final class AppleSliceUITests: XCTestCase {
     func testNativeTVDirectPlaybackMenusInfoAndRemoteScrub() throws {
         #if os(tvOS)
         ensureSignedIn()
+        probeNativeTVHomeFocusOnce()
         try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
         let play = app.buttons["play"]
         reveal(play); activate(play)
@@ -1050,6 +1051,17 @@ final class AppleSliceUITests: XCTestCase {
     private func leaveNativeTVPlayer(returningTo play: XCUIElement) {
         for _ in 0..<2 where !play.exists { XCUIRemote.shared.press(.menu) }
         XCTAssertTrue(play.waitForExistence(timeout: 15))
+    }
+    private func probeNativeTVHomeFocusOnce() {
+        XCTAssertTrue(hasHomeRoot(timeout: 10), "The focused Home probe must start on the authenticated Home root")
+        app.activate()
+        capture("Native TV Home focus probe after activate")
+        XCUIRemote.shared.press(.down)
+        let focused = app.descendants(matching: .any).allElementsBoundByIndex.filter(\.hasFocus)
+            .prefix(8)
+            .map { "type=\($0.elementType.rawValue) id=\($0.identifier) label=\($0.label) frame=\($0.frame)" }
+        print("F1_TV_HOME_FOCUS_PROBE direction=down focused={\(focused.joined(separator: " | "))}")
+        capture("Native TV Home focus probe after one Down")
     }
     #endif
     private func reveal(_ element: XCUIElement) {
