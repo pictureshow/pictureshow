@@ -284,9 +284,14 @@ private struct SeekOptions: View {
             }
             #endif
             HStack {
-                Button("Back 10 seconds") { adjust(-10) }.accessibilityIdentifier("seekBackward")
-                Button("Forward 10 seconds") { adjust(10) }.accessibilityIdentifier("seekForward")
+                Button { adjust(-10) } label: { Text("Back 10 seconds").minimumTouchTarget() }.accessibilityIdentifier("seekBackward")
+                Button { adjust(10) } label: { Text("Forward 10 seconds").minimumTouchTarget() }.accessibilityIdentifier("seekForward")
             }
+            #if os(iOS)
+            // This HStack shares one List row. Independent button styles prevent the
+            // automatic row action from activating both opposing seek controls.
+            .buttonStyle(.borderless)
+            #endif
         }
         .onAppear { target = Ticks.seconds(session.positionTicks) }
         .task(id: target) {
