@@ -1931,18 +1931,22 @@ final class AppleSliceUITests: XCTestCase {
                     options: [.regularExpression, .caseInsensitive]) != nil
     }
     private func leaveNativeTVPlayer(returningTo play: XCUIElement) {
-        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
-        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "The identified native AVKit presentation should be visible before sending Menu")
-        for attempt in 0..<3 where nativePlayer.exists {
+        guard tvPlayerSnapshot() != nil else {
+            XCTFail("The identified native AVKit presentation should be visible before sending Menu")
+            return
+        }
+        for attempt in 0..<3 where tvPlayerSnapshot() != nil {
             // The detail opener is obscured by AVKit until Menu dismisses it.
             // Resolving its hittability/focus here can fail before the Back input.
-            print("F1_TV_BACK step=\(attempt + 1) playerPresent=\(nativePlayer.exists)")
+            print("F1_TV_BACK step=\(attempt + 1) playerPresent=true")
             XCUIRemote.shared.press(.menu)
-            let disappeared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: nativePlayer)
-            _ = XCTWaiter.wait(for: [disappeared], timeout: 4)
+            let deadline = ProcessInfo.processInfo.systemUptime + 4
+            while ProcessInfo.processInfo.systemUptime < deadline, tvPlayerSnapshot() != nil {
+                Thread.sleep(forTimeInterval: 0.25)
+            }
         }
         captureFullScreen("Native TV after Menu before detail focus verification")
-        XCTAssertFalse(nativePlayer.exists, "Native Menu should dismiss the identified AVKit player presentation")
+        XCTAssertNil(tvPlayerSnapshot(), "Native Menu should dismiss the identified AVKit player presentation")
         XCTAssertTrue(play.waitForExistence(timeout: 15), "The original detail Play action should reappear after native dismissal")
         XCTAssertTrue(play.isHittable, "The original detail Play action should be hittable after native dismissal")
         XCTAssertTrue(play.hasFocus, "Native Menu dismissal should restore focus to the original detail Play action")
