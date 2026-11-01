@@ -117,10 +117,14 @@ final class AppleSliceUITests: XCTestCase {
         let result = app.buttons["item-\(searchItem)"]
         XCTAssertTrue(result.waitForExistence(timeout: 20))
         capture("Search results with keyboard")
-        field.typeText("\n")
         let keyboard = app.keyboards.firstMatch
         if keyboard.exists {
+            let submit = keyboard.buttons.matching(NSPredicate(format: "label ==[c] %@", "search")).firstMatch
+            if submit.waitForExistence(timeout: 3) { activate(submit) }
+            else { field.typeText("\n") }
             XCTAssertTrue(keyboard.waitForNonExistence(timeout: 10), "Submitting the query should dismiss the native keyboard before reviewing results")
+        } else {
+            field.typeText("\n")
         }
         XCTAssertTrue(result.isHittable, "The selected result should be reachable after the keyboard is dismissed")
         capture("Search results keyboard dismissed")
