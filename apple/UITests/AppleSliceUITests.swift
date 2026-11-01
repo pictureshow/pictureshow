@@ -262,10 +262,7 @@ final class AppleSliceUITests: XCTestCase {
         let playRequestedAt = ProcessInfo.processInfo.systemUptime
         activate(playFromStart)
         #if os(tvOS)
-        XCUIRemote.shared.press(.up)
-        let info = app.buttons["Pictureshow"]
-        XCTAssertTrue(info.waitForExistence(timeout: 10), "The native player should expose its Pictureshow info tab")
-        activate(info)
+        openNativeTVInfoTab()
         #endif
         let method = app.staticTexts["playbackMethod"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
@@ -523,10 +520,7 @@ final class AppleSliceUITests: XCTestCase {
         try openSampleDetail(id: XCTUnwrap(config["directID"]), key: "direct")
         let play = app.buttons["play"]
         reveal(play); activate(play)
-        XCUIRemote.shared.press(.up)
-        let info = app.buttons["Pictureshow"]
-        XCTAssertTrue(info.waitForExistence(timeout: 10), "The native player should expose its Pictureshow info tab before method/clock assertions")
-        activate(info)
+        openNativeTVInfoTab()
         let method = app.staticTexts["playbackMethod"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
         XCTAssertTrue(waitForSettledMethod(method, expected: "Direct play", timeout: 45), "Direct playback must settle before opening native track menus")
@@ -589,10 +583,7 @@ final class AppleSliceUITests: XCTestCase {
         try openSeriesEpisodeDetail()
         let play = app.buttons["play"]
         reveal(play); activate(play)
-        XCUIRemote.shared.press(.up)
-        let resumedInfo = app.buttons["Pictureshow"]
-        XCTAssertTrue(resumedInfo.waitForExistence(timeout: 10))
-        activate(resumedInfo)
+        openNativeTVInfoTab()
         XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 30))
         let position = app.staticTexts["playbackPosition"]
         let duration = max(1, Double(config["episodeRunSeconds"] ?? "0") ?? 0)
@@ -636,10 +627,7 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(play.waitForExistence(timeout: 15))
         activate(play)
         #if os(tvOS)
-        XCUIRemote.shared.press(.up)
-        let info = app.buttons["Pictureshow"]
-        XCTAssertTrue(info.waitForExistence(timeout: 10), "The native player should expose its Pictureshow info tab")
-        activate(info)
+        openNativeTVInfoTab()
         #endif
         let method = app.staticTexts["playbackMethod"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
@@ -673,10 +661,7 @@ final class AppleSliceUITests: XCTestCase {
         activate(play)
         XCTAssertTrue(method.waitForExistence(timeout: 30))
         #if os(tvOS)
-        XCUIRemote.shared.press(.up)
-        let resumedInfo = app.buttons["Pictureshow"]
-        XCTAssertTrue(resumedInfo.waitForExistence(timeout: 10))
-        activate(resumedInfo)
+        openNativeTVInfoTab()
         XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 10))
         #endif
         let resumeMinimum = eligible ? max(2, seconds(saved.replacingOccurrences(of: "Resume from ", with: "")) + 2) : 2
@@ -974,10 +959,65 @@ final class AppleSliceUITests: XCTestCase {
     }
     #endif
     #if os(tvOS)
+    /// The native custom tab is visible by title, but its AVKit AX cell can be unlabeled.
+    /// Navigate by the native info collection's frame geometry and validate its app-owned content.
+    private func openNativeTVInfoTab() {
+        if app.staticTexts["playbackMethod"].exists, app.staticTexts["playbackMethod"].isHittable { return }
+        XCUIRemote.shared.press(.up)
+        let collection = app.collectionViews["AVInfoMenuCollection"]
+        XCTAssertTrue(collection.waitForExistence(timeout: 10), "AVKit should expose its native info-menu collection")
+        let target = collection.cells.element(boundBy: 2)
+        XCTAssertTrue(target.waitForExistence(timeout: 10), "AVKit should expose the custom info tab after Info and Chapters")
+        XCTAssertTrue(target.isHittable, "The custom info tab cell must be visible in AVKit's native menu")
+        let targetFrame = target.frame
+        func currentFocus() -> (XCUIElement?, String) {
+            let element = app.descendants(matching: .any).allElementsBoundByIndex.first(where: \.hasFocus)
+            let details = element.map { "type=\($0.elementType.rawValue) id=\($0.identifier) label=\($0.label) frame=\($0.frame)" } ?? "none"
+            return (element, details)
+        }
+        var (focused, details) = currentFocus()
+        print("F1_TV_INFO_FOCUS step=initial targetCell=2 targetFrame=\(targetFrame) focused={\(details)}")
+        var reachedTarget = false
+        for step in 0..<16 {
+            if let frame = focused?.frame,
+               abs(frame.midX - targetFrame.midX) < max(55, targetFrame.width * 0.55),
+               abs(frame.midY - targetFrame.midY) < max(35, targetFrame.height * 0.60) {
+                reachedTarget = true
+                break
+            }
+            let direction: String
+            if let frame = focused?.frame, abs(frame.midY - targetFrame.midY) < targetFrame.height {
+                if frame.midX < targetFrame.midX { XCUIRemote.shared.press(.right); direction = "right" }
+                else { XCUIRemote.shared.press(.left); direction = "left" }
+            } else if let frame = focused?.frame, frame.midY > targetFrame.midY {
+                XCUIRemote.shared.press(.up); direction = "up"
+            } else {
+                XCUIRemote.shared.press(.down); direction = "down"
+            }
+            Thread.sleep(forTimeInterval: 0.15)
+            (focused, details) = currentFocus()
+            print("F1_TV_INFO_FOCUS step=\(step + 1) direction=\(direction) targetCell=2 targetFrame=\(targetFrame) focused={\(details)}")
+        }
+        XCTAssertTrue(reachedTarget, "Remote navigation should focus the visible custom info tab; keep its unlabeled-cell focus trace")
+        capture("Native TV focused custom info tab before selection")
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 15), "Selecting the custom info tab should expose Pictureshow playback status")
+        XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 10), "The Pictureshow info tab should expose the playback clock")
+        print("F1_AX tv_info_tab_visible_title=Pictureshow axLabel=unexposed focusedCellFrame=\(target.frame)")
+    }
+    private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
+        XCUIRemote.shared.press(.up)
+        let controlRow = app.collectionViews.allElementsBoundByIndex.first {
+            $0.frame.width > app.frame.width * 0.90 && $0.frame.height < 110 && $0.frame.minY > app.frame.height * 0.60
+        }
+        XCTAssertNotNil(controlRow, "AVKit should expose the native transport action row")
+        let matching = controlRow?.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch ?? app.cells.matching(NSPredicate(format: "label == %@", title)).firstMatch
+        print("F1_AX tv_transport_candidates title=\(title) row=\(String(describing: controlRow?.frame)) matched=\(matching.frame) label=\(matching.label)")
+        return matching
+    }
     private func inspectNativeTVInfoAndTracks(preferDirect: Bool = false) {
         for menuTitle in ["Audio", "Subtitles"] {
-            XCUIRemote.shared.press(.up)
-            let trigger = app.buttons[menuTitle].firstMatch
+            let trigger = nativeTVTransportMenu(menuTitle)
             XCTAssertTrue(trigger.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) transport menu")
             XCTAssertEqual(trigger.label, menuTitle, "The native AVKit transport menu should expose its visible label")
             print("F1_AX tv_transport_menu_label=\(trigger.label)")
@@ -1006,16 +1046,14 @@ final class AppleSliceUITests: XCTestCase {
             }
             print("F1_AX tv_track_action_label type=\(menuTitle) label=\(action.label) value=\(action.value ?? "")")
             activate(action)
-            XCTAssertTrue(app.buttons["Pictureshow"].waitForExistence(timeout: 20), "Selecting a native \(menuTitle) item should return to playback")
-            activate(app.buttons["Pictureshow"])
+            openNativeTVInfoTab()
             XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 20), "The AVKit info tab should report the playback clock after track replacement")
             let method = app.staticTexts["playbackMethod"]
             XCTAssertTrue(method.waitForExistence(timeout: 10))
             expectation(for: NSPredicate(format: "label != %@", "Preparing playback…"), evaluatedWith: method)
             waitForExpectations(timeout: 45)
             if let streamIndex = preferDirect ? config[directKey] : nil {
-                XCUIRemote.shared.press(.up)
-                let verifyTrigger = app.buttons[menuTitle].firstMatch
+                let verifyTrigger = nativeTVTransportMenu(menuTitle)
                 XCTAssertTrue(verifyTrigger.waitForExistence(timeout: 10), "The native \(menuTitle) menu should reopen for selected-state verification")
                 activate(verifyTrigger)
                 let suffix = "stream \(streamIndex)"
@@ -1033,17 +1071,11 @@ final class AppleSliceUITests: XCTestCase {
                 if !selectedInAX { print("F1_AX tv_track_selected_state_unexposed=true; retained native menu screenshot for visual review") }
                 XCTAssertTrue(selectedInAX, "AVKit should expose the selected state of configured Stream \(streamIndex); screenshot retained for independent visual review")
                 XCUIRemote.shared.press(.menu)
-                let infoTab = app.buttons["Pictureshow"]
-                XCTAssertTrue(infoTab.waitForExistence(timeout: 10), "Dismissing the native menu should return to the player")
-                activate(infoTab)
+                openNativeTVInfoTab()
             }
             capture("Native TV \(menuTitle) choice applied")
         }
-        let info = app.buttons["Pictureshow"]
-        XCTAssertTrue(info.waitForExistence(timeout: 10), "The native AVKit info tab should be titled Pictureshow")
-        XCTAssertEqual(info.label, "Pictureshow")
-        print("F1_AX tv_info_tab_label=\(info.label)")
-        activate(info)
+        openNativeTVInfoTab()
         XCTAssertTrue(app.staticTexts["playbackMethod"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["playbackPosition"].exists)
         capture("Native TV Pictureshow info panel")
