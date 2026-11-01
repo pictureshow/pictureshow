@@ -99,7 +99,11 @@ private struct SignInForm: View {
         ScrollView {
             VStack(alignment: .leading, spacing: compact ? 16 : 24) {
                 Label("Pictureshow", systemImage: "play.rectangle.fill").modifier(TokenFont(compact ? DesignTokens.titleSize : DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
-                Text(server.map { "Sign in to \($0.name)" } ?? "Your Jellyfin, beautifully at home.").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize)).foregroundStyle(Theme.muted)
+                if let server {
+                    Text("Sign in to \(server.name)").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
+                } else {
+                    Text("Your Jellyfin, beautifully at home.").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize)).foregroundStyle(Theme.muted)
+                }
                 if model.sessionEnded { Text("Your session ended. Sign in again.").foregroundStyle(.orange).accessibilityIdentifier("sessionEnded") }
                 if let server {
                     Text(server.url.host ?? "Jellyfin").foregroundStyle(Theme.muted)
@@ -144,7 +148,7 @@ private struct SignInForm: View {
                         .textInputAutocapitalization(.never).keyboardType(.URL)
                         #endif
                     Text("Automatic LAN discovery is unavailable in this unsigned build. Enter your server address on your network, VPN, or private server.").font(.callout).foregroundStyle(Theme.muted)
-                    Button(action: connect) { Text("Connect").minimumTouchTarget() }.disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
+                    Button(action: connect) { Text("Connect").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
                 }
                 if !model.snapshot.accounts.isEmpty { Button { work?.cancel(); flow.clear(); model.showSignIn = false } label: { Text("Remembered accounts").minimumTouchTarget() }.disabled(busy) }
                 if busy || flow.busy { ProgressView(busy ? "Connecting…" : "Getting a Quick Connect code…") }
