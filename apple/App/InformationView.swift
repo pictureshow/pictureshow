@@ -34,7 +34,7 @@ private struct AboutView: View {
     }
 }
 private struct LicenseListView: View {
-    var body: some View { ReadingPage(title: "Open-source licenses") { Text("1 bundled license; 0 third-party package dependencies.").foregroundStyle(Theme.muted); NavigationLink(value: AppRoute.information("license-mpl")) { VStack(alignment: .leading) { Text("Pictureshow").font(.headline); Text("Application, PictureshowCore and PictureshowTransport · MPL-2.0") } }.buttonStyle(.bordered).accessibilityIdentifier("license-MPL-2.0"); Text("Apple SwiftUI, Foundation, AVKit, AVFoundation, VideoToolbox and system frameworks are provided by the operating system.").foregroundStyle(Theme.muted) } }
+    var body: some View { ReadingPage(title: "Open-source licenses") { Text("1 bundled license; 0 third-party package dependencies.").foregroundStyle(Theme.muted); NavigationLink(value: AppRoute.information("license-mpl")) { VStack(alignment: .leading) { Text("Pictureshow").font(.headline); Text("Application, PictureshowCore and PictureshowTransport · MPL-2.0") } }.secondaryActionStyle().accessibilityIdentifier("license-MPL-2.0"); Text("Apple SwiftUI, Foundation, AVKit, AVFoundation, VideoToolbox and system frameworks are provided by the operating system.").foregroundStyle(Theme.muted) } }
 }
 private struct LicenseTextView: View {
     private var text: String {
@@ -63,7 +63,7 @@ private struct DiagnosticsView: View {
         ReadingPage(title: "This device") {
             Button("Refresh", action: refresh).buttonStyle(ProminentActionStyle()).focused($refreshFocused).accessibilityIdentifier("refreshDiagnostics")
             ForEach(Array(report.enumerated()), id: \.offset) { _, block in ReadingChunks(text: block) }
-            Button(showProfile ? "Hide device profile JSON" : "View device profile JSON") { showProfile.toggle() }.buttonStyle(.bordered).accessibilityIdentifier("toggleProfile")
+            Button(showProfile ? "Hide device profile JSON" : "View device profile JSON") { showProfile.toggle() }.secondaryActionStyle().accessibilityIdentifier("toggleProfile")
             if showProfile { ReadingChunks(text: profile) }
         }.onAppear { refresh(); refreshFocused = true }
     }

@@ -30,7 +30,7 @@ struct HomeView: View {
                         open(item)
                     }
                 }
-                HStack { NavigationLink(value: AppRoute.accounts) { Text("Switch user").minimumTouchTarget() }.accessibilityIdentifier("openAccounts"); Button { Task { await model.signOut() } } label: { Text("Sign out").minimumTouchTarget() }.accessibilityIdentifier("signOut") }.buttonStyle(.bordered).padding(Theme.gutter)
+                HStack { NavigationLink(value: AppRoute.accounts) { Text("Switch user").minimumTouchTarget() }.accessibilityIdentifier("openAccounts"); Button { Task { await model.signOut() } } label: { Text("Sign out").minimumTouchTarget() }.accessibilityIdentifier("signOut") }.secondaryActionStyle().padding(Theme.gutter)
             }.padding(.vertical, 24)
         }
         .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle("Pictureshow")
@@ -50,7 +50,7 @@ struct HomeView: View {
 struct ErrorNotice: View {
     let error: String
     var retry: () -> Void
-    var body: some View { VStack(alignment: .leading, spacing: 12) { Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true); Button(action: retry) { Text("Retry").minimumTouchTarget() }.buttonStyle(.bordered).accessibilityIdentifier("retry") } }
+    var body: some View { VStack(alignment: .leading, spacing: 12) { Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true); Button(action: retry) { Text("Retry").minimumTouchTarget() }.secondaryActionStyle().accessibilityIdentifier("retry") } }
 }
 
 struct CatalogShelf: View {
@@ -228,7 +228,7 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     if !person { HStack {
                         Picker("Sort by", selection: $sort) { Text("Title").tag("SortName"); Text("Date added").tag("DateCreated"); Text("Release date").tag("PremiereDate") }.accessibilityIdentifier("librarySort")
-                        Button { descending.toggle() } label: { Label(descending ? "Descending" : "Ascending", systemImage: descending ? "arrow.down" : "arrow.up").minimumTouchTarget() }.buttonStyle(.bordered).accessibilityIdentifier("sortDirection")
+                        Button { descending.toggle() } label: { Label(descending ? "Descending" : "Ascending", systemImage: descending ? "arrow.down" : "arrow.up").minimumTouchTarget() }.secondaryActionStyle().accessibilityIdentifier("sortDirection")
                     } }
                     if let error = page.error { ErrorNotice(error: error) { Task { await load() } } }
                     if page.items.isEmpty && !page.loading && page.error == nil { Text("No titles are available.").foregroundStyle(Theme.muted); Button { Task { await load(reset: true) } } label: { Text("Refresh").minimumTouchTarget() } }

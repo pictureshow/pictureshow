@@ -31,7 +31,7 @@ struct AccountsView: View {
                     Divider()
                 }
                 Button { model.beginSignIn(); dismiss() } label: { Label("Add a server", systemImage: "plus").minimumTouchTarget() }.accessibilityIdentifier("addServer")
-            }.buttonStyle(.bordered).padding(Theme.gutter).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
+            }.secondaryActionStyle().padding(Theme.gutter).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
         }.pictureshowNavigationTitle("Accounts").background(Theme.background.ignoresSafeArea())
             .sheet(item: $removal, onDismiss: { }) { request in RemovalConfirmation(request: request, cancel: { focused = request.opener; removal = nil }, commit: {
                 do { try model.remove(account: request.account, server: request.server); removal = nil; error = nil }
@@ -53,7 +53,7 @@ private struct RemovalConfirmation: View {
             if let error { Text(error).foregroundStyle(.orange) }
             Button(action: cancel) { Text("Cancel").minimumTouchTarget() }.focused($cancelFocused).disabled(committing).accessibilityHint(request.question).accessibilityIdentifier("cancelRemoval")
             Button(role: .destructive) { committing = true; do { try commit() } catch { self.error = error.localizedDescription; committing = false } } label: { Text("Remove").minimumTouchTarget() }.touchSecondaryInk().disabled(committing).accessibilityIdentifier("confirmRemoval")
-        }.buttonStyle(.bordered).padding(Theme.gutter).frame(maxWidth: 720, alignment: .leading).frame(maxWidth: .infinity) }
+        }.secondaryActionStyle().padding(Theme.gutter).frame(maxWidth: 720, alignment: .leading).frame(maxWidth: .infinity) }
             .interactiveDismissDisabled(committing).onAppear { cancelFocused = true }
             #if os(tvOS)
             .onExitCommand { if !committing { cancel() } }

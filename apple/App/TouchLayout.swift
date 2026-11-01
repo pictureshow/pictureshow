@@ -57,3 +57,26 @@ extension View {
         #endif
     }
 }
+
+
+#if os(tvOS)
+private struct TelevisionSecondaryActionStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(role: configuration.role) { configuration.trigger() } label: {
+            // Set ink on the label itself so the native bordered style cannot
+            // inherit light text onto the shared light lavender fill.
+            configuration.label.foregroundStyle(Theme.background)
+        }.buttonStyle(.bordered)
+    }
+}
+#endif
+
+extension View {
+    @ViewBuilder func secondaryActionStyle() -> some View {
+        #if os(tvOS)
+        buttonStyle(TelevisionSecondaryActionStyle())
+        #else
+        buttonStyle(.bordered)
+        #endif
+    }
+}

@@ -115,7 +115,7 @@ private struct SignInForm: View {
                     } else {
                         if !users.isEmpty {
                             Text("Public users").font(.headline).accessibilityAddTraits(.isHeader)
-                            ScrollView(.horizontal) { HStack { ForEach(users, id: \.id) { user in Button { username = user.name; focused = "password" } label: { Text(user.name).minimumTouchTarget() }.buttonStyle(.bordered) } } }
+                            ScrollView(.horizontal) { HStack { ForEach(users, id: \.id) { user in Button { username = user.name; focused = "password" } label: { Text(user.name).minimumTouchTarget() }.secondaryActionStyle() } } }
                         }
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Username").foregroundStyle(Theme.muted).accessibilityHidden(true)
@@ -128,7 +128,7 @@ private struct SignInForm: View {
                             Group { if showPassword { TextField("Password", text: $password) } else { SecureField("Password", text: $password) } }
                                 .textContentType(.password).focused($focused, equals: "password").submitLabel(.go).onSubmit { signIn(server) }.accessibilityLabel("Password").accessibilityIdentifier("password")
                                 .modifier(SignInFieldStyle(isFocused: focused == "password"))
-                            Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show").minimumTouchTarget() }.accessibilityLabel(showPassword ? "Hide password" : "Show password").buttonStyle(.bordered)
+                            Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show").minimumTouchTarget() }.accessibilityLabel(showPassword ? "Hide password" : "Show password").secondaryActionStyle()
                         }
                         }
                         Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).minimumTouchTarget() }.buttonStyle(ProminentActionStyle()).disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
@@ -138,12 +138,12 @@ private struct SignInForm: View {
                             else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").frame(maxWidth: .infinity).minimumTouchTarget() } }
                             else { Text("Checking Quick Connect…").foregroundStyle(Theme.muted) }
                             Button { leaveServer() } label: { Text("Change server").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy)
-                        }.buttonStyle(.bordered).touchSecondaryInk()
+                        }.secondaryActionStyle().touchSecondaryInk()
                     }
                 } else {
                     if !model.snapshot.servers.isEmpty {
                         Text("Remembered servers").font(.headline).accessibilityAddTraits(.isHeader)
-                        ForEach(model.snapshot.servers, id: \.url) { saved in Button { address = saved.url.absoluteString; connect() } label: { Text(saved.name).minimumTouchTarget() }.buttonStyle(.bordered) }
+                        ForEach(model.snapshot.servers, id: \.url) { saved in Button { address = saved.url.absoluteString; connect() } label: { Text(saved.name).minimumTouchTarget() }.secondaryActionStyle() }
                     }
                     Text("Server address").foregroundStyle(Theme.muted).accessibilityHidden(true)
                     TextField("Server address", text: $address).textContentType(.URL).autocorrectionDisabled().focused($focused, equals: "server").submitLabel(.go).onSubmit(connect)

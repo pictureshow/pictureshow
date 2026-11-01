@@ -146,7 +146,7 @@ struct DetailView: View {
                         hero(header, current: item)
                         if item.type == "Series" {
                             Text("Seasons").font(.title2.bold()).accessibilityAddTraits(.isHeader)
-                            ScrollView(.horizontal) { HStack(spacing: 18) { ForEach(state.seasons) { season in Button { opener = "season-\(season.id)"; state.chooseSeason(season.id, model: model) } label: { Text(season.name).minimumTouchTarget() }.buttonStyle(.bordered).tint(state.selectedSeason == season.id ? Theme.accent : Theme.muted).accessibilityValue(state.selectedSeason == season.id ? "Selected" : "").accessibilityIdentifier("season-\(season.id)").focused($focused, equals: "season-\(season.id)").id("season-\(season.id)") } }.padding(.vertical, 8) }
+                            ScrollView(.horizontal) { HStack(spacing: 18) { ForEach(state.seasons) { season in Button { opener = "season-\(season.id)"; state.chooseSeason(season.id, model: model) } label: { Text(season.name).minimumTouchTarget() }.secondaryActionStyle().tint(state.selectedSeason == season.id ? Theme.accent : Theme.muted).accessibilityValue(state.selectedSeason == season.id ? "Selected" : "").accessibilityIdentifier("season-\(season.id)").focused($focused, equals: "season-\(season.id)").id("season-\(season.id)") } }.padding(.vertical, 8) }
                         }
                         if ["Series", "Season"].contains(item.type) {
                             if state.episodes.isEmpty && state.fresh { Text("No episodes are available.").foregroundStyle(Theme.muted) }
@@ -154,13 +154,13 @@ struct DetailView: View {
                         }
                         if !item.people.isEmpty {
                             Text("Cast and crew").font(.title2.bold()).accessibilityAddTraits(.isHeader)
-                            ForEach(item.people) { person in Button { var target = MediaItem(id: person.id, name: person.name, type: "Person"); target.overview = nil; open(target) } label: { VStack(alignment: .leading) { Text(person.name); Text(person.role ?? person.type ?? "").font(.caption).foregroundStyle(Theme.muted) }.minimumTouchTarget() }.buttonStyle(.bordered).accessibilityLabel([person.name, person.role ?? person.type].compactMap { $0 }.joined(separator: ", ")) }
+                            ForEach(item.people) { person in Button { var target = MediaItem(id: person.id, name: person.name, type: "Person"); target.overview = nil; open(target) } label: { VStack(alignment: .leading) { Text(person.name); Text(person.role ?? person.type ?? "").font(.caption).foregroundStyle(Theme.secondaryButtonText) }.minimumTouchTarget() }.secondaryActionStyle().accessibilityLabel([person.name, person.role ?? person.type].compactMap { $0 }.joined(separator: ", ")) }
                         }
                         if header != item, let overview = item.overview, overview != header.overview { Text("More details").font(.title2).accessibilityAddTraits(.isHeader); Text(overview) }
                     } else if state.reading { ProgressView("Loading item…") }
                     if let error = state.readError { Text(error).foregroundStyle(.orange); Button { state.refresh(id: id, model: model, deliberate: true) } label: { Text(state.reading ? "Retrying…" : "Retry").minimumTouchTarget() }.disabled(state.reading).buttonStyle(ProminentActionStyle()).focused($focused, equals: "detailRetry").id("detailRetry").accessibilityIdentifier("detailRetry") }
-                    if let error = state.writeError { Text(error).foregroundStyle(.orange); Button { state.retryWrite(model: model) } label: { Text("Retry change").minimumTouchTarget() }.buttonStyle(.bordered) }
-                    if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange); Button { Task { await model.retryPlaybackSave() } } label: { Text(model.playbackSaving ? "Saving progress…" : "Retry saving progress").minimumTouchTarget() }.disabled(model.playbackSaving).buttonStyle(.bordered).accessibilityIdentifier("retryProgress") }
+                    if let error = state.writeError { Text(error).foregroundStyle(.orange); Button { state.retryWrite(model: model) } label: { Text("Retry change").minimumTouchTarget() }.secondaryActionStyle() }
+                    if let warning = model.playbackSaveError { Text(warning).foregroundStyle(.orange); Button { Task { await model.retryPlaybackSave() } } label: { Text(model.playbackSaving ? "Saving progress…" : "Retry saving progress").minimumTouchTarget() }.disabled(model.playbackSaving).secondaryActionStyle().accessibilityIdentifier("retryProgress") }
                     if let notice = state.notice { Text(notice).foregroundStyle(Theme.muted) }
                 }.padding(Theme.gutter)
             }
@@ -216,9 +216,9 @@ struct DetailView: View {
             if item.isPlayable || ["Series", "Season"].contains(item.type) {
                 Button { opener = "play"; state.offer(.play(true), model: model) } label: { Label(primaryLabel(item), systemImage: "play.fill").minimumTouchTarget() }.buttonStyle(ProminentActionStyle()).disabled(state.fresh && state.target == nil).focused($focused, equals: "play").id("play").accessibilityIdentifier("play")
             }
-            Button { opener = "watched"; state.offer(.watched(!item.isWatched), model: model) } label: { Label(item.isWatched ? "Mark unwatched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle").minimumTouchTarget() }.buttonStyle(.bordered).disabled(item.isEmptyContainer).focused($focused, equals: "watched").id("watched").accessibilityValue(item.isWatched ? "Watched" : "Unwatched").accessibilityIdentifier("watched")
-            Button { opener = "favorite"; state.offer(.favorite(!item.userData.isFavorite), model: model) } label: { Label(item.userData.isFavorite ? "Remove favorite" : "Add favorite", systemImage: item.userData.isFavorite ? "heart.fill" : "heart").minimumTouchTarget() }.buttonStyle(.bordered).focused($focused, equals: "favorite").id("favorite").accessibilityValue(item.userData.isFavorite ? "Favorite" : "Not favorite").accessibilityIdentifier("favorite")
-            if item.isPlayable { Button { opener = "startOver"; state.offer(.play(false), model: model) } label: { Text("Play from start").minimumTouchTarget() }.buttonStyle(.bordered).focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver") }
+            Button { opener = "watched"; state.offer(.watched(!item.isWatched), model: model) } label: { Label(item.isWatched ? "Mark unwatched" : "Mark watched", systemImage: item.isWatched ? "checkmark.circle.fill" : "checkmark.circle").minimumTouchTarget() }.secondaryActionStyle().disabled(item.isEmptyContainer).focused($focused, equals: "watched").id("watched").accessibilityValue(item.isWatched ? "Watched" : "Unwatched").accessibilityIdentifier("watched")
+            Button { opener = "favorite"; state.offer(.favorite(!item.userData.isFavorite), model: model) } label: { Label(item.userData.isFavorite ? "Remove favorite" : "Add favorite", systemImage: item.userData.isFavorite ? "heart.fill" : "heart").minimumTouchTarget() }.secondaryActionStyle().focused($focused, equals: "favorite").id("favorite").accessibilityValue(item.userData.isFavorite ? "Favorite" : "Not favorite").accessibilityIdentifier("favorite")
+            if item.isPlayable { Button { opener = "startOver"; state.offer(.play(false), model: model) } label: { Text("Play from start").minimumTouchTarget() }.secondaryActionStyle().focused($focused, equals: "startOver").id("startOver").accessibilityIdentifier("startOver") }
         }
     }
     private func primaryLabel(_ item: MediaItem) -> String {

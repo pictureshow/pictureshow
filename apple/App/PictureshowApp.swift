@@ -17,10 +17,12 @@ enum Theme {
     static let muted = DesignTokens.muted
     static let accent = DesignTokens.accent
     #if os(tvOS)
+    static let secondaryButtonText = background.opacity(0.8)
     static let gutter: CGFloat = 48
     static let cardWidth: CGFloat = 288
     static let wideCardWidth: CGFloat = 480
     #else
+    static let secondaryButtonText = muted
     static let gutter: CGFloat = 20
     static let cardWidth: CGFloat = 136
     static let wideCardWidth: CGFloat = 244
@@ -435,7 +437,7 @@ struct TouchShell: View {
                                     Text(names[index]).lineLimit(1).fixedSize(horizontal: true, vertical: false)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.vertical, 8).padding(.horizontal, 4).minimumTouchTarget()
-                            }.buttonStyle(.bordered).tint(tab == index ? Theme.accent : Theme.muted)
+                            }.secondaryActionStyle().tint(tab == index ? Theme.accent : Theme.muted)
                                 .accessibilityLabel(names[index]).accessibilityValue(tab == index ? "Selected" : "")
                         }
                         Spacer()
