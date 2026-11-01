@@ -660,15 +660,29 @@ final class AppleSliceUITests: XCTestCase {
         reveal(play)
         XCTAssertTrue(play.waitForExistence(timeout: 15))
         activate(play)
+        let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
         #if os(tvOS)
-        openNativeTVInfoTab()
-        #endif
-        let method = app.staticTexts["playbackMethod"]
-        XCTAssertTrue(method.waitForExistence(timeout: 30))
-        capture("\(expected) initial preparation")
-        XCTAssertTrue(waitForSettledMethod(method, expected: expected, timeout: 45), "The playback method should settle to \(expected)")
+        let position: XCUIElement
+        if key == "direct" {
+            openNativeTVInfoTab()
+            XCTAssertTrue(method.waitForExistence(timeout: 30))
+            XCTAssertTrue(waitForSettledMethod(method, expected: expected, timeout: 45), "The playback method should settle to \(expected)")
+            position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        } else {
+            // For negotiated server transcodes, the system AVKit elapsed clock stays exposed
+            // while the custom info cell has no AX focus. The sanitized Playback event records
+            // the selected transcode method; the eligible fixture below proves saved resume.
+            XCUIRemote.shared.press(.up)
+            position = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        }
+        XCTAssertTrue(position.waitForExistence(timeout: 30), "The native player should expose an accessibility clock")
+        #else
         let position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(method.waitForExistence(timeout: 30))
+        XCTAssertTrue(waitForSettledMethod(method, expected: expected, timeout: 45), "The playback method should settle to \(expected)")
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
+        #endif
+        capture("\(expected) initial preparation")
         XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 35, metric: key))
         // Respect the server's minimum video duration and watched percentage for resume.
         let minimum = max(Int(config[key + "ResumeSeconds"] ?? "6") ?? 6, seconds(position.label) + 6)
@@ -693,10 +707,18 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         let saved = play.label
         activate(play)
-        XCTAssertTrue(method.waitForExistence(timeout: 30))
         #if os(tvOS)
-        openNativeTVInfoTab()
-        XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 10))
+        if key == "direct" {
+            XCTAssertTrue(method.waitForExistence(timeout: 30))
+            openNativeTVInfoTab()
+        } else {
+            let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+            XCTAssertTrue(nativePlayer.waitForExistence(timeout: 30))
+            XCUIRemote.shared.press(.up)
+        }
+        XCTAssertTrue(position.waitForExistence(timeout: 30), "The reopened native player should expose its clock")
+        #else
+        XCTAssertTrue(method.waitForExistence(timeout: 30))
         #endif
         let resumeMinimum = eligible ? max(2, seconds(saved.replacingOccurrences(of: "Resume from ", with: "")) + 2) : 2
         // A reopened HLS stream has a 45-second startup deadline; allow 15 more seconds for
@@ -735,7 +757,7 @@ final class AppleSliceUITests: XCTestCase {
             #endif
         }
         #if os(tvOS)
-        XCUIRemote.shared.press(.menu)
+        leaveNativeTVPlayer(returningTo: play)
         #else
         activate(app.buttons["closePlayer"])
         #endif
@@ -998,14 +1020,17 @@ final class AppleSliceUITests: XCTestCase {
     private func openNativeTVInfoTab() {
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "The identified native player should contain the custom info surface")
-        let method = app.staticTexts["playbackMethod"]
-        let position = app.staticTexts["playbackPosition"]
+        // The custom controller hosts SwiftUI text inside UIKit, and tvOS may surface UILabels
+        // as `Other` instead of `StaticText`; query by the app-owned identifiers across types.
+        let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
+        let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        func safeLabel(_ element: XCUIElement) -> String { element.exists ? element.label : "<not exposed>" }
         func infoContentIsVisible() -> Bool {
             nativePlayer.exists && method.exists && method.isHittable && position.exists && position.isHittable
                 && nativePlayer.frame.contains(method.frame) && nativePlayer.frame.contains(position.frame)
         }
         if infoContentIsVisible() {
-            print("F1_AX tv_info_content_visible step=already-visible method=\(method.label) position=\(position.label)")
+            print("F1_AX tv_info_content_visible step=already-visible method=\(safeLabel(method)) position=\(safeLabel(position))")
             return
         }
         XCUIRemote.shared.press(.up)
@@ -1033,7 +1058,7 @@ final class AppleSliceUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
             focusedIndex = cellTrace("after-down")
             contentVisible = infoContentIsVisible()
-            print("F1_AX tv_info_content_visible step=down visible=\(contentVisible) method=\(method.label) position=\(position.label)")
+            print("F1_AX tv_info_content_visible step=down visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position))")
         }
         for step in 0..<count where !contentVisible && !target.hasFocus {
             let directionRight = focusedIndex.map { $0 < targetIndex } ?? true
@@ -1041,7 +1066,7 @@ final class AppleSliceUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
             focusedIndex = cellTrace("horizontal-\(step + 1)-\(directionRight ? "right" : "left")")
             contentVisible = infoContentIsVisible()
-            print("F1_AX tv_info_content_visible step=horizontal-\(step + 1) visible=\(contentVisible) method=\(method.label) position=\(position.label)")
+            print("F1_AX tv_info_content_visible step=horizontal-\(step + 1) visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position))")
         }
         if !contentVisible {
             XCTAssertTrue(target.hasFocus, "The final custom AVKit cell must be focused or reveal the visible custom-panel content")
@@ -1051,7 +1076,7 @@ final class AppleSliceUITests: XCTestCase {
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in infoContentIsVisible() }, object: method)
         XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 15), .completed,
                        "Remote navigation or activation should expose the app-owned method and clock inside the native player")
-        print("F1_AX tv_info_content_visible final=true method=\(method.label) position=\(position.label) focusedCellHasFocus=\(target.hasFocus) axCellLabelUnexposed=true")
+        print("F1_AX tv_info_content_visible final=true method=\(safeLabel(method)) position=\(safeLabel(position)) focusedCellHasFocus=\(target.hasFocus) axCellLabelUnexposed=true")
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
         XCUIRemote.shared.press(.up)
