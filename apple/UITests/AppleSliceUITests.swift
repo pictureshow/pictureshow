@@ -1095,6 +1095,9 @@ final class AppleSliceUITests: XCTestCase {
             .map { "id=\($0.identifier) label=\($0.label) frame=\($0.frame)" }
         print("F1_TV_ACTIVATE_FAILED targetID=\(element.identifier) targetLabel=\(element.label) targetFrame=\(element.frame) targetHittable=\(element.isHittable) focusedButtons={\(focused.joined(separator: " | "))}")
         print("F1_TV_VISIBLE_BUTTONS {\(visibleButtons.joined(separator: " | "))}")
+        if element.identifier.hasPrefix("item-") || element.identifier.hasPrefix("season-") {
+            capture("Native TV catalog focus after remote attempts")
+        }
         XCTFail("Remote could not focus \(element.identifier)")
         #else
         element.tap()
