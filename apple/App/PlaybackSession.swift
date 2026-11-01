@@ -314,7 +314,10 @@ import MediaAccessibility
     }
     var subtitleTimingAvailable: Bool { false }
     var subtitleTimingExplanation: String {
-        decision?.method == .transcode && (decision?.subtitleIndex ?? -1) >= 0
+        if externalSubtitles.selected != nil {
+            return "These external text subtitles use Pictureshow’s video overlay. Per-viewing subtitle timing adjustment is not available."
+        }
+        return decision?.method == .transcode && (decision?.subtitleIndex ?? -1) >= 0
         ? "These subtitles are burned into the video by the server. Timing and appearance cannot be changed."
         : "AVKit uses the system caption renderer. Per-viewing subtitle timing is not exposed by Apple's public player API."
     }
