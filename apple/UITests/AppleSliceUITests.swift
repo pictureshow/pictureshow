@@ -357,27 +357,45 @@ final class AppleSliceUITests: XCTestCase {
         let readoutStart = seekReadout.label.range(of: "Seek to ")!.upperBound
         let firstDragSeconds = seconds(String(seekReadout.label[readoutStart...]))
         XCTAssertGreaterThan(firstDragSeconds, 0, "The seek slider's visible Seek-to readout must expose the dragged time")
-        let observedDuration = Double(firstDragSeconds) / targetFraction
-        let calibratedStartFraction = min(1, max(0, Double(firstDragSeconds) / observedDuration))
-        let calibratedTargetFraction = min(1, max(0, Double(cue) / observedDuration))
-        let calibratedStartX = thumbInset + railWidth * calibratedStartFraction
-        let calibratedTargetX = thumbInset + railWidth * calibratedTargetFraction
-        let calibratedStart = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: calibratedStartX / sliderFrame.width, dy: 0.5))
-        let calibratedTarget = seekPosition.coordinate(withNormalizedOffset: CGVector(dx: calibratedTargetX / sliderFrame.width, dy: 0.5))
-        print("F1_GESTURE positive_subtitle_slider_calibration first_drag_seconds=\(firstDragSeconds) observed_duration_seconds=\(observedDuration) target_fraction=\(calibratedTargetFraction)")
-        calibratedStart.press(forDuration: 0.15, thenDragTo: calibratedTarget)
-        let calibratedReadoutStart = seekReadout.label.range(of: "Seek to ")!.upperBound
-        let calibratedSeconds = seconds(String(seekReadout.label[calibratedReadoutStart...]))
-        XCTAssertTrue((cue - 1)...(cue + 2) ~= calibratedSeconds, "The visible Seek-to readout should land in the requested cue window after touch calibration")
-        activate(app.buttons["playerOptionsDone"])
-        expectation(for: NSPredicate { _, _ in let value = self.seconds(position.label); return value >= cue - 1 && value <= cue + 2 }, evaluatedWith: position)
+        XCTAssertGreaterThan(firstDragSeconds, currentSeekValue + 10, "The real touch drag should move the paused seek target forward")
+        expectation(for: NSPredicate { _, _ in
+            let value = self.seconds(position.label)
+            return value >= firstDragSeconds - 1 && value <= firstDragSeconds + 2
+        }, evaluatedWith: position)
         waitForExpectations(timeout: 20)
-        Thread.sleep(forTimeInterval: 1)
-        capture("iPhone positive mov_text subtitle paused cue at \(cue)s")
-        XCTAssertLessThanOrEqual(seconds(position.label), cue + 2, "The cue capture should be taken near the actual cue time, not after its window")
+        print("F1_GESTURE positive_subtitle_touch_seek_seconds=\(firstDragSeconds) paused_clock=\(seconds(position.label))")
 
+        // The first touch drag intentionally proves real gesture support, but its landing
+        // point can differ by a few seconds from the normalized target. Use the accessible
+        // Back 10 control for a bounded seek near 14s, then let the decoded video run through
+        // the positive cue and pause on the observed 20–23s window.
+        activate(app.buttons["seekBackward"])
+        let backReadoutStart = seekReadout.label.range(of: "Seek to ")!.upperBound
+        let backSeconds = seconds(String(seekReadout.label[backReadoutStart...]))
+        XCTAssertTrue((firstDragSeconds - 11)...(firstDragSeconds - 9) ~= backSeconds, "Back 10 should move the seek target by approximately ten seconds")
+        XCTAssertTrue((cue - 7)...(cue - 4) ~= backSeconds, "The paused seek target should be below the positive cue before resuming")
+        activate(app.buttons["playerOptionsDone"])
+        expectation(for: NSPredicate { _, _ in
+            let value = self.seconds(position.label)
+            return value >= backSeconds - 1 && value <= backSeconds + 2
+        }, evaluatedWith: position)
+        waitForExpectations(timeout: 20)
         let resume = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Play")).firstMatch
-        XCTAssertTrue(resume.waitForExistence(timeout: 10), "AVKit should expose Play to resume the paused subtitle transition")
+        XCTAssertTrue(resume.waitForExistence(timeout: 10), "AVKit should expose Play after the seek panel closes")
+        activate(resume)
+        expectation(for: NSPredicate { _, _ in
+            let value = self.seconds(position.label)
+            return value >= cue - 1 && value <= cue + 2
+        }, evaluatedWith: position)
+        waitForExpectations(timeout: 20)
+        let pauseAtCue = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Pause")).firstMatch
+        XCTAssertTrue(pauseAtCue.waitForExistence(timeout: 10), "AVKit should expose Pause after playback resumes")
+        activate(pauseAtCue)
+        Thread.sleep(forTimeInterval: 1)
+        let cuePosition = seconds(position.label)
+        XCTAssertTrue((cue - 1)...(cue + 2) ~= cuePosition, "Pause and capture only while the player clock is in the subtitle cue window")
+        print("F1_METRIC positive_subtitle_paused_cue_position_seconds=\(cuePosition)")
+        capture("iPhone positive mov_text subtitle paused cue at \(cue)s")
         activate(resume)
         XCTAssertTrue(waitForPlaybackClock(position, minimum: cue + 3, timeout: TimeInterval(cue + 30), metric: "positive_subtitle_after_cue"))
         activate(app.buttons["closePlayer"])
@@ -963,12 +981,16 @@ final class AppleSliceUITests: XCTestCase {
                 // AVKit may expose native UIAction menu entries by their visible title rather
                 // than the action identifier. NativePlayer includes “Stream N” in each title.
                 if let streamIndex = preferDirect ? config[directKey] : nil {
-                    action = actionQuery.matching(NSPredicate(format: "label CONTAINS[c] %@", "Stream \(streamIndex)")).firstMatch
+                    action = actionQuery.matching(NSPredicate(format: "label ENDSWITH[c] %@", "Stream \(streamIndex)")).firstMatch
                 } else {
-                    action = actionQuery.matching(NSPredicate(format: "label CONTAINS[c] %@", "Stream")).firstMatch
+                    action = actionQuery.matching(NSPredicate(format: "label CONTAINS[c] %@", "Stream ")).firstMatch
                 }
             }
             XCTAssertTrue(action.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) menu items")
+            if let streamIndex = preferDirect ? config[directKey] : nil {
+                XCTAssertTrue(action.label.lowercased().hasSuffix("stream \(streamIndex)"),
+                              "The native \(menuTitle) choice must match configured Stream \(streamIndex), not a similarly numbered stream")
+            }
             print("F1_AX tv_track_action_label type=\(menuTitle) label=\(action.label) value=\(action.value ?? "")")
             activate(action)
             XCTAssertTrue(app.buttons["Pictureshow"].waitForExistence(timeout: 20), "Selecting a native \(menuTitle) item should return to playback")
