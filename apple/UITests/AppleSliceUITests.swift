@@ -392,9 +392,8 @@ final class AppleSliceUITests: XCTestCase {
         app.terminate()
         app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["directID"])
         app.launch()
-        let playFromStart = app.buttons["startOver"]
+        let playFromStart = try zeroPositionPlayAction()
         reveal(playFromStart)
-        XCTAssertTrue(playFromStart.waitForExistence(timeout: 15), "Direct startup trials must use Play from start, not a saved resume position")
         capture("Movie detail")
         let playRequestedAt = ProcessInfo.processInfo.systemUptime
         activate(playFromStart)
@@ -868,8 +867,7 @@ final class AppleSliceUITests: XCTestCase {
         }
         ensureSignedIn()
         try openSeriesEpisodeDetail()
-        let play = app.buttons["startOver"]
-        XCTAssertTrue(play.waitForExistence(timeout: 15), "Manual Next must begin this known-duration episode from zero")
+        let play = try zeroPositionPlayAction()
         reveal(play); activate(play)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15))
@@ -933,6 +931,17 @@ final class AppleSliceUITests: XCTestCase {
         capture("Native TV adjacent episode started")
         leaveNativeTVPlayer(returningTo: play)
         #endif
+    }
+    /// Fresh items expose Play; resumable items additionally expose Play from start.
+    /// Never use Resume as the zero-position decoder/continuation control.
+    private func zeroPositionPlayAction() throws -> XCUIElement {
+        let primary = app.buttons["play"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 15), "The authoritative primary action must be ready")
+        let fromStart = app.buttons["startOver"]
+        if fromStart.exists { return fromStart }
+        XCTAssertEqual(primary.label, "Play", "Without Play from start, primary Play must have no saved resume")
+        guard primary.label == "Play" else { throw NSError(domain: "Nonzero startup fixture", code: 1) }
+        return primary
     }
     private func playAndResume(id: String, expected: String, key: String) throws {
         let containers = (config[key + "Containers"] ?? "").split(separator: "|").map(String.init)
