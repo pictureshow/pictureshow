@@ -1027,6 +1027,7 @@ final class AppleSliceUITests: XCTestCase {
                 print("F1_AX tv_track_selected_state type=\(menuTitle) stream=\(streamIndex) isSelected=\(selectedAction.isSelected) value=\(selectedValue ?? "<unexposed>")")
                 capture("Native TV \(menuTitle) selected Stream \(streamIndex) checkmark")
                 if !selectedInAX { print("F1_AX tv_track_selected_state_unexposed=true; retained native menu screenshot for visual review") }
+                XCTAssertTrue(selectedInAX, "AVKit should expose the selected state of configured Stream \(streamIndex); screenshot retained for independent visual review")
                 XCUIRemote.shared.press(.menu)
                 let infoTab = app.buttons["Pictureshow"]
                 XCTAssertTrue(infoTab.waitForExistence(timeout: 10), "Dismissing the native menu should return to the player")
