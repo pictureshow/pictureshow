@@ -89,20 +89,23 @@ private struct SignInForm: View {
     var body: some View {
         #if os(iOS)
         GeometryReader { viewport in
-            form(compact: viewport.size.height < 480)
+            form(compact: viewport.size.height < 480, spacing: viewport.size.height < 900 ? 16 : 24)
         }
         #else
-        form(compact: false)
+        form(compact: false, spacing: 24)
         #endif
     }
-    private func form(compact: Bool) -> some View {
+    private func form(compact: Bool, spacing: CGFloat) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: compact ? 16 : 24) {
+            VStack(alignment: .leading, spacing: compact ? 12 : spacing) {
                 Label("Pictureshow", systemImage: "play.rectangle.fill").modifier(TokenFont(compact ? DesignTokens.titleSize : DesignTokens.displaySize, weight: .bold)).accessibilityAddTraits(.isHeader)
                 if let server {
                     Text("Sign in to \(server.name)").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
                 } else {
-                    Text("Your Jellyfin, beautifully at home.").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize)).foregroundStyle(Theme.muted)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Connect to your server").modifier(TokenFont(compact ? DesignTokens.bodySize : DesignTokens.titleSize, weight: .semibold)).accessibilityAddTraits(.isHeader)
+                        Text("Your Jellyfin, beautifully at home.").font(.callout).foregroundStyle(Theme.muted)
+                    }
                 }
                 if model.sessionEnded { Text("Your session ended. Sign in again.").foregroundStyle(.orange).accessibilityIdentifier("sessionEnded") }
                 if let server {
@@ -129,11 +132,13 @@ private struct SignInForm: View {
                         }
                         }
                         Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
-                        if quickEnabled == true { Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").minimumTouchTarget() }.disabled(busy).accessibilityIdentifier("quickConnect") }
-                        else if quickEnabled == false { Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted) }
-                        else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").minimumTouchTarget() } }
-                        else { Text("Checking Quick Connect…").foregroundStyle(Theme.muted) }
-                        Button { leaveServer() } label: { Text("Change server").minimumTouchTarget() }.disabled(busy)
+                        VStack(alignment: .leading, spacing: 12) {
+                            if quickEnabled == true { Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy).accessibilityIdentifier("quickConnect") }
+                            else if quickEnabled == false { Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted) }
+                            else if let availabilityError { Text(availabilityError).foregroundStyle(.orange); Button { Task { await loadOptions(server) } } label: { Text("Retry Quick Connect availability").frame(maxWidth: .infinity).minimumTouchTarget() } }
+                            else { Text("Checking Quick Connect…").foregroundStyle(Theme.muted) }
+                            Button { leaveServer() } label: { Text("Change server").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy)
+                        }.buttonStyle(.bordered).foregroundStyle(.primary)
                     }
                 } else {
                     if !model.snapshot.servers.isEmpty {
