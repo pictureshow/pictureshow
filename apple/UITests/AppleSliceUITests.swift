@@ -117,16 +117,7 @@ final class AppleSliceUITests: XCTestCase {
         let result = app.buttons["item-\(searchItem)"]
         XCTAssertTrue(result.waitForExistence(timeout: 20))
         capture("Search results with keyboard")
-        let keyboard = app.keyboards.firstMatch
-        if keyboard.exists {
-            let submit = keyboard.buttons.matching(NSPredicate(format: "label ==[c] %@", "search")).firstMatch
-            if submit.waitForExistence(timeout: 3) { activate(submit) }
-            else { field.typeText("\n") }
-            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 10), "Submitting the query should dismiss the native keyboard before reviewing results")
-        } else {
-            field.typeText("\n")
-        }
-        XCTAssertTrue(result.isHittable, "The selected result should be reachable after the keyboard is dismissed")
+        submitAndDismissSearchKeyboard(field: field, result: result)
         capture("Search results keyboard dismissed")
         returnHome()
 
@@ -166,6 +157,38 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["licenseTitle"].waitForExistence(timeout: 10))
         capture("MPL license text")
     }
+    #if os(tvOS)
+    /// Freshly checks the TV Settings navigation bar and a stable search-results layout without
+    /// repeating account or license flows already covered by the broader family test.
+    func testTVSettingsTitleAndSearchResultsAfterKeyboardDismissal() throws {
+        ensureSignedIn()
+        let settings = app.buttons["openSettings"]
+        reveal(settings); activate(settings)
+        let settingsTitle = app.descendants(matching: .any).matching(identifier: "settingsTitle").firstMatch
+        XCTAssertTrue(settingsTitle.waitForExistence(timeout: 10))
+        let bitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
+        reveal(bitrate)
+        XCTAssertTrue(bitrate.waitForExistence(timeout: 10))
+        let audioLanguage = app.descendants(matching: .any).matching(identifier: "audioLanguage").firstMatch
+        reveal(audioLanguage)
+        XCTAssertTrue(audioLanguage.waitForExistence(timeout: 10))
+        capture("TV Settings title with Audio output visible")
+
+        returnHome()
+        let search = app.buttons["openSearch"]
+        reveal(search); activate(search)
+        let field = app.textFields["searchField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        activate(field)
+        field.typeText(config["searchQuery"] ?? "Sample H264 AAC mov_text")
+        let searchItem = try XCTUnwrap(config["searchItemID"] ?? config["directID"])
+        let result = app.buttons["item-\(searchItem)"]
+        XCTAssertTrue(result.waitForExistence(timeout: 20))
+        capture("TV Search results with keyboard")
+        submitAndDismissSearchKeyboard(field: field, result: result)
+        capture("TV Search results keyboard dismissed")
+    }
+    #endif
     /// Confirms iPad layout survives rotation while the primary app sections remain reachable.
     func testiPadLandscapeAccountAndCatalogNavigation() throws {
         #if os(iOS)
@@ -911,6 +934,22 @@ final class AppleSliceUITests: XCTestCase {
     }
     private func seconds(_ label: String) -> Int {
         parsedClockSeconds(label) ?? 0
+    }
+    private func submitAndDismissSearchKeyboard(field: XCUIElement, result: XCUIElement) {
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.waitForExistence(timeout: 3) {
+            let submit = keyboard.buttons.matching(NSPredicate(format: "label ==[c] %@", "search")).firstMatch
+            if submit.waitForExistence(timeout: 2) { activate(submit) }
+            else { field.typeText("\n") }
+            #if os(tvOS)
+            if keyboard.exists { XCUIRemote.shared.press(.menu) }
+            #endif
+            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 10), "Submitting search or closing the native keyboard should leave the results screen visible")
+        } else {
+            field.typeText("\n")
+        }
+        XCTAssertTrue(field.exists, "Search should remain open after the native keyboard is dismissed")
+        XCTAssertTrue(result.isHittable, "The selected result should be reachable after the keyboard is dismissed")
     }
     private func ensureSignedIn() {
         if hasHomeRoot(timeout: 2) { returnHome(); return }
