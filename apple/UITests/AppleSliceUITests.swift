@@ -767,8 +767,15 @@ final class AppleSliceUITests: XCTestCase {
             print("F1_AX keyboard_intro_button=not_exposed")
         }
         if app.keyboards.firstMatch.exists {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.18)).tap()
-            _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 5)
+            let done = app.buttons["dismissSignInKeyboard"]
+            if done.waitForExistence(timeout: 2), done.isHittable {
+                activate(done)
+            } else {
+                // The form opts into interactive scroll dismissal; do not tap a field label or
+                // background and assume focus has cleared.
+                app.swipeDown()
+            }
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "The sign-in keyboard should be dismissed before the lower-actions capture")
         }
         print("F1_AX keyboard_after_dismiss=\(app.keyboards.firstMatch.exists)")
         #endif
