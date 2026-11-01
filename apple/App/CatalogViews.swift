@@ -237,11 +237,17 @@ struct LibraryView: View {
                             Button { opener = item.id; UserDefaults.standard.set(item.id, forKey: memoryKey); open(item) } label: { CatalogCard(item: item) }.buttonStyle(PosterButtonStyle()).focused($focused, equals: item.id).id(item.id).accessibilityLabel(item.accessibleTitle).accessibilityIdentifier("item-\(item.id)")
                                 .onAppear { if item.id == page.items.suffix(8).first?.id, page.next < page.total { Task { await load() } } }
                         }
-                    }
+                    }.televisionFocusSection()
                     if page.loading { ProgressView("Loading titles…") }
                     if page.next < page.total && !page.loading { Button { Task { await load() } } label: { Text("Load more").minimumTouchTarget() } }
                 }.padding(Theme.gutter)
-            }.background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(name)
+            }
+                #if os(tvOS)
+                // A default preference lets the engine enter content on first use;
+                // it does not override focus the viewer has deliberately moved.
+                .defaultFocus($focused, opener ?? page.items.first?.id)
+                #endif
+                .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(name)
                 .task(id: id) { if page.items.isEmpty { await load(reset: true) } }
                 .onChange(of: sort) { _, _ in Task { await load(reset: true) } }
                 .onChange(of: descending) { _, _ in Task { await load(reset: true) } }
