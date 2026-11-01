@@ -445,6 +445,7 @@ final class AppleSliceUITests: XCTestCase {
         var position: XCUIElement
         #if os(tvOS)
         position = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        if !position.waitForExistence(timeout: 2) { XCUIRemote.shared.press(.up) }
         #else
         position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
@@ -453,10 +454,14 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(position.waitForExistence(timeout: 30))
         let advancing = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard let value = self.parsedClockSeconds(position.label) else { return false }
-            return value >= 2 && value < cue
+            return value >= 2
         }, object: position)
-        XCTAssertEqual(XCTWaiter.wait(for: [advancing], timeout: 40), .completed, "Pause the zero-start viewing before the external cue begins")
+        XCTAssertEqual(XCTWaiter.wait(for: [advancing], timeout: 40), .completed, "The zero-start Direct viewing must show at least two seconds of actual playback")
 
+        XCTAssertTrue(nativePlayer.exists, "An ended/dismissed player cannot satisfy the paused-caption setup")
+        if let duration = config["directRunSeconds"].flatMap(Int.init), duration > 0 {
+            XCTAssertLessThan(seconds(position.label), duration, "A viewing that reached EOS before Pause is not a valid paused-caption setup")
+        }
         #if os(iOS)
         func touchNativeTransport(_ label: String) {
             let control = nativePlayer.buttons.matching(NSPredicate(format: "label ==[c] %@", label)).firstMatch
@@ -472,17 +477,48 @@ final class AppleSliceUITests: XCTestCase {
         #else
         XCUIRemote.shared.press(.playPause)
         #endif
-        let paused = seconds(position.label)
+        var paused = seconds(position.label)
         #if os(tvOS)
         openNativeTVInfoTab()
         position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
         #endif
         XCTAssertTrue(method.waitForExistence(timeout: 15))
         XCTAssertEqual(method.label, "Direct play", "The original native viewing must be Direct before optional text changes")
-        XCTAssertLessThan(paused, cue, "A missed short cue window is a failed setup, not later caption evidence")
         XCTAssertTrue(waitForPausedClockNear(position, target: paused, tolerance: 1, timeout: 10, metric: "external_initial_pause"))
         Thread.sleep(forTimeInterval: 1)
         XCTAssertLessThanOrEqual(abs(seconds(position.label) - paused), 1)
+
+        // Menu navigation can consume wall time before Pause. Rewind using the
+        // existing app-owned controls, then prove the real paused clock clamps
+        // to zero before choosing optional text. No synthetic timeline is used.
+        #if os(iOS)
+        activate(app.buttons["playerSeek"])
+        XCTAssertTrue(app.sliders["Seek position"].waitForExistence(timeout: 10))
+        #endif
+        let back10 = app.descendants(matching: .any).matching(identifier: "seekBackward").firstMatch
+        XCTAssertTrue(back10.waitForExistence(timeout: 10))
+        var rewindPresses = 0
+        while seconds(position.label) > 0 && rewindPresses < 7 {
+            let before = seconds(position.label)
+            let target = max(0, before - 10)
+            reveal(back10); activate(back10)
+            XCTAssertTrue(waitForPausedClockNear(position, target: target, tolerance: target == 0 ? 0 : 1, timeout: 15,
+                                                 metric: "external_back10_\(rewindPresses + 1)"),
+                          "Each real Back 10 action must move the observed paused player clock toward zero")
+            XCTAssertLessThan(seconds(position.label), before, "A seek label alone cannot prove the actual playback position changed")
+            rewindPresses += 1
+        }
+        #if os(iOS)
+        activate(app.buttons["playerOptionsDone"])
+        #endif
+        XCTAssertTrue(waitForPausedClockNear(position, target: 0, tolerance: 0, timeout: 15, metric: "external_zero_clamp"))
+        paused = seconds(position.label)
+        XCTAssertEqual(paused, 0, "The bounded real rewind must observe the zero clamp before Off/external selection")
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertEqual(seconds(position.label), 0, "Rewinding must retain paused intent rather than resume the A/V item")
+        XCTAssertEqual(method.label, "Direct play")
+        print("F2_METRIC external_text_rewind presses=\(rewindPresses) actual_paused_clock=\(seconds(position.label)) method=\(method.label)")
+        capture("External text 00 real paused Back 10 clamp at zero")
 
         func chooseExternalSubtitle(_ selectedIndex: String, tag: String) {
             #if os(tvOS)
