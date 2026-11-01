@@ -372,7 +372,8 @@ import MediaAccessibility
             if !closed { error = "Progress could not be saved. Go back to details and retry saving progress before continuing." }
             switching = false; return
         }
-        item = next; decision = nil; completedTicks = nil; viewingID = UUID(); started = false; stopped = false; completionCommitted = false; fallbackUsed = false
+        item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil
+        viewingID = UUID(); started = false; stopped = false; completionCommitted = false; fallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
         segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
         do { try await prepare(startTicks: 0, audio: nil, subtitle: nil) } catch { self.error = "Could not start the next episode. Go back and try again." }
