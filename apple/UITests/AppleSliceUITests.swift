@@ -114,8 +114,16 @@ final class AppleSliceUITests: XCTestCase {
         activate(field)
         field.typeText(config["searchQuery"] ?? "Sample H264 AAC mov_text")
         let searchItem = try XCTUnwrap(config["searchItemID"] ?? config["directID"])
-        XCTAssertTrue(app.buttons["item-\(searchItem)"].waitForExistence(timeout: 20))
-        capture("Search results")
+        let result = app.buttons["item-\(searchItem)"]
+        XCTAssertTrue(result.waitForExistence(timeout: 20))
+        capture("Search results with keyboard")
+        field.typeText("\n")
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists {
+            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 10), "Submitting the query should dismiss the native keyboard before reviewing results")
+        }
+        XCTAssertTrue(result.isHittable, "The selected result should be reachable after the keyboard is dismissed")
+        capture("Search results keyboard dismissed")
         returnHome()
 
         let settings = app.buttons["openSettings"]
