@@ -731,6 +731,9 @@ final class AppleSliceUITests: XCTestCase {
             // catalog traversal from Home before opening the configured library hierarchy.
             selectHomeRoot()
             #endif
+            #if os(tvOS)
+            capture("Native TV Home before \(key) catalog navigation")
+            #endif
             for key in ["libraryID", "samplesFolderID"] {
                 if let containerID = config[key] {
                     let container = app.buttons["item-\(containerID)"]
@@ -1050,10 +1053,17 @@ final class AppleSliceUITests: XCTestCase {
     }
     #endif
     private func reveal(_ element: XCUIElement) {
-        for _ in 0..<35 {
+        var lastFocusedDescription = ""
+        for step in 0..<35 {
             if element.exists, element.frame.width > 1, element.frame.height > 1, element.frame.intersects(app.frame), element.isHittable { return }
             #if os(tvOS)
             XCUIRemote.shared.press(.down)
+            let focused = app.buttons.allElementsBoundByIndex.first { $0.hasFocus }
+            let description = focused.map { "id=\($0.identifier) label=\($0.label) frame=\($0.frame)" } ?? "no-accessible-focused-button"
+            if description != lastFocusedDescription {
+                print("F1_TV_REVEAL step=\(step + 1) targetID=\(element.identifier) targetLabel=\(element.label) targetFrame=\(element.frame) targetHittable=\(element.isHittable) focus={\(description)}")
+                lastFocusedDescription = description
+            }
             #else
             if element.exists && element.frame.maxY < 130 { app.swipeDown() }
             else { app.swipeUp() }
@@ -1079,7 +1089,12 @@ final class AppleSliceUITests: XCTestCase {
                 else { XCUIRemote.shared.press(dx > 0 ? .right : .left) }
             } else { XCUIRemote.shared.press(.down) }
         }
-        print(app.debugDescription)
+        let focused = app.buttons.allElementsBoundByIndex.filter(\.hasFocus)
+            .map { "id=\($0.identifier) label=\($0.label) frame=\($0.frame)" }
+        let visibleButtons = app.buttons.allElementsBoundByIndex.filter(\.isHittable).prefix(20)
+            .map { "id=\($0.identifier) label=\($0.label) frame=\($0.frame)" }
+        print("F1_TV_ACTIVATE_FAILED targetID=\(element.identifier) targetLabel=\(element.label) targetFrame=\(element.frame) targetHittable=\(element.isHittable) focusedButtons={\(focused.joined(separator: " | "))}")
+        print("F1_TV_VISIBLE_BUTTONS {\(visibleButtons.joined(separator: " | "))}")
         XCTFail("Remote could not focus \(element.identifier)")
         #else
         element.tap()
