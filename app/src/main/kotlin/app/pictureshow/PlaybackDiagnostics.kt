@@ -17,3 +17,10 @@ internal object PlaybackDiagnostics {
 
     fun write(decision: PlayDecision, event: String, fields: String) = write(line(decision, event, fields))
 }
+
+/** The Android activity supplies the debug sink; catalog models retain no Android clock/log dependency. */
+internal var detailTimingSink: ((String, String) -> Unit)? = null
+
+internal fun detailTiming(phase: String, fields: String = "") {
+    detailTimingSink?.invoke(phase, fields)
+}

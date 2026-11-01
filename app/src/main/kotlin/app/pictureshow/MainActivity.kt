@@ -123,6 +123,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.DEBUG) {
+            detailTimingSink = { phase, fields ->
+                PlaybackDiagnostics.write("detail-timing phase=$phase uptime=${android.os.SystemClock.uptimeMillis()} $fields")
+            }
+        }
         if (savedInstanceState == null) {
             acceptPlaybackIntent(intent)
         } else {

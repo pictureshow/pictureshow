@@ -108,14 +108,19 @@ class DetailRecoveryAccessibilityTest {
         compose.runOnIdle { state.value = state.value.copy(loading = false, readSucceeded = true) }
         val heldNode = compose.onNodeWithTag("detail:play-pending").fetchSemanticsNode().id
         compose.onNodeWithTag("detail:play-pending").assertIsFocused().assertIsNotEnabled()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unavailable while saving progress."))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Text))
+        compose.onNodeWithTag("detail:play-pending")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Play")))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Button))
+        compose.onNodeWithText("Play unavailable", useUnmergedTree = true).assertDoesNotExist()
         for (tag in listOf("play", "played", "favorite", "from-start")) {
             compose.onNodeWithTag("detail:$tag-pending").assertIsNotEnabled()
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unavailable while saving progress."))
+                .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         }
         compose.runOnIdle { state.value = state.value.copy(playbackPending = false, playbackReportFinished = true) }
         compose.onNodeWithTag("detail:play").assertIsFocused()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ready"))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         assertEquals(heldNode, compose.onNodeWithTag("detail:play").fetchSemanticsNode().id)
     }
 

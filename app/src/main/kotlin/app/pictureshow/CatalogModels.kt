@@ -382,6 +382,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     private var seasonGeneration = 0
     private var retryDeadline: Job? = null
     private var parentReadPending = false
+    private val readLifecycle = app.pictureshow.core.DetailReadLifecycle()
 
     init {
         reload(retainRows = false)
@@ -435,7 +436,13 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     }
 
     // Lifecycle reads replace stale work but inherit any viewer-owned Retry deadline.
-    fun resumed() = reload(retainRows = false)
+    fun resumed() {
+        // init already started the arrival read. Restarting it at the first RESUMED
+        // cancels useful work during navigation; later returns still replace stale data.
+        val refresh = readLifecycle.resumed()
+        detailTiming("resume", "refresh=$refresh")
+        if (refresh) reload(retainRows = false)
+    }
 
     private fun readFinished() {
         retryDeadline?.cancel()
@@ -462,7 +469,9 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                     it.readAttempt + 1
                 )
             }
+            detailTiming("item-start")
             val result = session.call(account) { item(account, original.id) }
+            detailTiming("item-end", "success=${result is ClientResult.Success}")
             // A canceled RESUMED request must not overwrite the post-report refresh, even when
             // its transport finishes cancellation in a non-cancellable cleanup block.
             currentCoroutineContext().ensureActive()
@@ -479,9 +488,13 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                     // same stale-data guard until all of that page's authoritative reads land.
                     if (item.type !in listOf("Series", "Season")) playbackRead()
                     if (item.type == "Series") {
+                        detailTiming("next-start")
                         val next = session.call(account) { nextUp(account, item.id) }
+                        detailTiming("next-end", "success=${next is ClientResult.Success}")
                         currentCoroutineContext().ensureActive()
+                        detailTiming("seasons-start")
                         val seasons = session.call(account) { seasons(account, item.id) }
+                        detailTiming("seasons-end", "success=${seasons is ClientResult.Success}")
                         currentCoroutineContext().ensureActive()
                         parentReadPending = false
                         mutableState.update {
@@ -532,7 +545,9 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                 readFailure("This season has no series information.")
                 return@launch
             }
+            detailTiming("episodes-start")
             val result = session.call(account) { episodes(account, seriesId, season.id) }
+            detailTiming("episodes-end", "success=${result is ClientResult.Success}")
             if (generation != seasonGeneration) return@launch
             when (result) {
                 is ClientResult.Failure -> readFailure(result.error.message)
@@ -549,6 +564,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     }
 
     private fun playbackRead() {
+        detailTiming("read-settled")
         readFinished()
         session.playbackRead(original.id)
         mutableState.update {

@@ -27,13 +27,13 @@ Selection order on ordinary TV details is Play, optional resume-only Play from s
 Detail recovery accessibility: each failed Retry attempt publishes a failure state and its reason even if that
 reason matches the preceding failure. First-error speech includes the Retry action before a long reason can
 occupy the speech queue. Held actions remain input-focusable for the established handoff, expose disabled
-accessibility semantics, and become Ready when progress/report refresh settles. These changes preserve the
+accessibility semantics, and announce Ready once if the same selected control becomes usable when progress/report refresh settles. These changes preserve the
 request budget, Select guard and Retry-to-fresh focus contract; action slots remain present during publication.
 
 Detail feedback follows one presentation policy (`detail-action-state` and `detail-failure-presentation`
 application vectors). Focus arrival reads the action; outgoing full-screen grids do not publish pane
 window events that can queue their old titles ahead of it. Accepted pending requests describe the
-request, unavailable controls describe unavailability, and pending-to-usable actions describe Ready.
+request, unavailable controls use the native disabled cue with a plain action name, and a same-focused held-to-usable transition announces Ready once.
 Ordinary watched/favorite values remain available during traversal. Passive saving/loading progress
 is readable but does not announce every intermediate phase. A write failure publishes one explicit
 Change failed cue, its reason and Retry availability without moving selection. Its viewport overlay
@@ -42,10 +42,22 @@ truthful visible/spoken reason through late transport refinements; An accepted v
 clearance releases that presentation. Automatic transport generations retain the visible read-error
 episode identity (`detail-failure-key` vectors), including coalesced loading/error emissions. Transport state, action budgets and Select guards are unchanged.
 
-Accepted deferred requests have one urgent accessibility cue on the selected action. That priority ends when focus leaves or the request settles; visiting the action again or repeating Select does not reannounce acceptance. Passive pending and ready states retain their normal focused descriptions. A held action never acquires request priority. The `detail-request-priority` vectors pin this delivery policy independently of Android's live-region mechanism.
+Accepted deferred requests have one urgent accessibility cue on the selected action. That priority ends when focus leaves or the request settles; visiting the action again or repeating Select does not reannounce acceptance. Ordinary focused descriptions carry only actual toggle values; Ready is not retained on any action. A held action never acquires request priority. The `detail-request-priority` vectors pin this delivery policy independently of Android's live-region mechanism.
 
-Pending/request labels carry their intent once in the action text. State descriptions add only actual toggle value, unavailability or readiness; they do not repeat that text. This avoids duplicate full labels on TalkBack versions that speak both channels. Accepted-request live-region priority is unchanged.
+Pending/request labels carry their intent once in the action text. State descriptions add only actual toggle value; they do not repeat that text. This avoids duplicate full labels on TalkBack versions that speak both channels. Accepted-request live-region priority is unchanged.
 
 Accessible forward catalog arrival omits decorative navigation fades so the normal focused-action publication does not wait behind them (`catalog-arrival-animation` vectors). Navigation from playback, pop/return transitions, ordinary sighted transitions, focus requests, Select guards and request budgets retain their existing behavior. The visible write failure also leads with Change failed.
 
-Initial detail metadata stays accessibility-hidden while the first authoritative read is loading and no action has been published (`detail-arrival-publication` vectors). Publish it with the normal unfocused action handoff so input-focus sync cannot select the heading first. Already published pages and guarded playback-return controls retain their existing exposure. The fixed write-error panel inherits the entry lifecycle gate: it is accessibility-hidden outside RESUMED.
+Initial detail metadata stays accessibility-hidden while the first authoritative read is loading and no action has been published (`detail-arrival-publication` vectors). Keep static metadata hidden until the normal action handoff finishes or the viewer takes input ownership, so input-focus sync cannot select the heading first. Already published pages and guarded playback-return controls retain their existing exposure. The fixed write-error panel inherits the entry lifecycle gate: it is accessibility-hidden outside RESUMED.
+
+The `detail-ready-feedback` vectors pin one-shot readiness: only a held-to-usable transition on the same already-focused control while RESUMED emits Ready. Initial usable focus, peers, later traversal, toggle changes, recomposition and inactive settlement emit none. Disabled controls keep the platform disabled semantics, use a plain accessible action name (`detail-held-label` vectors), and omit competing availability state text. Read-failure placeholders show neutral Watched/Favorite unavailable labels and omit unknown toggle values and direction; successful authoritative data restores the real action and actual value.
+
+The initial detail read belongs to destination construction. Its first RESUMED event keeps that read in flight; each later return still starts a fresh authoritative read. A disabled action exposes one plain accessible action name and the native disabled property. Its visible unavailable label has no additional text semantics.
+
+Ready also requires the selected action to be usable. An authoritative empty container never announces its disabled Play as ready. The prior hold may wait for usability only on that same selected action; changing selection cancels it. Ordinary busy-to-idle transitions do not start a readiness episode.
+
+On ordinary arrival, publish the unfocused actions using the existing handoff before exposing the static header metadata to accessibility. The heading, episode metadata, overview and genres stay hidden until the handoff finishes or the viewer takes input ownership. Failure pages, pages without actions and playback returns retain their existing exposure. The `detail-metadata-handoff` vectors pin this gate; focus requests and publication frame waits are unchanged.
+
+The existing bounded host-focus delegate also covers a healthy ordinary action handoff. It drops only an empty host ViewGroup input-focus record while that handoff is pending; the actual virtual control focus, labeled groups, other events, inherited providers/actions and completed handoffs still forward normally. Failure and no-action ordinary pages keep their prior behavior; playback and recovery retain their previous scope. The `detail-host-focus-handoff` vectors pin this activation policy. No new timer or focus request is introduced.
+
+The first arrival gate is consumed by the completed handoff. A later lifecycle pause resetting focus-restoration state does not reactivate that initial metadata/host-event gate (`detail-arrival-pending` vectors). Existing playback and recovery handoffs retain their own scope.

@@ -4,9 +4,14 @@
 package app.pictureshow
 
 import android.app.Application
+import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityNodeProvider
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -16,6 +21,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -48,6 +54,237 @@ class DetailFeedbackTest {
     private val account = Account(Server("s", "Demo", "https://example.test", "12"), User("u", "Viewer"), "fake")
     private val film = MediaItem("film", "Invented feature", "Movie", overview = "An invented description.")
     private val failure = "The server could not complete the request (503)."
+
+    @Test fun settlementAnnouncesOnceOnTheSelectedActionWithoutLeavingReadyOnPeers() {
+        val speech = mutableListOf<String>()
+        val host = object : View(compose.activity) {
+            @Suppress("DEPRECATION")
+            override fun announceForAccessibility(text: CharSequence) {
+                speech += text.toString()
+            }
+        }
+        val state = mutableStateOf(CatalogDetailState(account, film, loading = true, playbackPending = true))
+        compose.setContent {
+            CompositionLocalProvider(LocalView provides host) {
+                PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, origin = film, onPendingAction = { true }) }
+            }
+        }
+        compose.onNodeWithTag("detail:play-pending").assertIsFocused()
+        compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false, readSucceeded = true) }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        compose.runOnIdle { assertEquals(listOf("Ready"), speech) }
+        compose.onNodeWithTag("detail:played").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unwatched"))
+        compose.runOnIdle {
+            state.value = state.value.copy(item = film.copy(userData = film.userData.copy(played = true)))
+        }
+        compose.onNodeWithTag("detail:played")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Watched"))
+        compose.onNodeWithTag("detail:play").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.runOnIdle { assertEquals(listOf("Ready"), speech) }
+    }
+
+    @Test fun anEmptyFreshSeasonCannotAnnounceItsDisabledPlayIsReady() {
+        val speech = mutableListOf<String>()
+        val host = object : View(compose.activity) {
+            @Suppress("DEPRECATION")
+            override fun announceForAccessibility(text: CharSequence) {
+                speech += text.toString()
+            }
+        }
+        val season = MediaItem("season", "Invented season", "Season", seriesId = "series", childCount = 1)
+        val state =
+            mutableStateOf(
+                CatalogDetailState(account, season, loading = true, playbackPending = true, episodes = listOf(film.copy(type = "Episode")))
+            )
+        compose.setContent {
+            CompositionLocalProvider(LocalView provides host) {
+                PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, origin = season, onPendingAction = { true }) }
+            }
+        }
+        compose.onNodeWithTag("detail:play-pending").assertIsFocused()
+        compose.runOnIdle {
+            state.value =
+                state.value.copy(
+                    item = season.copy(childCount = 0),
+                    episodes = emptyList(),
+                    loading = false,
+                    playbackPending = false,
+                    playbackReportFinished = true,
+                    readSucceeded = true
+                )
+        }
+        compose.runOnIdle { assertTrue(speech.isEmpty(), "An unavailable Play must not be announced as Ready: $speech") }
+    }
+
+    @Test fun settlementDoesNotAnnounceOverTheReadersIndependentTextSelection() {
+        val speech = mutableListOf<String>()
+        val host = object : View(compose.activity) {
+            override fun getAccessibilityNodeProvider() = object : AccessibilityNodeProvider() {
+                @Suppress("DEPRECATION")
+                override fun findFocus(focus: Int): AccessibilityNodeInfo = AccessibilityNodeInfo.obtain().apply {
+                    className = "android.widget.TextView"
+                    isVisibleToUser = true
+                }
+            }
+
+            @Suppress("DEPRECATION")
+            override fun announceForAccessibility(text: CharSequence) {
+                speech += text.toString()
+            }
+        }
+        val state = mutableStateOf(CatalogDetailState(account, film, loading = true, playbackPending = true))
+        compose.setContent {
+            CompositionLocalProvider(LocalView provides host) {
+                PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, origin = film, onPendingAction = { true }) }
+            }
+        }
+        compose.onNodeWithTag("detail:play-pending").assertIsFocused()
+        compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false, readSucceeded = true) }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        compose.runOnIdle { assertTrue(speech.isEmpty()) }
+    }
+
+    @Test fun unknownSeasonPlaceholderCannotClaimAWatchedDirectionOrValue() {
+        val season = MediaItem("season", "Invented season", "Season", seriesId = "series")
+        val state = mutableStateOf(CatalogDetailState(account, season, loading = false, error = failure, readFailed = true))
+        compose.setContent {
+            PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}) }
+        }
+        compose.onNodeWithText("Mark watched").assertDoesNotExist()
+        compose.onNodeWithText("Mark unwatched").assertDoesNotExist()
+        compose.onNodeWithText("Watched unavailable", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("detail:played", useUnmergedTree = true).assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Watched")))
+        compose.onNodeWithTag("detail:played", useUnmergedTree = true)
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ToggleableState))
+        compose.runOnIdle {
+            state.value = state.value.copy(
+                item = season.copy(userData = season.userData.copy(played = true)),
+                episodes = listOf(film.copy(type = "Episode")),
+                error = null,
+                readFailed = false,
+                readSucceeded = true
+            )
+        }
+        compose.onNodeWithText("Mark unwatched").assertIsDisplayed()
+        compose.onNodeWithTag("detail:played")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Watched"))
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun ordinaryArrivalFiltersOnlyTheEmptyHostFocusUntilHandoffFinishes() {
+        val series = MediaItem("series", "Invented series", "Series")
+        val state = mutableStateOf(CatalogDetailState(account, series, loading = true))
+        val owner = object : androidx.lifecycle.LifecycleOwner {
+            val registry = androidx.lifecycle.LifecycleRegistry(this)
+            override val lifecycle: androidx.lifecycle.Lifecycle = registry
+        }
+        compose.runOnUiThread { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        lateinit var host: View
+        lateinit var parent: android.view.ViewGroup
+        var inheritedInstalled = false
+        val forwarded = mutableListOf<android.view.accessibility.AccessibilityEvent>()
+        val inherited = object : androidx.core.view.AccessibilityDelegateCompat() {
+            override fun onRequestSendAccessibilityEvent(
+                parent: android.view.ViewGroup,
+                child: View,
+                event: android.view.accessibility.AccessibilityEvent
+            ): Boolean {
+                forwarded += event
+                return true
+            }
+        }
+        compose.setContent {
+            host = LocalView.current
+            if (!inheritedInstalled) {
+                parent = host.parent as android.view.ViewGroup
+                androidx.core.view.ViewCompat.setAccessibilityDelegate(parent, inherited)
+                inheritedInstalled = true
+            }
+            CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
+                PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}) }
+            }
+        }
+        fun event(klass: String) = android.view.accessibility.AccessibilityEvent.obtain(
+            android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED
+        ).apply { className = klass }
+        compose.runOnIdle {
+            val delegate = requireNotNull(androidx.core.view.ViewCompat.getAccessibilityDelegate(parent))
+            val empty = event("android.view.ViewGroup")
+            val before = forwarded.size
+            assertTrue(
+                !delegate.onRequestSendAccessibilityEvent(parent, host, empty),
+                "An empty host record must not select the first text node"
+            )
+            assertEquals(before, forwarded.size)
+            val actual = event("android.view.View")
+            assertTrue(delegate.onRequestSendAccessibilityEvent(parent, host, actual))
+            assertTrue(forwarded.last() === actual)
+        }
+        compose.runOnIdle {
+            state.value = state.value.copy(
+                loading = false,
+                readSucceeded = true,
+                nextUp = listOf(MediaItem("episode", "First episode", "Episode"))
+            )
+        }
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.runOnIdle {
+            val delegate = requireNotNull(androidx.core.view.ViewCompat.getAccessibilityDelegate(parent))
+            val ordinary = event("android.view.ViewGroup")
+            assertTrue(delegate.onRequestSendAccessibilityEvent(parent, host, ordinary))
+            assertTrue(forwarded.last() === ordinary)
+        }
+        compose.runOnUiThread { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.STARTED }
+        compose.runOnIdle {
+            val delegate = requireNotNull(androidx.core.view.ViewCompat.getAccessibilityDelegate(parent))
+            val later = event("android.view.ViewGroup")
+            assertTrue(
+                delegate.onRequestSendAccessibilityEvent(parent, host, later),
+                "Leaving an arrived page must not reactivate its initial host filter"
+            )
+            assertTrue(forwarded.last() === later)
+        }
+    }
+
+    @Test fun arrivalMetadataStaysHiddenWhileThePrimaryIsPublishedUnfocused() {
+        val series = MediaItem("series", "Invented series", "Series", productionYear = 2026, overview = "Arrival overview")
+        val state = mutableStateOf(CatalogDetailState(account, series, loading = true))
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}) }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle {
+            state.value = state.value.copy(
+                loading = false,
+                readSucceeded = true,
+                nextUp = listOf(MediaItem("episode", "First episode", "Episode"))
+            )
+        }
+        var publishedUnfocused = false
+        repeat(12) {
+            compose.mainClock.advanceTimeByFrame()
+            val nodes = compose.onAllNodesWithTag("detail:play").fetchSemanticsNodes()
+            if (nodes.isNotEmpty() && !nodes.single().config[SemanticsProperties.Focused]) {
+                publishedUnfocused = true
+                compose.onNodeWithText(series.name).assertDoesNotExist()
+                compose.onNodeWithText("2026").assertDoesNotExist()
+                compose.onNodeWithText("Arrival overview").assertDoesNotExist()
+            }
+        }
+        assertTrue(publishedUnfocused, "The existing handoff must still publish the action unfocused")
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("detail:play").assertIsFocused()
+        compose.onNodeWithText(series.name).assertIsDisplayed()
+        compose.onNodeWithText("2026").assertIsDisplayed()
+        compose.onNodeWithText("Arrival overview").assertIsDisplayed()
+    }
 
     @Test fun accessibleCatalogArrivalPublishesPrimaryFocusBeforeTheDefaultFadeEnds() = arrivalScenario(fromPlayback = false)
 
@@ -283,7 +520,7 @@ class DetailFeedbackTest {
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false, readSucceeded = true) }
         compose.onNodeWithTag("detail:play").assertIsFocused()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Ready"))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         assertEquals(id, compose.onNodeWithTag("detail:play").fetchSemanticsNode().id)
     }
 
@@ -318,6 +555,20 @@ class DetailFeedbackTest {
                     listOf("Change failed. $failure Retry is available.")
                 )
             )
+    }
+
+    @Test fun idleFailureRefinementsKeepTheFocusedRetryDescriptionIdentical() {
+        val first = "The server has not finished loading. Retry to reload the item."
+        val state = mutableStateOf(CatalogDetailState(account, film, loading = false, error = first, readFailed = true))
+        compose.setContent { PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}) } }
+        val before = compose.onNodeWithTag("detail:retry").fetchSemanticsNode()
+        val description = before.config[SemanticsProperties.StateDescription]
+        compose.runOnIdle { state.value = state.value.copy(error = "The server took too long to respond. Try again.", readAttempt = 2) }
+        compose.mainClock.advanceTimeBy(10_000)
+        compose.onNodeWithTag("detail:retry").assertIsFocused()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, description))
+        assertEquals(before.id, compose.onNodeWithTag("detail:retry").fetchSemanticsNode().id)
+        compose.onNodeWithText(first).assertIsDisplayed()
     }
 
     @Test fun oneFailurePresentationDoesNotReplaceTheReasonWhileItIsBeingSpoken() {
