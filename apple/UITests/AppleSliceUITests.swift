@@ -398,17 +398,28 @@ final class AppleSliceUITests: XCTestCase {
         let playRequestedAt = ProcessInfo.processInfo.systemUptime
         activate(playFromStart)
         #if os(tvOS)
-        openNativeTVInfoTab()
-        #endif
+        let initialInfo = try XCTUnwrap(openNativeTVInfoTab(), "The native Info surface must expose a method and clock together")
+        print("F1_METRIC direct_method_presentation_ms=\(Int((ProcessInfo.processInfo.systemUptime - playRequestedAt) * 1000)) method=\(initialInfo.method)")
+        capture("Direct startup initial preparation")
+        let initial = try XCTUnwrap(waitForTVPlayerClock(identifier: "playbackPosition", minimum: 0, timeout: 30,
+                                                        metric: "direct_initial", expectedMethod: "Direct play"))
+        let target = max(3, initial.seconds + 3)
+        print("F1_METRIC direct_initial_clock_seconds=\(initial.seconds) observed_advance_target_seconds=\(target)")
+        let advanced = try XCTUnwrap(waitForTVPlayerClock(identifier: "playbackPosition", minimum: target, timeout: 40,
+                                                         metric: "direct", expectedMethod: "Direct play"),
+                                    "Direct playback must visibly advance by at least three actual seconds inside the native player")
+        print("F1_METRIC direct_clock_advanced_from_play_ms=\(Int((ProcessInfo.processInfo.systemUptime - playRequestedAt) * 1000)) seconds=\(advanced.seconds) method=\(advanced.method ?? "<missing>")")
+        XCTAssertEqual(advanced.method, "Direct play")
+        capture("Direct startup advancing video")
+        leaveNativeTVPlayer(returningTo: playFromStart)
+        #else
         let method = app.staticTexts["playbackMethod"]
         XCTAssertTrue(method.waitForExistence(timeout: 30))
         print("F1_METRIC direct_method_presentation_ms=\(Int((ProcessInfo.processInfo.systemUptime - playRequestedAt) * 1000)) method=\(method.label)")
         capture("Direct startup initial preparation")
         let position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(position.waitForExistence(timeout: 10), "The player should expose an accessible current position")
-        #if os(iOS)
         assertTouchPlayerActionLabels()
-        #endif
         XCTAssertFalse(position.label.isEmpty, "The initial clock value must be present before direct playback is measured")
         let initialSeconds = seconds(position.label)
         let observedAdvanceTarget = max(3, initialSeconds + 3)
@@ -417,9 +428,6 @@ final class AppleSliceUITests: XCTestCase {
         print("F1_METRIC direct_clock_advanced_from_play_ms=\(Int((ProcessInfo.processInfo.systemUptime - playRequestedAt) * 1000)) seconds=\(seconds(position.label))")
         XCTAssertEqual(method.label, "Direct play")
         capture("Direct startup advancing video")
-        #if os(tvOS)
-        leaveNativeTVPlayer(returningTo: playFromStart)
-        #else
         activate(app.buttons["closePlayer"])
         #endif
         XCTAssertTrue(playFromStart.waitForExistence(timeout: 15))
@@ -1037,63 +1045,66 @@ final class AppleSliceUITests: XCTestCase {
         reveal(play); activate(play)
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
         XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15))
-        XCUIRemote.shared.press(.up)
-        let position = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
-        XCTAssertTrue(position.waitForExistence(timeout: 30))
-        let initial = seconds(position.label)
-        XCTAssertTrue(waitForPlaybackClock(position, minimum: max(3, initial + 3), timeout: 45,
-                                           metric: "tv_episode_next_initial", nativeAVKitClock: true))
-        let duration = max(1, Int(config["episodeRunSeconds"] ?? "0") ?? 0)
+        let initial = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 0, timeout: 30,
+                                                        metric: "tv_episode_next_initial_clock"))
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: max(3, initial.seconds + 3), timeout: 45,
+                                              metric: "tv_episode_next_initial"), "The current episode must genuinely advance before manual Next")
+        let duration = try XCTUnwrap(config["episodeRunSeconds"].flatMap(Int.init))
         XCTAssertGreaterThan(duration, 0, "The adjacent episode test needs a known duration")
         let currentName = try XCTUnwrap(config["episodeName"])
         let expectedName = try XCTUnwrap(config["nextEpisodeName"])
         let nearEndTarget = max(1, duration - 18)
-        XCTAssertTrue(waitForPlaybackClock(position, minimum: nearEndTarget, timeout: TimeInterval(duration + 15),
-                                           metric: "tv_episode_next_natural_final_window", nativeAVKitClock: true),
-                      "The episode clock must naturally reach the final window before looking for contextual Next")
-        let nearEnd = seconds(position.label)
-        XCTAssertGreaterThanOrEqual(nearEnd, nearEndTarget, "Playback must reach the final window naturally")
-
-        // Native contextual actions intentionally disappear while transport is
-        // visible. The same credits action must remain remote-reachable in the bar.
-        XCUIRemote.shared.press(.up)
-        let nextByID = app.descendants(matching: .any).matching(identifier: "playNextTransport").firstMatch
+        let nearEnd = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: nearEndTarget, maximum: duration - 5,
+                                                        timeout: TimeInterval(duration + 15), metric: "tv_episode_next_natural_final_window"),
+                                    "The current episode must naturally reach the manual-action window before physical EOS").seconds
         let nextActionPattern = "^Play next: \(NSRegularExpression.escapedPattern(for: expectedName))( \\([0-9]{1,2}\\))?$"
+        let nextByID = app.descendants(matching: .any).matching(identifier: "playNextTransport").firstMatch
         let nextByTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label MATCHES %@", nextActionPattern)).firstMatch
-        let next = nextByID.exists ? nextByID : nextByTitle
-        let currentTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", currentName)).firstMatch
-        let nextVisible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            nativePlayer.exists && currentTitle.exists && nativePlayer.frame.contains(currentTitle.frame)
-                && self.parsedClockSeconds(position.label) != nil
-                && self.seconds(position.label) < duration - 1
-                && next.exists && next.isHittable && nativePlayer.frame.contains(next.frame)
-        }, object: next)
-        let secondsRemaining = duration - nearEnd
-        XCTAssertGreaterThanOrEqual(secondsRemaining, 5, "The native contextual action must be activated before the physical end window")
-        XCTAssertEqual(XCTWaiter.wait(for: [nextVisible], timeout: TimeInterval(max(1, secondsRemaining - 2))), .completed,
-                       "After the native HUD settles, AVKit should expose a visible next-episode contextual action inside the player")
-        // Capture before the final fresh clock/title guards so attachment latency
-        // cannot turn physical EOS into a false manual-activation pass.
+        func nextInSnapshot(_ snapshot: TVPlayerSnapshot) -> XCUIElementSnapshot? {
+            snapshot.nodes.first {
+                $0.label.range(of: nextActionPattern, options: .regularExpression) != nil && $0.isEnabled
+            }
+        }
+        func currentEpisodeAction(_ snapshot: TVPlayerSnapshot) -> (clock: Int, next: XCUIElementSnapshot)? {
+            guard snapshot.nodes.contains(where: { $0.label == currentName }),
+                  let clock = snapshot.first(identifier: "AXElapsedTime").flatMap({ parsedClockSeconds($0.label) }),
+                  clock >= nearEndTarget, clock < duration - 1,
+                  let next = nextInSnapshot(snapshot) else { return nil }
+            return (clock, next)
+        }
+        // Every candidate requires the current title, valid native clock and exact
+        // adjacent action inside one player-frame snapshot. Hittability is also
+        // checked on the real control before taking a fresh final snapshot.
+        var next: XCUIElement?
+        let actionDeadline = ProcessInfo.processInfo.systemUptime + TimeInterval(max(1, duration - nearEnd - 2))
+        var lastReveal = ProcessInfo.processInfo.systemUptime - 2
+        while ProcessInfo.processInfo.systemUptime < actionDeadline {
+            if ProcessInfo.processInfo.systemUptime - lastReveal >= 2 {
+                XCUIRemote.shared.press(.up)
+                lastReveal = ProcessInfo.processInfo.systemUptime
+            }
+            if let snapshot = tvPlayerSnapshot(), let candidate = currentEpisodeAction(snapshot) {
+                let control = candidate.next.identifier == "playNextTransport" ? nextByID : nextByTitle
+                if control.isHittable { next = control; break }
+            }
+            Thread.sleep(forTimeInterval: 0.35)
+        }
+        let nextAction = try XCTUnwrap(next, "AVKit must expose a hittable exact adjacent-episode action before physical EOS")
         capture("Native TV manual Next available before activation")
-        let actionClock = try XCTUnwrap(parsedClockSeconds(position.label), "A valid native elapsed clock must be present before manual Next")
-        XCTAssertLessThan(actionClock, duration - 3, "The original episode must still be playing before manual Next is activated")
-        XCTAssertTrue(currentTitle.exists && nativePlayer.frame.contains(currentTitle.frame), "The original episode title must still be visible before manual Next")
-        XCTAssertNotNil(next.label.range(of: nextActionPattern, options: .regularExpression),
-                        "The contextual Next action must name the exact adjacent episode and expose its bounded countdown")
-        print("F1_METRIC tv_manual_next_action clock=\(actionClock) remaining=\(duration - actionClock) label=\(next.label)")
-        activate(next)
+        XCTAssertTrue(nextAction.isHittable, "Manual Next must remain hittable after the evidence capture")
+        let action = try XCTUnwrap(tvPlayerSnapshot().flatMap(currentEpisodeAction),
+                                  "The current episode title, clock and exact Next action must still coexist after capture")
+        XCTAssertLessThan(action.clock, duration - 3, "The original episode must still be playing before manual Next is activated")
+        print("F1_METRIC tv_manual_next_action clock=\(action.clock) remaining=\(duration - action.clock) label=\(action.next.label) snapshot=true")
+        activate(nextAction)
 
-        let playerTitle = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", expectedName)).firstMatch
-        let titleChanged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            playerTitle.exists && playerTitle.frame.width > 0 && playerTitle.frame.height > 0
-                && nativePlayer.exists && nativePlayer.frame.contains(playerTitle.frame)
-        }, object: playerTitle)
-        XCTAssertEqual(XCTWaiter.wait(for: [titleChanged], timeout: 45), .completed, "The native player title should identify the adjacent episode after handoff")
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) < nearEnd - 10 }, evaluatedWith: position)
-        waitForExpectations(timeout: 45)
-        expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= 2 }, evaluatedWith: position)
-        waitForExpectations(timeout: 35)
-        XCTAssertLessThanOrEqual(seconds(position.label), 12, "The next episode must start from its own beginning, not inherit the prior source position")
+        let reset = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 0, maximum: nearEnd - 11,
+                                                      timeout: 45, metric: "tv_episode_next_reset", requiredTitle: expectedName),
+                                  "The adjacent title and reset native clock must coexist after manual handoff")
+        let advanced = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: max(2, reset.seconds + 2), maximum: 12,
+                                                         timeout: 35, metric: "tv_episode_next_advanced", requiredTitle: expectedName),
+                                     "The adjacent episode must advance from its own beginning under its exact title")
+        XCTAssertLessThanOrEqual(advanced.seconds, 12, "The next episode must not inherit the prior source position")
         capture("Native TV adjacent episode started")
         leaveNativeTVPlayer(returningTo: play)
         #endif
@@ -1575,64 +1586,126 @@ final class AppleSliceUITests: XCTestCase {
     }
     #endif
     #if os(tvOS)
-    /// AVKit exposes its native tab row through AVInfoMenuCollection. The cells can have no AX
-    /// labels, so move Down into the row, then Right across its live cells to the custom last tab.
-    private func openNativeTVInfoTab() {
+    /// All fields in these observations come from one immutable accessibility tree.
+    /// Looking up attributes on live XCUIElements separately can cross a HUD transition.
+    private struct TVPlayerSnapshot {
+        let nodes: [XCUIElementSnapshot]
+        func first(identifier: String) -> XCUIElementSnapshot? {
+            nodes.first { $0.identifier == identifier }
+        }
+    }
+    private struct TVInfoObservation {
+        let method: String
+        let clock: String
+        let backFrame: CGRect
+        let forwardFrame: CGRect
+    }
+    private struct TVClockObservation {
+        let seconds: Int
+        let method: String?
+    }
+    private func tvSnapshotNodes(_ root: XCUIElementSnapshot) -> [XCUIElementSnapshot] {
+        [root] + root.children.flatMap { tvSnapshotNodes($0) }
+    }
+    private func tvPlayerSnapshot() -> TVPlayerSnapshot? {
+        guard let root = try? app.snapshot() else { return nil }
+        let nodes = tvSnapshotNodes(root)
+        guard let player = nodes.first(where: { $0.identifier == "pictureshowNativePlayer" }),
+              player.frame.width > 0, player.frame.height > 0 else { return nil }
+        return TVPlayerSnapshot(nodes: nodes.filter {
+            $0.frame.width > 0 && $0.frame.height > 0 && player.frame.contains($0.frame)
+                && root.frame.contains($0.frame)
+        })
+    }
+    private func tvInfoObservation(_ snapshot: TVPlayerSnapshot) -> TVInfoObservation? {
+        guard let method = snapshot.first(identifier: "playbackMethod"), !method.label.isEmpty,
+              let clock = snapshot.first(identifier: "playbackPosition"), parsedClockSeconds(clock.label) != nil,
+              let back = snapshot.first(identifier: "seekBackward"),
+              let forward = snapshot.first(identifier: "seekForward") else { return nil }
+        return TVInfoObservation(method: method.label, clock: clock.label,
+                                 backFrame: back.frame, forwardFrame: forward.frame)
+    }
+    /// Up is a real AVKit reveal input. It keeps the HUD available without pausing,
+    /// seeking, accepting a stale cached clock, or substituting an app/session timer.
+    private func waitForTVPlayerClock(identifier: String, minimum: Int, maximum: Int? = nil,
+                                      timeout: TimeInterval, metric: String, expectedMethod: String? = nil,
+                                      requiredTitle: String? = nil) -> TVClockObservation? {
+        let started = ProcessInfo.processInfo.systemUptime
+        let deadline = started + timeout
+        var lastReveal = started - 2
+        var lastClock = "<not exposed>"
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let now = ProcessInfo.processInfo.systemUptime
+            if now - lastReveal >= 2 {
+                XCUIRemote.shared.press(.up)
+                lastReveal = ProcessInfo.processInfo.systemUptime
+            }
+            if let snapshot = tvPlayerSnapshot(), let clock = snapshot.first(identifier: identifier) {
+                lastClock = clock.label
+                let method = snapshot.first(identifier: "playbackMethod")?.label
+                let hasExpectedInfo = expectedMethod == nil || (tvInfoObservation(snapshot)?.method == expectedMethod)
+                let hasTitle = requiredTitle.map { title in snapshot.nodes.contains { $0.label == title } } ?? true
+                if let value = parsedClockSeconds(clock.label), value >= minimum,
+                   maximum.map({ value <= $0 }) ?? true, hasExpectedInfo, hasTitle,
+                   snapshot.first(identifier: "playbackWaiting") == nil {
+                    print("F1_METRIC \(metric)_clock_advanced_ms=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) seconds=\(value) method=\(method ?? "<not exposed>") snapshot=true")
+                    return TVClockObservation(seconds: value, method: method)
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.35)
+        }
+        print("F1_METRIC \(metric)_clock_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) final_position=\(lastClock) snapshot=true")
+        return nil
+    }
+    /// AVKit can expose the custom tab as an unlabeled cell. Navigate its actual
+    /// last cell, then require method, clock and seek controls in the same tree.
+    @discardableResult
+    private func openNativeTVInfoTab() -> TVInfoObservation? {
         let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
-        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15), "The identified native player should contain the custom info surface")
-        // The custom controller hosts SwiftUI text inside UIKit, and tvOS may surface UILabels
-        // as `Other` instead of `StaticText`; query by the app-owned identifiers across types.
-        let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
-        let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
-        let back10 = app.descendants(matching: .any).matching(identifier: "seekBackward").firstMatch
-        let forward10 = app.descendants(matching: .any).matching(identifier: "seekForward").firstMatch
-        func safeLabel(_ element: XCUIElement) -> String { element.exists ? element.label : "<not exposed>" }
-        func isClockLabel(_ value: String) -> Bool {
-            parsedClockSeconds(value) != nil
+        guard nativePlayer.waitForExistence(timeout: 15) else {
+            XCTFail("The identified native player should contain the custom info surface")
+            return nil
         }
-        func visibleInPlayer(_ element: XCUIElement) -> Bool {
-            guard element.exists else { return false }
-            let frame = element.frame
-            return frame.width > 0 && frame.height > 0 && nativePlayer.frame.contains(frame)
+        func observe() -> TVInfoObservation? { tvPlayerSnapshot().flatMap(tvInfoObservation) }
+        func log(_ observation: TVInfoObservation, step: String) {
+            print("F1_AX tv_info_content_visible step=\(step) method=\(observation.method) position=\(observation.clock) seekFrames=\(observation.backFrame),\(observation.forwardFrame) snapshot=true")
         }
-        func infoContentIsVisible() -> Bool {
-            nativePlayer.exists && visibleInPlayer(method) && visibleInPlayer(position)
-                && !safeLabel(method).isEmpty && isClockLabel(safeLabel(position))
-                && visibleInPlayer(back10) && visibleInPlayer(forward10)
-        }
-        if infoContentIsVisible() {
-            print("F1_AX tv_info_content_visible step=already-visible method=\(safeLabel(method)) position=\(safeLabel(position)) methodHittable=\(method.isHittable) positionHittable=\(position.isHittable) seekFrames=\(back10.frame),\(forward10.frame)")
-            return
+        if let observation = observe() {
+            log(observation, step: "already-visible")
+            return observation
         }
         XCUIRemote.shared.press(.up)
         let collection = app.collectionViews["AVInfoMenuCollection"]
-        XCTAssertTrue(collection.waitForExistence(timeout: 10), "AVKit should expose its native info-menu collection")
-        let cells = collection.cells
-        let count = cells.count
-        XCTAssertGreaterThanOrEqual(count, 2, "AVKit should expose its built-in Info tab and custom Pictureshow tab")
-        let targetIndex = max(0, count - 1)
-        let target = cells.element(boundBy: targetIndex)
-        XCTAssertTrue(target.waitForExistence(timeout: 10), "AVKit should expose the final custom info tab")
-        func cellTrace(_ step: String) -> Int? {
-            let currentCells = cells.allElementsBoundByIndex
-            let focusedIndex = currentCells.firstIndex(where: \.hasFocus)
-            let descriptions = currentCells.enumerated().map { index, cell in
-                "\(index):label=\(cell.label) id=\(cell.identifier) focus=\(cell.hasFocus) frame=\(cell.frame)"
+        guard collection.waitForExistence(timeout: 10) else {
+            XCTFail("AVKit should expose its native info-menu collection")
+            return nil
+        }
+        let count = collection.cells.count
+        guard count >= 2 else {
+            XCTFail("AVKit should expose its built-in Info tab and custom Pictureshow tab")
+            return nil
+        }
+        let target = collection.cells.element(boundBy: count - 1)
+        guard target.waitForExistence(timeout: 10) else {
+            XCTFail("AVKit should expose the final custom info tab")
+            return nil
+        }
+        if observe() == nil { activateNativeTVMenuChoice(target) }
+        let deadline = ProcessInfo.processInfo.systemUptime + 15
+        var lastReveal = ProcessInfo.processInfo.systemUptime
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if let observation = observe() {
+                log(observation, step: "after-navigation")
+                return observation
             }
-            print("F1_TV_INFO_FOCUS step=\(step) targetCell=\(targetIndex)/\(count) targetFrame=\(target.frame) focusedIndex=\(focusedIndex.map { String($0) } ?? "none") cells={\(descriptions.joined(separator: " | "))}")
-            return focusedIndex
+            if ProcessInfo.processInfo.systemUptime - lastReveal >= 2 {
+                XCUIRemote.shared.press(.up)
+                lastReveal = ProcessInfo.processInfo.systemUptime
+            }
+            Thread.sleep(forTimeInterval: 0.35)
         }
-        _ = cellTrace("before-geometry-navigation")
-        if !infoContentIsVisible() {
-            // A tab cell need not itself own AX focus: AVKit may put focus on
-            // a descendant or the separate transport row. Route vertically and
-            // horizontally from the actual focused frame before real Select.
-            activateNativeTVMenuChoice(target)
-        }
-        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in infoContentIsVisible() }, object: method)
-        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 15), .completed,
-                       "Remote navigation or activation should expose the app-owned method and clock inside the native player")
-        print("F1_AX tv_info_content_visible final=true method=\(safeLabel(method)) position=\(safeLabel(position)) focusedCellHasFocus=\(target.hasFocus) axCellLabelUnexposed=true")
+        XCTFail("Remote navigation should expose the app-owned method, valid clock and both seek controls together inside the native player")
+        return nil
     }
     private func nativeTVTransportMenu(_ title: String) -> XCUIElement {
         XCUIRemote.shared.press(.up)
