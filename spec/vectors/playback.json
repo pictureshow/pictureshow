@@ -645,6 +645,84 @@
         "nanoseconds": 20118449000
       },
       "expected": 201184490
+    },
+    {
+      "id": "external-subtitle-loading-1-False-0",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 1,
+        "fullTimeline": false,
+        "serverStartMs": 0
+      },
+      "expected": {
+        "retryDelayMs": 1000,
+        "sourceOffsetMs": 0
+      }
+    },
+    {
+      "id": "external-subtitle-loading-4-False-120000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 4,
+        "fullTimeline": false,
+        "serverStartMs": 120000
+      },
+      "expected": {
+        "retryDelayMs": 4000,
+        "sourceOffsetMs": 0
+      }
+    },
+    {
+      "id": "external-subtitle-loading-10-True-126000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 10,
+        "fullTimeline": true,
+        "serverStartMs": 126000
+      },
+      "expected": {
+        "retryDelayMs": 10000,
+        "sourceOffsetMs": 126000
+      }
+    },
+    {
+      "id": "external-subtitle-loading-25-True-242000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 25,
+        "fullTimeline": true,
+        "serverStartMs": 242000
+      },
+      "expected": {
+        "retryDelayMs": 10000,
+        "sourceOffsetMs": 242000
+      }
+    },
+    {
+      "id": "external-subtitle-loading-2147483647-False-242000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 2147483647,
+        "fullTimeline": false,
+        "serverStartMs": 242000
+      },
+      "expected": {
+        "retryDelayMs": 10000,
+        "sourceOffsetMs": 0
+      }
+    },
+    {
+      "id": "external-subtitle-loading-0-True-10000000123",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 0,
+        "fullTimeline": true,
+        "serverStartMs": 10000000123
+      },
+      "expected": {
+        "retryDelayMs": 1000,
+        "sourceOffsetMs": 10000000123
+      }
     }
   ]
 }

@@ -5,7 +5,6 @@
 
 package app.pictureshow
 
-import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Timeline
 import androidx.media3.datasource.DataSource
@@ -13,13 +12,8 @@ import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaPeriod
 import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.exoplayer.source.MergingMediaSource
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.WrappingMediaSource
 import androidx.media3.exoplayer.upstream.Allocator
-import androidx.media3.extractor.ExtractorsFactory
-import androidx.media3.extractor.text.DefaultSubtitleParserFactory
-import androidx.media3.extractor.text.SubtitleExtractor
 
 /** A final TS segment can declare an audio PID but contain no audio packets (and hence no format).
  * Prepare using the preceding segment, then let Media3 select tracks at the unchanged requested
@@ -88,18 +82,7 @@ internal class HlsPreparationSource(source: MediaSource, private val onBootstrap
                     .setAllowChunklessPreparation(false).createMediaSource(item),
                 onBootstrap
             )
-            val parsers = DefaultSubtitleParserFactory()
-            val subtitles = requireNotNull(item.localConfiguration).subtitleConfigurations.map { config ->
-                val format = Format.Builder()
-                    .setId(config.id).setSampleMimeType(config.mimeType).setLanguage(config.language)
-                    .setSelectionFlags(config.selectionFlags).setRoleFlags(config.roleFlags).setLabel(config.label).build()
-                ProgressiveMediaSource.Factory(
-                    dataSources,
-                    ExtractorsFactory { arrayOf(SubtitleExtractor(parsers.create(format), format)) }
-                ).setLoadOnlySelectedTracks(true)
-                    .createMediaSource(MediaItem.fromUri(config.uri))
-            }
-            return if (subtitles.isEmpty()) hls else MergingMediaSource(hls, *subtitles.toTypedArray())
+            return IndependentSubtitleSource.merge(hls, item, dataSources)
         }
     }
 }

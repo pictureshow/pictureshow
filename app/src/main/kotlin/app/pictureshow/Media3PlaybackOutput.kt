@@ -34,7 +34,8 @@ internal class Media3PlaybackOutput(
     private val server: Server,
     private val title: String? = null,
     private val upstream: androidx.media3.datasource.DataSource.Factory? = null,
-    private val renderersFactory: RenderersFactory? = null
+    private val renderersFactory: RenderersFactory? = null,
+    private val subtitleDelay: SubtitleDelay = SubtitleDelay()
 ) : PlaybackOutput {
     private val mutablePlayer = MutableStateFlow<Player?>(null)
     val player = mutablePlayer.asStateFlow()
@@ -65,7 +66,7 @@ internal class Media3PlaybackOutput(
     private var subtitle = -1
     private var listener: Player.Listener? = null
     private var mediaSession: PlaybackMediaSession.Handle? = null
-    private val subtitleDelay = SubtitleDelay()
+    private var subtitleServerStartMs = 0L
     private var physicalEnd: PhysicalPlaybackEnd? = null
     var passthroughEnabled: Boolean = true
     val subtitleDelayMs: Int get() = subtitleDelay.milliseconds
@@ -96,7 +97,9 @@ internal class Media3PlaybackOutput(
             .setPreferredTextLanguage(Locale.getDefault().language)
             .setSelectUndeterminedTextLanguage(false)
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, audio < 0)
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle < 0)
+            // Publish track groups before selecting the exact server index. Otherwise Media3's
+            // language default can briefly start an unselected external subtitle request.
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
         val serverSeek = TranscodeSeek.required(decision)
         val videoClock = serverSeek && !TranscodeSeek.audioAlreadyEncodes(decision)
@@ -174,7 +177,20 @@ internal class Media3PlaybackOutput(
             val created = baseRenderers.createRenderers(handler, video, audio, text, metadata)
             videoRenderers = created.filterIsInstance<EndVideoRenderer>()
             val monitored = VideoEndDiagnostics { logVideo("audio-drained-video-pending") }.wrap(created)
-            detector?.wrap(monitored, handler) ?: monitored
+            val final = detector?.wrap(monitored, handler) ?: monitored
+            final.map { renderer ->
+                if (renderer.trackType == C.TRACK_TYPE_TEXT) {
+                    OptionalSubtitleRenderer(renderer) {
+                        val av = final.filter {
+                            it.trackType in listOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO) &&
+                                it.state != androidx.media3.exoplayer.Renderer.STATE_DISABLED
+                        }
+                        av.isNotEmpty() && av.all { it.isEnded }
+                    }
+                } else {
+                    renderer
+                }
+            }.toTypedArray()
         }
         val playbackThread = PlaybackReleaseFence.playback(context)
         playback = playbackThread
@@ -194,15 +210,8 @@ internal class Media3PlaybackOutput(
             throw failure
         }
         activePlayer = next
-        subtitleDelay.sourceStartMs = if (serverSeek &&
-            decision.mediaSource.mediaStreams.any {
-                it.type == MediaStreamType.Subtitle && it.index == subtitleIndex && PlaybackMedia.subtitleUsesFullTimeline(server, it)
-            }
-        ) {
-            startMs
-        } else {
-            0
-        }
+        subtitleServerStartMs = if (serverSeek) startMs else 0
+        updateSubtitleOffset(subtitleIndex)
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
         next.addAnalyticsListener(loads)
@@ -379,14 +388,6 @@ internal class Media3PlaybackOutput(
             }
         }.also(exposed::addListener)
         mutablePlayer.value = exposed
-        val clipped = if (serverSeek && positionMs > startMs) {
-            media.buildUpon().setClippingConfiguration(
-                androidx.media3.common.MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(positionMs - startMs).setAllowUnseekableMedia(true).build()
-            ).build()
-        } else {
-            media
-        }
         if (decision.method == PlayMethod.Transcode &&
             !serverSeek &&
             androidx.media3.common.util.Util.inferContentTypeForUriAndMimeType(
@@ -403,7 +404,16 @@ internal class Media3PlaybackOutput(
             }
             next.setMediaSource(hls, positionMs)
         } else {
-            next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
+            val unclipped = media.buildUpon().setSubtitleConfigurations(emptyList()).build()
+            val primary = sourceFactory.createMediaSource(unclipped)
+            val merged = IndependentSubtitleSource.merge(primary, media, dataSources)
+            val source = if (serverSeek && positionMs > startMs) {
+                androidx.media3.exoplayer.source.ClippingMediaSource.Builder(merged)
+                    .setStartPositionMs(positionMs - startMs).setAllowUnseekableMedia(true).build()
+            } else {
+                merged
+            }
+            next.setMediaSource(source, if (serverSeek) 0 else positionMs)
         }
         next.playWhenReady = !paused
         // Publish a prepared replacement: IDLE would advertise no media to external controllers.
@@ -423,9 +433,8 @@ internal class Media3PlaybackOutput(
         val active = activePlayer ?: return false
         val trackType = if (type == MediaStreamType.Audio) C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val parameters = active.trackSelectionParameters.buildUpon()
-        if (index < 0) {
-            val next = parameters.setTrackTypeDisabled(trackType, true).clearOverridesOfType(trackType).build()
-            if (next != active.trackSelectionParameters) active.trackSelectionParameters = next
+        val next = if (index < 0) {
+            parameters.setTrackTypeDisabled(trackType, true).clearOverridesOfType(trackType).build()
         } else {
             val stream = current?.mediaSource?.mediaStreams?.firstOrNull { it.type == type && it.index == index } ?: return false
             val chosen = PlaybackTracks.find(
@@ -434,12 +443,30 @@ internal class Media3PlaybackOutput(
                 active.currentTracks.groups.filter { it.type == trackType }
             ) ?: return false
             if (!chosen.first.isTrackSupported(chosen.second, false)) return false
-            val next = parameters.setTrackTypeDisabled(trackType, false)
+            parameters.setTrackTypeDisabled(trackType, false)
                 .setOverrideForType(TrackSelectionOverride(chosen.first.mediaTrackGroup, chosen.second)).build()
-            if (next != active.trackSelectionParameters) active.trackSelectionParameters = next
         }
-        if (type == MediaStreamType.Audio) audio = index else subtitle = index
+        if (type == MediaStreamType.Audio) {
+            audio = index
+        } else {
+            subtitle = index
+            // The playback thread may reset the text renderer as soon as this command is posted.
+            // Publish its new clock first, or a full-file -> rebased switch can reset at the old
+            // full-file time and discard every newly selected cue as preceding the reset.
+            updateSubtitleOffset(index)
+        }
+        if (next != active.trackSelectionParameters) active.trackSelectionParameters = next
         return true
+    }
+
+    private fun updateSubtitleOffset(index: Int) {
+        val stream = current?.mediaSource?.mediaStreams?.firstOrNull {
+            it.type == MediaStreamType.Subtitle && it.index == index
+        }
+        subtitleDelay.sourceStartMs = app.pictureshow.core.playback.ExternalSubtitleLoading.sourceOffsetMs(
+            stream != null && PlaybackMedia.subtitleUsesFullTimeline(server, stream),
+            subtitleServerStartMs
+        )
     }
 
     /** Snapshot before EOS releases the decoder; both the UI and Stop use this same final clock. */

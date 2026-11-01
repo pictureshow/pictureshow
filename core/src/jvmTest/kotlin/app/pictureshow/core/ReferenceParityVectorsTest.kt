@@ -130,6 +130,17 @@ class ReferenceParityVectorsTest {
                 deviceId = credentials.optionalText("deviceId")
             )
         return when (operation) {
+            "external-subtitle-loading" -> obj(
+                "retryDelayMs" to JsonPrimitive(
+                    app.pictureshow.core.playback.ExternalSubtitleLoading.retryDelayMs(input.int("errorCount"))
+                ),
+                "sourceOffsetMs" to JsonPrimitive(
+                    app.pictureshow.core.playback.ExternalSubtitleLoading.sourceOffsetMs(
+                        input.getValue("fullTimeline").jsonPrimitive.boolean,
+                        input.getValue("serverStartMs").jsonPrimitive.long
+                    )
+                )
+            )
             "address" -> invalidOrValue { obj("urls" to array(AddressCandidates.build(input.text("value")))) }
             "authorization" -> JsonPrimitive(
                 AuthorizationHeader.build(
