@@ -194,52 +194,56 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertGreaterThan(app.frame.height, app.frame.width, "The first iPad playback capture should be portrait")
         capture("iPad HLS player portrait")
 
-        let fullScreen = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "full screen", "fullscreen", "expand")).firstMatch
-        if !fullScreen.waitForExistence(timeout: 10) {
-            let labels = app.buttons.allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }
-            print("F1_AX iPad_native_player_buttons " + labels.joined(separator: " | "))
-            print("F1_NOTE iPad_fullscreen_roundtrip=unverified reason=native_expand_control_not_exposed")
-            capture("iPad fullscreen control unavailable")
-        } else {
-            let inlineTimelineWidth = app.sliders.firstMatch.frame.width
-            activate(fullScreen)
-            XCTAssertTrue(method.waitForExistence(timeout: 15), "Expanding the native AVKit player should keep the same Pictureshow viewing active")
-            let exitFullScreen = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "exit full screen", "shrink", "inline")).firstMatch
-            var nativeFullscreenStateChanged = false
-            let stateDeadline = ProcessInfo.processInfo.systemUptime + 10
-            while ProcessInfo.processInfo.systemUptime < stateDeadline {
-                let expandedTimelineWidth = app.sliders.firstMatch.frame.width
-                if exitFullScreen.exists || (inlineTimelineWidth > 1 && expandedTimelineWidth >= inlineTimelineWidth * 1.25) {
-                    nativeFullscreenStateChanged = true
-                    break
-                }
-                Thread.sleep(forTimeInterval: 0.25)
-            }
-            let expandedTimelineWidth = app.sliders.firstMatch.frame.width
-            print("F1_METRIC iPad_native_fullscreen_state_changed=\(nativeFullscreenStateChanged) inline_timeline_width=\(inlineTimelineWidth) expanded_timeline_width=\(expandedTimelineWidth) exit_control=\(exitFullScreen.exists ? exitFullScreen.label : "missing")")
-            XCTAssertTrue(waitForPlaybackClock(position, minimum: seconds(position.label) + 3, timeout: 40, metric: "ipad_fullscreen"))
-            capture(nativeFullscreenStateChanged ? "iPad native player expanded fullscreen" : "iPad fullscreen state unverified after activate")
-            if nativeFullscreenStateChanged {
-                let toggleFullScreen = exitFullScreen.exists ? exitFullScreen : app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "shrink", "inline")).firstMatch
-                XCTAssertTrue(toggleFullScreen.waitForExistence(timeout: 10), "The expanded AVKit player should expose its return-to-inline control")
-                activate(toggleFullScreen)
-                XCTAssertTrue(method.waitForExistence(timeout: 15), "Returning inline should preserve the player")
-                let expandAgain = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "full screen", "fullscreen", "expand")).firstMatch
-                XCTAssertTrue(expandAgain.waitForExistence(timeout: 10), "AVKit should return its native expand control in the inline state")
-            } else {
-                print("F1_NOTE iPad_fullscreen_roundtrip=unverified reason=no_native_state_or_geometry_change")
-            }
-        }
-        let inlineStart = seconds(position.label)
-        XCTAssertTrue(waitForPlaybackClock(position, minimum: inlineStart + 3, timeout: 40, metric: "ipad_inline"))
-        capture("iPad native player returned inline")
-
         XCUIDevice.shared.orientation = .landscapeLeft
         Thread.sleep(forTimeInterval: 2)
         XCTAssertGreaterThan(app.frame.width, app.frame.height, "The active iPad player should adapt to landscape")
         let landscapeStart = seconds(position.label)
         XCTAssertTrue(waitForPlaybackClock(position, minimum: landscapeStart + 3, timeout: 40, metric: "ipad_landscape_player"))
         capture("iPad HLS player landscape")
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 2)
+
+        let fullScreen = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "full screen", "fullscreen", "expand")).firstMatch
+        if !fullScreen.waitForExistence(timeout: 10) {
+            let labels = app.buttons.allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }
+            print("F1_AX iPad_native_player_buttons " + labels.joined(separator: " | "))
+            capture("iPad fullscreen control unavailable")
+            print("F1_NOTE iPad_fullscreen_roundtrip=UNVERIFIED reason=AVKit_expand_control_not_exposed; portrait_and_landscape_playback_already_captured")
+            throw XCTSkip("AVKit did not expose a fullscreen expansion control; orientation playback evidence was captured separately")
+        }
+        let inlineTimeline = app.sliders.firstMatch
+        XCTAssertTrue(inlineTimeline.waitForExistence(timeout: 10), "The inline AVKit player should expose its native timeline")
+        let inlineTimelineWidth = inlineTimeline.frame.width
+        activate(fullScreen)
+        XCTAssertTrue(method.waitForExistence(timeout: 15), "Expanding the native AVKit player should keep the same Pictureshow viewing active")
+        let exitFullScreen = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "exit full screen", "shrink", "inline")).firstMatch
+        var nativeFullscreenStateChanged = false
+        let stateDeadline = ProcessInfo.processInfo.systemUptime + 10
+        while ProcessInfo.processInfo.systemUptime < stateDeadline {
+            let expandedTimelineWidth = app.sliders.firstMatch.frame.width
+            if exitFullScreen.exists || (inlineTimelineWidth > 1 && expandedTimelineWidth >= inlineTimelineWidth * 1.25) {
+                nativeFullscreenStateChanged = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        let expandedTimelineWidth = app.sliders.firstMatch.frame.width
+        print("F1_METRIC iPad_native_fullscreen_state_changed=\(nativeFullscreenStateChanged) inline_timeline_width=\(inlineTimelineWidth) expanded_timeline_width=\(expandedTimelineWidth) exit_control=\(exitFullScreen.exists ? exitFullScreen.label : "missing")")
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: seconds(position.label) + 3, timeout: 40, metric: "ipad_fullscreen"))
+        capture(nativeFullscreenStateChanged ? "iPad native player expanded fullscreen" : "iPad fullscreen state unverified after activate")
+        guard nativeFullscreenStateChanged else {
+            print("F1_NOTE iPad_fullscreen_roundtrip=UNVERIFIED reason=no_native_state_or_geometry_change; portrait_and_landscape_playback_already_captured")
+            throw XCTSkip("AVKit fullscreen state did not change observably; portrait and landscape playback evidence was captured separately")
+        }
+        let toggleFullScreen = exitFullScreen.exists ? exitFullScreen : app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "shrink", "inline")).firstMatch
+        XCTAssertTrue(toggleFullScreen.waitForExistence(timeout: 10), "The expanded AVKit player should expose its return-to-inline control")
+        activate(toggleFullScreen)
+        XCTAssertTrue(method.waitForExistence(timeout: 15), "Returning inline should preserve the player")
+        let expandAgain = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@", "full screen", "fullscreen", "expand")).firstMatch
+        XCTAssertTrue(expandAgain.waitForExistence(timeout: 10), "AVKit should return its native expand control in the inline state")
+        let inlineStart = seconds(position.label)
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: inlineStart + 3, timeout: 40, metric: "ipad_inline"))
+        capture("iPad native player returned inline")
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 15), "Back should return to the same media detail after iPad rotation")
         #endif
