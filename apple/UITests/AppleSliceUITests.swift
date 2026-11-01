@@ -482,9 +482,15 @@ final class AppleSliceUITests: XCTestCase {
             let control = nativePlayer.buttons.matching(NSPredicate(format: "label ==[c] %@", label)).firstMatch
             let achieved = nativePlayer.buttons.matching(NSPredicate(format: "label ==[c] %@", opposite)).firstMatch
             let videoFrame = nativePlayer.frame
-            func usable(_ button: XCUIElement) -> Bool {
-                button.exists && button.isHittable && videoFrame.contains(button.frame)
+            func usableFrame(_ button: XCUIElement) -> CGRect? {
+                guard button.exists, button.isHittable else { return nil }
+                let frame = button.frame
+                guard frame.width > 0, frame.height > 0,
+                      videoFrame.width > 0, videoFrame.height > 0,
+                      videoFrame.contains(frame) else { return nil }
+                return frame
             }
+            func usable(_ button: XCUIElement) -> Bool { usableFrame(button) != nil }
             func failTransport(_ reason: String) throws -> Never {
                 var controls: [String] = []
                 if let snapshot = try? nativePlayer.snapshot() {
@@ -513,10 +519,15 @@ final class AppleSliceUITests: XCTestCase {
                 }
             }
             if usable(achieved) { return }
-            guard usable(control) else {
+            guard let controlFrame = usableFrame(control) else {
                 try failTransport("The real AVKit video must expose a hittable, contained \(label) or \(opposite) control")
             }
-            activate(control)
+            // The generic activation wait can outlast AVKit's visible HUD. Dispatch
+            // through the stable player at the native button frame just verified.
+            let target = CGVector(dx: (controlFrame.midX - videoFrame.minX) / videoFrame.width,
+                                  dy: (controlFrame.midY - videoFrame.minY) / videoFrame.height)
+            print("F2_GESTURE external_native_transport requested=\(label) buttonFrame=\(controlFrame) nativeFrame=\(videoFrame)")
+            nativePlayer.coordinate(withNormalizedOffset: target).tap()
             guard achieved.waitForExistence(timeout: 5), usable(achieved) else {
                 try failTransport("The native \(label) action must expose its contained, hittable \(opposite) state")
             }
