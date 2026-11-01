@@ -675,19 +675,34 @@ final class AppleSliceUITests: XCTestCase {
         if stableCuePosition != cuePosition { captureTouchCueState("seek did not retain paused intent") }
         XCTAssertEqual(stableCuePosition, cuePosition, "The real cue seek must retain the paused clock before overlay comparison")
         #endif
+        #if os(tvOS)
+        captureNativeTVExternalSubtitlePreview("External text 03 ON actual overlay at \(cuePosition)s", pausedSeconds: cuePosition)
+        position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        #else
         capture("External text 03 ON actual overlay at \(cuePosition)s")
+        #endif
 
         // The UILabel is intentionally not an accessibility element. Actual glyphs
         // and their disappearance are judged from these paired same-time frames.
         chooseExternalSubtitle("-1", tag: "04 Off at cue")
         Thread.sleep(forTimeInterval: 1)
         XCTAssertLessThanOrEqual(abs(seconds(position.label) - cuePosition), 1)
+        #if os(tvOS)
+        captureNativeTVExternalSubtitlePreview("External text 05 OFF same paused cue at \(seconds(position.label))s", pausedSeconds: cuePosition)
+        position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        #else
         capture("External text 05 OFF same paused cue at \(seconds(position.label))s")
+        #endif
         chooseExternalSubtitle(String(index), tag: "06 external restored at cue")
         Thread.sleep(forTimeInterval: 1)
         XCTAssertLessThanOrEqual(abs(seconds(position.label) - cuePosition), 1)
         XCTAssertTrue(cue..<cueEnd ~= seconds(position.label))
+        #if os(tvOS)
+        captureNativeTVExternalSubtitlePreview("External text 07 ON restored actual overlay at \(seconds(position.label))s", pausedSeconds: cuePosition)
+        position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        #else
         capture("External text 07 ON restored actual overlay at \(seconds(position.label))s")
+        #endif
         print("F2_METRIC external_text_cue_on_off_on index=\(index) clock=\(seconds(position.label)) method=\(method.label) window=\(cue)..<\(cueEnd)")
         #if os(tvOS)
         leaveNativeTVPlayer(returningTo: play)
@@ -1244,7 +1259,10 @@ final class AppleSliceUITests: XCTestCase {
         // Do not reveal the transport again: AVKit shows contextualActions only
         // while its transport is hidden. Leave real playback running throughout.
         captureFullScreen("Native TV contextual credits title countdown and Cancel")
-        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime, exitDeadline, "Capture and leave before automatic continuation")
+        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime, exitDeadline, "Capture while the original credits are still playing")
+        // The visual assertion is now captured during playback. Pause with the
+        // remote before cleanup so Back transitions cannot cross physical EOS.
+        XCUIRemote.shared.press(.playPause)
         leaveNativeTVPlayer(returningTo: play)
     }
     #endif
@@ -2152,6 +2170,33 @@ final class AppleSliceUITests: XCTestCase {
         label.range(of: "^(selected,\\s*)?Stream \(NSRegularExpression.escapedPattern(for: index))(\\s·|$)",
                     options: [.regularExpression, .caseInsensitive]) != nil
     }
+    /// Begin every paired frame on the same selected Info page, then clear its
+    /// pane, tab header and HUD with the observed three native Back transitions.
+    /// Never send the fourth Back here: that is the separate player dismissal.
+    private func captureNativeTVExternalSubtitlePreview(_ name: String, pausedSeconds: Int) {
+        guard let initial = tvPlayerSnapshot(), tvInfoObservation(initial) != nil else {
+            XCTFail("Each caption preview must start from the identified custom Info page")
+            return
+        }
+        for step in 0..<3 {
+            guard tvPlayerSnapshot() != nil else {
+                XCTFail("Caption preview must retain the identified player before Back")
+                return
+            }
+            print("F2_TV_CAPTION_PREVIEW backStep=\(step + 1)")
+            XCUIRemote.shared.press(.menu)
+            Thread.sleep(forTimeInterval: 1.5)
+        }
+        guard let video = tvPlayerSnapshot(), tvInfoObservation(video) == nil else {
+            XCTFail("Caption comparison must show the video without the custom Info panel")
+            return
+        }
+        captureFullScreen(name)
+        guard let restored = openNativeTVInfoTab() else { return }
+        XCTAssertEqual(restored.method, "Direct play")
+        XCTAssertEqual(parsedClockSeconds(restored.clock), pausedSeconds,
+                       "Hiding native controls must retain the same actual paused caption clock")
+    }
     private func leaveNativeTVPlayer(returningTo play: XCUIElement) {
         guard tvPlayerSnapshot() != nil else {
             XCTFail("The identified native AVKit presentation should be visible before sending Menu")
@@ -2168,7 +2213,7 @@ final class AppleSliceUITests: XCTestCase {
             }
         }
         var returned = false
-        for attempt in 0..<3 {
+        for attempt in 0..<5 {
             // A disappearing AX marker can be AVKit's panel transition, not a
             // completed dismissal. Wait for a positive surface before another Menu.
             let settleDeadline = ProcessInfo.processInfo.systemUptime + 1.5
@@ -2182,7 +2227,7 @@ final class AppleSliceUITests: XCTestCase {
             // Resolving its hittability/focus here can fail before the Back input.
             print("F1_TV_BACK step=\(attempt + 1) playerPresent=true")
             XCUIRemote.shared.press(.menu)
-            let deadline = ProcessInfo.processInfo.systemUptime + 1.5
+            let deadline = ProcessInfo.processInfo.systemUptime + 2
             while ProcessInfo.processInfo.systemUptime < deadline {
                 // Closing Info briefly drops both player AX representations before
                 // the transport returns. Only a positive catalog action can end
@@ -2191,6 +2236,13 @@ final class AppleSliceUITests: XCTestCase {
                 Thread.sleep(forTimeInterval: 0.25)
             }
             if returned { break }
+        }
+        // Native dismissal may wait for its final progress/Stop report. Once all
+        // Back inputs are sent, allow completion without sending extra inputs.
+        let finalDeadline = ProcessInfo.processInfo.systemUptime + 5
+        while !returned && ProcessInfo.processInfo.systemUptime < finalDeadline {
+            if detailHasReturned() { returned = true; break }
+            Thread.sleep(forTimeInterval: 0.25)
         }
         captureFullScreen("Native TV after Menu before detail focus verification")
         XCTAssertTrue(returned, "Native Menu should return to a visible detail action, not an intermediate AVKit transition")
