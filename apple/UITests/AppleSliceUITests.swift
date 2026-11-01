@@ -494,6 +494,10 @@ final class AppleSliceUITests: XCTestCase {
         XCUIRemote.shared.press(.playPause)
         expectation(for: NSPredicate { _, _ in self.seconds(position.label) >= pausedAt + 3 }, evaluatedWith: position)
         waitForExpectations(timeout: 15)
+        XCUIRemote.shared.press(.playPause)
+        let beforeSeekPause = seconds(position.label)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertLessThanOrEqual(seconds(position.label), beforeSeekPause + 1, "Pause playback before focusing Forward 10 so natural advancement cannot mask or distort the seek delta")
         let beforeSeek = seconds(position.label)
         let forward10 = app.buttons["seekForward"]
         XCTAssertTrue(forward10.waitForExistence(timeout: 10), "The active Pictureshow info panel should expose Forward 10 seconds")
