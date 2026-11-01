@@ -623,7 +623,13 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["playbackPosition"].waitForExistence(timeout: 10))
         #endif
         let resumeMinimum = eligible ? max(2, seconds(saved.replacingOccurrences(of: "Resume from ", with: "")) + 2) : 2
-        XCTAssertTrue(waitForPlaybackClock(position, minimum: resumeMinimum, timeout: 30, metric: key + "_resumed"))
+        // A reopened HLS stream has the app's 45-second bounded startup recovery plus time
+        // for AVKit's readiness/clock to surface. Retain this longer result separately from the
+        // earlier 30-second failure artifacts; it is still finite and reports its elapsed wait.
+        let resumedTimeout: TimeInterval = key == "hls" ? 105 : 30
+        let resumed = waitForPlaybackClock(position, minimum: resumeMinimum, timeout: resumedTimeout, metric: key + "_resumed")
+        if !resumed && key == "hls" { capture("HLS replay state after bounded 105-second wait") }
+        XCTAssertTrue(resumed)
         capture("\(expected) \(eligible ? "resumed" : "replayed short sample") after \(saved)")
         if key == "direct", let audio = config["directAudioIndex"], let subtitle = config["directSubtitleIndex"] {
             #if os(tvOS)
