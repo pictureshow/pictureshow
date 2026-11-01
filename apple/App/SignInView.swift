@@ -131,7 +131,7 @@ private struct SignInForm: View {
                             Button { showPassword.toggle(); focused = "password" } label: { Text(showPassword ? "Hide" : "Show").minimumTouchTarget() }.accessibilityLabel(showPassword ? "Hide password" : "Show password").buttonStyle(.bordered)
                         }
                         }
-                        Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
+                        Button { signIn(server) } label: { Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).minimumTouchTarget() }.buttonStyle(ProminentActionStyle()).disabled(busy || username.isEmpty).accessibilityIdentifier("signIn")
                         VStack(alignment: .leading, spacing: 12) {
                             if quickEnabled == true { Button { flow.begin(server: server, model: model) } label: { Text("Use Quick Connect").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy).accessibilityIdentifier("quickConnect") }
                             else if quickEnabled == false { Text("Quick Connect is disabled by this server. Use username and password.").foregroundStyle(Theme.muted) }
@@ -153,7 +153,7 @@ private struct SignInForm: View {
                         .textInputAutocapitalization(.never).keyboardType(.URL)
                         #endif
                     Text("Automatic LAN discovery is unavailable in this unsigned build. Enter your server address on your network, VPN, or private server.").font(.callout).foregroundStyle(Theme.muted)
-                    Button(action: connect) { Text("Connect").frame(maxWidth: .infinity).minimumTouchTarget() }.disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
+                    Button(action: connect) { Text("Connect").frame(maxWidth: .infinity).minimumTouchTarget() }.buttonStyle(ProminentActionStyle()).disabled(busy || address.isEmpty).accessibilityIdentifier("connect")
                 }
                 if !model.snapshot.accounts.isEmpty { Button { work?.cancel(); flow.clear(); model.showSignIn = false } label: { Text("Remembered accounts").minimumTouchTarget() }.disabled(busy) }
                 if busy || flow.busy { ProgressView(busy ? "Connecting…" : "Getting a Quick Connect code…") }
@@ -161,8 +161,12 @@ private struct SignInForm: View {
             }
             #if os(iOS)
             .buttonBorderShape(.roundedRectangle(radius: 12))
+            .buttonStyle(ProminentActionStyle())
             #endif
-            .buttonStyle(ProminentActionStyle()).frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
+            .frame(maxWidth: 720, alignment: .leading).padding(compact ? 12 : Theme.gutter).frame(maxWidth: .infinity)
+            #if os(tvOS)
+            .padding(.bottom, 60)
+            #endif
         }
         .background(Theme.background.ignoresSafeArea())
         #if os(iOS)
