@@ -281,13 +281,15 @@ struct NativePlayer: UIViewControllerRepresentable {
         }
         func playerViewControllerShouldDismiss(_ controller: AVPlayerViewController) -> Bool {
             #if DEBUG
-            Logger(subsystem: "app.pictureshow", category: "Playback").debug("Native dismissal requested ticks=\(self.session.positionTicks)")
+            let ticks = session.positionTicks
+            Logger(subsystem: "app.pictureshow", category: "Playback").debug("Native dismissal requested ticks=\(ticks)")
             #endif
             close(); return false
         }
         func playerViewController(_ controller: AVPlayerViewController, willTransitionToVisibilityOfTransportBar visible: Bool, with coordinator: AVPlayerViewControllerAnimationCoordinator) {
             #if DEBUG
-            Logger(subsystem: "app.pictureshow", category: "Playback").debug("Native transport visibility=\(visible) ticks=\(self.session.positionTicks)")
+            let ticks = session.positionTicks
+            Logger(subsystem: "app.pictureshow", category: "Playback").debug("Native transport visibility=\(visible) ticks=\(ticks)")
             #endif
             Task { @MainActor in session.controlsVisible = visible }
         }
