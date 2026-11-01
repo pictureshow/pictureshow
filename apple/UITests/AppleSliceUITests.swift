@@ -1157,6 +1157,29 @@ final class AppleSliceUITests: XCTestCase {
         leaveNativeTVPlayer(returningTo: play)
         #endif
     }
+    #if os(tvOS)
+    /// Pixel acceptance is supplied separately by the visual review. This case
+    /// lets the native HUD hide so its contextual credits surface can be captured.
+    func testNativeTVContextualContinuationPresentation() throws {
+        ensureSignedIn()
+        app.terminate()
+        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = try XCTUnwrap(config["episodeID"])
+        app.launch()
+        let play = try zeroPositionPlayAction()
+        reveal(play); activate(play)
+        let duration = try XCTUnwrap(config["episodeRunSeconds"].flatMap(Int.init))
+        XCTAssertGreaterThan(duration, 20)
+        let credits = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: duration - 14, maximum: duration - 10,
+                                                        timeout: TimeInterval(duration + 20), metric: "tv_contextual_credits"))
+        let exitDeadline = ProcessInfo.processInfo.systemUptime + TimeInterval(duration - credits.seconds - 2)
+        // Do not reveal the transport again: AVKit shows contextualActions only
+        // while its transport is hidden. Leave real playback running throughout.
+        Thread.sleep(forTimeInterval: 6)
+        captureFullScreen("Native TV contextual credits title countdown and Cancel")
+        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime, exitDeadline, "Capture and leave before automatic continuation")
+        leaveNativeTVPlayer(returningTo: play)
+    }
+    #endif
     /// Fresh items expose Play; resumable items additionally expose Play from start.
     /// Never use Resume as the zero-position decoder/continuation control.
     private func zeroPositionPlayAction() throws -> XCUIElement {
