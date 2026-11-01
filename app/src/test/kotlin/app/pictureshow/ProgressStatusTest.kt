@@ -8,7 +8,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -117,8 +116,10 @@ class ProgressStatusTest {
             compose.onNodeWithText("Loading item…").assertIsDisplayed()
             compose.onNodeWithText("Saving progress…").assertDoesNotExist()
             compose.onNodeWithTag("detail:play").assertDoesNotExist()
+            // Passive progress stays readable without queuing speech ahead of the focused
+            // request, failure or Ready state; all report/read protection checks remain.
             compose.onNodeWithText("Loading item…").assert(
-                SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
+                SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion)
             )
             compose.onNodeWithText("Loading item…").onParent().performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             compose.onNodeWithText("Loading item…").onParent().assertIsFocused()

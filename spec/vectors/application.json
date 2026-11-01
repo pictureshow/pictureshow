@@ -2408,6 +2408,528 @@
         "seasonCount": 0
       },
       "expected": false
+    },
+    {
+      "id": "detail.feedback.ordinary-primary",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": false,
+        "available": true,
+        "ready": false,
+        "requested": false
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.ordinary-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "pending": false,
+        "available": true,
+        "ready": false,
+        "requested": false
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.ordinary-favorite",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Not favorite",
+        "pending": false,
+        "available": true,
+        "ready": false,
+        "requested": false
+      },
+      "expected": "Not favorite"
+    },
+    {
+      "id": "detail.feedback.waiting-primary",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": true,
+        "available": true,
+        "ready": false,
+        "requested": false
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.waiting-start",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": true,
+        "available": true,
+        "ready": false,
+        "requested": false
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.request-play",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": true,
+        "available": true,
+        "ready": false,
+        "requested": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.request-start-peer",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": true,
+        "available": true,
+        "ready": false,
+        "requested": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.request-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "pending": true,
+        "available": true,
+        "ready": false,
+        "requested": true
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.request-favorite",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Not favorite",
+        "pending": true,
+        "available": true,
+        "ready": false,
+        "requested": true
+      },
+      "expected": "Not favorite"
+    },
+    {
+      "id": "detail.feedback.request-fresh-queue",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "pending": false,
+        "available": true,
+        "ready": true,
+        "requested": true
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.held-request",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": true,
+        "available": false,
+        "ready": false,
+        "requested": true
+      },
+      "expected": "Unavailable while saving progress."
+    },
+    {
+      "id": "detail.feedback.held-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "pending": true,
+        "available": false,
+        "ready": false,
+        "requested": false
+      },
+      "expected": "Unavailable while saving progress."
+    },
+    {
+      "id": "detail.feedback.ready-primary",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": false,
+        "available": true,
+        "ready": true,
+        "requested": false
+      },
+      "expected": "Ready"
+    },
+    {
+      "id": "detail.feedback.ready-start",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "pending": false,
+        "available": true,
+        "ready": true,
+        "requested": false
+      },
+      "expected": "Ready"
+    },
+    {
+      "id": "detail.feedback.ready-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Unwatched",
+        "pending": false,
+        "available": true,
+        "ready": true,
+        "requested": false
+      },
+      "expected": "Ready. Unwatched"
+    },
+    {
+      "id": "detail.feedback.ready-favorite",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Favorite",
+        "pending": false,
+        "available": true,
+        "ready": true,
+        "requested": false
+      },
+      "expected": "Ready. Favorite"
+    },
+    {
+      "id": "detail.feedback.reason-refinement",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "The server has not finished loading."
+          },
+          {
+            "key": "read:1",
+            "message": "The server took too long to respond."
+          }
+        ]
+      },
+      "expected": [
+        "The server has not finished loading.",
+        "The server has not finished loading."
+      ]
+    },
+    {
+      "id": "detail.feedback.retry-new-reason",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "Timeout."
+          },
+          {
+            "key": null,
+            "message": null
+          },
+          {
+            "key": "read:2",
+            "message": "Server unavailable (503)."
+          }
+        ]
+      },
+      "expected": [
+        "Timeout.",
+        null,
+        "Server unavailable (503)."
+      ]
+    },
+    {
+      "id": "detail.feedback.new-attempt-without-loading-emission",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "Timeout."
+          },
+          {
+            "key": "read:2",
+            "message": "Server unavailable (503)."
+          }
+        ]
+      },
+      "expected": [
+        "Timeout.",
+        "Server unavailable (503)."
+      ]
+    },
+    {
+      "id": "detail.feedback.write-clear-new-error",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "write",
+            "message": "Server unavailable (503)."
+          },
+          {
+            "key": null,
+            "message": null
+          },
+          {
+            "key": "write",
+            "message": "Connection lost."
+          }
+        ]
+      },
+      "expected": [
+        "Server unavailable (503).",
+        null,
+        "Connection lost."
+      ]
+    },
+    {
+      "id": "detail.feedback.clear-late-text",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "Timeout."
+          },
+          {
+            "key": null,
+            "message": "Timeout."
+          }
+        ]
+      },
+      "expected": [
+        "Timeout.",
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.coalesced-new-write-error",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "write:1",
+            "message": "Server unavailable (503)."
+          },
+          {
+            "key": "write:2",
+            "message": "Connection lost."
+          }
+        ]
+      },
+      "expected": [
+        "Server unavailable (503).",
+        "Connection lost."
+      ]
+    },
+    {
+      "id": "detail.feedback.priority.accepted-focused",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": true,
+        "requested": true,
+        "available": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.priority.passive-pending",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": false,
+        "requested": false,
+        "available": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.priority.rediscovered-request",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": false,
+        "requested": true,
+        "available": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.priority.settled-request",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": true,
+        "requested": false,
+        "available": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.priority.held-request",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": true,
+        "requested": true,
+        "available": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.arrival.reader-catalog",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.arrival.reader-player-recovery",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.reader-other-destination",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.sighted-catalog",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.sighted-player-recovery",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.sighted-other-destination",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.publication.initial-read",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": true,
+        "contentRevealed": false,
+        "returningFromPlayback": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.publication.initial-ready",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": false,
+        "contentRevealed": false,
+        "returningFromPlayback": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.publication.retained-page-read",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": true,
+        "contentRevealed": true,
+        "returningFromPlayback": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.publication.playback-return-pending-actions",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": true,
+        "contentRevealed": false,
+        "returningFromPlayback": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.identity.read-episode",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": true,
+        "retrying": false,
+        "writeAttempt": null
+      },
+      "expected": "read"
+    },
+    {
+      "id": "detail.feedback.identity.read-wins-over-old-write",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": true,
+        "retrying": false,
+        "writeAttempt": 9
+      },
+      "expected": "read"
+    },
+    {
+      "id": "detail.feedback.identity.accepted-retry-clears",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": true,
+        "retrying": true,
+        "writeAttempt": null
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.identity.new-write",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": false,
+        "retrying": false,
+        "writeAttempt": 3
+      },
+      "expected": "write:3"
+    },
+    {
+      "id": "detail.feedback.identity.settled-clears",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": false,
+        "retrying": false,
+        "writeAttempt": null
+      },
+      "expected": null
     }
   ]
 }

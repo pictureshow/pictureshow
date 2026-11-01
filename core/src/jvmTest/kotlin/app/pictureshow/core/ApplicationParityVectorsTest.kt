@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -35,6 +36,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 /** All expectations are committed JSON, shared unchanged with the Apple and web implementations. */
@@ -56,6 +58,53 @@ class ApplicationParityVectorsTest {
             try {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
+                    "detail-arrival-publication" -> JsonPrimitive(
+                        detailArrivalAwaitsAction(
+                            input.getValue("loading").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("contentRevealed").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("returningFromPlayback").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-request-priority" -> JsonPrimitive(
+                        detailRequestFeedbackIsUrgent(
+                            input.getValue("newlyAccepted").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("requested").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("available").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "catalog-arrival-animation" -> JsonPrimitive(
+                        catalogArrivalUsesAnimation(
+                            input.getValue("accessibilityEnabled").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("sourceIsPlayback").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("destinationIsCatalog").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-action-state" -> detailActionDescription(
+                        input["currentState"]?.jsonPrimitive?.contentOrNull,
+                        input.getValue("pending").jsonPrimitive.booleanOrNull!!,
+                        input.getValue("available").jsonPrimitive.booleanOrNull!!,
+                        input.getValue("ready").jsonPrimitive.booleanOrNull!!,
+                        input.getValue("requested").jsonPrimitive.booleanOrNull!!
+                    )?.let(::JsonPrimitive) ?: JsonNull
+                    "detail-failure-key" -> detailFailureKey(
+                        input.getValue("readRecovery").jsonPrimitive.booleanOrNull!!,
+                        input.getValue("retrying").jsonPrimitive.booleanOrNull!!,
+                        input["writeAttempt"]?.jsonPrimitive?.longOrNull
+                    )?.let(::JsonPrimitive) ?: JsonNull
+                    "detail-failure-presentation" -> {
+                        var previous: DetailFailurePresentation? = null
+                        JsonArray(
+                            input.getValue("steps").jsonArray.map { step ->
+                                val fields = step.jsonObject
+                                previous = presentDetailFailure(
+                                    previous,
+                                    fields["key"]?.jsonPrimitive?.contentOrNull,
+                                    fields["message"]?.jsonPrimitive?.contentOrNull
+                                )
+                                previous?.message?.let(::JsonPrimitive) ?: JsonNull
+                            }
+                        )
+                    }
                     "detail-empty" -> JsonPrimitive(
                         showDetailEmptyState(
                             input["itemType"]?.jsonPrimitive?.contentOrNull,

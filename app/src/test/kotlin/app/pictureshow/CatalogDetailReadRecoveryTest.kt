@@ -470,7 +470,7 @@ class CatalogDetailReadRecoveryTest {
         awaitFreshRetryPublication()
         compose.runOnIdle { state.value = state.value.copy(error = "Write unavailable") }
         advanceFrames(18)
-        compose.onNodeWithText("Write unavailable").assertExists()
+        compose.onNodeWithText("Change failed. Write unavailable").assertExists()
         compose.onNodeWithText("Retry").assertIsFocused().assertIsEnabled()
         compose.onNodeWithTag("detail:retry").assertDoesNotExist()
         compose.onNodeWithText("Retrying…").assertDoesNotExist()

@@ -29,3 +29,23 @@ reason matches the preceding failure. First-error speech includes the Retry acti
 occupy the speech queue. Held actions remain input-focusable for the established handoff, expose disabled
 accessibility semantics, and become Ready when progress/report refresh settles. These changes preserve the
 request budget, Select guard and Retry-to-fresh focus contract; action slots remain present during publication.
+
+Detail feedback follows one presentation policy (`detail-action-state` and `detail-failure-presentation`
+application vectors). Focus arrival reads the action; outgoing full-screen grids do not publish pane
+window events that can queue their old titles ahead of it. Accepted pending requests describe the
+request, unavailable controls describe unavailability, and pending-to-usable actions describe Ready.
+Ordinary watched/favorite values remain available during traversal. Passive saving/loading progress
+is readable but does not announce every intermediate phase. A write failure publishes one explicit
+Change failed cue, its reason and Retry availability without moving selection. Its viewport overlay
+keeps both the reason and the selected lower action readable. Each failure episode retains the same
+truthful visible/spoken reason through late transport refinements; An accepted viewer Retry, a new write attempt or settled error
+clearance releases that presentation. Automatic transport generations retain the visible read-error
+episode identity (`detail-failure-key` vectors), including coalesced loading/error emissions. Transport state, action budgets and Select guards are unchanged.
+
+Accepted deferred requests have one urgent accessibility cue on the selected action. That priority ends when focus leaves or the request settles; visiting the action again or repeating Select does not reannounce acceptance. Passive pending and ready states retain their normal focused descriptions. A held action never acquires request priority. The `detail-request-priority` vectors pin this delivery policy independently of Android's live-region mechanism.
+
+Pending/request labels carry their intent once in the action text. State descriptions add only actual toggle value, unavailability or readiness; they do not repeat that text. This avoids duplicate full labels on TalkBack versions that speak both channels. Accepted-request live-region priority is unchanged.
+
+Accessible forward catalog arrival omits decorative navigation fades so the normal focused-action publication does not wait behind them (`catalog-arrival-animation` vectors). Navigation from playback, pop/return transitions, ordinary sighted transitions, focus requests, Select guards and request budgets retain their existing behavior. The visible write failure also leads with Change failed.
+
+Initial detail metadata stays accessibility-hidden while the first authoritative read is loading and no action has been published (`detail-arrival-publication` vectors). Publish it with the normal unfocused action handoff so input-focus sync cannot select the heading first. Already published pages and guarded playback-return controls retain their existing exposure. The fixed write-error panel inherits the entry lifecycle gate: it is accessibility-hidden outside RESUMED.
