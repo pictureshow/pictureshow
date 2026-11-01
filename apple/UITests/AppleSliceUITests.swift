@@ -1085,21 +1085,58 @@ final class AppleSliceUITests: XCTestCase {
     private func activate(_ element: XCUIElement) {
         XCTAssertTrue(element.waitForExistence(timeout: 10))
         #if os(tvOS)
-        // Native focus remains the activation mechanism. The test app's focused controls
-        // are navigated by remote; use the shortest bounded search among visible controls.
+        // Native focus remains the activation mechanism. When a target is below a header but
+        // outside its horizontal column, align left/right first; Down alone can stay trapped
+        // on the trailing sort control. If two presses leave focus unchanged, try the other axis.
+        var unchangedFocusCount = 0
+        var previousAxis = ""
         for _ in 0..<45 {
             if element.hasFocus { XCUIRemote.shared.press(.select); return }
-            let current = app.buttons.allElementsBoundByIndex.first { $0.hasFocus }?.frame ?? focusedFrame()
-            if let current {
-                // SwiftUI Form rows focus a containing cell rather than their Button child.
-                if current.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)), current.height < element.frame.height * 3 {
-                    XCUIRemote.shared.press(.select); return
+            let focused = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
+            let current = focused?.frame ?? focusedFrame()
+            let focusKey = focused.map { "\($0.elementType.rawValue):\($0.identifier):\($0.label)" }
+                ?? current.map { "frame:\($0)" }
+                ?? "<no-focus-exposed>"
+            let dx = current.map { element.frame.midX - $0.midX } ?? 0
+            let dy = current.map { element.frame.midY - $0.midY } ?? 100
+            let horizontallyAligned = current.map { $0.minX < element.frame.maxX && element.frame.minX < $0.maxX } ?? false
+            let verticalDirection: XCUIRemote.Button = dy > 0 ? .down : .up
+            var direction = verticalDirection
+            var axis = "vertical"
+
+            if unchangedFocusCount >= 2 {
+                if previousAxis == "horizontal" {
+                    direction = verticalDirection
+                    axis = "vertical-after-stall"
+                } else {
+                    direction = dx > 0 ? .right : .left
+                    axis = "horizontal-after-stall"
                 }
-                let dx = element.frame.midX - current.midX
-                let dy = element.frame.midY - current.midY
-                if abs(dy) > 30 { XCUIRemote.shared.press(dy > 0 ? .down : .up) }
-                else { XCUIRemote.shared.press(dx > 0 ? .right : .left) }
-            } else { XCUIRemote.shared.press(.down) }
+                unchangedFocusCount = 0
+            } else if let current, !horizontallyAligned, element.frame.midY > current.midY + 30 {
+                direction = dx > 0 ? .right : .left
+                axis = "horizontal-align-before-down"
+            } else if abs(dy) > 30 {
+                direction = verticalDirection
+            } else {
+                direction = dx > 0 ? .right : .left
+                axis = "horizontal"
+            }
+
+            print("F1_TV_NAV focus=\(focusKey) targetID=\(element.identifier) targetLabel=\(element.label) direction=\(axis):\(String(describing: direction))")
+            XCUIRemote.shared.press(direction)
+            Thread.sleep(forTimeInterval: 0.15)
+            let updatedFocused = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }
+            let updatedKey = updatedFocused.map { "\($0.elementType.rawValue):\($0.identifier):\($0.label)" }
+                ?? focusedFrame().map { "frame:\($0)" }
+                ?? "<no-focus-exposed>"
+            if updatedKey == focusKey {
+                unchangedFocusCount += 1
+            } else {
+                print("F1_TV_NAV_FOCUS_CHANGED from=\(focusKey) to=\(updatedKey)")
+                unchangedFocusCount = 0
+            }
+            previousAxis = axis.hasPrefix("horizontal") ? "horizontal" : "vertical"
         }
         let focused = app.buttons.allElementsBoundByIndex.filter(\.hasFocus)
             .map { "id=\($0.identifier) label=\($0.label) frame=\($0.frame)" }
