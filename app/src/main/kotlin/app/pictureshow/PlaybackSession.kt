@@ -112,6 +112,11 @@ internal class PlaybackSession(
     private var ready = false
     private var started = false
 
+    // These belong to the viewing, not a prepared stream. An index carried through a seek,
+    // route change or fallback is still automatic until the viewer chooses that track type.
+    private var audioChosenByViewer = false
+    private var subtitleChosenByViewer = false
+
     // Retain the viewing even if replacement negotiation fails after retiring its old stream.
     private var reportingDecision: PlayDecision? = null
     private var fallbackUsed = false
@@ -291,6 +296,7 @@ internal class PlaybackSession(
         if (mutable.value.error != null) return@enqueue
         if (type !in listOf(MediaStreamType.Audio, MediaStreamType.Subtitle)) return@enqueue
         val current = decision ?: return@enqueue
+        if (type == MediaStreamType.Audio) audioChosenByViewer = true else subtitleChosenByViewer = true
         capture()
         val nextAudio = if (type == MediaStreamType.Audio) index else mutable.value.audioIndex
         val nextSubtitle = if (type == MediaStreamType.Subtitle) index else mutable.value.subtitleIndex
@@ -301,7 +307,17 @@ internal class PlaybackSession(
             audioRecoveryRequest = null
             audioRecoveryStage = 0
         }
-        if (!leavingAudioRecovery && current.method != PlayMethod.Transcode && output.select(type, index)) {
+        fun localSubtitle(chosen: Int): Boolean = chosen < 0 ||
+            current.mediaSource.mediaStreams.any {
+                it.index == chosen && PlaybackMedia.sideloadedSubtitle(it)
+            }
+        val local = app.pictureshow.core.playback.ExternalSubtitleLoading.canSelectLocally(
+            current.method == PlayMethod.Transcode,
+            type == MediaStreamType.Subtitle,
+            localSubtitle(mutable.value.subtitleIndex),
+            localSubtitle(nextSubtitle)
+        )
+        if (!leavingAudioRecovery && local && output.select(type, index)) {
             mutable.value = mutable.value.copy(audioIndex = nextAudio, subtitleIndex = nextSubtitle)
             requested = requested.copy(audioStreamIndex = nextAudio, subtitleStreamIndex = nextSubtitle)
             if (ready) gateway.progress(progressInfo())
@@ -618,8 +634,8 @@ internal class PlaybackSession(
         return PlaybackReports(requireNotNull(decision)).progress(
             lastPosition.milliseconds.milliseconds,
             lastPosition.paused,
-            mutable.value.audioIndex,
-            mutable.value.subtitleIndex
+            app.pictureshow.core.playback.TrackSelectionReporting.index(mutable.value.audioIndex, audioChosenByViewer),
+            app.pictureshow.core.playback.TrackSelectionReporting.index(mutable.value.subtitleIndex, subtitleChosenByViewer)
         )
     }
 

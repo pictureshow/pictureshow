@@ -723,6 +723,150 @@
         "retryDelayMs": 1000,
         "sourceOffsetMs": 10000000123
       }
+    },
+    {
+      "id": "subtitle-selection.external-to-external",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": true
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.burned-in-to-text",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": false,
+        "nextLocal": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.text-to-burned-in",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.audio-transcode",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": false,
+        "currentLocal": true,
+        "nextLocal": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.direct-audio",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": false,
+        "subtitle": false,
+        "currentLocal": false,
+        "nextLocal": false
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.unavailable-text",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "report-track-automatic-caption",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-automatic-off",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": -1,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-automatic-audio-fallback",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 2,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-viewer-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": true
+      },
+      "expected": 3
+    },
+    {
+      "id": "report-track-viewer-off",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": -1,
+        "chosenByViewer": true
+      },
+      "expected": -1
+    },
+    {
+      "id": "report-track-viewer-same-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": true
+      },
+      "expected": 3
+    },
+    {
+      "id": "report-track-carried-automatic-index",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 5,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-viewer-no-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": null,
+        "chosenByViewer": true
+      },
+      "expected": null
     }
   ]
 }

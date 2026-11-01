@@ -102,11 +102,7 @@ internal object PlaybackMedia {
         }
         .setSubtitleConfigurations(
             decision.mediaSource.mediaStreams.filter {
-                it.type == MediaStreamType.Subtitle &&
-                    deliveredExternally(it) &&
-                    it.deliveryMethod != SubtitleDeliveryMethod.Encode &&
-                    !it.deliveryUrl.isNullOrBlank() &&
-                    subtitleMime(it.codec) != null
+                sideloadedSubtitle(it)
             }.map { stream ->
                 MediaItem.SubtitleConfiguration.Builder(
                     subtitleUrl(server, stream, serverStartMs).toUri()
@@ -149,6 +145,12 @@ internal object PlaybackMedia {
             appendQueryParameter("CopyTimestamps", "false")
         }.build().toString()
     }
+
+    fun sideloadedSubtitle(stream: MediaStream): Boolean = stream.type == MediaStreamType.Subtitle &&
+        deliveredExternally(stream) &&
+        stream.deliveryMethod != SubtitleDeliveryMethod.Encode &&
+        !stream.deliveryUrl.isNullOrBlank() &&
+        subtitleMime(stream.codec) != null
 
     fun deliveredExternally(stream: MediaStream): Boolean =
         stream.isExternal || stream.isExternalUrl || stream.deliveryMethod == SubtitleDeliveryMethod.External

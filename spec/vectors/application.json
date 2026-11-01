@@ -2930,6 +2930,174 @@
         "writeAttempt": null
       },
       "expected": null
+    },
+    {
+      "id": "captions.text-before-server-and-flag-default",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "subrip"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.hi-image-before-non-hi-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 2,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "subrip"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 1,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.non-forced-image-before-forced-hi-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsForced": true,
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "pgssub"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.hi-text-before-hi-default-image",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "dvdsub",
+              "IsHearingImpaired": true,
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "ass",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-text-flag-with-unknown-codec",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "future_text",
+              "IsTextSubtitleStream": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.forced-only-still-selects-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsForced": true,
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "webvtt",
+              "IsForced": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
     }
   ]
 }

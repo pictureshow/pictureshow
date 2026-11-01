@@ -9,6 +9,10 @@ package app.pictureshow.core.playback
 object ExternalSubtitleLoading {
     fun retryDelayMs(errorCount: Int): Long = (errorCount.toLong().coerceAtLeast(1) * 1_000).coerceAtMost(10_000)
 
+    /** Attempt local selection before server negotiation; output still verifies its prepared groups. */
+    fun canSelectLocally(transcoding: Boolean, subtitle: Boolean, currentLocal: Boolean, nextLocal: Boolean): Boolean =
+        !transcoding || (subtitle && currentLocal && nextLocal)
+
     /** A full-file subtitle keeps authored time when server-seek video starts at local zero. */
     fun sourceOffsetMs(fullTimeline: Boolean, serverStartMs: Long): Long = if (fullTimeline) serverStartMs else 0
 }
