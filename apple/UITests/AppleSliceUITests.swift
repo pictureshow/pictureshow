@@ -1286,7 +1286,8 @@ final class AppleSliceUITests: XCTestCase {
             if let diagnostic = tvPlayerSnapshot() {
                 let matches = diagnostic.nodes.filter {
                     ["playNext", "cancelNext", "playNextTransport", "cancelNextTransport"].contains($0.identifier)
-                        || $0.label.hasPrefix("Next:") || $0.label.hasPrefix("Play next:") || $0.label.hasPrefix("Cancel next")
+                        || $0.label.hasPrefix("Next (") || $0.label.hasPrefix("Play next:")
+                        || $0.label == "Cancel" || $0.label.hasPrefix("Cancel next")
                 }
                 print("F2_TV_CONTEXTUAL_AX plannedClock=\(plannedClock) matches=\(matches.count) diagnosticOnly=true")
                 for node in matches.prefix(12) {

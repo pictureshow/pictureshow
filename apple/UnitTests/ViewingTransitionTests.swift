@@ -11,6 +11,7 @@ import PictureshowCore
 private final class ViewingProtocol: URLProtocol {
     static var requests: [URLRequest] = []
     static var failPlayed = false
+    static var nextEpisodeName = "Next"
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -25,7 +26,7 @@ private final class ViewingProtocol: URLProtocol {
             body = ["Id":path.hasSuffix("first") ? "first" : "next", "Type":"Episode", "Chapters":[]]
         } else if path.contains("MediaSegments") { body = ["Items":[]] }
         else if path.hasSuffix("/Episodes") {
-            body = ["Items":[["Id":"first","Name":"First","Type":"Episode","SeriesId":"series"],["Id":"next","Name":"Next","Type":"Episode","SeriesId":"series"]]]
+            body = ["Items":[["Id":"first","Name":"First","Type":"Episode","SeriesId":"series"],["Id":"next","Name":Self.nextEpisodeName,"Type":"Episode","SeriesId":"series"]]]
         } else if path.hasSuffix("UserPlayedItems/first"), Self.failPlayed { status = 503 }
         let data = try! JSONSerialization.data(withJSONObject: body)
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type":"application/json"])!, cacheStoragePolicy: .notAllowed)
@@ -43,7 +44,7 @@ private final class InertViewingPlayer: AVPlayer {
 
 @MainActor final class ViewingTransitionTests: XCTestCase {
     private var session: PlaybackSession!
-    override func tearDown() { ViewingProtocol.requests = []; ViewingProtocol.failPlayed = false }
+    override func tearDown() { ViewingProtocol.requests = []; ViewingProtocol.failPlayed = false; ViewingProtocol.nextEpisodeName = "Next" }
     private func setupViewing() async throws {
         ViewingProtocol.requests = []
         let configuration = URLSessionConfiguration.ephemeral
@@ -64,7 +65,48 @@ private final class InertViewingPlayer: AVPlayer {
     /// The next episode has no embedded sources in the list DTO. Its negotiation must discover
     /// its own source rather than binding the prior episode's source ID or caption metadata.
     func testContinuationNegotiatesTheNextEpisodesOwnSource() async throws {
+        #if os(tvOS)
+        ViewingProtocol.nextEpisodeName = "Another Chance (1): A deliberately long episode title that must stay in transport metadata"
+        #endif
         try await setupViewing()
+        #if os(tvOS)
+        let next = try XCTUnwrap(session.nextItem)
+        XCTAssertGreaterThan(next.name.count, 16, "The real next-episode lookup must supply a title too long for a contextual pill")
+        let coordinator = NativePlayer.Coordinator(session: session, close: {})
+        coordinator.updateContinuation(next, countdown: 10)
+        let contextNext = try XCTUnwrap(coordinator.continuationContextActions.first { $0.identifier.rawValue == "playNext" })
+        let contextCancel = try XCTUnwrap(coordinator.continuationContextActions.first { $0.identifier.rawValue == "cancelNext" })
+        let transportNext = try XCTUnwrap(coordinator.continuationTransportActions.first { $0.identifier.rawValue == "playNextTransport" })
+        let transportCancel = try XCTUnwrap(coordinator.continuationTransportActions.first { $0.identifier.rawValue == "cancelNextTransport" })
+        for countdown in [10, 8] {
+            coordinator.updateContinuation(next, countdown: countdown)
+            XCTAssertEqual(coordinator.continuationContextActions.count, 2)
+            XCTAssertEqual(coordinator.continuationTransportActions.count, 2)
+            XCTAssertTrue(contextNext === coordinator.continuationContextActions.first { $0.identifier.rawValue == "playNext" }, "Countdown updates must retain the focused Next action")
+            XCTAssertTrue(contextCancel === coordinator.continuationContextActions.first { $0.identifier.rawValue == "cancelNext" }, "Countdown updates must retain the Cancel action")
+            XCTAssertTrue(transportNext === coordinator.continuationTransportActions.first { $0.identifier.rawValue == "playNextTransport" })
+            XCTAssertTrue(transportCancel === coordinator.continuationTransportActions.first { $0.identifier.rawValue == "cancelNextTransport" })
+            XCTAssertLessThanOrEqual(contextNext.title.count, 16, "Native contextual pills must not inherit the long episode title")
+            XCTAssertEqual(contextNext.title, "Next (\(countdown))", "The compact pill must expose the current countdown")
+            XCTAssertFalse(contextNext.title.contains(next.name))
+            XCTAssertEqual(contextCancel.title, "Cancel", "Cancel must remain a short stable label across countdown ticks")
+            XCTAssertEqual(transportNext.title, "Play next: \(next.name) (\(countdown))", "Transport metadata must retain the complete next-episode title")
+            XCTAssertEqual(transportCancel.title, "Cancel next episode")
+        }
+        var following = next
+        following.id = "following"
+        coordinator.updateContinuation(following, countdown: 10)
+        XCTAssertEqual(coordinator.continuationContextActions.count, 2)
+        XCTAssertEqual(coordinator.continuationTransportActions.count, 2)
+        let followingContextNext = try XCTUnwrap(coordinator.continuationContextActions.first { $0.identifier.rawValue == "playNext" })
+        let followingContextCancel = try XCTUnwrap(coordinator.continuationContextActions.first { $0.identifier.rawValue == "cancelNext" })
+        let followingTransportNext = try XCTUnwrap(coordinator.continuationTransportActions.first { $0.identifier.rawValue == "playNextTransport" })
+        let followingTransportCancel = try XCTUnwrap(coordinator.continuationTransportActions.first { $0.identifier.rawValue == "cancelNextTransport" })
+        XCTAssertFalse(contextNext === followingContextNext, "A different episode must receive a newly bound Next action")
+        XCTAssertFalse(contextCancel === followingContextCancel)
+        XCTAssertFalse(transportNext === followingTransportNext)
+        XCTAssertFalse(transportCancel === followingTransportCancel)
+        #endif
         await session.advance()
         XCTAssertEqual(session.item.id, "next")
         XCTAssertEqual(session.decision?.source.id, "next-source")

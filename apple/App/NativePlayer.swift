@@ -233,8 +233,11 @@ struct NativePlayer: UIViewControllerRepresentable {
         }
         contextActions += context.coordinator.continuationContextActions
         let actionSignature = (session.skipSegment?.id ?? "") + "|" + contextActions.map { $0.identifier.rawValue }.joined(separator: "|")
+            + "|" + (session.nextCountdown.map(String.init) ?? "")
         if context.coordinator.actionSignature != actionSignature {
             context.coordinator.actionSignature = actionSignature
+            // AVKit owns the visible pills. Republish their retained actions
+            // when the title changes, without replacing the focused action.
             controller.contextualActions = contextActions
         }
         #endif
@@ -257,22 +260,22 @@ struct NativePlayer: UIViewControllerRepresentable {
             if continuationID != next.id {
                 continuationID = next.id
                 func play(_ identifier: String) -> UIAction {
-                    UIAction(title: "\(identifier == "playNext" ? "Next" : "Play next"): \(next.name) (\(countdown))", image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
+                    UIAction(title: identifier == "playNext" ? "Next (\(countdown))" : "Play next: \(next.name) (\(countdown))", image: UIImage(systemName: "forward.end.fill"), identifier: .init(identifier)) { [weak self] _ in
                         guard let self, self.session.nextItem?.id == next.id, self.session.nextCountdown != nil else { return }
                         Logger(subsystem: "app.pictureshow", category: "Playback").notice("Manual next activated item=\(next.id, privacy: .public) ticks=\(self.session.positionTicks)")
                         Task { await self.session.advance() }
                     }
                 }
                 func cancel(_ identifier: String) -> UIAction {
-                    UIAction(title: identifier == "cancelNext" ? "Cancel next" : "Cancel next episode", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
+                    UIAction(title: identifier == "cancelNext" ? "Cancel" : "Cancel next episode", identifier: .init(identifier)) { [weak self] _ in self?.session.cancelContinuation() }
                 }
                 continuationTransportActions = [play("playNextTransport"), cancel("cancelNextTransport")]
                 continuationContextActions = [play("playNext"), cancel("cancelNext")]
                 actionSignature = "" // A different episode may have the same action identifiers.
             }
-            // Mutate the retained action rather than replacing AVKit's focused controls
-            // every second. A countdown tick must not restart contextual presentation.
-            continuationContextActions.first?.title = "Next: \(next.name) (\(countdown))"
+            // Keep the narrow contextual pill readable; the transport action
+            // retains the episode name. Reuse actions across countdown ticks.
+            continuationContextActions.first?.title = "Next (\(countdown))"
             #if os(tvOS)
             continuationTransportActions.first?.title = "Play next: \(next.name) (\(countdown))"
             #endif
