@@ -1272,6 +1272,14 @@ final class AppleSliceUITests: XCTestCase {
         print("F1_AX tv_transport_candidates title=\(title) row=\(String(describing: controlRow?.frame)) matched=\(matching.frame) label=\(matching.label)")
         return matching
     }
+    private func waitForNativeTVMenuEnabled(_ element: XCUIElement, description: String) {
+        let deadline = ProcessInfo.processInfo.systemUptime + 30
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if element.exists, element.isEnabled { return }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTAssertTrue(element.exists && element.isEnabled, "Timed out waiting for \(description) to settle and enable")
+    }
     private func nativeTVTrackChoice(menuTitle: String, index: String) -> XCUIElement {
         let trigger = nativeTVTransportMenu(menuTitle)
         XCTAssertTrue(trigger.waitForExistence(timeout: 10), "Missing native AVKit \(menuTitle) menu trigger")
@@ -1291,7 +1299,7 @@ final class AppleSliceUITests: XCTestCase {
                           "The native \(menuTitle) choice must be the exact configured Stream \(index)")
         }
         print("F1_AX tv_track_menu_choice type=\(menuTitle) index=\(index) label=\(choice.label) value=\(choice.value ?? "")")
-        waitForEnabled(choice, description: "native \(menuTitle) track \(index)")
+        waitForNativeTVMenuEnabled(choice, description: "native \(menuTitle) track \(index)")
         return choice
     }
     private func selectNativeTVMenuTrack(menuTitle: String, index: String) -> String {
