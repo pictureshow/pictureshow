@@ -402,7 +402,7 @@ struct RootView: View {
         .fullScreenCover(item: $model.player, onDismiss: { Task { await model.presentationDismissed() } }) { session in PlayerScreen(session: session) { await model.playerClosed(session) } }
         .alert("Playback unavailable", isPresented: Binding(get: { model.playbackError != nil }, set: { if !$0 { model.playbackError = nil } })) { Button("OK") { model.playbackError = nil } } message: { Text(model.playbackError ?? "") }
     }
-    private func open(_ item: MediaItem) { path.append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) }
+    private func open(_ item: MediaItem) { performCatalogNavigation { path.append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) } }
 }
 
 @ViewBuilder func destination(_ route: AppRoute, open: @escaping (MediaItem) -> Void) -> some View {
@@ -472,6 +472,6 @@ struct TouchShell: View {
             .navigationDestination(for: AppRoute.self) { route in destination(route, open: { open($0, tab: index) }) }
         }
     }
-    private func open(_ item: MediaItem, tab index: Int) { paths[index].append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) }
+    private func open(_ item: MediaItem, tab index: Int) { performCatalogNavigation { paths[index].append(item.isCatalogContainer ? .library(item.id, item.name) : .detail(item.id)) } }
 }
 #endif
