@@ -418,6 +418,7 @@ struct RootView: View {
 struct TouchShell: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.horizontalSizeClass) private var width
+    @ScaledMetric(relativeTo: .body) private var railWidth: CGFloat = 220
     @State private var tab = 0
     @State private var paths: [[AppRoute]] = [[], [], [], []]
     private let names = ["Home", "Libraries", "Search", "Settings"]
@@ -426,7 +427,19 @@ struct TouchShell: View {
         Group {
             if width == .regular {
                 HStack(spacing: 0) {
-                    VStack(spacing: 24) { ForEach(0..<4) { index in Button { tab = index } label: { Label(names[index], systemImage: icons[index]).frame(maxWidth: .infinity, alignment: .leading).padding(12).minimumTouchTarget() }.buttonStyle(.bordered).tint(tab == index ? Theme.accent : Theme.muted).accessibilityValue(tab == index ? "Selected" : "") }; Spacer() }.padding().frame(width: 170).background(Theme.surface)
+                    VStack(spacing: 24) {
+                        ForEach(0..<4) { index in
+                            Button { tab = index } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: icons[index]).frame(minWidth: 24).accessibilityHidden(true)
+                                    Text(names[index]).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 8).padding(.horizontal, 4).minimumTouchTarget()
+                            }.buttonStyle(.bordered).tint(tab == index ? Theme.accent : Theme.muted)
+                                .accessibilityLabel(names[index]).accessibilityValue(tab == index ? "Selected" : "")
+                        }
+                        Spacer()
+                    }.padding(16).frame(width: railWidth).background(Theme.surface)
                     stack(tab)
                 }
             } else {
