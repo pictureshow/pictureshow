@@ -301,7 +301,17 @@ internal class PlaybackSession(
             audioRecoveryRequest = null
             audioRecoveryStage = 0
         }
-        if (!leavingAudioRecovery && current.method != PlayMethod.Transcode && output.select(type, index)) {
+        fun localSubtitle(chosen: Int): Boolean = chosen < 0 ||
+            current.mediaSource.mediaStreams.any {
+                it.index == chosen && PlaybackMedia.sideloadedSubtitle(it)
+            }
+        val local = app.pictureshow.core.playback.ExternalSubtitleLoading.canSelectLocally(
+            current.method == PlayMethod.Transcode,
+            type == MediaStreamType.Subtitle,
+            localSubtitle(mutable.value.subtitleIndex),
+            localSubtitle(nextSubtitle)
+        )
+        if (!leavingAudioRecovery && local && output.select(type, index)) {
             mutable.value = mutable.value.copy(audioIndex = nextAudio, subtitleIndex = nextSubtitle)
             requested = requested.copy(audioStreamIndex = nextAudio, subtitleStreamIndex = nextSubtitle)
             if (ready) gateway.progress(progressInfo())

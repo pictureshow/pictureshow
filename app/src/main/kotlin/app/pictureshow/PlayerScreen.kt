@@ -536,7 +536,7 @@ internal fun PlayerItemScreen(
                 }
             }
             val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
-            PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop))
+            PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop), output.subtitleDiagnostics)
             if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
             if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
                 PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
@@ -742,12 +742,17 @@ internal fun playerTime(milliseconds: Long): String {
 }
 
 @Composable
-internal fun PlayerSubtitles(player: Player?, appearance: SubtitleAppearance, overlayTop: Int? = null) {
+internal fun PlayerSubtitles(
+    player: Player?,
+    appearance: SubtitleAppearance,
+    overlayTop: Int? = null,
+    diagnostics: SubtitleCueDiagnostics? = null
+) {
     val context = LocalContext.current
     val subtitles = remember { SubtitleView(context).apply { isFocusable = false } }
     var videoSize by remember { mutableStateOf(player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN) }
     val density = LocalDensity.current
-    var cues by remember { mutableStateOf(player?.currentCues?.cues.orEmpty()) }
+    var cues by remember { mutableStateOf(player?.currentCues ?: CueGroup.EMPTY_TIME_ZERO) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val bounds = with(density) { subtitleVideoFrame(maxWidth.roundToPx(), maxHeight.roundToPx(), videoSize) }
         val safe = subtitleSafeFrame(bounds, overlayTop, with(density) { 12.dp.roundToPx() })
@@ -758,7 +763,13 @@ internal fun PlayerSubtitles(player: Player?, appearance: SubtitleAppearance, ov
             modifier = Modifier.offset { IntOffset(safe.left, safe.top) }.size(width, height),
             update = {
                 appearance.applyTo(it, context, bounds.height().toFloat() / safe.height().coerceAtLeast(1))
-                it.setCues(subtitleCuesInFrame(cues, bounds.width(), bounds.height(), safe.height()))
+                showSubtitleCues(
+                    it,
+                    cues,
+                    subtitleCuesInFrame(cues.cues, bounds.width(), bounds.height(), safe.height()),
+                    player?.currentPosition ?: 0,
+                    diagnostics
+                )
             }
         )
         DisposableEffect(appearance, bounds.height(), safe.height()) {
@@ -780,13 +791,13 @@ internal fun PlayerSubtitles(player: Player?, appearance: SubtitleAppearance, ov
     }
     DisposableEffect(player) {
         videoSize = player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
-        cues = player?.currentCues?.cues.orEmpty()
+        cues = player?.currentCues ?: CueGroup.EMPTY_TIME_ZERO
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
                 videoSize = size
             }
             override fun onCues(cueGroup: CueGroup) {
-                cues = cueGroup.cues
+                cues = cueGroup
             }
         }
         player?.addListener(listener)

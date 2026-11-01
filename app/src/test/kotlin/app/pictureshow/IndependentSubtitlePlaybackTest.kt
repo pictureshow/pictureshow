@@ -51,6 +51,42 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class IndependentSubtitlePlaybackTest {
     @Test
+    fun releaseDiagnosticsReportAutomaticSelectionRetriesAndViewReceiptsAcrossChoices() {
+        org.robolectric.shadows.ShadowLog.clear()
+        Fixture(failures = 2).use { f ->
+            f.release.countDown()
+            f.open()
+            f.until { f.player.currentCues.cues.isNotEmpty() }
+            val diagnostics = requireNotNull(f.output.subtitleDiagnostics)
+            val view = androidx.media3.ui.SubtitleView(RuntimeEnvironment.getApplication())
+            fun show() {
+                val group = f.player.currentCues
+                showSubtitleCues(view, group, group.cues, 0, diagnostics)
+            }
+            show()
+            show() // Layout/style recomposition must not repeat a receipt.
+            assertTrue(f.output.select(MediaStreamType.Subtitle, 2))
+            f.until { f.player.currentCues.cues.any { it.text.toString().contains("Caption 2") } }
+            show()
+            assertTrue(f.output.select(MediaStreamType.Subtitle, -1))
+            val lines = org.robolectric.shadows.ShadowLog.getLogsForTag("PictureshowPlayback").map { it.msg }
+                .filter { it.startsWith("subtitle-") }
+            assertEquals(1, lines.count { it == "subtitle-select item=item session=session stream=1 paused=true positionMs=0 selection=1" })
+            assertTrue(lines.contains("subtitle-loaded item=item session=session stream=1 attempts=3"), lines.toString())
+            assertTrue(lines.contains("subtitle-loaded item=item session=session stream=2 attempts=1"), lines.toString())
+            assertEquals(
+                listOf(
+                    "subtitle-cues item=item session=session stream=1 firstCueAtMs=0 selection=1",
+                    "subtitle-cues item=item session=session stream=2 firstCueAtMs=0 selection=2"
+                ),
+                lines.filter { it.startsWith("subtitle-cues") }
+            )
+            assertTrue(lines.contains("subtitle-select item=item session=session stream=2 paused=true positionMs=0 selection=2"))
+            assertTrue(lines.contains("subtitle-select item=item session=session stream=off paused=true positionMs=0 selection=3"))
+        }
+    }
+
+    @Test
     fun legacyProgressiveSubtitleChildrenBlockPreparationUntilHttpResponds() {
         Fixture(legacy = true).use { f ->
             f.open()
@@ -183,11 +219,26 @@ class IndependentSubtitlePlaybackTest {
 
     @Test
     fun directEmbeddedTextStillUsesTheContainerAndNeverRequestsExternalText() {
+        org.robolectric.shadows.ShadowLog.clear()
         Fixture(embedded = true, direct = true).use { f ->
             f.open()
             f.until { f.player.playbackState == Player.STATE_READY }
             f.until { f.texts.any { it.contains("Embedded caption") } }
             assertTrue(f.requests.isEmpty(), "Embedded text must not be sideloaded")
+            val group = f.player.currentCues
+            showSubtitleCues(
+                androidx.media3.ui.SubtitleView(RuntimeEnvironment.getApplication()),
+                group,
+                group.cues,
+                0,
+                requireNotNull(f.output.subtitleDiagnostics)
+            )
+            assertTrue(
+                org.robolectric.shadows.ShadowLog.getLogsForTag("PictureshowPlayback").any {
+                    it.msg == "subtitle-cues item=item session=session stream=1 firstCueAtMs=0 selection=1"
+                },
+                "Embedded view receipts must identify the actual container track"
+            )
             f.player.play()
             f.until { f.player.playbackState == Player.STATE_ENDED }
         }
@@ -261,7 +312,8 @@ class IndependentSubtitlePlaybackTest {
             )
         ).use { it.readBytes() }
         private val base: String
-        val output: Media3PlaybackOutput
+        lateinit var output: Media3PlaybackOutput
+            private set
         private var legacyPlayer: androidx.media3.exoplayer.ExoPlayer? = null
         val player: Player get() = legacyPlayer ?: requireNotNull(output.player.value)
         private val decision: PlayDecision
@@ -303,14 +355,15 @@ class IndependentSubtitlePlaybackTest {
             output = Media3PlaybackOutput(
                 RuntimeEnvironment.getApplication(),
                 Server("server", "Test", base, "12"),
-                renderersFactory = RenderersFactory { handler, _, _, _, _ ->
+                renderersFactory = RenderersFactory { handler, _, _, text, _ ->
                     arrayOf(
                         ReadingRenderer(C.TRACK_TYPE_VIDEO),
                         ReadingRenderer(C.TRACK_TYPE_AUDIO),
                         SubtitleDelayRenderer(
-                            TextRenderer({ cues ->
+                            SubtitleCueRenderer({ cues ->
                                 texts += cues.cues.joinToString { it.text.toString() }
-                            }, handler.looper),
+                                text.onCues(cues)
+                            }, handler, requireNotNull(output.subtitleDiagnostics)),
                             delay
                         )
                     )

@@ -10,6 +10,8 @@ import app.pictureshow.core.playback.MediaSourceInfo
 internal fun captionSubtitleLanguage(enabled: Boolean, configuration: UserConfiguration?, tvLanguage: String): String? =
     app.pictureshow.core.playback.captionSubtitleLanguage(enabled, configuration, tvLanguage)
 
-/** Full captions take precedence over forced-only translations; codec and delivery remain the server's job. */
+/** Prefer full captions, then hearing-impaired, then text for styling and seamless switching.
+ * Delivery is negotiated by the server.
+ */
 internal fun captionSubtitleIndex(source: MediaSourceInfo, preferredLanguage: String): Int? =
     app.pictureshow.core.playback.captionSubtitleIndex(source, preferredLanguage)

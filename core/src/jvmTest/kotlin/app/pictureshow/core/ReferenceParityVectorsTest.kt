@@ -130,6 +130,14 @@ class ReferenceParityVectorsTest {
                 deviceId = credentials.optionalText("deviceId")
             )
         return when (operation) {
+            "subtitle-selection-local" -> JsonPrimitive(
+                app.pictureshow.core.playback.ExternalSubtitleLoading.canSelectLocally(
+                    input.bool("transcoding"),
+                    input.bool("subtitle"),
+                    input.bool("currentLocal"),
+                    input.bool("nextLocal")
+                )
+            )
             "external-subtitle-loading" -> obj(
                 "retryDelayMs" to JsonPrimitive(
                     app.pictureshow.core.playback.ExternalSubtitleLoading.retryDelayMs(input.int("errorCount"))

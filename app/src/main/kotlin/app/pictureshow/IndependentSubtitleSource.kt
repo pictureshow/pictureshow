@@ -37,8 +37,11 @@ import java.io.IOException
  * and never contribute a buffering position, discontinuity, or error to the A/V period.
  * Parsed cues stay in the period for local seeks and off/on; releasing playback drops them.
  */
-internal class IndependentSubtitleSource(private val config: MediaItem.SubtitleConfiguration, private val dataSources: DataSource.Factory) :
-    BaseMediaSource() {
+internal class IndependentSubtitleSource(
+    private val config: MediaItem.SubtitleConfiguration,
+    private val dataSources: DataSource.Factory,
+    private val onLoaded: (Int, Int) -> Unit = { _, _ -> }
+) : BaseMediaSource() {
     private val item = MediaItem.fromUri(config.uri)
     private val inputFormat = Format.Builder()
         .setId(config.id).setSampleMimeType(config.mimeType).setLanguage(config.language)
@@ -104,6 +107,9 @@ internal class IndependentSubtitleSource(private val config: MediaItem.SubtitleC
 
         override fun onLoadCompleted(loadable: SubtitleLoad, elapsedRealtimeMs: Long, loadDurationMs: Long) {
             samples = loadable.samples
+            if (!released && streams.isNotEmpty()) {
+                config.id?.substringAfterLast("server-subtitle:", "")?.toIntOrNull()?.let { onLoaded(it, loadable.attempts) }
+            }
             // A seek/selection made while waiting chooses from the completed file on its own clock.
             streams.forEach { it.rewind(it.seekUs) }
         }
@@ -179,10 +185,13 @@ internal class IndependentSubtitleSource(private val config: MediaItem.SubtitleC
     private inner class SubtitleLoad : Loader.Loadable {
         @Volatile private var canceled = false
         var samples: List<Sample> = emptyList()
+        var attempts: Int = 0
+            private set
         override fun cancelLoad() {
             canceled = true
         }
         override fun load() {
+            attempts++
             val data = dataSources.createDataSource()
             val parser = parsers.create(inputFormat)
             try {
@@ -215,9 +224,14 @@ internal class IndependentSubtitleSource(private val config: MediaItem.SubtitleC
     companion object {
         private const val MAX_SUBTITLE_BYTES = 16 * 1024 * 1024
 
-        fun merge(primary: MediaSource, item: MediaItem, dataSources: DataSource.Factory): MediaSource {
+        fun merge(
+            primary: MediaSource,
+            item: MediaItem,
+            dataSources: DataSource.Factory,
+            onLoaded: (Int, Int) -> Unit = { _, _ -> }
+        ): MediaSource {
             val subtitles = requireNotNull(item.localConfiguration).subtitleConfigurations.map {
-                IndependentSubtitleSource(it, dataSources)
+                IndependentSubtitleSource(it, dataSources, onLoaded)
             }
             return if (subtitles.isEmpty()) primary else MergingMediaSource(primary, *subtitles.toTypedArray())
         }

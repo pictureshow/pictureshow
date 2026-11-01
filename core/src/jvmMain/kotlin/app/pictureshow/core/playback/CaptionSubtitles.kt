@@ -13,7 +13,9 @@ fun captionSubtitleLanguage(enabled: Boolean, configuration: UserConfiguration?,
         configuration.subtitleLanguage.takeIf(String::isNotBlank) ?: tvLanguage
     }
 
-/** Full captions take precedence over forced-only translations; codec and delivery remain the server's job. */
+/** Prefer full captions, then hearing-impaired, then text for styling and seamless switching.
+ * Delivery is negotiated by the server.
+ */
 fun captionSubtitleIndex(source: MediaSourceInfo, preferredLanguage: String): Int? {
     val language = captionLanguageKey(preferredLanguage) ?: return null
     return source.mediaStreams.filter {
@@ -21,11 +23,14 @@ fun captionSubtitleIndex(source: MediaSourceInfo, preferredLanguage: String): In
     }.sortedWith(
         compareBy<MediaStream> { it.isForced }
             .thenByDescending { it.isHearingImpaired }
+            .thenByDescending { it.isTextSubtitleStream || it.codec?.lowercase() in textCaptionCodecs }
             .thenByDescending { it.index == source.defaultSubtitleStreamIndex }
             .thenByDescending { it.isDefault }
             .thenBy { it.index }
     ).firstOrNull()?.index
 }
+
+private val textCaptionCodecs = setOf("subrip", "srt", "ass", "ssa", "webvtt", "vtt", "ttml", "mov_text", "tx3g", "text", "smi", "sami")
 
 // Jellyfin accepts ISO 639-2 bibliographic codes as well as the terminology codes returned by Locale.
 private fun captionLanguageKey(value: String?): String? = when (val language = StreamDefaults.language(value?.trim()?.lowercase())) {

@@ -72,6 +72,7 @@ internal class HlsPreparationSource(source: MediaSource, private val onBootstrap
             item: MediaItem,
             dataSources: DataSource.Factory,
             mediaDataSources: DataSource.Factory = dataSources,
+            onSubtitleLoaded: (Int, Int) -> Unit = { _, _ -> },
             onBootstrap: (Long, Long) -> Unit
         ): MediaSource {
             // Chunkless preparation would finish before the bootstrap segment supplies formats.
@@ -82,7 +83,7 @@ internal class HlsPreparationSource(source: MediaSource, private val onBootstrap
                     .setAllowChunklessPreparation(false).createMediaSource(item),
                 onBootstrap
             )
-            return IndependentSubtitleSource.merge(hls, item, dataSources)
+            return IndependentSubtitleSource.merge(hls, item, dataSources, onSubtitleLoaded)
         }
     }
 }

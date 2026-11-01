@@ -723,6 +723,78 @@
         "retryDelayMs": 1000,
         "sourceOffsetMs": 10000000123
       }
+    },
+    {
+      "id": "subtitle-selection.external-to-external",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": true
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.burned-in-to-text",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": false,
+        "nextLocal": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.text-to-burned-in",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.audio-transcode",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": false,
+        "currentLocal": true,
+        "nextLocal": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.direct-audio",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": false,
+        "subtitle": false,
+        "currentLocal": false,
+        "nextLocal": false
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.unavailable-text",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
     }
   ]
 }
