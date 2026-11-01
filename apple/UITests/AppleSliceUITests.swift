@@ -717,8 +717,9 @@ final class AppleSliceUITests: XCTestCase {
                 return
             }
             let rawTime = String(savedLabel.dropFirst(prefix.count))
-            let fields = rawTime.split(separator: ":").compactMap { Int($0) }
-            guard fields.count == rawTime.split(separator: ":").count,
+            let timeComponents = rawTime.split(separator: ":", omittingEmptySubsequences: false)
+            let fields = timeComponents.compactMap { Int($0) }
+            guard fields.count == timeComponents.count,
                   fields.count == 2 || fields.count == 3,
                   fields.allSatisfy({ $0 >= 0 && $0 < 60 }),
                   let first = fields.first else {
@@ -954,20 +955,26 @@ final class AppleSliceUITests: XCTestCase {
     private func waitForPlaybackClock(_ position: XCUIElement, minimum: Int, timeout: TimeInterval, metric: String, nativeAVKitClock: Bool = false) -> Bool {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let deadline = startedAt + timeout
-        var lastRevealAt = startedAt
+        var lastRevealAt = startedAt - 3
         var lastObservedSeconds: Int?
         var lastAdvanceAt = startedAt
+        var nativeRefreshRequested = false
+        var nativeClockAdvancedAfterRefresh = false
         while ProcessInfo.processInfo.systemUptime < deadline {
             let now = ProcessInfo.processInfo.systemUptime
             let exists = position.exists
             let label = exists ? position.label : ""
             let currentSeconds = label.isEmpty ? nil : seconds(label)
             let isHittable = exists && position.isHittable
-            if let currentSeconds, currentSeconds != lastObservedSeconds {
+            if let currentSeconds, let previousSeconds = lastObservedSeconds, currentSeconds != previousSeconds {
+                if nativeAVKitClock && nativeRefreshRequested { nativeClockAdvancedAfterRefresh = true }
                 lastObservedSeconds = currentSeconds
                 lastAdvanceAt = now
+            } else if lastObservedSeconds == nil {
+                if nativeAVKitClock && nativeRefreshRequested && currentSeconds != nil { nativeClockAdvancedAfterRefresh = true }
+                lastObservedSeconds = currentSeconds
             }
-            if let currentSeconds, currentSeconds >= minimum, (!nativeAVKitClock || isHittable) {
+            if let currentSeconds, currentSeconds >= minimum, (!nativeAVKitClock || nativeClockAdvancedAfterRefresh) {
                 print("F1_METRIC \(metric)_clock_advanced_ms=\(Int((now - startedAt) * 1000)) seconds=\(currentSeconds) hittable=\(isHittable)")
                 return true
             }
@@ -976,6 +983,7 @@ final class AppleSliceUITests: XCTestCase {
             if needsReveal, now - lastRevealAt >= 3 {
                 #if os(tvOS)
                 XCUIRemote.shared.press(.up)
+                if nativeAVKitClock { nativeRefreshRequested = true }
                 #else
                 let options = app.buttons["playerOptions"]
                 if options.exists { activate(options) }
@@ -1062,13 +1070,21 @@ final class AppleSliceUITests: XCTestCase {
         // as `Other` instead of `StaticText`; query by the app-owned identifiers across types.
         let method = app.descendants(matching: .any).matching(identifier: "playbackMethod").firstMatch
         let position = app.descendants(matching: .any).matching(identifier: "playbackPosition").firstMatch
+        let back10 = app.descendants(matching: .any).matching(identifier: "seekBackward").firstMatch
+        let forward10 = app.descendants(matching: .any).matching(identifier: "seekForward").firstMatch
         func safeLabel(_ element: XCUIElement) -> String { element.exists ? element.label : "<not exposed>" }
+        func visibleInPlayer(_ element: XCUIElement) -> Bool {
+            guard element.exists else { return false }
+            let frame = element.frame
+            return frame.width > 0 && frame.height > 0 && nativePlayer.frame.contains(frame)
+        }
         func infoContentIsVisible() -> Bool {
-            nativePlayer.exists && method.exists && method.isHittable && position.exists && position.isHittable
-                && nativePlayer.frame.contains(method.frame) && nativePlayer.frame.contains(position.frame)
+            nativePlayer.exists && visibleInPlayer(method) && visibleInPlayer(position)
+                && !safeLabel(method).isEmpty && seconds(safeLabel(position)) != nil
+                && visibleInPlayer(back10) && visibleInPlayer(forward10)
         }
         if infoContentIsVisible() {
-            print("F1_AX tv_info_content_visible step=already-visible method=\(safeLabel(method)) position=\(safeLabel(position))")
+            print("F1_AX tv_info_content_visible step=already-visible method=\(safeLabel(method)) position=\(safeLabel(position)) methodHittable=\(method.isHittable) positionHittable=\(position.isHittable) seekFrames=\(back10.frame),\(forward10.frame)")
             return
         }
         XCUIRemote.shared.press(.up)
@@ -1096,7 +1112,7 @@ final class AppleSliceUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
             focusedIndex = cellTrace("after-down")
             contentVisible = infoContentIsVisible()
-            print("F1_AX tv_info_content_visible step=down visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position))")
+            print("F1_AX tv_info_content_visible step=down visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position)) methodHittable=\(method.isHittable) positionHittable=\(position.isHittable)")
         }
         for step in 0..<count where !contentVisible && !target.hasFocus {
             let directionRight = focusedIndex.map { $0 < targetIndex } ?? true
@@ -1104,7 +1120,7 @@ final class AppleSliceUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
             focusedIndex = cellTrace("horizontal-\(step + 1)-\(directionRight ? "right" : "left")")
             contentVisible = infoContentIsVisible()
-            print("F1_AX tv_info_content_visible step=horizontal-\(step + 1) visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position))")
+            print("F1_AX tv_info_content_visible step=horizontal-\(step + 1) visible=\(contentVisible) method=\(safeLabel(method)) position=\(safeLabel(position)) methodHittable=\(method.isHittable) positionHittable=\(position.isHittable)")
         }
         if !contentVisible {
             XCTAssertTrue(target.hasFocus, "The final custom AVKit cell must be focused or reveal the visible custom-panel content")
