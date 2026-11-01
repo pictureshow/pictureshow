@@ -1097,6 +1097,7 @@ final class AppleSliceUITests: XCTestCase {
         }
         let nextAction = try XCTUnwrap(next, "AVKit must expose a hittable exact adjacent-episode action before physical EOS")
         capture("Native TV manual Next available before activation")
+        captureFullScreen("Native TV complete credits surface before manual activation")
         XCTAssertTrue(nextAction.isHittable, "Manual Next must remain hittable after the evidence capture")
         let action = try XCTUnwrap(tvPlayerSnapshot().flatMap(currentEpisodeAction),
                                   "The current episode title, clock and exact Next action must still coexist after capture")
@@ -1112,6 +1113,7 @@ final class AppleSliceUITests: XCTestCase {
                                      "The adjacent episode must advance from its own beginning under its exact title")
         XCTAssertLessThanOrEqual(advanced.seconds, 12, "The next episode must not inherit the prior source position")
         capture("Native TV adjacent episode started")
+        captureFullScreen("Native TV complete adjacent episode surface")
         leaveNativeTVPlayer(returningTo: play)
         #endif
     }
