@@ -228,17 +228,17 @@ final class AppleSliceUITests: XCTestCase {
         capture("iPad landscape Libraries root")
         let libraryID = try XCTUnwrap(config["libraryID"])
         let movieLibrary = app.buttons["item-\(libraryID)"]
-        let directID = try XCTUnwrap(config["directID"])
-        let knownMovie = app.buttons["item-\(directID)"]
+        let samplesFolderID = try XCTUnwrap(config["samplesFolderID"])
+        let knownFolder = app.buttons["item-\(samplesFolderID)"]
         let librarySort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
-        if librarySort.waitForExistence(timeout: 2), knownMovie.exists {
-            capture("iPad landscape restored movie library")
+        if librarySort.waitForExistence(timeout: 2), knownFolder.exists {
+            capture("iPad landscape restored Movies root")
         } else {
             if librarySort.exists { back() }
             reveal(movieLibrary); activate(movieLibrary)
             XCTAssertTrue(librarySort.waitForExistence(timeout: 15))
-            XCTAssertTrue(knownMovie.waitForExistence(timeout: 15), "The opened library must contain the configured movie before it is identified as Movies")
-            capture("iPad landscape movie library")
+            XCTAssertTrue(knownFolder.waitForExistence(timeout: 15), "The Movies root must contain its configured immediate Format Lab folder")
+            capture("iPad landscape Movies root")
         }
         returnHome()
         let search = app.buttons["openSearch"]
