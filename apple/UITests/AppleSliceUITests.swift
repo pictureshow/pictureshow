@@ -1860,18 +1860,13 @@ final class AppleSliceUITests: XCTestCase {
             XCTFail("AVKit should expose the final custom info tab")
             return nil
         }
-        if observe() == nil { activateNativeTVMenuChoice(target) }
+        if observe() == nil { activateNativeTVMenuChoice(target, revealed: { observe() != nil }) }
         diagnoseTVInfo(step: "after remote tab activation")
         let deadline = ProcessInfo.processInfo.systemUptime + 15
-        var lastReveal = ProcessInfo.processInfo.systemUptime
         while ProcessInfo.processInfo.systemUptime < deadline {
             if let observation = observe() {
                 log(observation, step: "after-navigation")
                 return observation
-            }
-            if ProcessInfo.processInfo.systemUptime - lastReveal >= 2 {
-                XCUIRemote.shared.press(.up)
-                lastReveal = ProcessInfo.processInfo.systemUptime
             }
             Thread.sleep(forTimeInterval: 0.35)
         }
@@ -2002,23 +1997,36 @@ final class AppleSliceUITests: XCTestCase {
         print("F1_AX tv_track_menu_action type=\(menuTitle) index=\(index) label=\(label)")
         return label
     }
-    private func activateNativeTVMenuChoice(_ choice: XCUIElement) {
+    private func activateNativeTVMenuChoice(_ choice: XCUIElement, revealed: (() -> Bool)? = nil) {
         // AVKit rebuilds its native menu accessibility tree while the transport HUD changes.
         // Avoid app-wide allElementsBoundByIndex snapshots here: XCTest can invalidate an
         // indexed element between enumeration and its hasFocus read. Track actions are cells,
         // so query the live focused cell directly and navigate within that native surface.
         XCTAssertTrue(choice.waitForExistence(timeout: 10))
         XCTAssertTrue(choice.isEnabled, "The settled native AVKit menu choice should be enabled")
+        func selectUnlessRevealed() {
+            if let revealed {
+                // Focusing an Info tab can reveal its content automatically.
+                // Selecting that already-open tab would toggle it closed again.
+                let deadline = ProcessInfo.processInfo.systemUptime + 1.5
+                while ProcessInfo.processInfo.systemUptime < deadline {
+                    if revealed() { return }
+                    Thread.sleep(forTimeInterval: 0.15)
+                }
+            }
+            XCUIRemote.shared.press(.select)
+        }
         let focusedCellQuery = app.cells.matching(NSPredicate(format: "hasFocus == true"))
         for step in 0..<20 {
-            if choice.hasFocus { XCUIRemote.shared.press(.select); return }
+            if revealed?() == true { return }
+            if choice.hasFocus { selectUnlessRevealed(); return }
             let focusedCell = focusedCellQuery.firstMatch
             let frame = focusedCell.exists ? focusedCell.frame : focusedFrame()
             print("F2_TV_NATIVE_FOCUS step=\(step) target=\(choice.frame) focused=\(frame.map { String(describing: $0) } ?? "<unexposed>")")
             if let frame,
                frame.contains(CGPoint(x: choice.frame.midX, y: choice.frame.midY)),
                frame.height < choice.frame.height * 3 {
-                XCUIRemote.shared.press(.select)
+                selectUnlessRevealed()
                 return
             }
             let dx = frame.map { choice.frame.midX - $0.midX } ?? 0
@@ -2026,7 +2034,8 @@ final class AppleSliceUITests: XCTestCase {
             let direction: XCUIRemote.Button = abs(dy) > 30 ? (dy > 0 ? .down : .up) : (dx > 0 ? .right : .left)
             XCUIRemote.shared.press(direction)
             Thread.sleep(forTimeInterval: 0.15)
-            if choice.hasFocus { XCUIRemote.shared.press(.select); return }
+            if revealed?() == true { return }
+            if choice.hasFocus { selectUnlessRevealed(); return }
         }
         XCTFail("Native AVKit menu focus did not reach configured choice \(choice.label)")
     }
