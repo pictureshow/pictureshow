@@ -311,6 +311,7 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["openSearch"].waitForExistence(timeout: 10))
         captureFullScreen("iPad landscape Home full device screen")
         print("F1_SIMCTL_CAPTURE_POINT ipad_landscape_home")
+        Thread.sleep(forTimeInterval: 2)
 
         let libraries = app.buttons["Libraries"]
         XCTAssertTrue(libraries.waitForExistence(timeout: 10))
@@ -326,6 +327,7 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertFalse(librarySort.exists, "The Libraries screenshot must show its root shelf, not a restored library grid")
         captureFullScreen("iPad landscape Libraries root full device screen")
         print("F1_SIMCTL_CAPTURE_POINT ipad_landscape_libraries")
+        Thread.sleep(forTimeInterval: 2)
 
         reveal(movies); activate(movies)
         let sort = app.descendants(matching: .any).matching(identifier: "librarySort").firstMatch
@@ -335,6 +337,7 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertTrue(folder.waitForExistence(timeout: 15), "The configured Movies root should contain its Format Lab folder")
         captureFullScreen("iPad landscape Movies root full device screen")
         print("F1_SIMCTL_CAPTURE_POINT ipad_landscape_movies_root")
+        Thread.sleep(forTimeInterval: 2)
         #endif
     }
     /// Optional AVKit fullscreen probe, isolated from required rotation and normal Back.
