@@ -197,15 +197,33 @@ import MediaAccessibility
         guard !timelineReady, startTask == nil, !closed, generation == version, let decision else { return }
         startTask = Task { [weak self] in
             guard let self else { return }
-            let target = self.pendingSeekTicks ?? decision.startTicks
-            if target > 0 {
-                let success = await self.player.seek(to: CMTime(seconds: Ticks.seconds(target), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                guard success else { self.error = "The saved position could not be loaded. Try again."; self.waitingForVideo = false; return }
+            if decision.subtitleIndex == -1, decision.method != .transcode,
+               let avItem = self.player.currentItem,
+               let group = try? await avItem.asset.loadMediaSelectionGroup(for: .legible) {
+                guard !Task.isCancelled, !self.closed, self.generation == version,
+                      self.player.currentItem === avItem else { return }
+                avItem.select(nil, in: group)
             }
             guard !Task.isCancelled, !self.closed, self.generation == version else { return }
-            if decision.subtitleIndex == -1, decision.method != .transcode,
-               let group = try? await self.player.currentItem?.asset.loadMediaSelectionGroup(for: .legible) { self.player.currentItem?.select(nil, in: group) }
-            self.pendingSeekTicks = nil; self.timelineReady = true; self.waitingForVideo = false
+            var target = self.pendingSeekTicks ?? decision.startTicks
+            var correctingSeek = false
+            while target > 0 || correctingSeek {
+                let revision = self.seekRevision
+                let success = await self.player.seek(to: CMTime(seconds: Ticks.seconds(target), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+                guard !Task.isCancelled, !self.closed, self.generation == version else { return }
+                // A newer viewer seek can arrive while the startup seek is in flight.
+                // Resolve that intent before interpreting the older completion or reporting
+                // readiness. Zero also requires a corrective seek after a nonzero request.
+                if self.seekRevision != revision {
+                    target = self.pendingSeekTicks ?? decision.startTicks
+                    correctingSeek = true
+                    continue
+                }
+                guard success else { self.error = "The saved position could not be loaded. Try again."; self.waitingForVideo = false; return }
+                break
+            }
+            self.pendingSeekTicks = nil; self.positionTicks = target
+            self.timelineReady = true; self.waitingForVideo = false
             self.status = self.playbackMethodStatus
             Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native ready viewing=\(self.viewingID.uuidString, privacy: .public) durationSeconds=\(self.durationSeconds ?? -1) targetTicks=\(target)")
             self.timeoutTask?.cancel(); self.timeoutTask = nil
