@@ -123,7 +123,7 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertEqual(fixture.totalDetailReads, priorReads + 1, "Repeated Select during an accepted Retry cannot start another read")
         capture("Detail recovery 04 held deliberate retry retains target", app: app)
         #if os(iOS)
-        assertRecoveryDoesNotCoverTitle(in: app, retry: retry, reason: "Previous attempt: " + reason)
+        assertRecoveryDoesNotCoverTitle(in: app, retry: retry, reason: "Previous attempt: " + reason, requireTitleInViewport: false)
         #endif
 
         fixture.releaseDetailReads()
@@ -334,14 +334,24 @@ final class DetailRecoveryUITests: XCTestCase {
         print("F3_DETAIL_RECOVERY_REACHABLE id=\(target.identifier) action=\(target.frame) panel=\(panel) enabled=false")
     }
 
-    private func assertRecoveryDoesNotCoverTitle(in app: XCUIApplication, retry: XCUIElement, reason: String) {
+    private func assertRecoveryDoesNotCoverTitle(in app: XCUIApplication, retry: XCUIElement, reason: String, requireTitleInViewport: Bool = true) {
         let titleFrame = app.staticTexts["detailTitle"].frame
         let reasonText = app.staticTexts[reason]
         XCTAssertTrue(reasonText.exists, "A held Retry must label the retained failure as the previous attempt")
-        let recoveryFrame = retry.frame.union(reasonText.frame)
+        let surface = app.descendants(matching: .any).matching(identifier: "detailRecoverySurface").firstMatch
+        XCTAssertTrue(surface.exists)
+        let recoveryFrame = surface.frame
+        XCTAssertTrue(recoveryFrame.contains(retry.frame) && recoveryFrame.contains(reasonText.frame), "Judge the complete painted recovery background")
         XCTAssertTrue(titleFrame.width > 0 && titleFrame.height > 0)
-        XCTAssertTrue(app.frame.contains(titleFrame), "The complete long title must remain in the visible viewport")
-        XCTAssertGreaterThanOrEqual(titleFrame.minY, app.navigationBars.firstMatch.frame.maxY)
+        if requireTitleInViewport {
+            XCTAssertTrue(app.frame.contains(titleFrame), "The complete long title must remain in the initial visible viewport")
+            XCTAssertGreaterThanOrEqual(titleFrame.minY, app.navigationBars.firstMatch.frame.maxY)
+        } else {
+            let favorite = app.buttons["favorite"]
+            XCTAssertTrue(favorite.exists && !favorite.isEnabled)
+            XCTAssertGreaterThanOrEqual(favorite.frame.minY, app.navigationBars.firstMatch.frame.maxY + 12)
+            XCTAssertLessThanOrEqual(favorite.frame.maxY, recoveryFrame.minY - 8, "Retry must retain the scrolled lower action clear of its painted surface")
+        }
         XCTAssertFalse(titleFrame.intersects(recoveryFrame), "Recovery controls and their background cannot cover the long title")
     }
     #endif

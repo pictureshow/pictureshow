@@ -1077,13 +1077,28 @@ final class AppleSliceUITests: XCTestCase {
         let deadline = ProcessInfo.processInfo.systemUptime + 30
         while fixture.snapshot.startCount == 0 && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.1) }
         XCTAssertEqual(fixture.snapshot.startCount, 1, "The real AVPlayer must reach Ready and queue one Start")
-        XCUIRemote.shared.press(.playPause)
         XCUIRemote.shared.press(.up)
+        let nativePlayer = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        XCTAssertTrue(nativePlayer.waitForExistence(timeout: 15))
         let elapsed = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
         XCTAssertTrue(elapsed.waitForExistence(timeout: 10))
+        let initial = seconds(elapsed.label)
+        XCTAssertTrue(waitForPlaybackClock(elapsed, minimum: initial + 2, timeout: 30,
+                                           metric: "native_track_menu_initial", nativeAVKitClock: true),
+                      "A queued Start alone must not stand in for advancing native playback")
+        let progressBeforePause = fixture.snapshot.progressCount
+        XCUIRemote.shared.press(.playPause)
+        let pauseDeadline = ProcessInfo.processInfo.systemUptime + 10
+        while (fixture.snapshot.progressCount <= progressBeforePause
+                || fixture.snapshot.requests.last(where: { $0.path == "/Sessions/Playing/Progress" })?.paused != true)
+                && ProcessInfo.processInfo.systemUptime < pauseDeadline { Thread.sleep(forTimeInterval: 0.1) }
+        XCTAssertGreaterThan(fixture.snapshot.progressCount, progressBeforePause, "The remote pause must produce a fresh Progress report")
+        XCTAssertEqual(fixture.snapshot.requests.last(where: { $0.path == "/Sessions/Playing/Progress" })?.paused, true,
+                       "The remote must establish reported paused intent before opening any track menu")
         let paused = seconds(elapsed.label)
         Thread.sleep(forTimeInterval: 1.2)
         XCTAssertLessThanOrEqual(seconds(elapsed.label), paused + 1)
+        print("F3_NATIVE_MENU_PRECONDITION advancing=true remotePaused=true pausedClock=\(paused)")
         let before = fixture.snapshot
         func activeTrackRows(_ snapshot: XCUIElementSnapshot) throws -> [XCUIElementSnapshot] {
             // AVKit publishes an inactive source collection and the presented

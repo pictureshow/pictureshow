@@ -54,6 +54,7 @@ enum DetailCommand: Equatable {
         if refreshOnResume { refresh(id: id, model: model, restart: true) }
     }
     func leave() {
+        detailDiagnostic("event=readLeave generation=\(epoch) reading=\(reading) uptime=\(ProcessInfo.processInfo.systemUptime)")
         departed = true; epoch = UUID(); readTask?.cancel(); readTask = nil
         reading = false; retrying = false; retryingWrite = false
         pending = []; queuedAt = nil; cue = nil
@@ -125,6 +126,7 @@ enum DetailCommand: Equatable {
         guard let deadline else { return }
         readTask?.cancel(); epoch = UUID(); let version = epoch
         beginRead(deliberate: deliberate)
+        detailDiagnostic("event=readBegin generation=\(version) deliberate=\(deliberate) remaining=\(max(0, deadline.timeIntervalSinceNow)) uptime=\(ProcessInfo.processInfo.systemUptime)")
         readTask = Task {
             defer { if epoch == version { reading = false } }
             do {
@@ -147,15 +149,27 @@ enum DetailCommand: Equatable {
                         } else if item.isPlayable { target = item }
                         return DetailPublication(item: item, seasons: seasons, episodes: episodes, season: season, target: target)
                     }
-                    group.addTask { let wait = max(0, deadline.timeIntervalSinceNow); try await Task.sleep(for: .seconds(wait)); throw DetailTimeout() }
-                    defer { group.cancelAll() }
+                    group.addTask {
+                        let wait = max(0, deadline.timeIntervalSinceNow)
+                        try await Task.sleep(for: .seconds(wait))
+                        await detailDiagnostic("event=readTimerFired generation=\(version) uptime=\(ProcessInfo.processInfo.systemUptime)")
+                        throw DetailTimeout()
+                    }
+                    defer {
+                        detailDiagnostic("event=readGroupCancel generation=\(version) uptime=\(ProcessInfo.processInfo.systemUptime)")
+                        group.cancelAll()
+                    }
                     guard let first = try await group.next() else { throw CancellationError() }; return first
                 }
+                detailDiagnostic("event=readGroupReturned generation=\(version) uptime=\(ProcessInfo.processInfo.systemUptime)")
                 guard version == epoch, !departed, isCurrent() else { return }
                 publishRead(result, publication: publication)
                 onSuccess()
-            } catch is CancellationError { }
+            } catch is CancellationError {
+                detailDiagnostic("event=readCancelled generation=\(version) current=\(version == epoch) departed=\(departed) uptime=\(ProcessInfo.processInfo.systemUptime)")
+            }
             catch {
+                detailDiagnostic("event=readCaught generation=\(version) current=\(version == epoch) departed=\(departed) deadline=\(error is DetailTimeout) uptime=\(ProcessInfo.processInfo.systemUptime)")
                 guard version == epoch, !departed, isCurrent() else { return }
                 onFailure(error); publishReadFailure(error.localizedDescription)
             }
