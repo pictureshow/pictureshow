@@ -637,13 +637,13 @@ final class ViewingAVPlayer: AVPlayer {
         }
         // A background transition during an awaited completion cancels this route,
         // even if the viewer already returned. Keep the completed destination.
-        guard isForeground, stopGeneration == lifecycleVersion else { switching = false; return }
+        guard isForeground, stopGeneration == lifecycleVersion, (!automatic || !pauseIntent) else { switching = false; return }
         await finishViewing()
         guard !closed, reportError == nil else {
             if !closed { error = "Progress could not be saved. Go back to details and retry saving progress before continuing." }
             switching = false; return
         }
-        guard isForeground, stopGeneration == lifecycleVersion else { switching = false; return }
+        guard isForeground, stopGeneration == lifecycleVersion, (!automatic || !pauseIntent) else { switching = false; return }
         externalSubtitles.release(); subtitleCue = nil
         item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil; seekFallbackTicks = nil; nativeSeekPending = false
         viewingID = UUID(); reportSequence = 0; audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false; hevcFallbackUsed = false
