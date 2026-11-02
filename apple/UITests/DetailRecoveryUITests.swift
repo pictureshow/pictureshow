@@ -343,8 +343,8 @@ final class DetailRecoveryUITests: XCTestCase {
     @MainActor private func f5Speech(_ service: XCUIVoiceOverService, matching text: String, forward: Bool = true) throws -> String {
         if let current = try? service.currentSpeech(), current.utterance.localizedCaseInsensitiveContains(text) { return current.utterance }
         for _ in 0..<20 {
-            let output = try forward ? service.moveForward() : service.moveBackward()
-            if let output, output.utterance.localizedCaseInsensitiveContains(text) { return output.utterance }
+            let output = try (forward ? service.moveForward() : service.moveBackward())
+            if output.utterance.localizedCaseInsensitiveContains(text) { return output.utterance }
         }
         throw NSError(domain: "F5VoiceOver", code: 1, userInfo: [NSLocalizedDescriptionKey: "VoiceOver did not reach the requested action"])
     }
