@@ -99,11 +99,18 @@ requires the receiver to reach the configured server URL; a development localhos
 reachable from a household receiver. Removing the relay makes native external playback feasible;
 simulator runs do not establish real AirPlay, Siri Remote touch gestures or receiver codec support.
 
-AVKit exposes system caption styling. App `textStyleRules` affect supported native WebVTT only.
-Burned-in captions retain the video's authored appearance and timing. Apple's public AVKit API
-does not expose per-viewing subtitle clock delay, so this limitation is stated instead of offering
-a control that does nothing. Native controls handle caption safe-area behavior where supported;
-burned-in pixels cannot be repositioned independently of the video.
+Selected external SRT/WebVTT loads only after selection, with bounded independent requests and
+retry/cancellation; loading or text failure does not hold A/V readiness or fail playback. Parsed
+cues use Pictureshow's overlay, with the chosen subtitle size/background. On TV the overlay moves
+above the native HUD and expanded Pictureshow panel; oversized cues truncate within the available
+area at the chosen font size. This app overlay is not embedded in the asset handed to an AirPlay
+receiver, so this path does not supply its external text captions to that receiver.
+
+AVKit exposes system caption styling for native captions. App `textStyleRules` affect supported
+native WebVTT only. Burned-in captions retain the video's authored appearance and timing. Apple's
+public AVKit API does not expose per-viewing subtitle clock delay; the app-owned external overlay
+also has no per-viewing delay control. Native controls handle native-caption safe-area behavior
+where supported; burned-in pixels cannot be repositioned independently of the video.
 
 ## Runtime acceptance
 
