@@ -765,6 +765,7 @@ class CatalogDetailReadRecoveryTest {
         compose.setContent {
             PictureshowTheme { CatalogDetail(state.value, {}, {}, {}, {}, {}, onPendingAction = { true }, origin = season) }
         }
+        compose.mainClock.advanceTimeBy(1_600)
         compose.onNodeWithText("Mark watched when ready").assertExists()
         compose.runOnIdle {
             state.value = state.value.copy(

@@ -732,6 +732,7 @@ fun CatalogDetail(
     var expiryReported by remember { mutableStateOf(false) }
     var recoveryMessage by remember { mutableStateOf<String?>(null) }
     var retryWorking by remember { mutableStateOf(false) }
+    var retryCueBaseline by remember { mutableStateOf<Long?>(null) }
     var recoveryFocusOwned by remember { mutableStateOf(false) }
     var recoveryTarget by remember { mutableStateOf<String?>(null) }
     var recoveryTargetInputRevision by remember { mutableIntStateOf(-1) }
@@ -753,6 +754,18 @@ fun CatalogDetail(
         (playbackReturn && state.error == null && state.loading)
     var semanticsRevealed by remember { mutableStateOf(false) }
     var pendingSemanticsRevealed by remember { mutableStateOf(false) }
+    val pendingPresentationVisible = app.pictureshow.core.detailPendingPresentationVisible(
+        playbackWaiting,
+        lifecycleState == Lifecycle.State.RESUMED,
+        pendingSemanticsRevealed
+    )
+    var presentHeldLabels by remember(pendingPresentationVisible) { mutableStateOf(false) }
+    LaunchedEffect(pendingPresentationVisible) {
+        if (pendingPresentationVisible) {
+            delay(app.pictureshow.core.DETAIL_PENDING_LABEL_GRACE_MILLIS)
+            presentHeldLabels = true
+        }
+    }
     var pendingFocusRestored by remember { mutableStateOf(false) }
     val pendingFocus = remember { FocusRequester() }
     val playedFocus = remember { FocusRequester() }
@@ -767,6 +780,10 @@ fun CatalogDetail(
         rememberDetailFeedbackChannel(playbackWaiting && pendingSemanticsRevealed && lifecycleState == Lifecycle.State.RESUMED) { target ->
             if (target == headerInputTarget) readiness.presented(target)
         }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        retryCueBaseline = null
+        feedbackChannel.clearReaderFocus()
+    }
     val readerMovement = remember { PlaybackReaderMovement() }
     val reportLive by rememberUpdatedState(onPendingControlsReady)
     DisposableEffect(Unit) {
@@ -927,12 +944,44 @@ fun CatalogDetail(
     )
     SideEffect { previousFailure = presentedFailure }
     val recoveryReason = presentedFailure?.message ?: rawRecoveryReason
+    SideEffect {
+        if (app.pictureshow.core.detailRetryAttemptSucceeded(
+                retryCueBaseline,
+                state.readAttempt,
+                state.loading,
+                readFailure || state.error != null
+            )
+        ) {
+            retryCueBaseline = null
+        }
+    }
     val writeFailure = presentedFailure?.message?.takeIf { failureKey?.startsWith("write:") == true }
     fun requestReadRetry() {
         if (!retryWorking && !recoveryHandoff) {
             previousFailure = null
+            retryCueBaseline = state.readAttempt
             retryWorking = true
             onRetry()
+        }
+    }
+    LaunchedEffect(retryCueBaseline, state.readAttempt, state.loading, readFailure, recoveryReason, lifecycleState) {
+        if (app.pictureshow.core.detailRetryFailureNeedsCue(
+                retryCueBaseline,
+                state.readAttempt,
+                state.loading,
+                readFailure,
+                lifecycleState == Lifecycle.State.RESUMED
+            )
+        ) {
+            val started = android.os.SystemClock.uptimeMillis()
+            val reason = recoveryReason.trim().trimEnd('.')
+            while (android.os.SystemClock.uptimeMillis() - started < app.pictureshow.core.ApiTimeouts.REQUEST_MILLIS) {
+                if (feedbackChannel.sendReadFailure("Loading failed. $reason. Retry is available.")) {
+                    retryCueBaseline = null
+                    break
+                }
+                delay(50)
+            }
         }
     }
     fun queueFresh(target: String, command: () -> Unit): Boolean {
@@ -975,7 +1024,10 @@ fun CatalogDetail(
         val command: () -> Unit = {
             val fresh = latestItem
             if (fresh != null) {
-                if (watched && !fresh.isEmptyContainer && fresh.isWatched != desired) latestOnPlayed()
+                if (watched && !fresh.isEmptyContainer) {
+                    val notice = app.pictureshow.core.detailPlayedRequestNotice(desired, fresh.isWatched)
+                    if (notice == null) latestOnPlayed() else commandNotice = notice
+                }
                 if (!watched && fresh.userData.isFavorite != desired) latestOnFavorite()
             }
         }
@@ -1148,10 +1200,10 @@ fun CatalogDetail(
                             if (latestPlaybackReady &&
                                 !latestBusy &&
                                 fresh != null &&
-                                !fresh.isEmptyContainer &&
-                                fresh.isWatched != wanted
+                                !fresh.isEmptyContainer
                             ) {
-                                latestOnPlayed()
+                                val notice = app.pictureshow.core.detailPlayedRequestNotice(wanted, fresh.isWatched)
+                                if (notice == null) latestOnPlayed() else commandNotice = notice
                             }
                         }
                     ) {
@@ -1178,7 +1230,21 @@ fun CatalogDetail(
                     }
                 }
             }
-        )
+        ).let { actions ->
+            fun label(target: String, pending: String) = app.pictureshow.core.detailPendingPresentationLabel(
+                presentHeldLabels,
+                target in actions.requestedTargets,
+                actions.available,
+                app.pictureshow.core.detailHeldActionLabel(target),
+                pending
+            )
+            actions.copy(
+                playLabel = label("primary", actions.playLabel),
+                fromStartLabel = label("from-start", actions.fromStartLabel),
+                playedLabel = label("played", actions.playedLabel),
+                favoriteLabel = label("favorite", actions.favoriteLabel)
+            )
+        }
     } else {
         null
     }
@@ -1352,7 +1418,7 @@ fun CatalogDetail(
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = list,
-                modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail")
+                modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").semantics { testTagsAsResourceId = true }
                     // A returning page must expose its restored input target before TalkBack can
                     // choose a heading or overview as a replacement for the departing player.
                     .then(
@@ -1463,7 +1529,7 @@ fun CatalogDetail(
                                     modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
                                     alignment = BiasAlignment(0f, -.5f)
                                 )
-                                CatalogHeading(headerItem.name, modifier = arrivalMetadataSemantics)
+                                CatalogHeading(headerItem.name, modifier = arrivalMetadataSemantics.testTag("detail:title"))
                                 if (headerItem.type == "Episode") {
                                     Text(
                                         listOfNotNull(

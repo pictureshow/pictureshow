@@ -14,6 +14,15 @@ fun detailHeldActionLabel(target: String): String = when (target) {
     else -> "Favorite"
 }
 
+/** Brief authoritative reads keep ordinary arrival speech; Select still queues behind the read. */
+const val DETAIL_PENDING_LABEL_GRACE_MILLIS = 1_500L
+
+/** A hidden navigation transition cannot spend the reader's arrival grace. */
+fun detailPendingPresentationVisible(waiting: Boolean, resumed: Boolean, published: Boolean): Boolean = waiting && resumed && published
+
+fun detailPendingPresentationLabel(held: Boolean, requested: Boolean, available: Boolean, plain: String, pending: String): String =
+    if (held || requested || !available) pending else plain
+
 /** Visible placeholder wording is independent of the single native disabled cue. */
 fun detailUnavailableActionLabel(target: String): String =
     if (target == "from-start") "Start unavailable" else "${detailHeldActionLabel(target)} unavailable"
@@ -190,3 +199,28 @@ fun detailHeldLabelIsPresentation(selectedWhileHeld: Boolean, heldLabelRequested
 
 /** A logical action name is insufficient if its announcing page has departed. */
 fun detailFeedbackCanSubmit(currentPage: Boolean, selectedAction: Boolean): Boolean = currentPage && selectedAction
+
+/** Completion intent changes presentation only; the authoritative read/write guard stays separate. */
+fun detailCompletionPresentedPlayed(played: Boolean, completionIntent: Boolean): Boolean = played || completionIntent
+
+/** A desired-state request may already match a newer read, but must not disappear silently. */
+fun detailPlayedRequestNotice(wanted: Boolean, current: Boolean): String? = if (wanted == current) {
+    "Nothing changed. This item is already ${if (wanted) "watched" else "unwatched"}."
+} else {
+    null
+}
+
+/** Release only this page's exact retained reader node; input focus remains independent. */
+fun detailReaderFocusCanClear(currentPage: Boolean, ownedHeader: Boolean, sameNativeNode: Boolean): Boolean =
+    currentPage && ownedHeader && sameNativeNode
+
+/** Only an accepted, newer Retry attempt owns a failure cue away from the Retry control. */
+fun detailRetryFailureNeedsCue(baseline: Long?, attempt: Long, loading: Boolean, failed: Boolean, resumed: Boolean): Boolean =
+    baseline != null && attempt > baseline && !loading && failed && resumed
+
+/** A successful Retry ends its episode before an unrelated dependent read can fail later. */
+fun detailRetryAttemptSucceeded(baseline: Long?, attempt: Long, loading: Boolean, failed: Boolean): Boolean =
+    baseline != null && attempt > baseline && !loading && !failed
+
+/** Only the raw successful read can confirm an ACK; projected completion state cannot. */
+fun detailReadMatchesAcknowledgement(raw: ItemUserData?, acknowledged: ItemUserData?): Boolean = raw != null && raw == acknowledged

@@ -92,6 +92,32 @@ class ApplicationParityVectorsTest {
                             input.getValue("succeeded").jsonPrimitive.booleanOrNull!!
                         )
                     )
+                    "detail-pending-presentation-visible" -> JsonPrimitive(
+                        detailPendingPresentationVisible(
+                            input.getValue("waiting").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("resumed").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("published").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-pending-presentation-label" -> JsonPrimitive(
+                        detailPendingPresentationLabel(
+                            input.getValue("held").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("requested").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("available").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("plain").jsonPrimitive.content,
+                            input.getValue("pending").jsonPrimitive.content
+                        )
+                    )
+                    "detail-completion-presented-played" -> JsonPrimitive(
+                        detailCompletionPresentedPlayed(
+                            input.getValue("played").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("completionIntent").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-played-request-notice" -> detailPlayedRequestNotice(
+                        input.getValue("wanted").jsonPrimitive.booleanOrNull!!,
+                        input.getValue("current").jsonPrimitive.booleanOrNull!!
+                    )?.let(::JsonPrimitive) ?: JsonNull
                     "detail-cold-pending" -> JsonPrimitive(
                         detailNeedsPendingControls(
                             input.getValue("loading").jsonPrimitive.booleanOrNull!!,
@@ -210,6 +236,36 @@ class ApplicationParityVectorsTest {
                             input.getValue("handoff").jsonPrimitive.booleanOrNull!!,
                             input.getValue("action").jsonPrimitive.booleanOrNull!!,
                             input.getValue("onlyLabelChanged").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-raw-read-acknowledgement" -> JsonPrimitive(
+                        detailReadMatchesAcknowledgement(
+                            input["raw"]?.takeUnless { it is JsonNull }?.let { Json.decodeFromJsonElement<ItemUserData>(it) },
+                            input["acknowledged"]?.takeUnless { it is JsonNull }?.let { Json.decodeFromJsonElement<ItemUserData>(it) }
+                        )
+                    )
+                    "detail-retry-attempt-succeeded" -> JsonPrimitive(
+                        detailRetryAttemptSucceeded(
+                            input["baseline"]?.jsonPrimitive?.longOrNull,
+                            input.getValue("attempt").jsonPrimitive.longOrNull!!,
+                            input.getValue("loading").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("failed").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-retry-failure-cue" -> JsonPrimitive(
+                        detailRetryFailureNeedsCue(
+                            input["baseline"]?.jsonPrimitive?.longOrNull,
+                            input.getValue("attempt").jsonPrimitive.longOrNull!!,
+                            input.getValue("loading").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("failed").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("resumed").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-reader-focus-clear" -> JsonPrimitive(
+                        detailReaderFocusCanClear(
+                            input.getValue("currentPage").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("ownedHeader").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("sameNativeNode").jsonPrimitive.booleanOrNull!!
                         )
                     )
                     "detail-feedback-source" -> JsonPrimitive(

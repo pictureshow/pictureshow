@@ -264,6 +264,7 @@ class DetailRecoveryFollowup4Test {
             compose.onNodeWithTag("detail:$tag-pending")
                 .assert(SemanticsMatcher.expectValue(SemanticsPropertiesAndroid.TestTagsAsResourceId, true))
         }
+        compose.mainClock.advanceTimeBy(1_600)
         compose.onNodeWithText("Play when ready").assertExists()
     }
 
