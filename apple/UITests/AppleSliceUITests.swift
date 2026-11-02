@@ -2739,8 +2739,12 @@ final class AppleSliceUITests: XCTestCase {
                 return
             }
             guard let focused else {
-                XCTFail("The current native Info snapshot must identify focus before moving to \(identifier)")
-                return
+                // AVKit can publish the rebuilt Info content one frame before
+                // it restores a focus owner after a paused HLS seek.
+                print("F2_TV_INFO_FOCUS step=\(step) target=\(identifier) focus=unexposed reacquire=down")
+                XCUIRemote.shared.press(.down)
+                Thread.sleep(forTimeInterval: 0.25)
+                continue
             }
             let dx = target.frame.midX - focused.frame.midX
             let dy = target.frame.midY - focused.frame.midY
