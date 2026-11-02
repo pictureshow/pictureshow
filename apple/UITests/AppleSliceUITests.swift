@@ -1213,13 +1213,13 @@ final class AppleSliceUITests: XCTestCase {
                        "A native early open must not mount partial or stale track rows")
         let cancel = app.buttons["cancelPendingTracks"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5), "The pending sheet needs a focusable cancel control")
-        print("F4_PENDING_SHEET_FOCUS cancel=\(cancel.hasFocus) done=\(app.buttons["playerOptionsDone"].hasFocus)")
+        print("F4_PENDING_SHEET_FOCUS cancel=\(cancel.hasFocus)")
         XCUIRemote.shared.press(.menu)
         let dismissedDeadline = ProcessInfo.processInfo.systemUptime + 5
-        while app.buttons["playerOptionsDone"].exists && ProcessInfo.processInfo.systemUptime < dismissedDeadline {
+        while cancel.exists && ProcessInfo.processInfo.systemUptime < dismissedDeadline {
             Thread.sleep(forTimeInterval: 0.1)
         }
-        XCTAssertFalse(app.buttons["playerOptionsDone"].exists, "Menu must dismiss the pending Tracks sheet before its worker finishes")
+        XCTAssertFalse(cancel.exists, "Menu must dismiss the pending Tracks sheet before its worker finishes")
         fixture.releaseMenuWorker(1)
         Thread.sleep(forTimeInterval: 0.5)
         let after = try app.snapshot()

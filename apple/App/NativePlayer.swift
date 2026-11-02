@@ -304,11 +304,26 @@ struct PlayerOptions: View {
                     }
                 } else {
                     if menu == nil {
+                        #if os(tvOS)
+                        HStack(spacing: 12) {
+                            ProgressView().tint(.white)
+                            Text("Preparing tracks…").font(.headline).foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 18)
+                        .listRowBackground(Color.clear)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Preparing audio and subtitles")
+                        .accessibilityIdentifier("preparingTracks")
+                        #else
                         ProgressView("Preparing audio and subtitles…").accessibilityIdentifier("preparingTracks")
+                        #endif
                         #if os(tvOS)
                         Button("Cancel", action: closePanel)
                             .accessibilityIdentifier("cancelPendingTracks")
                             .focused($pendingCancelFocused)
+                            .buttonStyle(.borderedProminent)
+                            .padding(.horizontal, 18)
+                            .listRowBackground(Color.clear)
                         #endif
                     } else {
                         if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
@@ -333,7 +348,13 @@ struct PlayerOptions: View {
                 }
             }
             .pictureshowNavigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : trackPanelTitle)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone") } }
+            .toolbar {
+                if kind != "tracks" || menu != nil {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone")
+                    }
+                }
+            }
         }
         #if os(tvOS)
         .onExitCommand { closePanel() }
