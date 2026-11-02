@@ -36,7 +36,8 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         val users: Map<String, ItemUserData> = emptyMap(),
         val refreshRevision: Long = 0,
         val pendingPlayback: Set<String> = emptySet(),
-        val userRevisions: Map<String, Long> = emptyMap()
+        val userRevisions: Map<String, Long> = emptyMap(),
+        val completionIntents: Set<String> = emptySet()
     )
     private val mutableChanges = MutableStateFlow(Changes())
     val changes = mutableChanges.asStateFlow()
@@ -54,8 +55,15 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
 
     internal fun playbackUnresolved(itemId: String) = itemId in unresolvedPlayback
 
+    internal fun completionIntent(itemId: String) {
+        mutableChanges.update { it.copy(completionIntents = it.completionIntents + itemId) }
+    }
+
     internal fun playbackRead(itemId: String) {
-        if (itemId !in changes.value.pendingPlayback) unresolvedPlayback = unresolvedPlayback - itemId
+        if (itemId !in changes.value.pendingPlayback) {
+            unresolvedPlayback = unresolvedPlayback - itemId
+            mutableChanges.update { it.copy(completionIntents = it.completionIntents - itemId) }
+        }
     }
 
     internal fun playbackCompleted(item: MediaItem) {
@@ -77,7 +85,8 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
                 refreshRevision = it.refreshRevision + 1,
                 users = confirmed,
                 userRevisions = confirmed.keys.associateWith { _ -> it.revision + 1 },
-                pendingPlayback = pending
+                pendingPlayback = pending,
+                completionIntents = it.completionIntents - (confirmed.keys - pending)
             )
         }
     }
@@ -428,14 +437,23 @@ data class CatalogDetailState(
     val writeAttempt: Long = 0
 )
 
+private fun MediaItem.withCompletionIntent(intents: Set<String>): MediaItem = copy(
+    userData = userData.copy(played = app.pictureshow.core.detailCompletionPresentedPlayed(userData.played, id in intents))
+)
+
 class CatalogDetailViewModel(private val account: Account, private val original: MediaItem, private val session: CatalogSession) :
     ViewModel() {
     private val initialChanges = session.changes.value
     private val mutableState = MutableStateFlow(
         CatalogDetailState(
             account,
-            item = initialChanges.users[original.id]?.let { original.copy(userData = it) }
-                ?: original.takeUnless { original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id) },
+            item = (
+                initialChanges.users[original.id]?.let { original.copy(userData = it) }
+                    ?: original.takeUnless {
+                        (original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id)) &&
+                            original.id !in initialChanges.completionIntents
+                    }
+                )?.withCompletionIntent(initialChanges.completionIntents),
             playbackPending = original.id in initialChanges.pendingPlayback || session.playbackUnresolved(original.id),
             playbackReportFinished = original.id !in initialChanges.pendingPlayback
         )
@@ -447,6 +465,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     private var seasonGeneration = 0
     private var retryDeadline: Job? = null
     private var parentReadPending = false
+    private var lastReadUserData: ItemUserData? = null
     private val readLifecycle = app.pictureshow.core.DetailReadLifecycle()
 
     init {
@@ -457,19 +476,24 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             session.changes.collect { changes ->
                 val changed = app.pictureshow.core.catalogRevisionNeedsRefresh(revision, changes.revision)
                 val refreshed = changes.refreshRevision != refreshRevision
+                val users = if (changed || refreshed) changes.users else emptyMap()
                 revision = changes.revision
                 refreshRevision = changes.refreshRevision
                 val alreadyConfirmed = app.pictureshow.core.detailHasConfirmedLeafRead(
                     state.value.readSucceeded,
-                    changes.users[original.id]?.let { it == state.value.item?.userData } == true,
+                    app.pictureshow.core.detailReadMatchesAcknowledgement(lastReadUserData, changes.users[original.id]),
                     original.type in CONTAINER_TYPES
                 )
                 // Refresh discards older local mutations and carries only a just-acknowledged
                 // playback completion. Apply that state while loading; the fresh read then wins.
                 mutableState.update { state ->
                     state.copy(
-                        item = state.item?.let { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
-                        episodes = state.episodes.map { item -> changes.users[item.id]?.let { item.copy(userData = it) } ?: item },
+                        item = (state.item ?: original.takeIf { it.id in users || it.id in changes.completionIntents })?.let { item ->
+                            (users[item.id]?.let { item.copy(userData = it) } ?: item).withCompletionIntent(changes.completionIntents)
+                        },
+                        episodes = state.episodes.map { item ->
+                            (users[item.id]?.let { item.copy(userData = it) } ?: item).withCompletionIntent(changes.completionIntents)
+                        },
                         playbackPending = original.id in changes.pendingPlayback ||
                             session.playbackUnresolved(original.id) ||
                             (state.playbackPending && !(refreshed && original.id in changes.users)),
@@ -545,11 +569,13 @@ class CatalogDetailViewModel(private val account: Account, private val original:
             }
             detailTiming("item-start")
             val result = session.readItem(account, original.id) { item ->
+                // Presentation intent is not evidence that an older wire read matched the ACK.
+                lastReadUserData = item.userData
                 if (item.type != "Series") parentReadPending = false
-                mutableState.update { it.copy(item = item) }
                 // A full leaf read can acknowledge completion immediately. Containers
                 // still require their episode and Next up reads before becoming ready.
                 if (!app.pictureshow.core.detailReadRequiresDependents(item.type)) playbackRead()
+                mutableState.update { it.copy(item = item.withCompletionIntent(session.changes.value.completionIntents)) }
             }
             detailTiming("item-end", "success=${result is ClientResult.Success}")
             // A canceled RESUMED request must not overwrite the post-report refresh, even when

@@ -4966,6 +4966,421 @@
         "selectedAction": false
       },
       "expected": false
+    },
+    {
+      "id": "detail.pending-presentation.quiet-primary",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": false,
+        "available": true,
+        "plain": "Play",
+        "pending": "Play when ready"
+      },
+      "expected": "Play",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.quiet-toggle",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": false,
+        "available": true,
+        "plain": "Watched",
+        "pending": "Mark unwatched when ready"
+      },
+      "expected": "Watched",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.real-hold",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": true,
+        "requested": false,
+        "available": true,
+        "plain": "Play",
+        "pending": "Play when ready"
+      },
+      "expected": "Play when ready",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.accepted-during-grace",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": true,
+        "available": true,
+        "plain": "Play",
+        "pending": "Play requested"
+      },
+      "expected": "Play requested",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.unavailable-during-grace",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": false,
+        "available": false,
+        "plain": "Play",
+        "pending": "Play unavailable"
+      },
+      "expected": "Play unavailable",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.false.false",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": false,
+        "completionIntent": false
+      },
+      "expected": false,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.false.true",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": false,
+        "completionIntent": true
+      },
+      "expected": true,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.true.false",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": true,
+        "completionIntent": false
+      },
+      "expected": true,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.true.true",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": true,
+        "completionIntent": true
+      },
+      "expected": true,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.true.true",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": true,
+        "current": true
+      },
+      "expected": "Nothing changed. This item is already watched.",
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.false.false",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": false,
+        "current": false
+      },
+      "expected": "Nothing changed. This item is already unwatched.",
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.true.false",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": true,
+        "current": false
+      },
+      "expected": null,
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.false.true",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": false,
+        "current": true
+      },
+      "expected": null,
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.owned",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": true,
+        "ownedHeader": true,
+        "sameNativeNode": true
+      },
+      "expected": true,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.old-owner",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": false,
+        "ownedHeader": true,
+        "sameNativeNode": true
+      },
+      "expected": false,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.foreign",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": true,
+        "ownedHeader": false,
+        "sameNativeNode": true
+      },
+      "expected": false,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.reused-id",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": true,
+        "ownedHeader": true,
+        "sameNativeNode": false
+      },
+      "expected": false,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.new-failure",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": true,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.old-reason",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 1,
+        "loading": false,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.loading",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": true,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.success",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": false,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.paused",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": true,
+        "resumed": false
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.no-request",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": null,
+        "attempt": 2,
+        "loading": false,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.new-success",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": false
+      },
+      "expected": true,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.old-result",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 1,
+        "loading": false,
+        "failed": false
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.in-flight",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": true,
+        "failed": false
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.failed",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.projected-is-not-raw",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": {
+          "Played": false
+        },
+        "acknowledged": {
+          "Played": true
+        }
+      },
+      "expected": false,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.confirmed",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": {
+          "Played": true
+        },
+        "acknowledged": {
+          "Played": true
+        }
+      },
+      "expected": true,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.no-read",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": null,
+        "acknowledged": {
+          "Played": true
+        }
+      },
+      "expected": false,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.other-field",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": {
+          "Played": true,
+          "IsFavorite": false
+        },
+        "acknowledged": {
+          "Played": true,
+          "IsFavorite": true
+        }
+      },
+      "expected": false,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail-pending-presentation-visible",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": true,
+        "resumed": true,
+        "published": true
+      },
+      "expected": true,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail-pending-presentation-transition",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": true,
+        "resumed": false,
+        "published": false
+      },
+      "expected": false,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail-pending-presentation-unpublished",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": true,
+        "resumed": true,
+        "published": false
+      },
+      "expected": false,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail-pending-presentation-settled",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": false,
+        "resumed": true,
+        "published": true
+      },
+      "expected": false,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
     }
   ]
 }

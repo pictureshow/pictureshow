@@ -22,6 +22,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.accessibility.AccessibilityNodeProviderCompat
 
+private const val DETAIL_FAILURE_CUE = "app.pictureshow.detail.failure-cue"
+
 private val heldDetailActionIds = setOf(
     "detail:play-pending",
     "detail:played-pending",
@@ -58,6 +60,18 @@ internal class DetailFeedbackChannel internal constructor(
     private val bridge: DetailPresentationBridge,
     private val owner: Any
 ) {
+    fun sendReadFailure(message: String): Boolean {
+        val provider = host.accessibilityNodeProvider as? DetailPresentationProvider
+            ?: bridge.delegate.getAccessibilityNodeProvider(host)?.provider as? DetailPresentationProvider
+        return provider?.sendReadFailure(host, message, bridge.isCurrent(owner)) == true
+    }
+
+    fun clearReaderFocus(): Boolean {
+        val provider = host.accessibilityNodeProvider as? DetailPresentationProvider
+            ?: bridge.delegate.getAccessibilityNodeProvider(host)?.provider as? DetailPresentationProvider
+        return provider?.clearReaderFocus(bridge.isCurrent(owner)) == true
+    }
+
     fun send(target: String, message: String): Boolean {
         val provider = host.accessibilityNodeProvider as? DetailPresentationProvider
             ?: bridge.delegate.getAccessibilityNodeProvider(host)?.provider as? DetailPresentationProvider
@@ -69,10 +83,12 @@ internal class DetailFeedbackChannel internal constructor(
 internal class DetailPresentationBridge(previous: AccessibilityDelegateCompat) {
     private val owners = linkedMapOf<Any, () -> DetailReaderPresentationState?>()
     private val actionIds = mutableMapOf<String, Int>()
+    private val reader = DetailReaderCursor()
     val delegate = DetailPresentationDelegate(
         previous,
         actionIds,
         { owners.isNotEmpty() },
+        reader,
         { owners.values.lastOrNull()?.invoke() }
     )
     private var installed = false
@@ -83,6 +99,8 @@ internal class DetailPresentationBridge(previous: AccessibilityDelegateCompat) {
         }
     }
     fun acquire(owner: Any, presentation: () -> DetailReaderPresentationState?) {
+        actionIds.clear()
+        reader.clear()
         owners[owner] = presentation
     }
     fun release(owner: Any) {
@@ -131,6 +149,14 @@ internal class DetailFeedbackDelegate(
     private val original: AccessibilityDelegateCompat get() = inherited() ?: fallback
 
     override fun onRequestSendAccessibilityEvent(host: ViewGroup, child: View, event: AccessibilityEvent): Boolean {
+        // This exact one-shot cue has already validated the current reader source and
+        // page owner. It is not an obsolete action-label change during Retry handoff.
+        if (!disposed &&
+            child === ownedChild &&
+            (event.parcelableData as? Bundle)?.getBoolean(DETAIL_FAILURE_CUE) == true
+        ) {
+            return original.onRequestSendAccessibilityEvent(host, child, event)
+        }
         val stateChange = if (Build.VERSION.SDK_INT >= 30) AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION else 0
         val labels =
             AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT or
@@ -213,9 +239,25 @@ internal fun rememberDetailFeedbackChannel(active: Boolean, onPresented: (String
     return channel
 }
 
+internal class DetailReaderCursor {
+    var id: Int? = null
+    var resource: String? = null
+    fun clear() {
+        id = null
+        resource = null
+    }
+    fun record(id: Int, node: AccessibilityNodeInfo) {
+        if (node.isAccessibilityFocused && node.isVisibleToUser) {
+            this.id = id
+            resource = node.viewIdResourceName
+        }
+    }
+}
+
 internal class DetailPresentationProvider(
     private val original: AccessibilityNodeProvider,
     private val actionIds: MutableMap<String, Int> = mutableMapOf(),
+    private val reader: DetailReaderCursor = DetailReaderCursor(),
     private val presentation: () -> DetailReaderPresentationState?
 ) : AccessibilityNodeProvider() {
     fun wasQueried(id: String?): Boolean = id != null && presentation()?.queriedHeldIds?.contains(id) == true
@@ -223,6 +265,7 @@ internal class DetailPresentationProvider(
     @Suppress("DEPRECATION")
     override fun createAccessibilityNodeInfo(virtualViewId: Int): AccessibilityNodeInfo? =
         original.createAccessibilityNodeInfo(virtualViewId)?.also { node ->
+            reader.record(virtualViewId, node)
             val id = node.viewIdResourceName
             val target = detailActionTarget(id)
             val state = presentation()
@@ -252,6 +295,66 @@ internal class DetailPresentationProvider(
                 }
             }
         }
+
+    @Suppress("DEPRECATION")
+    fun sendReadFailure(host: View, message: String, currentPage: Boolean): Boolean {
+        if (!currentPage) return false
+        val manager = host.context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+            as android.view.accessibility.AccessibilityManager
+        if (!manager.isEnabled) return false
+        val focused = original.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY) ?: return false
+        // Retry's own state change owns feedback while the reader remains on Retry.
+        if (focused.viewIdResourceName == "detail:retry") {
+            focused.recycle()
+            return true
+        }
+        val id = reader.id
+        val node = id?.let(original::createAccessibilityNodeInfo)
+        val valid = node != null &&
+            node == focused &&
+            node.viewIdResourceName == reader.resource &&
+            node.isAccessibilityFocused &&
+            node.isVisibleToUser &&
+            node.liveRegion == View.ACCESSIBILITY_LIVE_REGION_NONE
+        val role = node?.className
+        node?.recycle()
+        focused.recycle()
+        if (!valid) return false
+        val event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED).apply {
+            setSource(host, id!!)
+            packageName = host.context.packageName
+            className = role
+            isEnabled = true
+            parcelableData = Bundle().apply { putBoolean(DETAIL_FAILURE_CUE, true) }
+            if (Build.VERSION.SDK_INT >= 30) {
+                contentChangeTypes = AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION
+                text.add(message)
+            } else {
+                contentChangeTypes = AccessibilityEvent.CONTENT_CHANGE_TYPE_CONTENT_DESCRIPTION
+                contentDescription = message
+            }
+        }
+        val sent = host.parent?.requestSendAccessibilityEvent(host, event) == true
+        if (!sent) event.recycle()
+        return sent
+    }
+
+    @Suppress("DEPRECATION")
+    fun clearReaderFocus(currentPage: Boolean): Boolean {
+        if (!currentPage) return false
+        val focused = original.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY) ?: return false
+        val target = detailActionTarget(focused.viewIdResourceName)
+        val id = target?.let(actionIds::get)
+        val node = id?.let(original::createAccessibilityNodeInfo)
+        val valid = app.pictureshow.core.detailReaderFocusCanClear(
+            currentPage,
+            target != null,
+            node != null && node == focused && node.isAccessibilityFocused
+        )
+        node?.recycle()
+        focused.recycle()
+        return valid && original.performAction(id!!, AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS, null)
+    }
 
     @Suppress("DEPRECATION")
     fun sendFeedback(host: View, target: String, message: String, currentPage: Boolean = true): Boolean {
@@ -311,6 +414,8 @@ internal class DetailPresentationProvider(
             )
         ) {
             val node = original.createAccessibilityNodeInfo(virtualViewId)
+            if (action == AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS && reader.id == virtualViewId) reader.clear()
+            if (node != null && action == AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) reader.record(virtualViewId, node)
             try {
                 val target = detailActionTarget(node?.viewIdResourceName)
                 val id = node?.viewIdResourceName
@@ -341,6 +446,7 @@ internal class DetailPresentationDelegate(
     private var previous: AccessibilityDelegateCompat,
     private val actionIds: MutableMap<String, Int> = mutableMapOf(),
     private val attached: () -> Boolean = { true },
+    private val reader: DetailReaderCursor = DetailReaderCursor(),
     private val presentation: () -> DetailReaderPresentationState?
 ) : AccessibilityDelegateCompat() {
     internal var disposed = false
@@ -353,7 +459,11 @@ internal class DetailPresentationDelegate(
         val inherited = original.getAccessibilityNodeProvider(host) ?: return null
         if (disposed || !attached()) return inherited
         val provider = inherited.provider as? AccessibilityNodeProvider ?: return null
-        return AccessibilityNodeProviderCompat(DetailPresentationProvider(provider, actionIds) { presentation().takeUnless { disposed } })
+        return AccessibilityNodeProviderCompat(
+            DetailPresentationProvider(provider, actionIds, reader) {
+                presentation().takeUnless { disposed }
+            }
+        )
     }
     override fun dispatchPopulateAccessibilityEvent(host: View, event: AccessibilityEvent) =
         original.dispatchPopulateAccessibilityEvent(host, event)

@@ -8,6 +8,7 @@ import app.pictureshow.core.ClientResult
 
 /** Called after Stopped: that report may already have marked played and incremented the count. */
 internal suspend fun CatalogSession.completePlayback(account: Account, itemId: String): ClientResult<Unit> {
+    completionIntent(itemId)
     val item = when (val result = completionItem(account, itemId)) {
         is ClientResult.Failure -> return result
         is ClientResult.Success -> result.value
