@@ -155,6 +155,8 @@ final class ViewingAVPlayer: AVPlayer {
     private var lifecycleObservers: [NSObjectProtocol] = []
     // The catalog owns played presentation separately from raw server data.
     var onCompletionBegan: ((String) -> UUID)?
+    var onCompletionReportFinished: ((String, UUID, Bool) -> Void)?
+    private var completionOwners: [String: UUID] = [:]
     var onCompletionFinished: ((String, UUID, Bool) -> Void)?
     private var pendingSeekTicks: Int64?
     private var seekFallbackTicks: Int64?
@@ -615,6 +617,7 @@ final class ViewingAVPlayer: AVPlayer {
         let itemID = item.id
         if let duration = durationSeconds { positionTicks = PlaybackEndPosition.completed(currentTicks / 10_000, durationMs: Int64(duration * 1000)) * 10_000; completedTicks = positionTicks }
         let token = onCompletionBegan?(itemID)
+        if let token { completionOwners[itemID] = token }
         let task = Task { [self] in
             var succeeded = false
             defer { if let token { onCompletionFinished?(itemID, token, succeeded) } }
@@ -733,6 +736,7 @@ final class ViewingAVPlayer: AVPlayer {
         await reportTail?.value
         if let failedPlayedID {
             let token = onCompletionBegan?(failedPlayedID)
+            if let token { completionOwners[failedPlayedID] = token }
             var succeeded = false
             defer { if let token { onCompletionFinished?(failedPlayedID, token, succeeded) } }
             do {
@@ -751,6 +755,7 @@ final class ViewingAVPlayer: AVPlayer {
             catch { failedEncodings.append(decision) }
         }
         clearReportErrorIfRecovered()
+        if let token = completionOwners[item.id] { onCompletionReportFinished?(item.id, token, !completionReportingFailed) }
         if !failedEncodings.isEmpty { reportError = "The server could not stop an encoding. Check your connection and retry." }
     }
     private func clearReportErrorIfRecovered() {
@@ -763,7 +768,9 @@ final class ViewingAVPlayer: AVPlayer {
         let last = decision.map(reportingDecision)
         await releaseStream()
         if started, let last { finalReport = (last, positionTicks, error != nil); enqueueReport(decision: last, kind: "stop", ticks: positionTicks, paused: true) }
-        await reportTail?.value; status = "Stopped"; waitingForVideo = false
+        await reportTail?.value
+        if let token = completionOwners[item.id] { onCompletionReportFinished?(item.id, token, !completionReportingFailed) }
+        status = "Stopped"; waitingForVideo = false
     }
     /// A panel submits only the chosen type. The other type is read when this
     /// serialized command executes, after any earlier replacement completes.

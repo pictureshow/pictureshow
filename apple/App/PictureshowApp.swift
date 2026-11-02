@@ -77,7 +77,7 @@ struct AccountSnapshot: Codable {
         var transport: Task<Void, Never>?
     }
     private var completionRead: CompletionRead?
-    private struct PlayedProjection { let owner: UUID; var active: Set<UUID>; var raw: Bool; var failed = false }
+    private struct PlayedProjection { let owner: UUID; var active: Set<UUID>; var raw: Bool; var failed = false; var awaitingReport = true }
     private var sessionPlayedOwners: [UUID: [String: UUID]] = [:]
     @Published private var playedProjections: [String: PlayedProjection] = [:]
     func presented(_ item: MediaItem) -> MediaItem {
@@ -95,6 +95,12 @@ struct AccountSnapshot: Codable {
         if projection.owner == owner { projection.failed = !success }
         playedProjections[itemID] = projection
     }
+    func finishPlayedReport(_ itemID: String, owner: UUID, success: Bool) {
+        guard var projection = playedProjections[itemID], projection.owner == owner else { return }
+        projection.awaitingReport = false
+        if !success { projection.failed = true }
+        playedProjections[itemID] = projection
+    }
     func withdrawPlayedProjection(_ itemID: String, owner: UUID) {
         guard var projection = playedProjections[itemID], projection.owner == owner else { return }
         projection.failed = true; playedProjections[itemID] = projection
@@ -102,7 +108,7 @@ struct AccountSnapshot: Codable {
     func settlePlayedProjection(_ item: MediaItem, reporting: Bool) {
         guard var projection = playedProjections[item.id] else { return }
         projection.raw = item.userData.played
-        if !reporting && projection.active.isEmpty { playedProjections[item.id] = nil }
+        if !reporting && !projection.awaitingReport && projection.active.isEmpty { playedProjections[item.id] = nil }
         else { playedProjections[item.id] = projection }
     }
     @Published var externalDetailID: String?
@@ -280,6 +286,10 @@ struct AccountSnapshot: Codable {
                 let token = self.beginPlayedProjection(itemID, rawPlayed: session?.item.userData.played ?? false)
                 if let session { self.sessionPlayedOwners[session.id, default: [:]][itemID] = token }
                 return token
+            }
+            session.onCompletionReportFinished = { [weak self] itemID, token, success in
+                guard let self, self.accountGeneration == accountVersion else { return }
+                self.finishPlayedReport(itemID, owner: token, success: success)
             }
             session.onCompletionFinished = { [weak self] itemID, token, success in
                 guard let self, self.accountGeneration == accountVersion else { return }
