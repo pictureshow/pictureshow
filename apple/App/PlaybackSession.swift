@@ -93,9 +93,9 @@ import MediaAccessibility
     private var stalledSince: Date?
     private var lastObservedTicks: Int64 = 0
 
-    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer(), externalSubtitles: ExternalTextSubtitles? = nil, diagnostics: PlaybackDiagnostics = PlaybackDiagnostics()) {
+    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer(), externalSubtitles: ExternalTextSubtitles? = nil, diagnostics: PlaybackDiagnostics? = nil) {
         self.client = client; self.account = account; self.item = item; self.preferences = preferences; self.player = player
-        self.diagnostics = diagnostics
+        self.diagnostics = diagnostics ?? PlaybackDiagnostics()
         self.externalSubtitles = externalSubtitles ?? ExternalTextSubtitles()
         subtitleObservation = self.externalSubtitles.$loading.combineLatest(self.externalSubtitles.$unavailable)
             .map { loading, unavailable -> String? in

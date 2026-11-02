@@ -2,7 +2,16 @@
 // Copyright (c) Legitimate LLC.
 import SwiftUI
 import UIKit
+import OSLog
 import PictureshowCore
+
+/// Opt-in observation only: never changes VoiceOver state or announcement policy.
+@MainActor func detailDiagnostic(_ event: String) {
+    #if DEBUG
+    guard ProcessInfo.processInfo.environment["PICTURESHOW_DETAIL_DIAGNOSTICS"] == "1" else { return }
+    Logger(subsystem: "app.pictureshow", category: "Detail").notice("\(event, privacy: .public)")
+    #endif
+}
 
 /// Identity is the accepted user event, so identical failed attempts can speak again
 /// while transport refinements within an attempt stay silent.
@@ -19,9 +28,15 @@ private struct CueAnnouncement: ViewModifier {
         content.onChange(of: cue, initial: true) { _, current in
             guard let current, current.id != delivered else { return }
             delivered = current.id
-            guard UIAccessibility.isVoiceOverRunning, !current.message.isEmpty else { return }
+            let kind = current.message == "Ready" ? "Ready" : "other"
+            detailDiagnostic("event=cueObserved cue=\(current.id) kind=\(kind)")
+            guard UIAccessibility.isVoiceOverRunning, !current.message.isEmpty else {
+                detailDiagnostic("event=cueNotPosted cue=\(current.id) kind=\(kind) voiceOver=\(UIAccessibility.isVoiceOverRunning)")
+                return
+            }
             let speech = NSAttributedString(string: current.message, attributes: [.accessibilitySpeechQueueAnnouncement: !current.urgent])
             UIAccessibility.post(notification: .announcement, argument: speech)
+            detailDiagnostic("event=cuePosted cue=\(current.id) kind=\(kind)")
         }
     }
 }

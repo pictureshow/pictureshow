@@ -34,6 +34,7 @@ final class DetailRecoveryUITests: XCTestCase {
         app.launchEnvironment["PICTURESHOW_TEST_USERNAME"] = "Fixture viewer"
         app.launchEnvironment["PICTURESHOW_TEST_PASSWORD"] = "synthetic-fixture-password"
         app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = "fixture-title"
+        app.launchEnvironment["PICTURESHOW_DETAIL_DIAGNOSTICS"] = "1"
         app.launch()
         defer { app.terminate() }
         let connect = app.buttons["connect"]
@@ -93,7 +94,8 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue((retry.value as? String ?? "").contains("Retry. Loading failed. " + reason))
         XCTAssertTrue(play.exists)
         XCTAssertFalse(play.isEnabled, "The stale Play node remains visible but exposes disabled accessibility semantics")
-        XCTAssertTrue((play.value as? String ?? "").contains("Unavailable"))
+        XCTAssertEqual(play.label, "Play")
+        XCTAssertEqual(play.value as? String ?? "", "")
         #if os(tvOS)
         XCTAssertTrue(retry.hasFocus, "Failure must select the real Retry control")
         #endif
@@ -126,7 +128,7 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 15) { !retry.exists && play.exists && play.isEnabled })
         // Capture the actual destination before an assertion can end the test.
         capture("Detail recovery 05 fresh primary after release", app: app)
-        XCTAssertTrue((play.value as? String ?? "").contains("Ready"), "The same usable primary exposes its pending-to-ready state")
+        XCTAssertEqual(play.value as? String ?? "", "", "Ready is an event and never a persistent action value")
         XCTAssertFalse(app.staticTexts[reason].exists, "Successful recovery clears the old visible failure")
         #if os(tvOS)
         XCTAssertTrue(play.hasFocus, "Successful Retry must hand selection directly to the real fresh primary")
@@ -151,6 +153,134 @@ final class DetailRecoveryUITests: XCTestCase {
         #endif
         print("F2_DETAIL_RECOVERY reads=\(fixture.totalDetailReads) retryRetained=true freshPrimaryEnabled=\(play.isEnabled) readyValue=\(play.value as? String ?? "")")
     }
+
+    func testFirstAppearanceKeepsOneReadAndHeldActionRetainsNativeFocusThenEmitsOneReady() throws {
+        continueAfterFailure = false
+        let fixture = try DetailRecoveryHTTPFixture()
+        defer { fixture.stop() }
+        let app = try launchFixtureDetail(fixture)
+        defer { app.terminate() }
+        app.terminate()
+        fixture.holdDetailReads()
+        let before = fixture.totalDetailReads
+        app.launch()
+        XCTAssertTrue(waitUntil(timeout: 15) { fixture.heldReadCount == 1 })
+        Thread.sleep(forTimeInterval: 1.2)
+        XCTAssertEqual(fixture.totalDetailReads, before + 1, "The first appearance must observe the arrival read without restarting it")
+        fixture.releaseDetailReads()
+        let play = app.buttons["play"], watched = app.buttons["watched"], favorite = app.buttons["favorite"]
+        XCTAssertTrue(play.waitForExistence(timeout: 15) && play.isEnabled)
+        XCTAssertTrue(watched.exists && watched.isEnabled)
+        XCTAssertFalse((play.value as? String ?? "").contains("Ready"))
+        let freshReads = fixture.totalDetailReads
+        fixture.holdDetailReads()
+        activate(watched, in: app)
+        XCTAssertTrue(waitUntil(timeout: 10) { fixture.heldReadCount == 1 })
+        XCTAssertEqual(fixture.totalDetailReads, freshReads + 1)
+        let held = try app.snapshot()
+        func nodes(_ node: XCUIElementSnapshot) -> [XCUIElementSnapshot] { [node] + node.children.flatMap(nodes) }
+        let heldNodes = nodes(held)
+        for (identifier, name) in [("play", "Play"), ("watched", "Watched"), ("favorite", "Favorite")] {
+            let node = try XCTUnwrap(heldNodes.first { $0.identifier == identifier && $0.elementType == .button })
+            XCTAssertFalse(node.isEnabled, "Held action must expose native disabled semantics")
+            XCTAssertEqual(node.label, name)
+            XCTAssertEqual(node.value as? String ?? "", "")
+            #if os(tvOS)
+            if identifier == "watched" { XCTAssertTrue(node.hasFocus, "The same input control must retain remote focus while held") }
+            #endif
+        }
+        capture("F3 detail held plain disabled actions", app: app)
+        print("F3_DETAIL_PHASE same-focused-held reads=\(fixture.totalDetailReads)")
+        fixture.releaseDetailReads()
+        XCTAssertTrue(waitUntil(timeout: 15) { watched.exists && watched.isEnabled })
+        #if os(tvOS)
+        XCTAssertTrue(watched.hasFocus)
+        focus(favorite, in: app)
+        XCTAssertTrue(favorite.hasFocus)
+        focus(watched, in: app)
+        XCTAssertTrue(watched.hasFocus)
+        #endif
+        XCTAssertEqual(watched.value as? String, "Watched")
+        XCTAssertFalse((watched.value as? String ?? "").contains("Ready"))
+        Thread.sleep(forTimeInterval: 1.2)
+        XCTAssertEqual(fixture.totalDetailReads, freshReads + 1)
+        capture("F3 detail settled same control and later traversal", app: app)
+        print("F3_DETAIL_PHASE settled-and-traversed reads=\(fixture.totalDetailReads) initialReadDelta=1 heldReadDelta=1")
+    }
+
+    func testSeriesReadFailureKeepsNeutralUnknownActionsAndSeasonSelection() throws {
+        continueAfterFailure = false
+        let fixture = try DetailRecoveryHTTPFixture(kind: .series)
+        defer { fixture.stop() }
+        let app = try launchFixtureDetail(fixture)
+        defer { app.terminate() }
+        let season = app.buttons["season-fixture-season"]
+        XCTAssertTrue(season.waitForExistence(timeout: 15))
+        XCTAssertEqual(season.value as? String, "Selected")
+        fixture.holdDetailReads()
+        activate(app.buttons["watched"], in: app)
+        XCTAssertTrue(waitUntil(timeout: 10) { fixture.heldReadCount == 1 })
+        let retry = app.buttons["detailRetry"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 40))
+        for name in ["watched", "favorite"] {
+            let node = app.buttons[name]
+            XCTAssertFalse(node.isEnabled)
+            XCTAssertEqual(node.label, name == "watched" ? "Watched" : "Favorite")
+            XCTAssertEqual(node.value as? String ?? "", "")
+        }
+        XCTAssertFalse(season.isEnabled)
+        XCTAssertEqual(season.label, "Season 1")
+        XCTAssertEqual(season.value as? String ?? "", "", "An unknown retained season cannot claim Selected")
+        let reason = "The item took too long to load. Choose Retry to try again."
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", reason)).count, 1)
+        XCTAssertEqual(retry.value as? String, "Retry. Loading failed. " + reason)
+        capture("F3 series neutral retained unknown actions and season", app: app)
+        fixture.releaseDetailReads()
+        activate(retry, in: app)
+        XCTAssertTrue(waitUntil(timeout: 15) { !retry.exists && season.isEnabled })
+        XCTAssertEqual(season.value as? String, "Selected")
+        XCTAssertEqual(app.buttons["watched"].value as? String, "Watched")
+        print("F3_DETAIL_SERIES neutralUnknown=true singleIdleReason=true restoredSelection=true")
+    }
+
+    private func launchFixtureDetail(_ fixture: DetailRecoveryHTTPFixture) throws -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["PICTURESHOW_TEST_SERVER"] = fixture.address
+        app.launchEnvironment["PICTURESHOW_TEST_USERNAME"] = "Fixture viewer"
+        app.launchEnvironment["PICTURESHOW_TEST_PASSWORD"] = "synthetic-fixture-password"
+        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = "fixture-title"
+        app.launchEnvironment["PICTURESHOW_DETAIL_DIAGNOSTICS"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["connect"].waitForExistence(timeout: 15), "Use a fresh owned clone")
+        activate(app.buttons["connect"], in: app)
+        let signIn = app.buttons["signIn"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 15))
+        #if os(tvOS)
+        if app.keyboards.firstMatch.exists { XCUIRemote.shared.press(.menu) }
+        #else
+        if app.buttons["dismissSignInKeyboard"].exists { app.buttons["dismissSignInKeyboard"].tap() }
+        if !signIn.isHittable { app.swipeUp() }
+        #endif
+        activate(signIn, in: app)
+        XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 20))
+        return app
+    }
+
+    #if os(tvOS)
+    private func focus(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<24 {
+            if element.hasFocus { return }
+            let current = app.descendants(matching: .any).allElementsBoundByIndex.first { $0.hasFocus }?.frame
+            guard let current else { XCUIRemote.shared.press(.down); continue }
+            let target = element.frame
+            let dx = target.midX - current.midX, dy = target.midY - current.midY
+            let sameColumn = current.minX < target.maxX && target.minX < current.maxX
+            if abs(dy) > 20 && (sameColumn || abs(dy) > abs(dx)) { XCUIRemote.shared.press(dy < 0 ? .up : .down) }
+            else { XCUIRemote.shared.press(dx < 0 ? .left : .right) }
+        }
+        XCTFail("Could not focus fixture control without activation")
+    }
+    #endif
 
     #if os(iOS)
     private func assertRecoveryDoesNotCoverTitle(in app: XCUIApplication, retry: XCUIElement, reason: String) {
@@ -212,6 +342,8 @@ final class DetailRecoveryUITests: XCTestCase {
 /// An HTTP boundary fixture, rather than a production UI state override. All
 /// values are invented and the listener dies with this one test case.
 private final class DetailRecoveryHTTPFixture {
+    enum Kind { case movie, series }
+    private let kind: Kind
     private let listener: NWListener
     private let queue = DispatchQueue(label: "pictureshow.detail-recovery-fixture")
     private let lock = NSLock()
@@ -223,7 +355,8 @@ private final class DetailRecoveryHTTPFixture {
     var address: String { "http://127.0.0.1:\(listener.port!.rawValue)" }
     var totalDetailReads: Int { lock.lock(); defer { lock.unlock() }; return reads }
     var heldReadCount: Int { lock.lock(); defer { lock.unlock() }; return held.count }
-    init() throws {
+    init(kind: Kind = .movie) throws {
+        self.kind = kind
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in if case .ready = state { ready.signal() } }
@@ -267,6 +400,10 @@ private final class DetailRecoveryHTTPFixture {
             else if path.hasSuffix("/Users/Public") { body = [] as [String] }
             else if path.hasSuffix("/UserPlayedItems/fixture-title") {
                 self.lock.lock(); self.played = line[0] == "POST"; self.lock.unlock(); body = self.userData()
+            } else if self.kind == .series && path.hasSuffix("/Shows/fixture-title/Seasons") {
+                body = ["Items": [["Id": "fixture-season", "Name": "Season 1", "Type": "Season", "SeriesId": "fixture-title", "IndexNumber": 1]]]
+            } else if self.kind == .series && (path.hasSuffix("/Shows/fixture-title/Episodes") || path.hasSuffix("/Shows/NextUp")) {
+                body = ["Items": [["Id": "fixture-episode", "Name": "Fixture episode", "Type": "Episode", "SeriesId": "fixture-title", "SeasonId": "fixture-season", "ParentIndexNumber": 1, "IndexNumber": 1, "UserData": self.userData()]]]
             } else if path.hasSuffix("/Items") { body = ["Items": [self.movie()]] }
             else { body = ["Items": []] }
             self.respond(connection, body: body)
@@ -276,7 +413,7 @@ private final class DetailRecoveryHTTPFixture {
         lock.lock(); defer { lock.unlock() }; return ["Played": played, "IsFavorite": false, "PlaybackPositionTicks": 0]
     }
     private func movie() -> [String: Any] {
-        ["Id": "fixture-title", "Name": "A fixture film with a deliberately long wrapping title for lower-action viewport verification", "Type": "Movie", "ProductionYear": 2026, "Overview": "An invented film used to verify the ordinary detail recovery path.", "UserData": userData()]
+        ["Id": "fixture-title", "Name": "A fixture film with a deliberately long wrapping title for lower-action viewport verification", "Type": kind == .series ? "Series" : "Movie", "ProductionYear": 2026, "Overview": "An invented film used to verify the ordinary detail recovery path.", "UserData": userData()]
     }
     private func respond(_ connection: NWConnection, body: Any) {
         guard let data = try? JSONSerialization.data(withJSONObject: body, options: [.fragmentsAllowed]) else { connection.cancel(); return }

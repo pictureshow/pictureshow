@@ -49,7 +49,9 @@ enum DetailCommand: Equatable {
     }
     func resume(id: String, model: AppModel) {
         appear()
-        if readLifecycle.resumed() { refresh(id: id, model: model, restart: true) }
+        let refreshOnResume = readLifecycle.resumed()
+        detailDiagnostic("event=resume refresh=\(refreshOnResume)")
+        if refreshOnResume { refresh(id: id, model: model, restart: true) }
     }
     func leave() {
         departed = true; epoch = UUID(); readTask?.cancel(); readTask = nil
@@ -281,7 +283,9 @@ struct DetailView: View {
             }
             .onChange(of: readySnapshot, initial: true) { _, snapshot in
                 if let message = readiness.update(held: snapshot.held, focused: snapshot.focused, resumed: snapshot.active, usable: snapshot.usable) {
-                    state.cue = AccessibilityCue(message: message, urgent: false)
+                    let cue = AccessibilityCue(message: message, urgent: false)
+                    detailDiagnostic("event=readyGenerated cue=\(cue.id) selected=\(snapshot.focused ?? "none") active=\(snapshot.active)")
+                    state.cue = cue
                 }
             }
             .onChange(of: model.refreshID) { _, _ in state.refresh(id: id, model: model) }
