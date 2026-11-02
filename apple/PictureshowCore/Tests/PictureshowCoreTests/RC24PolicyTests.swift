@@ -4,12 +4,12 @@ import XCTest
 @testable import PictureshowCore
 
 final class RC24PolicyTests: XCTestCase {
-    private func source(_ streams: [[String: Any]], defaultIndex: Int = 1) throws -> MediaSource {
+    private func source(_ streams: [[String: Any]], defaultIndex: Int? = nil) throws -> MediaSource {
         try JSONDecoder().decode(MediaSource.self, from: JSONSerialization.data(withJSONObject: [
-            "DefaultSubtitleStreamIndex": defaultIndex, "MediaStreams": streams
+            "DefaultSubtitleStreamIndex": defaultIndex as Any? ?? NSNull(), "MediaStreams": streams
         ]))
     }
-    func testTextCaptionRankPrecedesDefaultsButPreservesAccessibilityRanks() throws {
+    func testTextCaptionRankPrecedesFlagsWhenServerHasNoSelection() throws {
         let image: [String: Any] = ["Type": "Subtitle", "Index": 1, "Language": "eng", "Codec": "pgssub", "IsDefault": true]
         for codec in ["SuBrIp", "ASS", "tx3g", "sami"] {
             let text: [String: Any] = ["Type": "Subtitle", "Index": 2, "Language": "eng", "Codec": codec]
@@ -32,14 +32,14 @@ final class RC24PolicyTests: XCTestCase {
     func testReadyBelongsOnlyToSameFocusedHeldEpisode() {
         var feedback = DetailReadyFeedback()
         XCTAssertNil(feedback.update(held: false, focused: "play", resumed: true))
-        XCTAssertNil(feedback.update(held: true, focused: "play", resumed: true))
+        XCTAssertNil(feedback.update(held: true, focused: "play", resumed: true, presented: true))
         XCTAssertNil(feedback.update(held: false, focused: "play", resumed: true, usable: false))
         XCTAssertEqual(feedback.update(held: false, focused: "play", resumed: true), "Ready")
         XCTAssertNil(feedback.update(held: false, focused: "play", resumed: true), "Periodic changes must not repeat Ready")
-        XCTAssertNil(feedback.update(held: true, focused: "play", resumed: true))
+        XCTAssertNil(feedback.update(held: true, focused: "play", resumed: true, presented: true))
         XCTAssertNil(feedback.update(held: false, focused: "favorite", resumed: true), "Focus movement ends the held episode")
         XCTAssertNil(feedback.update(held: false, focused: "play", resumed: true), "Returning later cannot revive the old cue")
-        XCTAssertNil(feedback.update(held: true, focused: "play", resumed: true))
+        XCTAssertNil(feedback.update(held: true, focused: "play", resumed: true, presented: true))
         XCTAssertNil(feedback.update(held: false, focused: "play", resumed: false), "A suspended page cannot announce Ready")
         XCTAssertNil(feedback.update(held: false, focused: "play", resumed: true))
         XCTAssertNil(feedback.update(held: true, focused: nil, resumed: true))
