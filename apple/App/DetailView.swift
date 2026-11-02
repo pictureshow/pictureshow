@@ -362,7 +362,7 @@ struct DetailView: View {
             .onAppear { visible = true; state.appear(); resumeIfActive(); focused = opener; returnedFromPlayback = contentRevealed }
             .onDisappear { visible = false; resumed = false; accessibilityFocused = nil; pendingPresentation = false; state.leave() }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { resumeIfActive() } else { resumed = false; accessibilityFocused = nil; state.cue = nil }
+                if phase == .active { resumeIfActive() } else { resumed = false; pendingPresentation = false; accessibilityFocused = nil; state.cue = nil }
             }
             .task(id: PendingPresentation(waiting: guarded, active: visible && resumed && scenePhase == .active && model.player == nil)) {
                 pendingPresentation = false
