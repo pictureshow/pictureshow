@@ -231,6 +231,9 @@ struct DetailView: View {
     @State private var handoffInFlight = false
     @State private var stableActions = false
     @State private var didPublishAction = false
+    #if os(tvOS)
+    @ScaledMetric(relativeTo: .body) private var recoveryLaneHeight: CGFloat = 160
+    #endif
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -269,9 +272,19 @@ struct DetailView: View {
             #if os(iOS)
             .safeAreaInset(edge: .bottom, spacing: 0) { recoveryPanel }
             #else
-            .overlay(alignment: .topTrailing) { recoveryPanel }
+            // The bottom lane is reserved from the first frame, including healthy
+            // states. Recovery stays outside the content and does not resize its
+            // viewport; native focus may still scroll to the selected action.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ZStack {
+                    Color.clear.allowsHitTesting(false)
+                    recoveryPanel
+                }
+                .frame(maxWidth: .infinity, minHeight: recoveryLaneHeight, maxHeight: recoveryLaneHeight, alignment: .center)
+                .background(Theme.background)
+            }
             #endif
-            .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(state.header?.name ?? "Details")
+            .background(Theme.background.ignoresSafeArea()).pictureshowNavigationTitle(state.header?.name ?? "Details", opaqueTVTitle: true)
             .announceCue(state.cue)
             .announceStatus(state.notice)
             .accessibilityHidden(model.player != nil)
@@ -430,8 +443,13 @@ struct DetailView: View {
         }
     }
     @ViewBuilder private var recoveryPanel: some View {
+        #if os(tvOS)
+        let layout = AnyLayout(HStackLayout(alignment: .center, spacing: 24))
+        #else
+        let layout = AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+        #endif
         if state.recoveryVisible {
-            VStack(alignment: .leading, spacing: 8) {
+            layout {
                 Button {
                     guard !state.reading else { return }
                     state.refresh(id: id, model: model, deliberate: true)
@@ -441,19 +459,31 @@ struct DetailView: View {
                 .accessibilityValue(state.reading || state.fresh ? "Loading item. Please wait." : "Retry. Loading failed. \(state.readFailure?.message ?? state.readError ?? "")")
                 #if os(tvOS)
                 if let reason = state.readFailure?.message ?? state.readError {
-                    Text(state.reading ? "Previous attempt: \(reason)" : reason).foregroundStyle(.orange).selectableReading()
+                    ScrollView(.vertical) {
+                        Text(state.reading ? "Previous attempt: \(reason)" : reason)
+                            .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading).selectableReading().readingFocusable()
+                    }.frame(maxWidth: .infinity, maxHeight: max(1, recoveryLaneHeight - 40))
                 }
                 #else
                 if let reason = state.readFailure?.message ?? state.readError {
                     Text(state.reading ? "Previous attempt: \(reason)" : reason).foregroundStyle(.orange).selectableReading()
                 }
                 #endif
-            }.padding(12).frame(maxWidth: 440, alignment: .leading).background(Theme.surface).padding(8)
+            }.modifier(DetailRecoverySurface())
         } else if let failure = state.writeFailure {
-            VStack(alignment: .leading, spacing: 8) {
+            layout {
+                #if os(tvOS)
+                ScrollView(.vertical) {
+                    Text("Change failed. \(failure.message)").foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("detailWriteError").selectableReading().readingFocusable()
+                }.frame(maxWidth: .infinity, maxHeight: max(1, recoveryLaneHeight - 40))
+                #else
                 Text("Change failed. \(failure.message)").foregroundStyle(.orange).selectableReading().accessibilityIdentifier("detailWriteError")
+                #endif
                 Button { state.retryWrite(model: model) } label: { Text("Retry change").minimumTouchTarget() }.secondaryActionStyle().accessibilityIdentifier("detailWriteRetry")
-            }.padding(12).frame(maxWidth: 440, alignment: .leading).background(Theme.surface).padding(8).accessibilityHidden(!visible || scenePhase != .active)
+            }.modifier(DetailRecoverySurface()).accessibilityHidden(!visible || scenePhase != .active)
         }
     }
     private func primaryLabel(_ item: MediaItem) -> String {
@@ -469,6 +499,17 @@ struct DetailView: View {
         #endif
     }
     private func metadata(_ item: MediaItem) -> String { [item.type == "Episode" ? item.seriesName : nil, item.type == "Episode" ? item.episodeLabel : nil, item.productionYear.map(String.init), item.officialRating, Catalog.runtimeLabel(item.runTimeTicks)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
+}
+
+private struct DetailRecoverySurface: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surface).accessibilityIdentifier("detailRecoverySurface").padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+        #else
+        content.padding(12).frame(maxWidth: 440, alignment: .leading).background(Theme.surface).accessibilityIdentifier("detailRecoverySurface").padding(8)
+        #endif
+    }
 }
 
 struct PersonFilmography: View {

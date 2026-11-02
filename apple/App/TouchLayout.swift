@@ -44,7 +44,7 @@ extension View {
 extension View {
     /// Keep the platform navigation bar and provide explicit TV title ink. Global
     /// UINavigationBarAppearance setters assert in the supported tvOS runtime.
-    @ViewBuilder func pictureshowNavigationTitle(_ title: String) -> some View {
+    @ViewBuilder func pictureshowNavigationTitle(_ title: String, opaqueTVTitle: Bool = false) -> some View {
         #if os(tvOS)
         navigationTitle(title)
             // Keep scrolled Form/List rows behind an opaque native bar instead
@@ -53,8 +53,17 @@ extension View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
             ToolbarItem(placement: .principal) {
-                Text(title).font(.title2).foregroundStyle(.white).lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
+                if opaqueTVTitle {
+                    Text(title).font(.title2).foregroundStyle(.white).lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        // tvOS can leave the principal surface transparent despite
+                        // toolbarBackground. This changes no measured header size.
+                        .background { Theme.background.padding(.horizontal, 16).padding(.vertical, 12) }
+                        .accessibilityAddTraits(.isHeader)
+                } else {
+                    Text(title).font(.title2).foregroundStyle(.white).lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                }
             }
         }
         #else

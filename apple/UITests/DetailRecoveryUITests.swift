@@ -102,6 +102,8 @@ final class DetailRecoveryUITests: XCTestCase {
         capture("Detail recovery 03 truthful deadline and disabled action", app: app)
         #if os(iOS)
         assertRecoveryDoesNotCoverTitle(in: app, retry: retry, reason: reason)
+        revealAboveRecovery(app.buttons["favorite"], in: app, retry: retry, reason: reason)
+        capture("F3 lower Favorite action scrolled clear of recovery", app: app)
         #endif
 
         let priorReads = fixture.totalDetailReads
@@ -235,6 +237,21 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", reason)).count, 1)
         XCTAssertEqual(retry.value as? String, "Retry. Loading failed. " + reason)
         capture("F3 series neutral retained unknown actions and season", app: app)
+        #if os(tvOS)
+        let bodyTitle = app.staticTexts["detailTitle"].frame
+        let surface = app.descendants(matching: .any).matching(identifier: "detailRecoverySurface").firstMatch
+        XCTAssertTrue(surface.exists)
+        let recoveryBounds = surface.frame
+        XCTAssertTrue(recoveryBounds.contains(retry.frame) && recoveryBounds.contains(app.staticTexts[reason].frame), "Judge the complete painted recovery background")
+        XCTAssertFalse(bodyTitle.intersects(recoveryBounds), "The recovery surface must not cover the scrolled body title")
+        print("F3_TV_RECOVERY_GEOMETRY bodyTitle=\(bodyTitle) recovery=\(recoveryBounds) disjoint=true")
+        #endif
+        #if os(iOS)
+        revealAboveRecovery(app.buttons["favorite"], in: app, retry: retry, reason: reason)
+        capture("F3 series neutral Favorite clear of recovery", app: app)
+        revealAboveRecovery(season, in: app, retry: retry, reason: reason)
+        capture("F3 series unknown Season clear of recovery", app: app)
+        #endif
         fixture.releaseDetailReads()
         activate(retry, in: app)
         XCTAssertTrue(waitUntil(timeout: 15) { !retry.exists && season.isEnabled })
@@ -292,6 +309,31 @@ final class DetailRecoveryUITests: XCTestCase {
     #endif
 
     #if os(iOS)
+    /// A docked recovery surface may cover the current scroll position, but
+    /// every retained action must remain reachable above its complete background.
+    private func revealAboveRecovery(_ target: XCUIElement, in app: XCUIApplication, retry: XCUIElement, reason: String) {
+        let message = app.staticTexts[reason]
+        XCTAssertTrue(target.exists && retry.exists && message.exists)
+        let top = app.navigationBars.firstMatch.frame.maxY + 12
+        for _ in 0..<8 {
+            let panel = app.descendants(matching: .any).matching(identifier: "detailRecoverySurface").firstMatch.frame
+            let frame = target.frame
+            if frame.minY >= top && frame.maxY <= panel.minY - 8 { break }
+            let low = panel.minY - 24
+            XCTAssertGreaterThan(low - top, frame.height + 20)
+            let startY = frame.maxY > low ? low : top + 16
+            let endY = frame.maxY > low ? top + 16 : low
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: app.frame.midX, dy: startY)).press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: app.frame.midX, dy: endY)))
+        }
+        let panel = app.descendants(matching: .any).matching(identifier: "detailRecoverySurface").firstMatch.frame
+        XCTAssertGreaterThanOrEqual(target.frame.minY, top)
+        XCTAssertLessThanOrEqual(target.frame.maxY, panel.minY - 8, "The complete retained action must scroll above the recovery background")
+        XCTAssertFalse(target.frame.intersects(panel))
+        XCTAssertFalse(target.isEnabled, "Scrolling cannot manufacture authoritative detail state")
+        print("F3_DETAIL_RECOVERY_REACHABLE id=\(target.identifier) action=\(target.frame) panel=\(panel) enabled=false")
+    }
+
     private func assertRecoveryDoesNotCoverTitle(in app: XCUIApplication, retry: XCUIElement, reason: String) {
         let titleFrame = app.staticTexts["detailTitle"].frame
         let reasonText = app.staticTexts[reason]
