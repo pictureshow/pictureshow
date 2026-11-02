@@ -78,7 +78,7 @@ struct PlayerScreen: View {
                     if session.waitingForVideo {
                         ProgressView(session.status).accessibilityIdentifier("playbackWaiting")
                     }
-                    if let error = session.error { Text(error).foregroundStyle(.orange) }
+                    if let error = session.error { Text(error).foregroundStyle(.orange).accessibilityIdentifier("playbackError") }
                     if let error = session.reportError { Text(error) }
                     Button("Back to details", action: finish).accessibilityIdentifier("loadingBack")
                 }.padding(32).background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 16)).padding(.top, 100)

@@ -2534,7 +2534,21 @@ final class AppleSliceUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.35)
         }
         print("F1_METRIC \(metric)_clock_timeout_ms=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) final_position=\(lastClock) snapshot=true")
+        if metric.hasPrefix("f5_") { diagnoseF5Clock(metric: metric) }
         return nil
+    }
+    /// Save the actual failure surface before teardown. A sign-in attachment
+    /// created earlier in setup cannot establish the state at a later timeout.
+    /// Emit only fixed identifiers and booleans; an error may contain server text.
+    private func diagnoseF5Clock(metric: String) {
+        if let snapshot = try? app.snapshot() {
+            let nodes = tvSnapshotNodes(snapshot)
+            for id in ["pictureshowNativePlayer", "playbackWaiting", "playbackError", "loadingBack", "serverAddress", "signIn", "play", "openSearch", "openSettings"] {
+                let node = nodes.first { $0.identifier == id }
+                print("F5_CLOCK_SURFACE metric=\(metric) id=\(id) present=\(node != nil) enabled=\(node?.isEnabled ?? false)")
+            }
+        }
+        captureFullScreen("F5 clock unavailable \(metric) before teardown")
     }
     /// Capture one bounded, same-tree diagnostic before XCTest tears the app down.
     /// A post-run simulator screenshot can show Home and cannot diagnose this panel.
