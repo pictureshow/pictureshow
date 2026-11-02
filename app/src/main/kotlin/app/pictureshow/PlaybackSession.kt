@@ -12,7 +12,9 @@ import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackClient
+import app.pictureshow.core.playback.PlaybackHttpOutcome
 import app.pictureshow.core.playback.PlaybackProgressInfo
+import app.pictureshow.core.playback.PlaybackReportFailure
 import app.pictureshow.core.playback.PlaybackReports
 import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PlaybackStopInfo
@@ -33,9 +35,23 @@ internal interface PlaybackGateway {
     suspend fun start(info: PlaybackProgressInfo): ClientResult<Unit>
     suspend fun progress(info: PlaybackProgressInfo): ClientResult<Unit>
     suspend fun stopped(info: PlaybackStopInfo): ClientResult<Unit>
+
+    // Test/offline gateways can retain the simple ports. The server overrides these to report the
+    // exact HTTP status and fixed transport outcome from the request that carried this snapshot.
+    suspend fun start(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit): ClientResult<Unit> =
+        start(info).also { observe(it.reportOutcome()) }
+    suspend fun progress(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit): ClientResult<Unit> =
+        progress(info).also { observe(it.reportOutcome()) }
+    suspend fun stopped(info: PlaybackStopInfo, observe: (PlaybackHttpOutcome) -> Unit): ClientResult<Unit> =
+        stopped(info).also { observe(it.reportOutcome()) }
     suspend fun stopEncoding(sessionId: String): ClientResult<Unit>
     suspend fun played(): ClientResult<Unit> = ClientResult.Success(Unit)
 }
+
+private fun ClientResult<Unit>.reportOutcome() = PlaybackHttpOutcome(
+    null,
+    if (this is ClientResult.Failure) PlaybackReportFailure.Network else null
+)
 
 internal class ServerPlaybackGateway(
     private val client: PlaybackClient,
@@ -61,6 +77,12 @@ internal class ServerPlaybackGateway(
     override suspend fun start(info: PlaybackProgressInfo) = client.reportStart(account, info)
     override suspend fun progress(info: PlaybackProgressInfo) = client.reportProgress(account, info)
     override suspend fun stopped(info: PlaybackStopInfo) = client.reportStopped(account, info)
+    override suspend fun start(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit) =
+        client.reportStart(account, info, observe)
+    override suspend fun progress(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit) =
+        client.reportProgress(account, info, observe)
+    override suspend fun stopped(info: PlaybackStopInfo, observe: (PlaybackHttpOutcome) -> Unit) =
+        client.reportStopped(account, info, observe)
     override suspend fun stopEncoding(sessionId: String) = client.stopEncoding(account, sessionId)
     override suspend fun played() = markPlayed()
 }
@@ -114,6 +136,7 @@ internal class PlaybackSession(
     private var requested = PlaybackRequest()
     private var ready = false
     private var started = false
+    private var reportSequence = 0L
 
     // These belong to the viewing, not a prepared stream. An index carried through a seek,
     // route change or fallback is still automatic until the viewer chooses that track type.
@@ -173,10 +196,10 @@ internal class PlaybackSession(
         ready = true
         mutable.value = mutable.value.copy(preparing = false, reportError = null)
         if (started) {
-            gateway.progress(progressInfo())
+            reportProgress()
         } else {
             started = true
-            gateway.start(progressInfo())
+            reportProgress(start = true)
         }
         ticker?.cancel()
         ticker = owner.launch {
@@ -234,7 +257,7 @@ internal class PlaybackSession(
 
     fun progress(source: PlayDecision? = decision) = enqueue {
         if (source === decision && ready && pendingSeek == null && !seeking && mutable.value.error == null) {
-            gateway.progress(progressInfo())
+            reportProgress()
         }
     }
 
@@ -311,7 +334,7 @@ internal class PlaybackSession(
                 "type=${if (type == MediaStreamType.Audio) "audio" else "subtitle"} " +
                     "stream=${if (index < 0) "off" else index} ready=$ready positionMs=${lastPosition.milliseconds}"
             )
-            if (ready) gateway.progress(progressInfo())
+            if (ready) reportProgress()
             return@enqueue
         }
         val nextAudio = if (type == MediaStreamType.Audio) index else mutable.value.audioIndex
@@ -336,7 +359,7 @@ internal class PlaybackSession(
         if (!leavingAudioRecovery && local && output.select(type, index)) {
             mutable.value = mutable.value.copy(audioIndex = nextAudio, subtitleIndex = nextSubtitle)
             requested = requested.copy(audioStreamIndex = nextAudio, subtitleStreamIndex = nextSubtitle)
-            if (ready) gateway.progress(progressInfo())
+            if (ready) reportProgress()
         } else {
             // An unsupported in-player audio choice also uses the server. Keep the original
             // policy so the next working track can return to direct playback without an error.
@@ -645,6 +668,38 @@ internal class PlaybackSession(
         diagnostic(PlaybackDiagnostics.line(decision ?: reportingDecision, event, fields))
     }
 
+    private suspend fun reportProgress(start: Boolean = false): ClientResult<Unit> {
+        val info = progressInfo()
+        val observe =
+            reportDiagnostic(if (start) "start" else "progress", info.positionTicks, info.audioStreamIndex, info.subtitleStreamIndex)
+        return if (start) gateway.start(info, observe) else gateway.progress(info, observe)
+    }
+
+    /** Capture the same immutable fields/provenance as the body, before suspending in HTTP. */
+    private fun reportDiagnostic(kind: String, positionTicks: Long, audio: Int?, subtitle: Int?): (PlaybackHttpOutcome) -> Unit {
+        val current = decision ?: reportingDecision
+        val sequence = ++reportSequence
+        val fields = "seq=$sequence " + app.pictureshow.core.playback.PlaybackReportFields.describe(
+            kind,
+            positionTicks,
+            audio,
+            subtitle,
+            audioChosenByViewer,
+            subtitleChosenByViewer
+        )
+        val sent = kotlin.time.TimeSource.Monotonic.markNow()
+        return { outcome ->
+            diagnostic(
+                PlaybackDiagnostics.line(
+                    current,
+                    "report",
+                    "$fields status=${outcome.status ?: "none"} " +
+                        "failure=${outcome.failure?.name?.lowercase() ?: "none"} elapsedMs=${sent.elapsedNow().inWholeMilliseconds}"
+                )
+            )
+        }
+    }
+
     private fun progressInfo(): PlaybackProgressInfo {
         capture()
         return PlaybackReports(requireNotNull(decision)).progress(
@@ -671,7 +726,7 @@ internal class PlaybackSession(
         ticker?.cancel()
         val current = decision ?: reportingDecision ?: return false
         if (releaseOutput) output.release()
-        if (ready) gateway.progress(progressInfo())
+        if (ready) reportProgress()
         val stopped = reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
         // Retired encodes already have their two scoped DELETEs scheduled.
         if (decision?.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
@@ -700,8 +755,8 @@ internal class PlaybackSession(
      * final stop report is the one that keeps the viewer's place, so it gets one retry before it is surfaced.
      */
     private suspend fun reportStopped(info: PlaybackStopInfo): Boolean {
-        var result = gateway.stopped(info)
-        if (result is ClientResult.Failure) result = gateway.stopped(info)
+        var result = gateway.stopped(info, reportDiagnostic("stop", info.positionTicks, null, null))
+        if (result is ClientResult.Failure) result = gateway.stopped(info, reportDiagnostic("stop", info.positionTicks, null, null))
         if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
         return result is ClientResult.Success
     }
