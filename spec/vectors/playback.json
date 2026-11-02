@@ -973,6 +973,94 @@
         "subtitleViewer": true
       },
       "expected": "kind=stop positionMs=90123 audio=omitted subtitle=omitted audioOrigin=viewer subtitleOrigin=viewer"
+    },
+    {
+      "id": "seek-step-first",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 79965,
+        "pendingMs": null,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 89965
+    },
+    {
+      "id": "seek-step-handoff",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 80000,
+        "pendingMs": 90000,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 100000
+    },
+    {
+      "id": "seek-step-third",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 90000,
+        "pendingMs": 100000,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 110000
+    },
+    {
+      "id": "seek-step-mixed-left",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 80000,
+        "pendingMs": 110000,
+        "deltaMs": -10000,
+        "durationMs": 180000
+      },
+      "expected": 100000
+    },
+    {
+      "id": "seek-step-held-right",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 80000,
+        "pendingMs": 100000,
+        "deltaMs": 30000,
+        "durationMs": 180000
+      },
+      "expected": 130000
+    },
+    {
+      "id": "seek-step-clamp-zero",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 1000,
+        "pendingMs": 1000,
+        "deltaMs": -30000,
+        "durationMs": 180000
+      },
+      "expected": 0
+    },
+    {
+      "id": "seek-step-clamp-end",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 175000,
+        "pendingMs": 175000,
+        "deltaMs": 30000,
+        "durationMs": 180000
+      },
+      "expected": 180000
+    },
+    {
+      "id": "seek-step-ready-clock",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 112000,
+        "pendingMs": null,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 122000
     }
   ]
 }

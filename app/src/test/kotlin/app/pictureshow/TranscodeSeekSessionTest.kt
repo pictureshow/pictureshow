@@ -307,6 +307,89 @@ class TranscodeSeekSessionTest {
         runCurrent()
     }
 
+    @Test
+    fun relativeStepsUseViewingIntentAcrossSlowPrepareReplacementAndReady() = runTest {
+        val events = mutableListOf<String>()
+        val gateway = Gateway(events)
+        val output = Output(events)
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(80_000)
+        runCurrent()
+        val retired = assertNotNull(session.state.value.decision)
+        session.ready(retired)
+        runCurrent()
+        gateway.gate = CompletableDeferred()
+        assertEquals(90_000L, session.stepSeek(10_000))
+        advanceTimeBy(800)
+        runCurrent()
+        // The old decoder's position can be stale throughout PlaybackInfo and handoff.
+        output.snapshot = PlaybackPosition(80_000, true)
+        assertEquals(100_000L, session.stepSeek(10_000))
+        assertEquals(100_000L, session.state.value.seekTargetMs)
+        gateway.gate!!.complete(Unit)
+        runCurrent()
+        assertFalse(session.seek(110_000, retired), "A delayed callback from the retired player is rejected")
+        // The screen may still hold that player, but its relative action uses the viewing.
+        advanceTimeBy(800)
+        assertEquals(110_000L, session.stepSeek(10_000))
+        advanceTimeBy(250)
+        runCurrent()
+        assertEquals(110_000L, output.opens.last().position)
+        assertEquals(110_000L, session.state.value.seekTargetMs)
+        val current = assertNotNull(session.state.value.decision)
+        session.ready(current, PlaybackPosition(110_000, true), 110_000)
+        runCurrent()
+        assertNull(session.state.value.seekTargetMs)
+        output.snapshot = PlaybackPosition(112_000, true)
+        assertEquals(122_000L, session.stepSeek(10_000), "Once ready, a new sequence starts from the playing clock")
+        session.close()
+        runCurrent()
+    }
+
+    @Test
+    fun rapidMixedAndHeldStepsAccumulateAndClampBeforeAndDuringNegotiation() = runTest {
+        val events = mutableListOf<String>()
+        val gateway = Gateway(events)
+        val output = Output(events)
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(80_000)
+        runCurrent()
+        session.ready(assertNotNull(session.state.value.decision))
+        runCurrent()
+        listOf(10_000L, 10_000, 10_000).forEach {
+            session.stepSeek(it)
+            advanceTimeBy(100)
+            runCurrent()
+        }
+        advanceTimeBy(250)
+        runCurrent()
+        assertEquals(110_000L, output.opens.last().position)
+        val replacement = assertNotNull(session.state.value.decision)
+        // READY was captured for the opened replacement, but a newer key arrives before
+        // that queued callback runs. It must not acknowledge the newer viewing target.
+        session.ready(replacement, PlaybackPosition(110_000, true), 110_000)
+        gateway.gate = CompletableDeferred()
+        assertEquals(100_000L, session.stepSeek(-10_000))
+        runCurrent()
+        assertEquals(100_000L, session.state.value.seekTargetMs)
+        advanceTimeBy(250)
+        runCurrent()
+        assertEquals(130_000L, session.stepSeek(30_000))
+        assertEquals(100_000L, session.stepSeek(-30_000))
+        assertEquals(110_000L, session.stepSeek(10_000))
+        gateway.gate!!.complete(Unit)
+        runCurrent()
+        assertEquals(110_000L, output.opens.last().position)
+        assertEquals(110_000L, session.state.value.seekTargetMs)
+        assertEquals(0L, session.stepSeek(-600_000))
+        assertEquals(600_000L, session.stepSeek(900_000))
+        advanceTimeBy(250)
+        runCurrent()
+        assertEquals(600_000L, output.opens.last().position)
+        session.close()
+        runCurrent()
+    }
+
     private data class Open(val position: Long, val audio: Int, val subtitle: Int, val paused: Boolean)
 
     private class Output(private val events: MutableList<String>) : PlaybackOutput {

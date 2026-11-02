@@ -131,6 +131,14 @@ class ReferenceParityVectorsTest {
                 deviceId = credentials.optionalText("deviceId")
             )
         return when (operation) {
+            "seek-step" -> JsonPrimitive(
+                app.pictureshow.core.playback.SeekSteps.target(
+                    input.getValue("positionMs").jsonPrimitive.long,
+                    input["pendingMs"]?.jsonPrimitive?.longOrNull,
+                    input.getValue("deltaMs").jsonPrimitive.long,
+                    input.getValue("durationMs").jsonPrimitive.long
+                )
+            )
             "playback-report-fields" -> JsonPrimitive(
                 app.pictureshow.core.playback.PlaybackReportFields.describe(
                     input.text("kind"),
