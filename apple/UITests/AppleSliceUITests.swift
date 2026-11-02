@@ -1427,10 +1427,11 @@ final class AppleSliceUITests: XCTestCase {
         }
         func focusTimeline() throws {
             XCUIRemote.shared.press(.up)
-            let timeline = app.sliders.firstMatch
-            XCTAssertTrue(timeline.waitForExistence(timeout: 10))
-            for _ in 0..<10 where !timeline.hasFocus { XCUIRemote.shared.press(.down) }
-            XCTAssertTrue(timeline.hasFocus, "Remote directions must enter the actual native AVKit timeline")
+            // AVKit's TV scrub rail can expose Media Controls and an elapsed
+            // marker as Other elements without any Slider in XCTest. The real
+            // post-Select A/V clock below is the oracle for each remote step.
+            let elapsed = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+            XCTAssertTrue(elapsed.waitForExistence(timeout: 10), "The native AVKit timeline must expose elapsed time")
         }
         struct SeekResult {
             let name: String
