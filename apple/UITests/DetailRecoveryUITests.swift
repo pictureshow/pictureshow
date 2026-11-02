@@ -187,8 +187,8 @@ final class DetailRecoveryUITests: XCTestCase {
         let heldNodes = nodes(held)
         for (identifier, name) in [("play", "Play"), ("watched", "Watched"), ("favorite", "Favorite")] {
             let node = try XCTUnwrap(heldNodes.first { $0.identifier == identifier && $0.elementType == .button })
-            XCTAssertFalse(node.isEnabled, "Held action must expose native disabled semantics")
-            XCTAssertEqual(node.label, name)
+            XCTAssertTrue(node.isEnabled, "Held actions accept one deferred request through their guarded handler")
+            XCTAssertTrue(["Play", "Play when ready", "Mark unwatched", "Mark unwatched when ready", "Remove favorite", "Remove favorite when ready", "Add favorite", "Add favorite when ready"].contains(node.label), "The current held presentation must name its offered action")
             XCTAssertEqual(node.value as? String ?? "", "")
             #if os(tvOS)
             if identifier == "watched" { XCTAssertTrue(node.hasFocus, "The same input control must retain remote focus while held") }
@@ -274,21 +274,20 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 10) { fixture.heldReadCount == 1 })
         XCTAssertFalse(app.staticTexts["detailTitle"].exists, "The full metadata response is still held")
         XCTAssertTrue(watched.exists && favorite.exists && app.buttons["startOver"].exists)
-        XCTAssertFalse(watched.isEnabled, "Cold guarded controls keep native disabled semantics")
-        XCTAssertEqual(watched.label, "Watched")
+        XCTAssertTrue(watched.isEnabled, "Cold controls accept one guarded request")
+        XCTAssertTrue(["Mark watched", "Mark watched when ready"].contains(watched.label))
         #if os(tvOS)
         focus(watched, in: app)
         XCUIRemote.shared.press(.select)
         #else
-        // The AX representation is disabled while the visible destination button
-        // retains its guarded physical-input handler.
+        // Both accessibility and physical input share the guarded request handler.
         watched.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         #endif
-        XCTAssertTrue(waitUntil(timeout: 5) { watched.value as? String == "Watched change requested" })
+        XCTAssertTrue(waitUntil(timeout: 5) { watched.label == "Watched already requested" })
         #if os(tvOS)
         focus(favorite, in: app)
         focus(watched, in: app)
-        XCTAssertEqual(watched.value as? String, "Watched already requested")
+        XCTAssertEqual(watched.label, "Watched already requested")
         XCUIRemote.shared.press(.select)
         #else
         watched.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -296,11 +295,11 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue(fixture.playedWriteMethods.isEmpty, "No cold key can write before authoritative UserData arrives")
         capture("F4 cold pending request before metadata", app: app)
         fixture.releaseDetailReads()
-        XCTAssertTrue(waitUntil(timeout: 15) { watched.exists && watched.isEnabled && watched.value as? String == "Unwatched" })
-        XCTAssertEqual(fixture.playedWriteMethods, ["DELETE"], "Resolve the unknown toggle against Played=true once, including duplicate Select")
+        XCTAssertTrue(waitUntil(timeout: 15) { watched.exists && watched.isEnabled && watched.value as? String == "Watched" })
+        XCTAssertEqual(fixture.playedWriteMethods, [], "The offered Mark watched direction already matches fresh Played=true; never invert it")
         XCTAssertFalse((watched.value as? String ?? "").contains("Ready"))
         capture("F4 cold request resolved against authoritative state", app: app)
-        print("F4_DETAIL_COLD pendingBeforeMetadata=true duplicateSelectGuarded=true resolvedPlayedTrueToFalse=true")
+        print("F4_DETAIL_COLD pendingBeforeMetadata=true duplicateSelectGuarded=true preservedOfferedPlayedTrue=true")
     }
 
     private func launchFixtureDetail(_ fixture: DetailRecoveryHTTPFixture, holdOnRelaunch: Bool = false) throws -> XCUIApplication {

@@ -534,7 +534,7 @@ struct DetailView: View {
             .detailActionState(value: "", unavailable: unavailablePlay, held: guarded, label: semanticLabel(plain: "Play from start", pending: "Play from start when ready", actual: label, unavailable: unavailablePlay), requestStatus: request, acceptsHeldRequest: true).accessibilityFocused($accessibilityFocused, equals: "startOver")
     }
     private func semanticLabel(plain: String, pending: String, actual: String, unavailable: Bool) -> String {
-        if unavailable { return plain }
+        if unavailable { return actual }
         if guarded { return pendingPresentation ? pending : plain }
         return actual
     }
