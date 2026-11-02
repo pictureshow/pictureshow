@@ -113,6 +113,7 @@ final class ViewingAVPlayer: AVPlayer {
     private var closeTask: Task<Void, Never>?
     private var pauseIntent = false
     private var pendingSeekTicks: Int64?
+    private var seekFallbackTicks: Int64?
     private var nativeSeekPending = false
     private var seekRevision = 0
     private var segments: [MediaSegment] = []
@@ -314,7 +315,7 @@ final class ViewingAVPlayer: AVPlayer {
                 guard success else { self.error = "The saved position could not be loaded. Try again."; self.waitingForVideo = false; return }
                 break
             }
-            self.pendingSeekTicks = nil; self.positionTicks = target
+            self.pendingSeekTicks = nil; self.seekFallbackTicks = nil; self.positionTicks = target
             self.timelineReady = true; self.waitingForVideo = false
             self.status = self.playbackMethodStatus
             Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native ready viewing=\(self.viewingID.uuidString, privacy: .public) durationSeconds=\(self.durationSeconds ?? -1) targetTicks=\(target)")
@@ -340,6 +341,7 @@ final class ViewingAVPlayer: AVPlayer {
     /// internal seek uses the accumulated intent even while currentTime lags.
     func nativeSeekTarget(from oldSeconds: Double, to targetSeconds: Double) -> Double {
         guard !closed, oldSeconds.isFinite, targetSeconds.isFinite else { return targetSeconds }
+        if pendingSeekTicks == nil { seekFallbackTicks = Ticks.from(seconds: oldSeconds) }
         let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
         let target = SeekSteps.target(positionMs: Ticks.from(seconds: oldSeconds) / 10_000,
                                       pendingMs: pendingSeekTicks.map { $0 / 10_000 },
@@ -358,14 +360,17 @@ final class ViewingAVPlayer: AVPlayer {
         return Ticks.seconds(target)
     }
     func nativeSeekCompleted(_ receipt: ViewingAVPlayer.SeekReceipt, success: Bool) {
-        guard nativeSeekPending, !closed, success, receipt.generation == generation,
+        guard nativeSeekPending, !closed, receipt.generation == generation,
               receipt.revision == seekRevision, receipt.target == pendingSeekTicks else { return }
-        nativeSeekPending = false; pendingSeekTicks = nil; positionTicks = receipt.target
+        nativeSeekPending = false; pendingSeekTicks = nil
+        let observed = player.currentTime().seconds
+        positionTicks = success ? receipt.target : max(0, observed.isFinite ? Ticks.from(seconds: observed) : seekFallbackTicks ?? 0)
+        seekFallbackTicks = nil
         (player as? ViewingAVPlayer)?.arm(nil)
-        diagnostics.record("seek.nativeCompleted")
+        diagnostics.record(success ? "seek.nativeCompleted" : "seek.nativeFailed")
         #if DEBUG
         if ProcessInfo.processInfo.environment["PICTURESHOW_SEEK_DIAGNOSTICS"] == "1" {
-            Logger(subsystem: "app.pictureshow", category: "Playback").notice("seek-native-complete uptimeMs=\(Int64(ProcessInfo.processInfo.systemUptime * 1_000)) targetMs=\(receipt.target / 10_000) revision=\(receipt.revision) generation=\(receipt.generation)")
+            Logger(subsystem: "app.pictureshow", category: "Playback").notice("seek-native-complete uptimeMs=\(Int64(ProcessInfo.processInfo.systemUptime * 1_000)) targetMs=\(receipt.target / 10_000) revision=\(receipt.revision) generation=\(receipt.generation) success=\(success) actualMs=\(self.positionTicks / 10_000)")
         }
         #endif
         enqueueProgress()
@@ -379,6 +384,7 @@ final class ViewingAVPlayer: AVPlayer {
     }
     func seek(toTicks ticks: Int64) {
         guard !closed else { return }
+        if pendingSeekTicks == nil { seekFallbackTicks = currentTicks }
         nativeSeekPending = false; (player as? ViewingAVPlayer)?.arm(nil)
         seekRevision += 1
         let revision = seekRevision, version = generation
@@ -390,9 +396,12 @@ final class ViewingAVPlayer: AVPlayer {
             Task { @MainActor in
                 // AVPlayer can finish an earlier seek after another seek or a
                 // track/episode replacement. It must not publish into that stream.
-                guard let self, !self.closed, success, self.generation == version,
+                guard let self, !self.closed, self.generation == version,
                       self.seekRevision == revision, self.pendingSeekTicks == target else { return }
-                self.pendingSeekTicks = nil; self.positionTicks = target
+                self.pendingSeekTicks = nil
+                let observed = self.player.currentTime().seconds
+                self.positionTicks = success ? target : max(0, observed.isFinite ? Ticks.from(seconds: observed) : self.seekFallbackTicks ?? 0)
+                self.seekFallbackTicks = nil
                 // A media Play/Pause received during the asynchronous seek is newer than
                 // the intent at seek start. Apply that current intent on completion.
                 if self.pauseIntent { self.player.pause() } else { self.player.play() }
@@ -522,7 +531,7 @@ final class ViewingAVPlayer: AVPlayer {
             switching = false; return
         }
         externalSubtitles.release(); subtitleCue = nil
-        item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil; nativeSeekPending = false
+        item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil; seekFallbackTicks = nil; nativeSeekPending = false
         viewingID = UUID(); reportSequence = 0; audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false; hevcFallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
         segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
