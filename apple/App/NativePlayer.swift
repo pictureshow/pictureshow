@@ -375,19 +375,40 @@ struct NativePlayer: UIViewControllerRepresentable {
         #if os(tvOS)
         let continuation = session.nextCountdown != nil ? session.nextItem : nil
         context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown)
-        let signature = "\(session.trackLabels.cacheRevision)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
+        let signature = "\(session.trackLabels.cacheRevision)|\(session.trackLabels.prepared?.generation ?? -1)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
         if context.coordinator.menuSignature != signature {
             context.coordinator.menuSignature = signature
             session.diagnostics.record("nativePlayer.menuBuilt")
             func tracks(_ type: String) -> UIMenu {
-                // AVKit owns its native menu window. Deferred children let an early
-                // open wait with native loading feedback and receive all rows at once.
+                let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
+                if let prepared = session.trackLabels.prepared {
+                    // AVKit's transport can omit a menu whose only child is a
+                    // deferred element. Present complete prepared rows directly;
+                    // their generation still guards a late native action.
+                    func action(_ title: String, index: Int) -> UIAction {
+                        UIAction(title: title, identifier: .init("\(type.lowercased())-\(index)"), state: selected == index ? .on : .off) { _ in
+                            Task { @MainActor in
+                                guard session.trackLabels.prepared?.generation == prepared.generation,
+                                      session.error == nil, !session.terminal else { return }
+                                session.trackLabels.cancelOpen()
+                                await session.selectTrack(type: type, index: index, menuGeneration: prepared.generation)
+                            }
+                        }
+                    }
+                    return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles",
+                                  image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"),
+                                  options: .singleSelection,
+                                  children: [action("Off", index: -1)] + prepared.values(type).map { action($0.menuTitle, index: $0.id) })
+                }
+                // Before preparation, one immediate child keeps the AVKit menu
+                // reachable. The deferred provider holds an actual early open
+                // until its source-bound pair of menus is complete.
+                let waiting = UIAction(title: "Preparing tracks…", attributes: .disabled) { _ in }
                 let children = UIDeferredMenuElement.uncached { completion in
                     Task { @MainActor in
                         guard session.error == nil, !session.terminal else { completion([]); return }
                         session.trackLabels.requestOpen { presentation in
                             guard let presentation else { completion([]); return }
-                            let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
                             func action(_ title: String, index: Int) -> UIAction {
                                 UIAction(title: title, identifier: .init("\(type.lowercased())-\(index)"), state: selected == index ? .on : .off) { _ in
                                     Task { @MainActor in
@@ -401,7 +422,7 @@ struct NativePlayer: UIViewControllerRepresentable {
                         }
                     }
                 }
-                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), options: .singleSelection, children: [children])
+                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), options: .singleSelection, children: [waiting, children])
             }
             let chapters = UIMenu(title: "Chapters", image: UIImage(systemName: "list.bullet"), children: session.chapters.enumerated().map { index, chapter in
                 UIAction(title: chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name, subtitle: clock(chapter.startTicks)) { _ in session.seek(toTicks: chapter.startTicks) }
