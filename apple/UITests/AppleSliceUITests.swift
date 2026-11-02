@@ -3224,6 +3224,228 @@ final class AppleSliceUITests: XCTestCase {
         #endif
         XCTAssertTrue(hasHomeRoot(timeout: 5), "Navigation should return to Home with Search or Settings available")
     }
+
+// Private insertion draft for AppleSliceUITests.swift (methods belong inside
+// final class AppleSliceUITests so its existing private UI helpers are visible).
+// Requires f5-demo-api-proxy.py and the runner's loopback proxy config.
+
+// MARK: - Private F5 proxy controls
+
+private func f5ProxyURL(_ suffix: String) throws -> URL {
+    let raw = try XCTUnwrap(config["server"])
+    let base = try XCTUnwrap(URL(string: raw))
+    XCTAssertEqual(base.scheme, "http")
+    XCTAssertEqual(base.host, "127.0.0.1", "F5 controls are loopback only")
+    return base.appendingPathComponent("__f5").appendingPathComponent(suffix)
+}
+
+private func f5ProxyCall(_ suffix: String, body: [String: Any]? = nil) async throws -> [String: Any] {
+    var request = URLRequest(url: try f5ProxyURL(suffix))
+    request.httpMethod = body == nil ? "GET" : "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    if let body {
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    }
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let status = (response as? HTTPURLResponse)?.statusCode
+    XCTAssertEqual(status, 200, "F5 loopback control request must succeed")
+    return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+}
+
+private func f5Status() async throws -> [String: Any] {
+    try await f5ProxyCall("status")
+}
+
+private func f5Arm(_ route: String, action: String, count: Int = 1, status: Int = 503) async throws {
+    let body: [String: Any] = ["route": route, "action": action, "count": count, "status": status]
+    let reply = try await f5ProxyCall("fault", body: body)
+    XCTAssertEqual(reply["armed"] as? Bool, true)
+}
+
+private func f5Release(_ route: String, preservePolicy: Bool = false) async throws {
+    let reply = try await f5ProxyCall("release", body: ["route": route, "preservePolicy": preservePolicy])
+    XCTAssertEqual(reply["route"] as? String, route)
+}
+
+private func f5Pending(_ route: String, in status: [String: Any]) -> Int {
+    (status["pendingHeldRequests"] as? [String: Int])?[route] ?? 0
+}
+
+private func f5Seen(_ key: String, in status: [String: Any]) -> Int {
+    ((status["counts"] as? [String: [String: Int]])?[key])?["seen"] ?? 0
+}
+
+private func f5InjectedFailures(_ route: String, in status: [String: Any]) -> Int {
+    let rows = status["injected"] as? [[String: Any]] ?? []
+    return rows.filter {
+        $0["route"] as? String == route && $0["status"] as? Int == 503
+    }.count
+}
+
+private func f5WaitForPending(_ route: String, count: Int, timeout: TimeInterval) async throws -> Bool {
+    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    while ProcessInfo.processInfo.systemUptime < deadline {
+        if f5Pending(route, in: try await f5Status()) >= count { return true }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return false
+}
+
+private func f5WaitForSeen(_ key: String, count: Int, timeout: TimeInterval) async throws -> Bool {
+    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    while ProcessInfo.processInfo.systemUptime < deadline {
+        if f5Seen(key, in: try await f5Status()) >= count { return true }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return false
+}
+
+private func f5WaitForStoppedFailures(_ count: Int, timeout: TimeInterval) async throws -> Bool {
+    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    while ProcessInfo.processInfo.systemUptime < deadline {
+        if f5InjectedFailures("stopped_report", in: try await f5Status()) >= count { return true }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return false
+}
+
+// MARK: - F5 real demo detail recovery
+
+@MainActor
+func testF5DemoHeldWatchedRequestIsSingleAndReadRetryRecovers() async throws {
+    let itemID = try XCTUnwrap(config["completionID"] ?? config["captionID"])
+    ensureSignedIn()
+    app.terminate()
+    app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = itemID
+    app.launch()
+
+    let play = app.buttons["play"]
+    let watched = app.buttons["watched"]
+    XCTAssertTrue(play.waitForExistence(timeout: 25))
+    XCTAssertTrue(watched.waitForExistence(timeout: 10))
+    let initialStatus = try await f5Status()
+    let initialWrites = f5Seen("POST:played_write", in: initialStatus)
+    capture("F5 live detail before held Watched")
+
+    try await f5Arm("item_detail", action: "hold_fail", count: 1, status: 503)
+    var releaseNeeded = true
+    defer {
+        if releaseNeeded { Task { try? await f5Release("item_detail") } }
+    }
+    activate(watched)
+    let readHeld = try await f5WaitForPending("item_detail", count: 1, timeout: 15)
+    XCTAssertTrue(readHeld, "The real item refresh after the Watched action should be held")
+    XCTAssertTrue(waitUntil(timeout: 10) { watched.label == "Watched already requested" })
+
+    // A repeated native activation while the authoritative item read is held
+    // must remain idempotent. The proxy counts writes without retaining item IDs.
+    if watched.isEnabled { activate(watched) }
+    let oneWriteArrived = try await f5WaitForSeen("POST:played_write", count: initialWrites + 1, timeout: 10)
+    XCTAssertTrue(oneWriteArrived)
+    let heldStatus = try await f5Status()
+    let heldWrites = f5Seen("POST:played_write", in: heldStatus)
+    XCTAssertEqual(heldWrites, initialWrites + 1, "One accepted watched intent produces one server write")
+    capture("F5 live detail held Watched request remains single")
+
+    try await f5Release("item_detail")
+    releaseNeeded = false
+    let retry = app.buttons["detailRetry"]
+    XCTAssertTrue(retry.waitForExistence(timeout: 30), "The held real read should fail through the normal detail Retry state")
+    let retryValue = try XCTUnwrap(retry.value as? String)
+    let prefix = "Retry. Loading failed. "
+    XCTAssertTrue(retryValue.hasPrefix(prefix))
+    let reason = String(retryValue.dropFirst(prefix.count))
+    XCTAssertFalse(reason.isEmpty)
+    XCTAssertTrue(app.staticTexts[reason].waitForExistence(timeout: 5))
+    capture("F5 live detail truthful read failure")
+
+    let priorDetailReads = f5Seen("GET:item_detail", in: try await f5Status())
+    activate(retry)
+    let retryStarted = try await f5WaitForSeen("GET:item_detail", count: priorDetailReads + 1, timeout: 10)
+    XCTAssertTrue(retryStarted)
+    XCTAssertTrue(waitUntil(timeout: 20) { !retry.exists && watched.exists && watched.value as? String == "Watched" })
+    let finalStatus = try await f5Status()
+    let finalWrites = f5Seen("POST:played_write", in: finalStatus)
+    XCTAssertEqual(finalWrites, initialWrites + 1, "Retrying the read must not repeat the watched write")
+    capture("F5 live detail fresh authoritative Watched state")
+    print("F5_DETAIL_HELD_WATCHED writes=1 retryRead=true")
+}
+
+// MARK: - F5 real demo completion projection recovery
+
+@MainActor
+func testF5DemoFailedCompletionWithdrawsProjectionWhileFreshReadIsHeld() async throws {
+    let itemID = try XCTUnwrap(config["completionID"])
+    let duration = Int(config["completionDurationSeconds"] ?? "60") ?? 60
+    ensureSignedIn()
+    app.terminate()
+    app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = itemID
+    app.launch()
+    let play = app.buttons["play"]
+    XCTAssertTrue(play.waitForExistence(timeout: 25))
+    XCTAssertTrue(play.label.hasPrefix("Resume from "), "The API harness must seed completionID at forty seconds before launch")
+    XCTAssertEqual(parsedClockSeconds(play.label.replacingOccurrences(of: "Resume from ", with: "")), 40)
+    try await f5Arm("stopped_report", action: "hold_fail", count: 1, status: 503)
+    var stopReleaseNeeded = true
+    var detailReleaseNeeded = false
+    defer {
+        if stopReleaseNeeded { Task { try? await f5Release("stopped_report") } }
+        if detailReleaseNeeded { Task { try? await f5Release("item_detail") } }
+    }
+    activate(play)
+
+    #if os(tvOS)
+    _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 40, maximum: duration - 1,
+                                           timeout: 45, metric: "f5_completion_resume"))
+    _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: duration - 2, maximum: duration + 2,
+                                           timeout: 35, metric: "f5_completion_natural_eos"))
+    #else
+    let position = app.staticTexts["playbackPosition"]
+    XCTAssertTrue(position.waitForExistence(timeout: 90))
+    XCTAssertTrue(waitForPlaybackClock(position, minimum: 40, timeout: 25, metric: "f5_completion_resume"))
+    XCTAssertTrue(waitForPlaybackClock(position, minimum: duration - 2, timeout: 35, metric: "f5_completion_natural_eos"))
+    #endif
+    let stopHeld = try await f5WaitForPending("stopped_report", count: 1, timeout: 20)
+    XCTAssertTrue(stopHeld, "Natural EOS must reach the held final Stop report")
+
+    try await f5Arm("item_detail", action: "hold", count: 10)
+    detailReleaseNeeded = true
+    #if os(tvOS)
+    leaveNativeTVPlayer(returningTo: app.buttons["play"])
+    #else
+    activate(app.buttons["closePlayer"])
+    #endif
+    let detailReadHeld = try await f5WaitForPending("item_detail", count: 1, timeout: 15)
+    XCTAssertTrue(detailReadHeld, "Returning from playback should start the fresh detail read and hold it")
+    let watched = app.buttons["watched"]
+    XCTAssertTrue(watched.waitForExistence(timeout: 15))
+    XCTAssertEqual(watched.label, "Mark unwatched when ready", "Successful completion provisionally presents its played projection")
+    capture("F5 completion provisional played projection before failed Stop")
+
+    try await f5Arm("stopped_report", action: "fail", count: 1, status: 503)
+    // Preserve the second 503 policy while releasing the first held Stop. The
+    // proxy's default release clears leftover policy for ordinary cleanup.
+    try await f5Release("stopped_report", preservePolicy: true)
+    stopReleaseNeeded = false
+    let bothStopsFailed = try await f5WaitForStoppedFailures(2, timeout: 20)
+    XCTAssertTrue(bothStopsFailed, "The held final Stop and its immediate retry should both fail")
+    let stillHeld = try await f5WaitForPending("item_detail", count: 1, timeout: 5)
+    XCTAssertTrue(stillHeld, "The authoritative item read must remain held during Stop failure reconciliation")
+    XCTAssertTrue(waitUntil(timeout: 15) { watched.label == "Mark watched when ready" }, "A failed completion report withdraws only its provisional Played=true projection")
+    let retryProgress = app.buttons["retryProgress"]
+    XCTAssertTrue(retryProgress.waitForExistence(timeout: 10))
+    XCTAssertEqual(retryProgress.label, "Retry saving progress")
+    capture("F5 failed Stop withdraws projection while item read remains held")
+
+    try await f5Release("item_detail")
+    detailReleaseNeeded = false
+    let afterRelease = try await f5Status()
+    XCTAssertEqual(f5Pending("item_detail", in: afterRelease), 0, "The held authoritative detail read is released after evidence capture")
+    XCTAssertTrue(waitUntil(timeout: 20) { ["Mark watched", "Mark unwatched"].contains(watched.label) }, "After release, the action must match fresh server UserData")
+    print("F5_COMPLETION stopFailures=2 projectionWithdrawn=true retrySavingProgress=true detailReadReleasedAfterCapture=true")
+}
+
     private func capture(_ name: String) { let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
     private func captureFullScreen(_ name: String) { let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a) }
 }
