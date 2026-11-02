@@ -21,23 +21,73 @@ struct AccessibilityCue: Equatable {
     var urgent = true
 }
 
+/// One page owns one delivery lane. Queue behind the focused label, coalesce
+/// unsubmitted cues, and consume every identity once. UIKit provides no API to
+/// retract an announcement once submitted; departure cancels only pending work.
+@MainActor final class DetailCueDelivery: ObservableObject {
+    private(set) var inFlight: UUID?
+    private(set) var inFlightMessage: String?
+    private var consumed = Set<UUID>()
+    private var pending: (cue: AccessibilityCue, until: TimeInterval)?
+    private var active = true
+    private let enabled: () -> Bool
+    private let now: () -> TimeInterval
+    private let post: (AccessibilityCue, NSAttributedString) -> Void
+    init(enabled: @escaping () -> Bool = { UIAccessibility.isVoiceOverRunning },
+         now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         post: @escaping (AccessibilityCue, NSAttributedString) -> Void = { cue, speech in
+             UIAccessibility.post(notification: .announcement, argument: speech)
+             detailDiagnostic("event=cuePosted cue=\(cue.id) kind=\(cue.message == "Ready" ? "Ready" : "other") queued=true")
+         }) { self.enabled = enabled; self.now = now; self.post = post }
+    func resume() { active = true }
+    func cancel() { active = false; pending = nil }
+    func submit(_ cue: AccessibilityCue?) {
+        guard let cue else { pending = nil; return }
+        guard !consumed.contains(cue.id) else { return }
+        consumed.insert(cue.id)
+        guard active, enabled(), !cue.message.isEmpty else { return }
+        if inFlight != nil { pending = (cue, now() + 30); return }
+        deliver(cue)
+    }
+    func finished(message: String? = nil) {
+        if let message, message != inFlightMessage { return }
+        inFlight = nil; inFlightMessage = nil
+        guard let next = pending else { return }
+        pending = nil
+        guard active, enabled(), now() < next.until else { return }
+        deliver(next.cue)
+    }
+    private func deliver(_ cue: AccessibilityCue) {
+        inFlight = cue.id; inFlightMessage = cue.message
+        let speech = NSAttributedString(string: cue.message, attributes: [.accessibilitySpeechQueueAnnouncement: true])
+        post(cue, speech)
+    }
+}
+
 private struct CueAnnouncement: ViewModifier {
     let cue: AccessibilityCue?
-    @State private var delivered: UUID?
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var delivery = DetailCueDelivery()
+    @State private var submittedMessage: String?
     func body(content: Content) -> some View {
-        content.onChange(of: cue, initial: true) { _, current in
-            guard let current, current.id != delivered else { return }
-            delivered = current.id
-            let kind = current.message == "Ready" ? "Ready" : "other"
-            detailDiagnostic("event=cueObserved cue=\(current.id) kind=\(kind)")
-            guard UIAccessibility.isVoiceOverRunning, !current.message.isEmpty else {
-                detailDiagnostic("event=cueNotPosted cue=\(current.id) kind=\(kind) voiceOver=\(UIAccessibility.isVoiceOverRunning)")
-                return
+        content.onAppear { delivery.resume(); delivery.submit(cue) }
+            .onChange(of: cue, initial: true) { _, current in
+                submittedMessage = current?.message
+                delivery.submit(current)
             }
-            let speech = NSAttributedString(string: current.message, attributes: [.accessibilitySpeechQueueAnnouncement: !current.urgent])
-            UIAccessibility.post(notification: .announcement, argument: speech)
-            detailDiagnostic("event=cuePosted cue=\(current.id) kind=\(kind)")
-        }
+            .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.announcementDidFinishNotification)) { note in
+                // UIKit completion has no application identity. Match our current
+                // utterance so an unrelated announcement cannot drain this page.
+                guard let text = note.userInfo?[UIAccessibility.announcementStringValueUserInfoKey] as? String,
+                      text == delivery.inFlightMessage else { return }
+                detailDiagnostic("event=cueFinished success=\(note.userInfo?[UIAccessibility.announcementWasSuccessfulUserInfoKey] as? Bool ?? false)")
+                delivery.finished(message: text)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in
+                if !UIAccessibility.isVoiceOverRunning { delivery.cancel() } else if scenePhase == .active { delivery.resume() }
+            }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { delivery.resume() } else { delivery.cancel() } }
+            .onDisappear { delivery.cancel() }
     }
 }
 
@@ -61,12 +111,13 @@ private struct DetailActionState: ViewModifier {
     let held: Bool
     let label: String
     let requestStatus: String?
+    let acceptsHeldRequest: Bool
     func body(content: Content) -> some View {
         // Disable only the hidden accessibility representation. The visible native
         // Button retains input focus and its existing deferred-command guards.
         // SwiftUI has no public notEnabled AccessibilityTraits member; disabled
         // controls publish the platform's native disabled accessibility property.
-        let disabled = held || unavailable
+        let disabled = unavailable || (held && !acceptsHeldRequest)
         content.opacity(disabled ? 0.55 : 1).accessibilityRepresentation {
             content.accessibilityLabel(label).accessibilityValue(requestStatus ?? (disabled ? "" : value)).disabled(disabled)
         }
@@ -76,7 +127,7 @@ private struct DetailActionState: ViewModifier {
 extension View {
     func announceStatus(_ value: String?) -> some View { modifier(StatusAnnouncement(value: value)) }
     func announceCue(_ cue: AccessibilityCue?) -> some View { modifier(CueAnnouncement(cue: cue)) }
-    func detailActionState(value: String, unavailable: Bool, held: Bool, label: String, requestStatus: String? = nil) -> some View { modifier(DetailActionState(value: value, unavailable: unavailable, held: held, label: label, requestStatus: requestStatus)) }
+    func detailActionState(value: String, unavailable: Bool, held: Bool, label: String, requestStatus: String? = nil, acceptsHeldRequest: Bool = false) -> some View { modifier(DetailActionState(value: value, unavailable: unavailable, held: held, label: label, requestStatus: requestStatus, acceptsHeldRequest: acceptsHeldRequest)) }
 }
 
 /// Apply only to catalog path mutations. Playback dismissal keeps its existing

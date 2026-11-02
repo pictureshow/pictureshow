@@ -77,6 +77,34 @@ struct AccountSnapshot: Codable {
         var transport: Task<Void, Never>?
     }
     private var completionRead: CompletionRead?
+    private struct PlayedProjection { let owner: UUID; var active: Set<UUID>; var raw: Bool; var failed = false }
+    private var sessionPlayedOwners: [UUID: [String: UUID]] = [:]
+    @Published private var playedProjections: [String: PlayedProjection] = [:]
+    func presented(_ item: MediaItem) -> MediaItem {
+        guard let projection = playedProjections[item.id] else { return item }
+        var shown = item; shown.userData.played = projection.failed ? projection.raw : true
+        return shown
+    }
+    @discardableResult func beginPlayedProjection(_ itemID: String, rawPlayed: Bool) -> UUID {
+        let token = UUID(); var active = playedProjections[itemID]?.active ?? []; active.insert(token)
+        playedProjections[itemID] = PlayedProjection(owner: token, active: active, raw: playedProjections[itemID]?.raw ?? rawPlayed)
+        return token
+    }
+    func finishPlayedProjection(_ itemID: String, owner: UUID, success: Bool) {
+        guard var projection = playedProjections[itemID], projection.active.remove(owner) != nil else { return }
+        if projection.owner == owner { projection.failed = !success }
+        playedProjections[itemID] = projection
+    }
+    func withdrawPlayedProjection(_ itemID: String, owner: UUID) {
+        guard var projection = playedProjections[itemID], projection.owner == owner else { return }
+        projection.failed = true; playedProjections[itemID] = projection
+    }
+    func settlePlayedProjection(_ item: MediaItem, reporting: Bool) {
+        guard var projection = playedProjections[item.id] else { return }
+        projection.raw = item.userData.played
+        if !reporting && projection.active.isEmpty { playedProjections[item.id] = nil }
+        else { playedProjections[item.id] = projection }
+    }
     @Published var externalDetailID: String?
     let preferences = AppPreferences()
     let signInFlow = SignInFlow()
@@ -208,7 +236,7 @@ struct AccountSnapshot: Codable {
         }
     }
     private func resetCatalogOwnership() {
-        cancelCompletionRead(); detailReadOwners = [:]
+        cancelCompletionRead(); detailReadOwners = [:]; playedProjections = [:]; sessionPlayedOwners = [:]
         loadedHomeRevision = nil; loadedHomeAccount = nil
         loadingHomeRevision = nil; loadingHomeAccount = nil
     }
@@ -247,6 +275,16 @@ struct AccountSnapshot: Codable {
         defer { preparing = false }
         do {
             let session = PlaybackSession(client: client, account: account, item: item, preferences: preferences.value)
+            session.onCompletionBegan = { [weak self, weak session] itemID in
+                guard let self, self.accountGeneration == accountVersion else { return UUID() }
+                let token = self.beginPlayedProjection(itemID, rawPlayed: session?.item.userData.played ?? false)
+                if let session { self.sessionPlayedOwners[session.id, default: [:]][itemID] = token }
+                return token
+            }
+            session.onCompletionFinished = { [weak self] itemID, token, success in
+                guard let self, self.accountGeneration == accountVersion else { return }
+                self.finishPlayedProjection(itemID, owner: token, success: success)
+            }
             try await session.prepare(startTicks: resume ? item.userData.playbackPositionTicks : 0, audio: audio, subtitle: subtitle)
             guard accountGeneration == accountVersion, !Task.isCancelled else { await session.stop(); return }
             activePlayback = session; player = session
@@ -264,6 +302,8 @@ struct AccountSnapshot: Codable {
         return owner.generation == accountGeneration && owner.account == account?.localKey
     }
     func detailReadApplied(_ item: MediaItem, read: Int64) {
+        guard detailReadIsCurrent(read) else { return }
+        settlePlayedProjection(item, reporting: playbackSaving)
         guard let owner = detailReadOwners.removeValue(forKey: read), owner.generation == accountGeneration,
               owner.account == account?.localKey, owner.item == item.id, let waiting = completionRead,
               waiting.generation == owner.generation, waiting.account == owner.account,
@@ -282,6 +322,7 @@ struct AccountSnapshot: Codable {
         defer { waiting.continuation.resume() }
         guard waiting.generation == accountGeneration, waiting.account == account?.localKey else { return }
         if let item {
+            settlePlayedProjection(item, reporting: false)
             rows = rows.map { row in
                 let items = row.items.map { value in
                     var updated = value
@@ -332,6 +373,9 @@ struct AccountSnapshot: Codable {
             await session.stop()
             guard accountGeneration == accountVersion, let account else { return }
             playbackSaveError = session.reportError
+            if session.reportError != nil {
+                for (itemID, token) in sessionPlayedOwners[session.id] ?? [:] { withdrawPlayedProjection(itemID, owner: token) }
+            }
             pendingPlaybackSave = session
             if session.reportError == nil {
                 await refreshAfterPlayback(account: account, itemID: session.item.id)

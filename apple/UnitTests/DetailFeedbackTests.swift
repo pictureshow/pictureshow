@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Legitimate LLC.
 import XCTest
+import UIKit
 import PictureshowCore
 #if os(tvOS)
 @testable import Pictureshow_tvOS
@@ -50,6 +51,71 @@ private final class DetailFixtureProtocol: URLProtocol {
 }
 
 @MainActor final class DetailFeedbackTests: XCTestCase {
+    func testF5CompletionFailureWithdrawsOnlyItsOwnPlayedProjection() {
+        let model = AppModel(client: client(), account: account)
+        var raw = MediaItem(id: "title", name: "Title", type: "Movie")
+        raw.userData.isFavorite = true
+        let old = model.beginPlayedProjection(raw.id, rawPlayed: false)
+        XCTAssertTrue(model.presented(raw).isWatched)
+        let newest = model.beginPlayedProjection(raw.id, rawPlayed: false)
+        model.finishPlayedProjection(raw.id, owner: old, success: false)
+        XCTAssertTrue(model.presented(raw).isWatched, "Old failure cannot withdraw a newer owner")
+        model.finishPlayedProjection(raw.id, owner: newest, success: false)
+        XCTAssertFalse(model.presented(raw).isWatched)
+        XCTAssertTrue(model.presented(raw).userData.isFavorite)
+    }
+    func testF5CompletionActiveOwnerSurvivesRawReadThenFailedStopWithdraws() {
+        let model = AppModel(client: client(), account: account)
+        let raw = MediaItem(id: "title", name: "Title", type: "Episode")
+        let owner = model.beginPlayedProjection(raw.id, rawPlayed: false)
+        model.settlePlayedProjection(raw, reporting: false)
+        XCTAssertTrue(model.presented(raw).isWatched, "A raw read cannot release active completion")
+        model.finishPlayedProjection(raw.id, owner: owner, success: true)
+        model.settlePlayedProjection(raw, reporting: true)
+        XCTAssertTrue(model.presented(raw).isWatched, "Pending reports retain the projection")
+        model.withdrawPlayedProjection(raw.id, owner: owner)
+        XCTAssertFalse(model.presented(raw).isWatched, "A failed Stop restores the raw played state")
+        var latest = raw; latest.userData.played = true
+        model.settlePlayedProjection(latest, reporting: false)
+        XCTAssertTrue(model.presented(latest).isWatched)
+        XCTAssertFalse(model.presented(raw).isWatched, "A settled projection does not override later raw reads")
+    }
+    func testF5FailureExpiresHeldRequestWithOneRetryCue() {
+        let state = DetailState()
+        XCTAssertTrue(state.enqueue(.play(true)))
+        XCTAssertFalse(state.enqueue(.play(true)))
+        state.publishReadFailure("The server refused the read.")
+        XCTAssertTrue(state.pending.isEmpty)
+        XCTAssertTrue(state.cue?.message.contains("The previous request expired and will not run") == true)
+        XCTAssertTrue(state.cue?.message.contains("Retry is available") == true)
+        let owner = state.cue?.id
+        state.publishReadFailure("A transport refinement")
+        XCTAssertEqual(state.cue?.id, owner)
+    }
+    func testF5SpeechQueuesAfterFocusAndCoalescesWithoutReplay() {
+        var posts: [(UUID, NSAttributedString)] = []
+        let delivery = DetailCueDelivery(enabled: { true }, post: { posts.append(($0.id, $1)) })
+        let ready = AccessibilityCue(message: "Ready")
+        delivery.submit(ready); delivery.submit(ready)
+        let failure = AccessibilityCue(message: "Loading failed. Retry is available.")
+        delivery.submit(AccessibilityCue(message: "An obsolete cue")); delivery.submit(failure)
+        XCTAssertEqual(posts.count, 1)
+        XCTAssertEqual(posts[0].1.attribute(.accessibilitySpeechQueueAnnouncement, at: 0, effectiveRange: nil) as? Bool, true)
+        delivery.finished(message: "A foreign announcement")
+        XCTAssertEqual(posts.count, 1)
+        delivery.finished(message: "Ready")
+        XCTAssertEqual(posts.map { $0.0 }, [ready.id, failure.id])
+        delivery.submit(failure); XCTAssertEqual(posts.count, 2)
+    }
+    func testF5SpeechCancelsDepartureDisabledAndExpiredPendingCue() {
+        var clock: TimeInterval = 0; var enabled = true; var posts = 0
+        let delivery = DetailCueDelivery(enabled: { enabled }, now: { clock }, post: { _, _ in posts += 1 })
+        delivery.submit(AccessibilityCue(message: "First")); delivery.submit(AccessibilityCue(message: "Expired"))
+        clock = 31; delivery.finished(); XCTAssertEqual(posts, 1)
+        delivery.submit(AccessibilityCue(message: "Second")); delivery.submit(AccessibilityCue(message: "Departed"))
+        delivery.cancel(); delivery.finished(); XCTAssertEqual(posts, 2)
+        delivery.resume(); enabled = false; delivery.submit(AccessibilityCue(message: "Off")); XCTAssertEqual(posts, 2)
+    }
     override func tearDown() {
         DetailFixtureProtocol.itemType = "Movie"; DetailFixtureProtocol.failItems = false; DetailFixtureProtocol.failEpisodes = false
         DetailFixtureProtocol.holdItems = false; DetailFixtureProtocol.itemReads = 0; DetailFixtureProtocol.episodeReads = 0; DetailFixtureProtocol.held = []; DetailFixtureProtocol.homeReads = 0; DetailFixtureProtocol.itemFailureStatus = 503
@@ -160,7 +226,7 @@ private final class DetailFixtureProtocol: URLProtocol {
         XCTAssertNil(state.item)
         XCTAssertTrue(state.enqueue(.toggleWatched))
         state.acceptRequestCue(.toggleWatched)
-        XCTAssertEqual(state.requestedLabel(.toggleWatched), "Watched change requested")
+        XCTAssertEqual(state.requestedLabel(.toggleWatched), "Watched already requested")
         let cue = state.cue?.id
         state.requestFocusChanged(nil) // Reader selects text; input focus need not change.
         XCTAssertEqual(state.requestedLabel(.toggleWatched), "Watched already requested")
