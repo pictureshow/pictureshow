@@ -95,7 +95,6 @@ function App() {
         [restoring, setRestoring] = useState(!!initial.saved?.current),
         [verifyAttempt, setVerifyAttempt] = useState(0),
         [verified, setVerified] = useState(false),
-        [externalEntry, setExternalEntry] = useState(0),
         [generation, setGeneration] = useState(0),
         [returnBarrier, setReturnBarrier] = useState<Promise<void> | undefined>(
             undefined,
@@ -405,11 +404,6 @@ function App() {
         restore();
         return () => observer.disconnect();
     }, [stack, account, server, restoring, chooser]);
-    useEffect(() => {
-        const changed = () => setExternalEntry((n) => n + 1);
-        window.addEventListener("hashchange", changed);
-        return () => window.removeEventListener("hashchange", changed);
-    }, []);
     // Retain safe catalog entries across reloads; never persist an Item DTO or an active player.
     useEffect(() => {
         if (!account || !verified) return;
@@ -423,58 +417,71 @@ function App() {
     }, [stack, account, verified]);
     useEffect(() => {
         if (!account || !verified) return;
-        const q = new URLSearchParams(location.hash.slice(1)),
-            id = q.get("item"),
-            position = q.get("positionMs");
-        if (!id) return;
-        history.replaceState(null, "", location.pathname + location.search);
-        if (
-            !/^[a-zA-Z0-9_-]{1,128}$/.test(id) ||
-            (position !== null &&
-                (!Number.isSafeInteger(Number(position)) ||
-                    Number(position) < 0 ||
-                    Number(position) > Number.MAX_SAFE_INTEGER / 10000))
-        ) {
-            setError(
-                "This playback link is invalid. Choose an item from your library.",
-            );
-            return;
-        }
-        let live = true;
-        client
-            .detail(id)
-            .then((item) => {
-                if (live) {
-                    const detail: Entry[] = [
-                        { route: { kind: "home" } },
-                        { route: { kind: "detail", id: item.Id } },
-                    ];
-                    appHistory.publish(detail, true);
-                    const runtime =
-                        item.RunTimeTicks &&
-                        item.RunTimeTicks > 0 &&
-                        item.RunTimeTicks < 99 * 3600 * 1e7
-                            ? item.RunTimeTicks / 1e7
-                            : undefined;
-                    const start =
-                        runtime === undefined
-                            ? Number(position ?? 0) / 1000
-                            : Math.min(Number(position ?? 0) / 1000, runtime);
-                    const playback: Entry[] = [
-                        ...detail,
-                        { route: { kind: "player", item, start } },
-                    ];
-                    appHistory.publish(playback);
-                    setStack(playback);
-                }
-            })
-            .catch((e) => {
-                if (live) fail(e);
-            });
+        let live = true,
+            generation = 0;
+        // A hash event with an already-consumed URL must not dispose its pending read.
+        // Only a newer link or an account/effect release supersedes that work.
+        const consume = () => {
+            const q = new URLSearchParams(location.hash.slice(1)),
+                id = q.get("item"),
+                position = q.get("positionMs");
+            if (!id) return;
+            const request = ++generation;
+            history.replaceState(null, "", location.pathname + location.search);
+            if (
+                !/^[a-zA-Z0-9_-]{1,128}$/.test(id) ||
+                (position !== null &&
+                    (!Number.isSafeInteger(Number(position)) ||
+                        Number(position) < 0 ||
+                        Number(position) > Number.MAX_SAFE_INTEGER / 10000))
+            ) {
+                setError(
+                    "This playback link is invalid. Choose an item from your library.",
+                );
+                return;
+            }
+            client
+                .detail(id)
+                .then((item) => {
+                    if (live && request === generation) {
+                        const detail: Entry[] = [
+                            { route: { kind: "home" } },
+                            { route: { kind: "detail", id: item.Id } },
+                        ];
+                        appHistory.publish(detail, true);
+                        const runtime =
+                            item.RunTimeTicks &&
+                            item.RunTimeTicks > 0 &&
+                            item.RunTimeTicks < 99 * 3600 * 1e7
+                                ? item.RunTimeTicks / 1e7
+                                : undefined;
+                        const start =
+                            runtime === undefined
+                                ? Number(position ?? 0) / 1000
+                                : Math.min(
+                                      Number(position ?? 0) / 1000,
+                                      runtime,
+                                  );
+                        const playback: Entry[] = [
+                            ...detail,
+                            { route: { kind: "player", item, start } },
+                        ];
+                        appHistory.publish(playback);
+                        setStack(playback);
+                    }
+                })
+                .catch((e) => {
+                    if (live && request === generation) fail(e);
+                });
+        };
+        window.addEventListener("hashchange", consume);
+        consume();
         return () => {
             live = false;
+            window.removeEventListener("hashchange", consume);
         };
-    }, [verified, account?.accessToken, externalEntry]);
+    }, [verified, account?.accessToken]);
+
     async function logout() {
         if (busy) return;
         setBusy(true);

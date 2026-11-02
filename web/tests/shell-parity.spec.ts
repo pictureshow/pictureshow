@@ -423,7 +423,26 @@ test("external playback entry resolves current-account detail and bounded positi
 }) => {
     const observed = await fixture(page);
     await signIn(page);
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve)),
+        requested = new Promise<void>((resolve) => (entered = resolve));
+    await page.route(
+        "https://jellyfin.example/Items/movie?**",
+        async (route) => {
+            entered();
+            await gate;
+            await route.fallback();
+        },
+    );
     await page.goto("/#item=movie&positionMs=20000");
+    await requested;
+    // A queued hash notification after URL consumption must not cancel its held read.
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe("");
+    await page.evaluate(() =>
+        window.dispatchEvent(new HashChangeEvent("hashchange")),
+    );
+    await page.waitForTimeout(50);
+    release();
     await expect(page.locator("video")).toBeVisible();
     await expect.poll(() => observed.negotiations.length).toBeGreaterThan(0);
     expect(observed.negotiations.at(-1).StartTimeTicks).toBe(20e7);
