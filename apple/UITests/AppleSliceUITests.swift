@@ -1069,14 +1069,15 @@ final class AppleSliceUITests: XCTestCase {
         }
     }
     /// Real UI/lifecycle input around an explicitly held production metadata worker.
-    /// The fixture controls only HTTP metadata/worker release, never focus or outcomes.
+    /// A Play request before its first decision remains on Detail by design; the
+    /// pre-source request rule is exercised at the cache boundary in hosted tests.
+    /// This native case begins when the player first becomes reachable.
     @MainActor func testF4PhonePreparedMenuInitialSourceBackBackgroundAndReplacement() throws {
         #if os(iOS)
         let fixture = try NativeTrackHTTPFixture(durationSeconds: 120)
         let address = try fixture.start()
         defer { fixture.releaseAllMenuWorkers(); fixture.releasePlaybackInfo(); fixture.stop(); app.terminate() }
         app.launchEnvironment["PICTURESHOW_TEST_TRACK_MENU_GATE"] = address
-        fixture.holdInitialPlaybackInfo()
         try fixture.launchSignedInDetail(app, activate: { self.activate($0) })
         let play = app.buttons["play"], tracks = app.buttons["playerTracks"]
         let done = app.buttons["playerOptionsDone"]
@@ -1093,13 +1094,10 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertFalse(app.buttons["audio-1"].exists, message)
         }
         activate(play)
-        wait("The initial PlaybackInfo must be held before opening", { fixture.snapshot.playbackInfoCount > 0 })
+        wait("The first source starts background preparation", { workerCount(1) == 1 })
         XCTAssertTrue(tracks.waitForExistence(timeout: 10))
         activate(tracks)
         XCTAssertEqual(tracks.value as? String, "Preparing audio and subtitles")
-        assertNoPanel("Before the initial source, no partial track sheet may mount")
-        fixture.releasePlaybackInfo()
-        wait("Source arrival must start background preparation without another open", { workerCount(1) == 1 })
         assertNoPanel("The early request remains pending while real label work is blocked")
         fixture.releaseMenuWorker(1)
         XCTAssertTrue(done.waitForExistence(timeout: 10), "The initial request follows the first negotiated source and mounts on worker completion")
@@ -1107,7 +1105,7 @@ final class AppleSliceUITests: XCTestCase {
         activate(done)
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(play.waitForExistence(timeout: 10))
-        print("F4_NATIVE_PHONE initialSourceFollow=true completeMenu=true workerThread=background")
+        print("F4_NATIVE_PHONE firstSourceEarlyOpen=true completeMenu=true workerThread=background")
 
         // A second viewing holds a new worker. Back to details is usable while
         // it is blocked; completion cannot mount a sheet after the viewing exits.
@@ -1389,6 +1387,17 @@ final class AppleSliceUITests: XCTestCase {
         let seekID = try XCTUnwrap(config["seekID"], "Supply the own-pilot FPS Seek Clock 1440 demo item as private seekID")
         app.launchEnvironment["PICTURESHOW_SEEK_DIAGNOSTICS"] = "1"
         ensureSignedIn()
+        // The 1440p60 source needs a bounded transcode on the demo server.
+        // Set the viewer's actual preference before playback, then prove the
+        // server honored it from the scoped encoder log after this case.
+        let settings = app.buttons["openSettings"]
+        reveal(settings); activate(settings)
+        let bitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
+        reveal(bitrate); activate(bitrate)
+        let fourMbps = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "4 Mbps")).firstMatch
+        XCTAssertTrue(fourMbps.waitForExistence(timeout: 10), "The demo seek case needs the actual 4 Mbps Settings choice")
+        activate(fourMbps)
+        returnHome()
         app.terminate()
         app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = seekID
         app.launch()
