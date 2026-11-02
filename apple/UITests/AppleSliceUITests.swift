@@ -3231,6 +3231,15 @@ final class AppleSliceUITests: XCTestCase {
 
 // MARK: - Private F5 proxy controls
 
+private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    repeat {
+        if condition() { return true }
+        Thread.sleep(forTimeInterval: 0.1)
+    } while ProcessInfo.processInfo.systemUptime < deadline
+    return condition()
+}
+
 private func f5ProxyURL(_ suffix: String) throws -> URL {
     let raw = try XCTUnwrap(config["server"])
     let base = try XCTUnwrap(URL(string: raw))
