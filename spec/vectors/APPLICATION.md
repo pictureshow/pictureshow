@@ -92,26 +92,39 @@ Input: boolean `enabled` (system captions), nullable `configuration` (whole Jell
 `tvLanguage` (platform locale). Expected is a preferred-language string or null. Captions off, an unavailable/failed
 configuration read, or a case-insensitive SubtitleMode `None` all return null, leaving the server's original selection
 in charge. Otherwise use a nonblank SubtitleLanguagePreference before the TV locale. Other modes, including
-OnlyForced, do not disable full system captions. The selected language is returned verbatim here; normalization
+OnlyForced, permit system-caption fallback when the server supplies no selection. The selected language is returned verbatim here; normalization
 occurs when matching tracks. This opt-in system-caption policy precedes negotiation, while `default-stream` maps the
 server's resulting default index after negotiation. It does not override an explicit per-playback Off choice.
 
 ## `caption-index`
 
 Input: `source` (Jellyfin MediaSourceInfo, including MediaStreams and nullable DefaultSubtitleStreamIndex), and string
-`preferredLanguage`. Expected is a selected subtitle index or null. Match subtitle streams only, using normalized
-language keys, then sort by these priorities in order:
+`preferredLanguage`. Expected is a subtitle index, -1 for retained Off, or null when no selection can be made.
+First retain -1 or any nonnegative server default that identifies an actual subtitle stream. Retention precedes
+language normalization and ranking: the server may be returning a viewer's choice, including another language,
+an unknown language, a forced track or an image track. Audio/video and absent stream indices are not usable defaults.
+
+Only when there is no usable default, match subtitle streams using normalized language keys, then sort by:
 
 1. Full captions (`IsForced=false`) before forced-only translations.
 2. Hearing-impaired tracks before other tracks.
-3. The server DefaultSubtitleStreamIndex before other indices.
+3. Text before image, using IsTextSubtitleStream or a known text codec.
 4. `IsDefault=true` before other streams.
 5. Lowest numerical index.
 
-No language match or an unknown/blank preferred language returns null and retains the server's choice. Codec and
-DeliveryMethod do not participate in this selection; the chosen index must be renegotiated with Jellyfin so text
-extraction or bitmap burn-in is decided honestly by the server. These cases test the pure choice policy; preservation
-of source/resume through renegotiation and explicit Off across route changes remain app session acceptance tests in `app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt`. `ServerPlaybackGateway.prepare` bypasses the override for any explicit subtitle index, including -1. A differing match triggers a second PlaybackInfo request pinned to that source and index, retaining the original start/flags and capability snapshot; the initial decision is not opened before that negotiation succeeds.
+No language match or an unknown/blank preferred language returns null in that fallback. Jellyfin 12 represents
+remembered Off as -1 and computed no-default as null/omitted; preserve that distinction. Server defaults do not reveal
+whether a remembered choice or language/default rules produced them, so keep valid defaults in both cases. A server
+image default can therefore require burn-in even when text exists. Per-device choice history would compete with
+cross-client choices and is not used.
+
+DeliveryMethod does not rank tracks; a fallback choice must be renegotiated with Jellyfin so extraction or burn-in
+is decided by the server. The pure choice is covered here; source/resume preservation and panel pick -> Stop ->
+reopen are app acceptance tests in CaptionSubtitlesTest and TrackReportingSessionTest. ServerPlaybackGateway bypasses
+the override for explicit per-playback indices, including -1. A fallback differing from the server default triggers
+a second PlaybackInfo pinned to that source and index, retaining start/flags/capabilities; the first decision is not
+opened before negotiation succeeds. A retained default needs no caption-override request. Reopening still has
+automatic provenance and omits subtitle indices from reports until the viewer picks in that viewing (PLAY-20).
 
 Matching trims and lowercases language input, then uses the same JVM normalization described under `default-stream`.
 It additionally maps every ISO 639-2 bibliographic alias to its terminology form:

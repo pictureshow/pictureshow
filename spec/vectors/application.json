@@ -1612,7 +1612,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -1635,11 +1635,11 @@
       "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
     },
     {
-      "id": "captions.hearing-impaired-before-server-default",
+      "id": "captions.hearing-impaired-before-default-flag",
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -1739,7 +1739,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 2,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -1758,7 +1758,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -1777,7 +1777,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 2,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -2884,11 +2884,11 @@
       "expected": null
     },
     {
-      "id": "captions.text-before-server-and-flag-default",
+      "id": "captions.text-before-flag-default",
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -2915,7 +2915,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 2,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -2942,7 +2942,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -2970,7 +2970,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -2999,7 +2999,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -3027,7 +3027,7 @@
       "operation": "caption-index",
       "input": {
         "source": {
-          "DefaultSubtitleStreamIndex": 1,
+          "DefaultSubtitleStreamIndex": null,
           "MediaStreams": [
             {
               "Type": "Subtitle",
@@ -5381,6 +5381,231 @@
       },
       "expected": false,
       "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "captions.server-text-default-before-hi",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "Codec": "ass"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-image-default-before-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "Codec": "pgssub"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-forced-default-retained",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsForced": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-other-language-default-retained",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "ara",
+              "Codec": "ass"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.remembered-off-retained",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": -1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": -1,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.null-default-enables-captions",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 3,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.stale-default-enables-captions",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 99,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 3,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.audio-default-is-not-subtitle",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Audio",
+              "Index": 4,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 3,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.valid-default-with-unknown-language",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "und",
+              "Codec": "ass"
+            }
+          ]
+        },
+        "preferredLanguage": "und"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
     }
   ]
 }

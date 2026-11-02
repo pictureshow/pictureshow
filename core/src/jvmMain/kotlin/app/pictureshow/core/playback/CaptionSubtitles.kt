@@ -13,10 +13,15 @@ fun captionSubtitleLanguage(enabled: Boolean, configuration: UserConfiguration?,
         configuration.subtitleLanguage.takeIf(String::isNotBlank) ?: tvLanguage
     }
 
-/** Prefer full captions, then hearing-impaired, then text for styling and seamless switching.
+/** Retain a valid server subtitle or Off, in any language; it may be the viewer's remembered choice.
+ * With no usable default, prefer full captions, hearing-impaired, then text in the caption language.
  * Delivery is negotiated by the server.
  */
 fun captionSubtitleIndex(source: MediaSourceInfo, preferredLanguage: String): Int? {
+    if (source.defaultSubtitleStreamIndex == -1) return -1
+    source.mediaStreams.firstOrNull {
+        it.type == MediaStreamType.Subtitle && it.index >= 0 && it.index == source.defaultSubtitleStreamIndex
+    }?.let { return it.index }
     val language = captionLanguageKey(preferredLanguage) ?: return null
     return source.mediaStreams.filter {
         it.type == MediaStreamType.Subtitle && captionLanguageKey(it.language) == language
@@ -24,7 +29,6 @@ fun captionSubtitleIndex(source: MediaSourceInfo, preferredLanguage: String): In
         compareBy<MediaStream> { it.isForced }
             .thenByDescending { it.isHearingImpaired }
             .thenByDescending { it.isTextSubtitleStream || it.codec?.lowercase() in textCaptionCodecs }
-            .thenByDescending { it.index == source.defaultSubtitleStreamIndex }
             .thenByDescending { it.isDefault }
             .thenBy { it.index }
     ).firstOrNull()?.index
