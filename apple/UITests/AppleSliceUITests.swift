@@ -23,6 +23,7 @@ final class AppleSliceUITests: XCTestCase {
         app.launchEnvironment["PICTURESHOW_TEST_SERVER"] = config["server"]
         app.launchEnvironment["PICTURESHOW_TEST_USERNAME"] = config["username"]
         app.launchEnvironment["PICTURESHOW_TEST_PASSWORD"] = config["password"]
+        if config["detailDiagnostics"] == "1" { app.launchEnvironment["PICTURESHOW_DETAIL_DIAGNOSTICS"] = "1" }
         app.launch()
     }
     func testLiveVerticalSlice() throws {
@@ -1384,6 +1385,8 @@ final class AppleSliceUITests: XCTestCase {
     @MainActor func testF5RealDemoRememberedSubtitleSurvivesCaptionPreference() throws {
         let itemID = try XCTUnwrap(config["captionID"])
         let index = try XCTUnwrap(config["rememberSubtitleIndex"])
+        XCTAssertEqual(config["rememberSubtitleLanguage"], "spa")
+        XCTAssertEqual(config["captionFallbackLanguage"], "eng", "The harness must prove a different caption fallback language")
         let originalDisplay = MACaptionAppearanceGetDisplayType(.user)
         defer { MACaptionAppearanceSetDisplayType(.user, originalDisplay) }
         MACaptionAppearanceSetDisplayType(.user, .automatic)

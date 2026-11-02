@@ -325,6 +325,7 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 10) { fixture.heldReadCount == 1 })
         let held = try f5Speech(service, matching: "Mark watched", forward: false)
         print("F5_VO_HELD utterance=\(held)")
+        XCTAssertTrue(held.localizedCaseInsensitiveContains("when ready"), "VoiceOver must actually read the held presentation")
         let watched = app.buttons["watched"]
         // An iOS VoiceOver double tap activates its current accessible action.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
