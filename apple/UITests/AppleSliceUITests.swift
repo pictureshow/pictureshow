@@ -1380,6 +1380,46 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertEqual(after.subtitleRequestCount, before.subtitleRequestCount)
         #endif
     }
+    /// Actual app/AVKit lifecycle against the private demo account. The harness
+    /// additionally checks immutable HTTP report bodies and restores UserData.
+    @MainActor func testF5RealDemoBackgroundReturnStaysPaused() throws {
+        let itemID = try XCTUnwrap(config["seekID"])
+        ensureSignedIn()
+        app.terminate(); app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = itemID; app.launch()
+        let play = app.buttons["play"]
+        XCTAssertTrue(play.waitForExistence(timeout: 20)); activate(play)
+        #if os(tvOS)
+        let first = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 30, maximum: 80, timeout: 90, metric: "f5_background_started"))
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: first.seconds + 1, maximum: first.seconds + 12, timeout: 30, metric: "f5_background_decoding"))
+        XCUIRemote.shared.press(.home)
+        #else
+        let position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(position.waitForExistence(timeout: 90))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: 31, timeout: 90, metric: "f5_background_decoding"))
+        XCUIDevice.shared.press(.home)
+        #endif
+        Thread.sleep(forTimeInterval: 15)
+        app.activate()
+        #if os(tvOS)
+        let returned = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 30, maximum: 100, timeout: 30, metric: "f5_background_return"))
+        Thread.sleep(forTimeInterval: 5)
+        let later = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: returned.seconds, maximum: returned.seconds + 1, timeout: 15, metric: "f5_background_still_paused"))
+        XCTAssertLessThanOrEqual(abs(later.seconds - returned.seconds), 1)
+        capture("F5 real demo TV remains paused after Home return")
+        leaveNativeTVPlayer(returningTo: play)
+        #else
+        XCTAssertTrue(position.waitForExistence(timeout: 30))
+        let returned = try XCTUnwrap(parsedClockSeconds(position.label))
+        Thread.sleep(forTimeInterval: 5)
+        let later = try XCTUnwrap(parsedClockSeconds(position.label))
+        XCTAssertLessThanOrEqual(abs(later - returned), 1)
+        capture("F5 real demo phone remains paused after Home return")
+        activate(app.buttons["closePlayer"])
+        XCTAssertTrue(play.waitForExistence(timeout: 20))
+        #endif
+        print("F5_LIFECYCLE homeSeconds=15 returnStillPaused=true")
+    }
+
     /// The real demo HLS decoder follows three remote activations of the
     /// Pictureshow Info panel's ten-second action. This is a separate control
     /// from AVKit clickpad navigation, which XCUIRemote cannot swipe.
