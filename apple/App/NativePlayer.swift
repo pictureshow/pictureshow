@@ -785,8 +785,8 @@ private struct SeekOptions: View {
             }
             #endif
             HStack {
-                Button { adjust(-10) } label: { Text("Back 10 seconds").minimumTouchTarget() }.accessibilityIdentifier("seekBackward")
-                Button { adjust(10) } label: { Text("Forward 10 seconds").minimumTouchTarget() }.accessibilityIdentifier("seekForward")
+                Button { adjust(-10) } label: { seekButtonLabel("Back 10 seconds") }.accessibilityIdentifier("seekBackward")
+                Button { adjust(10) } label: { seekButtonLabel("Forward 10 seconds") }.accessibilityIdentifier("seekForward")
             }
             #if os(iOS)
             // This HStack shares one List row. Independent button styles prevent the
@@ -808,6 +808,13 @@ private struct SeekOptions: View {
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             hidePreview = true
         }
+    }
+    @ViewBuilder private func seekButtonLabel(_ title: String) -> some View {
+        #if os(tvOS)
+        Text(title).minimumTouchTarget().foregroundStyle(Theme.background)
+        #else
+        Text(title).minimumTouchTarget()
+        #endif
     }
     private func adjust(_ delta: Double) {
         // The panel may have stayed open while video advanced. Relative buttons

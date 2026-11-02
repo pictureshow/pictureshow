@@ -1414,12 +1414,18 @@ final class AppleSliceUITests: XCTestCase {
         let forward = app.buttons["seekForward"]
         XCTAssertTrue(forward.waitForExistence(timeout: 10))
         for index in 0..<3 {
+            if index > 0 {
+                let reopened = try XCTUnwrap(openNativeTVInfoTab())
+                XCTAssertEqual(reopened.method, "Server HLS")
+            }
             activateNativeTVInfoAction(identifier: "seekForward")
-            if index < 2 { Thread.sleep(forTimeInterval: 0.8) }
+            let target = baseline + (index + 1) * 10
+            let step = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: target - 1,
+                                                          maximum: target + 1, timeout: 45,
+                                                          metric: "f4_info_hls_step_\(index + 1)"))
+            print("F4_TV_INFO_HLS_STEP index=\(index + 1) expectedSeconds=\(target) actualSeconds=\(step.seconds)")
         }
         let wanted = baseline + 30
-        print("F4_TV_INFO_HLS_SEEK pendingExpectedSeconds=\(wanted)")
-        XCUIRemote.shared.press(.menu)
         let settled = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: wanted - 1,
                                                          maximum: wanted + 1, timeout: 45,
                                                          metric: "f4_info_hls_three_steps"))
