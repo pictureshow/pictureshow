@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Legitimate LLC.
 import XCTest
+import MediaAccessibility
 
 /// Runs only against the explicitly supplied private pilot account. Configure test-runner
 /// PICTURESHOW_PILOT_JSON through a local .xctestrun, never a checked-in test plan.
@@ -1380,6 +1381,63 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertEqual(after.subtitleRequestCount, before.subtitleRequestCount)
         #endif
     }
+    @MainActor func testF5RealDemoRememberedSubtitleSurvivesCaptionPreference() throws {
+        let itemID = try XCTUnwrap(config["captionID"])
+        let index = try XCTUnwrap(config["rememberSubtitleIndex"])
+        let originalDisplay = MACaptionAppearanceGetDisplayType(.user)
+        defer { MACaptionAppearanceSetDisplayType(.user, originalDisplay) }
+        MACaptionAppearanceSetDisplayType(.user, .automatic)
+        ensureSignedIn()
+        app.terminate(); app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = itemID; app.launch()
+        var play = app.buttons["play"]
+        XCTAssertTrue(play.waitForExistence(timeout: 20)); activate(play)
+        #if os(tvOS)
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 2, maximum: 25, timeout: 90, metric: "f5_caption_initial"))
+        XCUIRemote.shared.press(.playPause)
+        _ = selectNativeTVMenuTrack(menuTitle: "Subtitles", index: index)
+        leaveNativeTVPlayer(returningTo: play)
+        #else
+        var position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(position.waitForExistence(timeout: 90))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 90, metric: "f5_caption_initial"))
+        let native = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        let pause = native.buttons.matching(NSPredicate(format: "label ==[c] %@", "Pause")).firstMatch
+        if !pause.isHittable { native.tap() }
+        XCTAssertTrue(pause.waitForExistence(timeout: 5) && pause.isHittable)
+        pause.tap()
+        selectTouchTrack(type: "subtitle", index: index)
+        activate(app.buttons["closePlayer"])
+        XCTAssertTrue(play.waitForExistence(timeout: 20))
+        #endif
+        MACaptionAppearanceSetDisplayType(.user, .alwaysOn)
+        XCTAssertEqual(MACaptionAppearanceGetDisplayType(.user), .alwaysOn)
+        app.terminate(); app.launch()
+        play = app.buttons["play"]
+        XCTAssertTrue(play.waitForExistence(timeout: 20)); activate(play)
+        #if os(tvOS)
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 1, maximum: 30, timeout: 90, metric: "f5_caption_reopened"))
+        XCUIRemote.shared.press(.playPause)
+        let remembered = nativeTVTrackChoice(menuTitle: "Subtitles", index: index)
+        let value = (remembered.value as? String ?? "").lowercased()
+        XCTAssertTrue(remembered.isSelected || ["selected", "on", "1"].contains(value) || remembered.label.lowercased().hasPrefix("selected,"), "The server-remembered non-default-language track must already be selected without another pick")
+        capture("F5 remembered language with system captions enabled")
+        XCUIRemote.shared.press(.menu)
+        leaveNativeTVPlayer(returningTo: play)
+        #else
+        position = app.staticTexts["playbackPosition"]
+        XCTAssertTrue(position.waitForExistence(timeout: 90))
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: 1, timeout: 90, metric: "f5_caption_reopened"))
+        openTouchTrackPanel()
+        let remembered = app.buttons["subtitle-\(index)"]
+        reveal(remembered)
+        XCTAssertEqual(remembered.value as? String, "Selected", "No new pick may be needed after Stop/reopen")
+        capture("F5 remembered language with system captions enabled")
+        activate(app.buttons["playerOptionsDone"]); activate(app.buttons["closePlayer"])
+        XCTAssertTrue(play.waitForExistence(timeout: 20))
+        #endif
+        print("F5_CAPTION_REOPEN selectedIndex=\(index) captionPreference=alwaysOn newPick=false")
+    }
+
     /// Actual app/AVKit lifecycle against the private demo account. The harness
     /// additionally checks immutable HTTP report bodies and restores UserData.
     @MainActor func testF5RealDemoBackgroundReturnStaysPaused() throws {
