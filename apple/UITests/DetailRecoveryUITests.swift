@@ -302,6 +302,51 @@ final class DetailRecoveryUITests: XCTestCase {
         print("F4_DETAIL_COLD pendingBeforeMetadata=true duplicateSelectGuarded=true preservedOfferedPlayedTrue=true")
     }
 
+    #if os(iOS)
+    @available(iOS 27.0, *)
+    @MainActor
+    func testF5VoiceOverNativeHeldRequestRunsOnce() throws {
+        continueAfterFailure = false
+        let fixture = try DetailRecoveryHTTPFixture()
+        defer { fixture.stop() }
+        let app = try launchFixtureDetail(fixture)
+        defer { app.terminate() }
+        let service = XCUIDevice.shared.voiceOverService
+        let originallyEnabled = service.isEnabled
+        if !originallyEnabled { try service.enable() }
+        defer { if !originallyEnabled, service.isEnabled { try? service.disable() } }
+        XCTAssertTrue(service.isEnabled)
+        let initial = try f5Speech(service, matching: "Play")
+        print("F5_VO_INITIAL utterance=\(initial)")
+        XCTAssertFalse(initial.localizedCaseInsensitiveContains("when ready"))
+        fixture.holdDetailReads()
+        activate(app.buttons["favorite"], in: app)
+        XCTAssertTrue(waitUntil(timeout: 10) { fixture.heldReadCount == 1 })
+        let held = try f5Speech(service, matching: "Mark watched")
+        print("F5_VO_HELD utterance=\(held)")
+        let watched = app.buttons["watched"]
+        // An iOS VoiceOver double tap activates its current accessible action.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
+        XCTAssertTrue(waitUntil(timeout: 5) { watched.label == "Watched already requested" })
+        XCTAssertTrue(fixture.playedWriteMethods.isEmpty)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
+        XCTAssertTrue(fixture.playedWriteMethods.isEmpty)
+        fixture.releaseDetailReads()
+        XCTAssertTrue(waitUntil(timeout: 15) { fixture.playedWriteMethods == ["POST"] })
+        XCTAssertTrue(waitUntil(timeout: 10) { watched.value as? String == "Watched" })
+        capture("F5 VoiceOver accepted held Watched once", app: app)
+        print("F5_VO_RUN_ONCE writes=\(fixture.playedWriteMethods.count)")
+    }
+    @available(iOS 27.0, *)
+    @MainActor private func f5Speech(_ service: XCUIVoiceOverService, matching text: String) throws -> String {
+        if let current = try service.currentSpeech(), current.utterance.localizedCaseInsensitiveContains(text) { return current.utterance }
+        for _ in 0..<20 {
+            if let output = try service.moveForward(), output.utterance.localizedCaseInsensitiveContains(text) { return output.utterance }
+        }
+        throw NSError(domain: "F5VoiceOver", code: 1, userInfo: [NSLocalizedDescriptionKey: "VoiceOver did not reach the requested action"])
+    }
+    #endif
+
     private func launchFixtureDetail(_ fixture: DetailRecoveryHTTPFixture, holdOnRelaunch: Bool = false) throws -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["PICTURESHOW_TEST_SERVER"] = fixture.address

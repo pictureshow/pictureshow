@@ -24,6 +24,7 @@ enum DetailCommand: Equatable {
     @Published var selectedSeason: String?
     @Published var target: MediaItem?
     @Published var reading = false
+    @Published var readPresentationID = UUID()
     @Published var fresh = false
     @Published var readError: String?
     @Published var writeError: String?
@@ -74,6 +75,7 @@ enum DetailCommand: Equatable {
     }
     var recoveryTarget: String { target != nil ? "play" : empty ? "favorite" : "watched" }
     func beginRead(deliberate: Bool) {
+        readPresentationID = UUID()
         reading = true; fresh = false; readError = nil
         if deliberate { retrying = true; readFailure = nil; cue = AccessibilityCue(message: "Loading item. Please wait.") }
         else if header == nil { focusRequest = "play" }
@@ -290,6 +292,7 @@ struct DetailView: View {
     @State private var returnedFromPlayback = false
     @State private var readiness = DetailReadyFeedback()
     @State private var pendingPresentation = false
+    @State private var requestCancelledReady = false
     @State private var visible = false
     @State private var resumed = false
     @State private var handoffFinished = false
@@ -364,7 +367,7 @@ struct DetailView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { resumeIfActive() } else { resumed = false; pendingPresentation = false; accessibilityFocused = nil; state.cue = nil }
             }
-            .task(id: PendingPresentation(waiting: guarded, active: visible && resumed && scenePhase == .active && model.player == nil)) {
+            .task(id: PendingPresentation(generation: state.readPresentationID, waiting: guarded, active: visible && resumed && scenePhase == .active && model.player == nil)) {
                 pendingPresentation = false
                 guard guarded, visible, resumed, scenePhase == .active, model.player == nil else { return }
                 do { try await Task.sleep(for: .milliseconds(1_500)) } catch { return }
@@ -373,7 +376,7 @@ struct DetailView: View {
                 detailDiagnostic("event=heldLabelsPublished")
             }
             .onChange(of: readySnapshot, initial: true) { _, snapshot in
-                if let message = readiness.update(held: snapshot.held, focused: snapshot.focused, resumed: snapshot.active, usable: snapshot.usable, presented: pendingPresentation, cancelled: state.readError != nil || state.writeError != nil || !state.pending.isEmpty || state.activeCommand != nil) {
+                if let message = readiness.update(held: snapshot.held, focused: snapshot.focused, resumed: snapshot.active, usable: snapshot.usable, presented: pendingPresentation, cancelled: requestCancelledReady || state.readError != nil || state.writeError != nil || !state.pending.isEmpty || state.activeCommand != nil) {
                     let cue = AccessibilityCue(message: message, urgent: false)
                     detailDiagnostic("event=readyGenerated cue=\(cue.id) selected=\(snapshot.focused ?? "none") active=\(snapshot.active)")
                     state.cue = cue
@@ -412,7 +415,8 @@ struct DetailView: View {
                     handoffInFlight = false
                 }
             }
-            .onChange(of: state.pending) { _, _ in state.reconcileRequestCue() }
+            .onChange(of: state.pending) { _, pending in if !pending.isEmpty { requestCancelledReady = true }; state.reconcileRequestCue() }
+            .onChange(of: guarded) { _, held in if !held { requestCancelledReady = false } }
             .onChange(of: state.activeCommand) { _, _ in state.reconcileRequestCue() }
             .onChange(of: focused) { _, focus in state.requestFocusChanged(focus); if let focus { opener = focus; if state.item != nil, focus != "detailRetry", !handoffInFlight { handoffFinished = true }; proxy.scrollTo(focus, anchor: .center) } }
             .onChange(of: accessibilityFocused) { _, focus in
@@ -466,7 +470,7 @@ struct DetailView: View {
     private var metadataHidden: Bool {
         DetailFeedback.metadataAwaitsHandoff(hasActions: state.item != nil && state.item?.type != "Person", handoffFinished: handoffFinished, returningFromPlayback: returnedFromPlayback, failed: state.readError != nil || state.recoveryVisible)
     }
-    private struct PendingPresentation: Equatable { let waiting: Bool; let active: Bool }
+    private struct PendingPresentation: Equatable { let generation: UUID; let waiting: Bool; let active: Bool }
     private struct ReadySnapshot: Equatable {
         let held: Bool
         let focused: String?
