@@ -482,7 +482,11 @@ struct NativePlayer: UIViewControllerRepresentable {
             }
         }
         func playerViewController(_ controller: AVPlayerViewController, timeToSeekAfterUserNavigatedFrom oldTime: CMTime, to targetTime: CMTime) -> CMTime {
-            CMTime(seconds: session.nativeSeekTarget(from: oldTime.seconds, to: targetTime.seconds), preferredTimescale: 600)
+            // AVKit asks for this target synchronously on its UI callback path.
+            // The delegate requirement is not annotated MainActor in the SDK.
+            MainActor.assumeIsolated {
+                CMTime(seconds: session.nativeSeekTarget(from: oldTime.seconds, to: targetTime.seconds), preferredTimescale: 600)
+            }
         }
         #endif
     }
