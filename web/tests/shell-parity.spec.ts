@@ -316,7 +316,7 @@ test("returning detail stays visible and queues the offered favorite until final
         page.getByRole("heading", { name: "The Test Picture", exact: true }),
     ).toBeVisible();
     await expect(
-        page.getByRole("status").filter({ hasText: /Saving progress/ }),
+        page.getByText(/^(Item loaded\. )?Saving progress…$/),
     ).toBeVisible();
     const favorite = page.locator('[data-focus="favorite"]');
     await favorite.focus();
@@ -328,7 +328,7 @@ test("returning detail stays visible and queues the offered favorite until final
         page.getByRole("button", { name: "Resume from 0:20", exact: true }),
     ).toBeVisible();
     await expect(
-        page.getByRole("status").filter({ hasText: /Saving progress/ }),
+        page.getByText(/^(Item loaded\. )?Saving progress…$/),
     ).toHaveCount(0);
     await expect(page.locator("video")).toHaveCount(0);
 });

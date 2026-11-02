@@ -104,11 +104,26 @@ test("keyboard path: password, resume, real video, reports, tracks, Back restore
             { timeout: 20000 },
         )
         .toBeGreaterThanOrEqual(2);
+    const beforeLocalCaptions = f.negotiations.length;
     await page.getByLabel("Subtitles", { exact: true }).focus();
     await page.keyboard.press("Enter");
     await page.getByRole("radio", { name: /English captions/ }).focus();
     await page.keyboard.press("Enter");
-    await expect.poll(() => f.negotiations.at(-1)?.SubtitleStreamIndex).toBe(3);
+    await expect.poll(() => f.reports.at(-1)?.body.SubtitleStreamIndex).toBe(3);
+    expect(f.reports.at(-1)?.body.AudioStreamIndex).toBe(2);
+    expect(f.negotiations).toHaveLength(beforeLocalCaptions);
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate((v: HTMLVideoElement) =>
+                    [...v.textTracks].some(
+                        (t) =>
+                            t.mode === "showing" && (t.cues?.length ?? 0) > 0,
+                    ),
+                ),
+        )
+        .toBe(true);
     await expect.poll(() => f.mediaRequests.includes("subtitle")).toBe(true);
     await page.getByRole("button", { name: "Stop and go back" }).focus();
     await page.keyboard.press("Enter");
