@@ -178,6 +178,8 @@ internal fun PlayerItemScreen(
     val emptyState = remember { MutableStateFlow(PlaybackState()) }
     val state by (controller?.state ?: emptyState).collectAsState()
     val player by output.player.collectAsState()
+    val foreground by output.foreground.collectAsState()
+    val pauseIntent by output.pauseIntent.collectAsState()
     var setupError by remember { mutableStateOf<String?>(null) }
     var controls by remember { mutableStateOf(false) }
     var controlsFeedback by remember { mutableStateOf<String?>(null) }
@@ -196,7 +198,7 @@ internal fun PlayerItemScreen(
         controls = true
         interaction++
     }, onResume = { interaction++ })
-    val paused = playback.paused
+    val paused = playback.paused || pauseIntent
     val showPlayButton = playback.showPlayButton
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
@@ -228,6 +230,8 @@ internal fun PlayerItemScreen(
     var nextCancelled by remember { mutableStateOf(false) }
     var ended by remember { mutableStateOf(false) }
     var switching by remember { mutableStateOf(false) }
+    var deferredNext by remember { mutableStateOf<MediaItem?>(null) }
+    var advanceReported by remember { mutableStateOf(false) }
     var exitRequested by remember { mutableStateOf(false) }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
@@ -238,12 +242,32 @@ internal fun PlayerItemScreen(
         if (next == null) {
             if (exitRequested) return
             exitRequested = true
-            finishPlayback(controller, onExit)
+            if (advanceReported) onExit() else finishPlayback(controller, onExit)
             return
         }
-        if (switching || exitRequested) return
+        if (switching || exitRequested || !output.foreground.value) return
         switching = true
-        controller?.closeForNext({ !exitRequested }) { if (!exitRequested) onNext(next) } ?: onExit()
+        if (advanceReported) {
+            onNext(next)
+            return
+        }
+        val generation = output.stopGeneration
+        fun mayAdvance() = !exitRequested && output.foreground.value && output.stopGeneration == generation
+        controller?.closeForNext(::mayAdvance) {
+            advanceReported = true
+            if (!exitRequested) {
+                if (mayAdvance()) {
+                    onNext(next)
+                } else {
+                    // Stop was already committed before backgrounding. Keep the completed
+                    // destination; only a deliberate Next/Play may open its successor.
+                    position = output.position().milliseconds
+                    deferredNext = next
+                    switching = false
+                    PlaybackDiagnostics.write("continuation-deferred positionMs=$position")
+                }
+            }
+        } ?: onExit()
     }
 
     fun applyPendingSeek() {
@@ -358,7 +382,8 @@ internal fun PlayerItemScreen(
             output.onProgress = { session.progress(it) }
             output.onFailure = { retry, source -> session.failed(retry, source) }
             output.onAudioFailure = { source, local -> session.audioFailed(source, local) }
-            output.onEnded = { source ->
+            output.onEnded = ended@{ source ->
+                if (!output.foreground.value || output.pauseIntent.value) return@ended
                 val finalPosition = output.position().milliseconds
                 val finalDuration = output.player.value?.duration?.takeIf { it > 0 } ?: duration
                 if (session.ended(source)) {
@@ -398,8 +423,8 @@ internal fun PlayerItemScreen(
         nextLookup = null
         nextLookup = EpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
     }
-    LaunchedEffect(ended, nextLookup, nextCancelled) {
-        if (!ended) return@LaunchedEffect
+    LaunchedEffect(ended, nextLookup, nextCancelled, foreground, pauseIntent) {
+        if (!ended || !foreground || pauseIntent) return@LaunchedEffect
         val lookup = nextLookup
         if (nextCancelled) {
             finish(reason = "natural-end")
@@ -496,9 +521,12 @@ internal fun PlayerItemScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 if (chooserRequest?.opened == false) chooserRequest = null
-                output.pause()
+                output.setForeground(false)
+            } else if (event == Lifecycle.Event.ON_START) {
+                output.setForeground(true)
             }
         }
+        output.setForeground(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
@@ -657,7 +685,8 @@ internal fun PlayerItemScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus)) {
-                            player?.togglePlayback()
+                            val pending = deferredNext
+                            if (pending != null) finish(pending) else player?.togglePlayback()
                             interaction++
                         }
                         Button(scale = playerButtonScale(), onClick = {
@@ -703,19 +732,29 @@ internal fun PlayerItemScreen(
                         position = target
                         interaction++
                     }, onFocusRemoved = restoreActionFocus, showButton = actionsVisible)
-                    nextEpisode?.takeUnless { nextCancelled }?.let { next ->
-                        val trigger = nextEpisodeTriggerMs(duration, segments)
-                        NextEpisodeControl(
-                            account, next, trigger != null && position >= trigger, ended,
-                            paused || playback.buffering || state.preparing || !actionsVisible,
-                            onFocusRemoved = restoreActionFocus, onPlay = { finish(next) },
-                            onCancel = {
-                                PlaybackDiagnostics.write("continuation-cancel item=${item.id}")
-                                nextCancelled = true
-                            }, visible = actionsVisible, compact = controls,
-                            remainingMs = if (creditsStartMs(duration, segments) == null) (duration - position).coerceAtLeast(0) else null,
-                            autoPlay = !accessibleControls
-                        )
+                    (deferredNext ?: nextEpisode)?.takeUnless { nextCancelled }?.let { next ->
+                        key(deferredNext, output.stopGeneration) {
+                            val trigger = nextEpisodeTriggerMs(duration, segments)
+                            NextEpisodeControl(
+                                account, next, deferredNext != null || (trigger != null && position >= trigger), ended,
+                                paused || playback.buffering || state.preparing || !actionsVisible,
+                                onFocusRemoved = restoreActionFocus, onPlay = { finish(next) },
+                                onCancel = {
+                                    PlaybackDiagnostics.write("continuation-cancel item=${item.id}")
+                                    nextCancelled = true
+                                    deferredNext = null
+                                    if (advanceReported) finish(reason = "natural-end")
+                                }, visible = actionsVisible, compact = controls,
+                                remainingMs = if (creditsStartMs(duration, segments) ==
+                                    null
+                                ) {
+                                    (duration - position).coerceAtLeast(0)
+                                } else {
+                                    null
+                                },
+                                autoPlay = !accessibleControls && foreground && !pauseIntent && deferredNext == null
+                            )
+                        }
                     }
                 }
             }

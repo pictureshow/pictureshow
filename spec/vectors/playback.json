@@ -1061,6 +1061,72 @@
         "durationMs": 180000
       },
       "expected": 122000
+    },
+    {
+      "id": "visibility-native-foreground",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": true,
+        "foreground": true,
+        "pauseLatched": false
+      },
+      "expected": true
+    },
+    {
+      "id": "visibility-native-stopped",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": true,
+        "foreground": false,
+        "pauseLatched": false
+      },
+      "expected": false
+    },
+    {
+      "id": "visibility-returned-latched",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": true,
+        "foreground": true,
+        "pauseLatched": true
+      },
+      "expected": false
+    },
+    {
+      "id": "visibility-paused-request",
+      "operation": "visibility-play",
+      "input": {
+        "requested": false,
+        "foregroundRequired": true,
+        "foreground": true,
+        "pauseLatched": false
+      },
+      "expected": false
+    },
+    {
+      "id": "visibility-web-background",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": false,
+        "foreground": false,
+        "pauseLatched": false
+      },
+      "expected": true
+    },
+    {
+      "id": "visibility-web-paused",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": false,
+        "foreground": false,
+        "pauseLatched": true
+      },
+      "expected": false
     }
   ]
 }

@@ -131,6 +131,14 @@ class ReferenceParityVectorsTest {
                 deviceId = credentials.optionalText("deviceId")
             )
         return when (operation) {
+            "visibility-play" -> JsonPrimitive(
+                app.pictureshow.core.playback.PlaybackVisibility.playWhenReady(
+                    input.getValue("requested").jsonPrimitive.boolean,
+                    input.getValue("foregroundRequired").jsonPrimitive.boolean,
+                    input.getValue("foreground").jsonPrimitive.boolean,
+                    input.getValue("pauseLatched").jsonPrimitive.boolean
+                )
+            )
             "seek-step" -> JsonPrimitive(
                 app.pictureshow.core.playback.SeekSteps.target(
                     input.getValue("positionMs").jsonPrimitive.long,

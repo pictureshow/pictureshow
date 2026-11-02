@@ -82,12 +82,12 @@ class PlaybackReportDiagnosticsTest {
             val prefix = "report item=item session=play "
             assertEquals(
                 listOf(
-                    "${prefix}seq=1 kind=start positionMs=0 audio=omitted subtitle=omitted audioOrigin=automatic subtitleOrigin=automatic status=204 failure=none elapsedMs=N",
-                    "${prefix}seq=2 kind=progress positionMs=0 audio=omitted subtitle=3 audioOrigin=automatic subtitleOrigin=viewer status=204 failure=none elapsedMs=N",
-                    "${prefix}seq=3 kind=progress positionMs=0 audio=2 subtitle=3 audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N",
-                    "${prefix}seq=4 kind=progress positionMs=0 audio=2 subtitle=-1 audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N",
-                    "${prefix}seq=5 kind=progress positionMs=0 audio=2 subtitle=-1 audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N",
-                    "${prefix}seq=6 kind=stop positionMs=0 audio=omitted subtitle=omitted audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N"
+                    "${prefix}seq=1 kind=start positionMs=0 audio=omitted subtitle=omitted audioOrigin=automatic subtitleOrigin=automatic status=204 failure=none elapsedMs=N paused=false",
+                    "${prefix}seq=2 kind=progress positionMs=0 audio=omitted subtitle=3 audioOrigin=automatic subtitleOrigin=viewer status=204 failure=none elapsedMs=N paused=false",
+                    "${prefix}seq=3 kind=progress positionMs=0 audio=2 subtitle=3 audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N paused=false",
+                    "${prefix}seq=4 kind=progress positionMs=0 audio=2 subtitle=-1 audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N paused=false",
+                    "${prefix}seq=5 kind=progress positionMs=0 audio=2 subtitle=-1 audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N paused=false",
+                    "${prefix}seq=6 kind=stop positionMs=0 audio=omitted subtitle=omitted audioOrigin=viewer subtitleOrigin=viewer status=204 failure=none elapsedMs=N paused=omitted"
                 ),
                 reports
             )
