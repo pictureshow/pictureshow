@@ -43,6 +43,97 @@ async function observe(page: Page) {
         });
     });
 }
+async function recoveryGeometry(
+    page: Page,
+    state: "held" | "pending" | "failed",
+) {
+    const previous = page.viewportSize();
+    for (const [width, height] of [
+        [1920, 1080],
+        [1280, 800],
+        [600, 900],
+        [768, 900],
+        [800, 900],
+        [390, 844],
+    ]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        if (state === "held") {
+            const restart = page.locator('[data-focus="restart"]');
+            await expect(restart).toHaveAccessibleName("Restart when ready");
+            if (width === 390)
+                expect(
+                    (await restart.boundingBox())!.height,
+                ).toBeLessThanOrEqual(49);
+        } else if (state === "pending") {
+            const status = page.locator(".catalog-detail-status");
+            await expect(status).toBeVisible();
+            expect(
+                await status.evaluate((e) => {
+                    const r = e.getBoundingClientRect(),
+                        header = document
+                            .querySelector(".app-header")!
+                            .getBoundingClientRect();
+                    const nav = document.querySelector(".root-navigation")!,
+                        n = nav.getBoundingClientRect();
+                    const overlaps = (a: DOMRect, b: DOMRect) =>
+                        a.left < b.right &&
+                        a.right > b.left &&
+                        a.top < b.bottom &&
+                        a.bottom > b.top;
+                    const footer = document.querySelector("footer");
+                    const footerClear =
+                        !footer ||
+                        getComputedStyle(footer).display === "none" ||
+                        !overlaps(r, footer.getBoundingClientRect());
+                    const originalPointerEvents = (e as HTMLElement).style
+                        .pointerEvents;
+                    (e as HTMLElement).style.pointerEvents = "auto";
+                    const visibleAtPoint =
+                        document
+                            .elementFromPoint(
+                                r.x + r.width / 2,
+                                r.y + r.height / 2,
+                            )
+                            ?.closest(".catalog-detail-status") === e;
+                    (e as HTMLElement).style.pointerEvents =
+                        originalPointerEvents;
+                    return (
+                        !overlaps(r, header) &&
+                        footerClear &&
+                        (getComputedStyle(nav).display === "none" ||
+                            !overlaps(r, n)) &&
+                        visibleAtPoint
+                    );
+                }),
+            ).toBe(true);
+        } else {
+            const retry = page.getByRole("button", {
+                name: "Retry saving progress",
+                exact: true,
+            });
+            await expect(retry).toBeVisible();
+            const box = (await retry.boundingBox())!;
+            const navTop = await page
+                .locator(".root-navigation")
+                .evaluate((e) =>
+                    getComputedStyle(e).display === "none"
+                        ? innerHeight
+                        : e.getBoundingClientRect().top,
+                );
+            expect(box.y).toBeGreaterThanOrEqual(0);
+            expect(box.y + box.height).toBeLessThanOrEqual(
+                width < 600 ? navTop : height,
+            );
+            await expect(page.locator(".catalog-detail-status")).toHaveCount(0);
+            await expect(page.locator(".catalog-error")).not.toContainText(
+                "stop report",
+            );
+        }
+    }
+    if (previous) await page.setViewportSize(previous);
+}
+
 async function evidence(page: Page, name: string, screenshots = false) {
     const requestedDirectory = process.env.WEB_F3_EVIDENCE;
     if (!requestedDirectory) return;
@@ -80,8 +171,13 @@ async function evidence(page: Page, name: string, screenshots = false) {
     for (const [size, width, height] of [
         ["tv", 1920, 1080],
         ["desktop", 1280, 800],
+        ["tablet", 600, 900],
+        ["tablet768", 768, 900],
+        ["tablet800", 800, 900],
         ["phone", 390, 844],
     ] as const) {
+        if ((size === "tablet768" || size === "tablet800") && name !== "held")
+            continue;
         await page.setViewportSize({ width, height });
         await page.evaluate(
             () =>
@@ -105,6 +201,45 @@ async function evidence(page: Page, name: string, screenshots = false) {
             JSON.stringify(
                 await page.locator(".catalog-detail-actions").evaluate((e) => ({
                     viewport: [innerWidth, innerHeight],
+                    surfaces: Object.fromEntries(
+                        [
+                            ".catalog-error",
+                            ".catalog-error p",
+                            ".catalog-error button",
+                            ".catalog-detail-status",
+                            "footer",
+                            ".app-header",
+                            ".root-navigation",
+                        ].map((selector) => {
+                            const node = document.querySelector(selector);
+                            return [
+                                selector,
+                                node
+                                    ? {
+                                          bounds: node
+                                              .getBoundingClientRect()
+                                              .toJSON(),
+                                          display:
+                                              getComputedStyle(node).display,
+                                          font: getComputedStyle(node).font,
+                                          padding:
+                                              getComputedStyle(node).padding,
+                                      }
+                                    : null,
+                            ];
+                        }),
+                    ),
+                    focus: document.activeElement
+                        ? {
+                              tag: document.activeElement.tagName,
+                              key: (document.activeElement as HTMLElement)
+                                  .dataset.focus,
+                              text: document.activeElement.textContent?.trim(),
+                              bounds: document.activeElement
+                                  .getBoundingClientRect()
+                                  .toJSON(),
+                          }
+                        : null,
                     actions: [...e.querySelectorAll("button")].map((b) => ({
                         label: b.textContent?.trim(),
                         bounds: b.getBoundingClientRect().toJSON(),
@@ -202,6 +337,7 @@ test("rc28 a held keyboard press is accepted once and runs once without Ready", 
     await expect(play).toHaveAccessibleName("Play when ready", {
         timeout: 4000,
     });
+    await recoveryGeometry(page, "held");
     await evidence(page, "held", true);
     expect(await play.evaluate((e: HTMLButtonElement) => e.disabled)).toBe(
         false,
@@ -248,6 +384,10 @@ test("rc28 a failed read cues Retry once without moving heading focus; a retry o
     read.release();
     const retry = page.getByRole("button", { name: "Retry", exact: true });
     await expect(retry).toBeVisible();
+    await expect(heading).toHaveCSS("outline-style", "solid");
+    expect((await heading.boundingBox())!.width).toBeLessThan(
+        (await page.locator("main").boundingBox())!.width * 0.7,
+    );
     await evidence(page, "failure-retry", true);
     await expect(heading).toBeFocused();
     await expect(page.locator("[data-detail-feedback]")).toContainText(
@@ -322,9 +462,17 @@ test("rc28 natural completion projects Watched before acknowledgement and withdr
     });
     const watched = page.locator('[data-focus="watched"]');
     await expect(watched).toBeVisible();
+    await recoveryGeometry(page, "pending");
     await evidence(page, "completion-pending", true);
     await expect(watched).toHaveAttribute("aria-pressed", "true");
     await expect(watched).toHaveAccessibleName(/watched/i);
+    // A real queued action exercises the longest held status beside the narrow rail.
+    await page.locator('[data-focus="favorite"]').focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Favorite change requested",
+    );
+    await recoveryGeometry(page, "pending");
     fail = true;
     stop.release();
     await expect(
@@ -334,6 +482,7 @@ test("rc28 natural completion projects Watched before acknowledgement and withdr
         }),
     ).toBeVisible();
     await expect(watched).toHaveAttribute("aria-pressed", "false");
+    await recoveryGeometry(page, "failed");
     await evidence(page, "completion-failed", true);
     await expect(watched).toHaveAccessibleName(/watched/i);
 });
@@ -550,4 +699,154 @@ test("rc28 timed-out held request expires, Retry explains it, and release cannot
     );
     expect(writes).toBe(0);
     await evidence(page, "expired-request");
+});
+
+test("rc28 advancing native media clears a stale stalled latch without another playing event", async ({
+    page,
+}) => {
+    await fixture(page);
+    await openDetail(page);
+    await page.keyboard.press("Enter");
+    await playing(page);
+    const video = page.locator("video");
+    const before = await video.evaluate((v: HTMLVideoElement) => {
+        (window as any).playingAfterStall = 0;
+        v.addEventListener(
+            "playing",
+            () => (window as any).playingAfterStall++,
+        );
+        v.dispatchEvent(new Event("stalled"));
+        return v.currentTime;
+    });
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+        .toBeGreaterThan(before + 0.5);
+    await expect(page.locator(".playback-feedback")).toHaveText("");
+    expect(await page.evaluate(() => (window as any).playingAfterStall)).toBe(
+        0,
+    );
+    await page
+        .getByRole("button", { name: "Stop and go back", exact: true })
+        .click();
+});
+
+test("rc28 rebased captions own exact boundaries and restore an expired cue after delay", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    const source = {
+        ...movie.MediaSources[0],
+        DefaultSubtitleStreamIndex: 3,
+        SupportsDirectPlay: false,
+        TranscodingUrl: "/Videos/movie/master.m3u8",
+    };
+    await page.route(
+        "https://jellyfin.example/Items/movie/PlaybackInfo",
+        (route) => {
+            f.negotiations.push(route.request().postDataJSON());
+            return route.fulfill({
+                headers,
+                body: JSON.stringify({
+                    PlaySessionId: "caption-boundary",
+                    MediaSources: [source],
+                }),
+            });
+        },
+    );
+    await page.route("https://jellyfin.example/**/Subtitles/**", (route) =>
+        route.fulfill({
+            headers,
+            contentType: "text/vtt",
+            body: "WEBVTT\n\n00:09.000 --> 00:10.000\nExpired\n\n00:10.000 --> 00:11.000\nCurrent\n\n00:11.000 --> 00:40.000\nNext\n",
+        }),
+    );
+    await openDetail(page);
+    await page.keyboard.press("Enter");
+    const video = page.locator("video");
+    await expect
+        .poll(() =>
+            video.evaluate(
+                (v: HTMLVideoElement) => v.textTracks[0]?.cues?.length ?? 0,
+            ),
+        )
+        .toBeGreaterThan(0);
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), {
+            timeout: 20000,
+        })
+        .toBeGreaterThanOrEqual(2);
+    await video.evaluate((v: HTMLVideoElement) => {
+        v.pause();
+        v.currentTime = 0;
+    });
+    await expect
+        .poll(() =>
+            video.evaluate(
+                (v: HTMLVideoElement) =>
+                    [...(v.textTracks[0].cues ?? [])].filter(
+                        (c) => c.endTime <= 0,
+                    ).length,
+            ),
+        )
+        .toBe(0);
+    const active = () =>
+        video.evaluate((v: HTMLVideoElement) =>
+            [...(v.textTracks[0].activeCues ?? [])].map(
+                (c) => (c as VTTCue).text,
+            ),
+        );
+    await expect.poll(active).toEqual(["Current"]);
+    await video.evaluate((v: HTMLVideoElement) => {
+        v.currentTime = 1;
+    });
+    await expect.poll(active).toEqual(["Next"]);
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("button", { name: "Later", exact: true }).click();
+    await expect
+        .poll(() =>
+            video.evaluate((v: HTMLVideoElement) =>
+                [...(v.textTracks[0].cues ?? [])].some(
+                    (c) => (c as VTTCue).text === "Expired" && c.endTime > 0,
+                ),
+            ),
+        )
+        .toBe(true);
+    await page.getByRole("button", { name: "Reset", exact: true }).click();
+    await expect
+        .poll(() =>
+            video.evaluate((v: HTMLVideoElement) =>
+                [...(v.textTracks[0].cues ?? [])].some(
+                    (c) => (c as VTTCue).text === "Expired",
+                ),
+            ),
+        )
+        .toBe(false);
+    await page.keyboard.press("Escape");
+    for (const [width, height] of [
+        [1920, 1080],
+        [1280, 800],
+        [390, 844],
+    ]) {
+        await page.setViewportSize({ width, height });
+        await expect
+            .poll(() =>
+                video.evaluate((v: HTMLVideoElement) => {
+                    const cue = v.textTracks[0]?.cues?.[0] as
+                        VTTCue | undefined;
+                    const top = document
+                        .querySelector(".transport")!
+                        .getBoundingClientRect().top;
+                    return (
+                        cue &&
+                        typeof cue.line === "number" &&
+                        (cue.line / 100) * innerHeight < top &&
+                        (innerWidth < 600 || cue.line >= 60)
+                    );
+                }),
+            )
+            .toBe(true);
+    }
+    await page
+        .getByRole("button", { name: "Stop and go back", exact: true })
+        .click();
 });

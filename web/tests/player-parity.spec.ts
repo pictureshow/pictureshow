@@ -490,14 +490,14 @@ test("manual credits continuation completes once before next; reader choice has 
 test("credits countdown advances once and suspends while a panel is open", async ({
     page,
 }) => {
-    await page.clock.install();
     const f = await creditsEpisode(page, true);
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.clock.runFor(12000);
+    // Keep the native media clock and the countdown on the same wall clock.
+    // Fast-forwarding JS alone can create a real WebKit buffering hold.
+    await page.waitForTimeout(12000);
     expect(f.completed()).toBe(0);
     await page.getByRole("button", { name: "Done", exact: true }).click();
-    await page.clock.runFor(11000);
-    await expect.poll(f.completed).toBe(1);
+    await expect.poll(f.completed, { timeout: 14000 }).toBe(1);
     await expect(
         page.getByRole("heading", { name: "The Next Morning", exact: true }),
     ).toBeVisible();

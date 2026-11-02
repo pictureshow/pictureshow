@@ -162,11 +162,14 @@
     gap: 1.3rem;
 }
 .catalog-error p {
-    flex: 1;
+    max-width: 70ch;
+    flex: 1 1 16rem;
     margin: 0;
+    text-wrap: pretty;
 }
 .catalog-error button {
     flex: none;
+    margin-left: auto;
 }
 .catalog-detail-page {
     position: relative;
@@ -221,15 +224,16 @@
 }
 .catalog-detail-status {
     position: fixed;
-    z-index: 5;
-    top: 1rem;
+    z-index: 20;
+    bottom: 7rem;
     left: 50%;
     transform: translateX(-50%);
     padding: 0.7rem 1.1rem;
     border: 1px solid var(--color-app-accent);
     border-radius: 1rem;
     background: #202635f0;
-    max-width: 90vw;
+    width: max-content;
+    max-width: min(90vw, 560px);
     text-align: center;
     pointer-events: none;
 }
@@ -422,7 +426,7 @@
         flex: 1;
     }
     .catalog-detail-status {
-        top: 0.5rem;
+        bottom: calc(88px + env(safe-area-inset-bottom));
         padding: 0.5rem 0.8rem;
         font-size: 0.85rem;
     }
@@ -529,4 +533,53 @@
 .catalog-detail-page .catalog-error button:focus,
 .catalog-loading-detail .catalog-error button:focus {
     transition: none;
+}
+
+/* Preserve the reader's heading focus on failure, with a compact visible anchor. */
+.catalog-page h1[tabindex="-1"]:focus {
+    width: fit-content;
+    outline: 2px solid var(--focus-tv-fieldRingColor);
+    outline-offset: 8px;
+    box-shadow: none;
+}
+
+/* Centre the snackbar in the content column beside the tablet/desktop rail. */
+@media (min-width: 600px) and (max-width: 1499px) {
+    .catalog-detail-status {
+        left: calc(50% + 48px);
+        max-width: min(calc(100vw - 144px), 560px);
+    }
+}
+
+/* The narrow content column uses the same stable action grid as a phone. */
+@media (min-width: 600px) and (max-width: 800px) {
+    .catalog-detail-hero {
+        flex-direction: column-reverse;
+    }
+    .catalog-detail-art {
+        width: 100%;
+        height: 190px;
+        aspect-ratio: 16/9;
+        object-fit: cover;
+    }
+    .catalog-detail-copy {
+        width: 100%;
+    }
+    .catalog-detail-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        width: 100%;
+    }
+    .catalog-detail-actions button {
+        padding: 0.7rem 0.5rem;
+        min-height: 48px;
+    }
+    .catalog-detail-actions button:first-child {
+        grid-column: 1/-1;
+    }
+}
+@media (max-width: 599px) {
+    .catalog-error button {
+        width: 100%;
+    }
 }

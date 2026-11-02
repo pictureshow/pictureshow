@@ -226,6 +226,7 @@ export function Player({
             window.innerWidth > window.innerHeight,
         );
     const delayRef = useRef(0),
+        trackCueSets = useRef(new WeakMap<TextTrack, Set<TextTrackCue>>()),
         cues = useRef(
             new WeakMap<
                 TextTrackCue,
@@ -242,7 +243,7 @@ export function Player({
         nextRetry = useRef(false),
         stopError = useRef(""),
         stopStages = useRef({ reported: false, encodingStopped: false }),
-        safeCaptionLine = useRef(90),
+        safeCaptionLine = useRef<number | null>(null),
         completionNext = useRef<Item | null | undefined>(undefined),
         orientationOwned = useRef(false),
         stopSnapshot = useRef<
@@ -437,7 +438,7 @@ export function Player({
             .catch(() => {
                 stopError.current = stopStages.current.reported
                     ? "Playback stopped, but server cleanup did not finish. Retry cleanup before another viewing."
-                    : "The stop report could not reach your server. Resume may be out of date.";
+                    : "Playback progress could not be saved. Resume may start earlier.";
                 if (alive.current) setReportError(stopError.current);
             });
         return s.queue;
@@ -1130,7 +1131,8 @@ export function Player({
             current: Decision | undefined,
             hasPlayed = false,
             needsGesture = false,
-            lastProgress = 0;
+            lastProgress = 0,
+            lastPlaybackClock = Number.NaN;
         let slow: ReturnType<typeof setTimeout> | undefined,
             deadline: ReturnType<typeof setTimeout> | undefined,
             directTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1165,6 +1167,28 @@ export function Player({
             if (disposed || !current || replacing.current) return;
             sample();
             setPaused(pauseIntent.current);
+            const advanced = el.currentTime > lastPlaybackClock;
+            lastPlaybackClock = el.currentTime;
+            if (
+                advanced &&
+                !el.paused &&
+                !el.seeking &&
+                pendingSeek.current === undefined &&
+                !pauseIntent.current &&
+                el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+            ) {
+                // Some engines send stalled without another playing event when
+                // media data catches up. A moving decoder clock proves recovery.
+                clearWaiting();
+                setBuffering(false);
+                setNotice((value) =>
+                    value ===
+                        "Still waiting for playback. You can go back and try again." ||
+                    value === "Preparing playback…"
+                        ? ""
+                        : value,
+                );
+            }
             if (Date.now() - lastProgress >= 10000) {
                 lastProgress = Date.now();
                 report("progress");
@@ -1301,7 +1325,11 @@ export function Player({
             if (!pauseIntent.current && !disposed)
                 void physicalEndRef.current();
         };
+        const seeking = () => {
+            lastPlaybackClock = Number.NaN;
+        };
         const seeked = () => {
+            lastPlaybackClock = el.currentTime;
             if (
                 !disposed &&
                 !replacing.current &&
@@ -1314,6 +1342,7 @@ export function Player({
                 sample();
             }
         };
+        el.addEventListener("seeking", seeking);
         el.addEventListener("seeked", seeked);
         el.addEventListener("loadedmetadata", metadata);
         el.addEventListener("timeupdate", update);
@@ -1457,6 +1486,7 @@ export function Player({
             clearInterval(timer);
             clearWaiting();
             clearTimeout(directTimer);
+            el.removeEventListener("seeking", seeking);
             el.removeEventListener("seeked", seeked);
             el.removeEventListener("loadedmetadata", metadata);
             el.removeEventListener("timeupdate", update);
@@ -1602,52 +1632,69 @@ export function Player({
         const track = video.current?.textTracks[0];
         if (!track) return;
         track.mode = "showing";
-        for (const cue of Array.from(track.cues ?? [])) {
-            let source = cues.current.get(cue);
-            if (!source) {
-                source = {
+        const attached = new Set(Array.from(track.cues ?? []));
+        let originals = trackCueSets.current.get(track);
+        if (!originals) {
+            originals = new Set();
+            trackCueSets.current.set(track, originals);
+        }
+        // Retain full-file originals even when a cue is outside the decoder's
+        // nonnegative timeline: a later subtitle delay or seek can restore it.
+        for (const cue of attached) {
+            originals.add(cue);
+            if (!cues.current.has(cue))
+                cues.current.set(cue, {
                     start: cue.startTime,
                     end: cue.endTime,
                     ...(cue instanceof VTTCue
                         ? { line: cue.line, snap: cue.snapToLines }
                         : {}),
-                };
-                cues.current.set(cue, source);
+                });
+        }
+        const authoredStarts = new Set(
+            Array.from(originals, (cue) => cues.current.get(cue)!.start),
+        );
+        const offset =
+            viewing.current.decision?.method === "Transcode"
+                ? (viewing.current.offset ?? 0)
+                : 0;
+        for (const cue of originals) {
+            const source = cues.current.get(cue)!;
+            const start = source.start - offset + delayRef.current / 1000;
+            let end = source.end - offset + delayRef.current / 1000;
+            // Chrome can keep both touching intervals active at an exact paused
+            // boundary. Give that boundary to the arriving cue, preserving truly
+            // overlapping authored intervals and immutable full-file times.
+            if (authoredStarts.has(source.end))
+                end -= Math.min(0.001, (source.end - source.start) / 2);
+            if (end <= 0) {
+                if (attached.has(cue)) track.removeCue(cue);
+                continue;
             }
-            const offset =
-                viewing.current.decision?.method === "Transcode"
-                    ? (viewing.current.offset ?? 0)
-                    : 0;
-            cue.startTime = source.start - offset + delayRef.current / 1000;
-            cue.endTime = Math.max(
-                cue.startTime + 0.001,
-                source.end -
-                    (viewing.current.decision?.method === "Transcode"
-                        ? (viewing.current.offset ?? 0)
-                        : 0) +
-                    delayRef.current / 1000,
-            );
+            cue.startTime = start;
+            cue.endTime = Math.max(start + 0.000001, end);
+            if (!attached.has(cue)) track.addCue(cue);
             if (cue instanceof VTTCue) {
                 cue.snapToLines =
-                    safeCaptionLine.current >= 90
+                    safeCaptionLine.current === null
                         ? (source.snap ?? true)
                         : false;
                 cue.line =
-                    safeCaptionLine.current >= 90
+                    safeCaptionLine.current === null
                         ? (source.line ?? "auto")
                         : safeCaptionLine.current;
             }
         }
         const origin = loadedCaption.current;
         if (origin && track.cues?.length) {
-            const key = `${origin.source}:${origin.index}:${subtitleSelection.current}`;
+            const key = `${origin.source}:${origin.index}:${origin.selection}`;
             if (!cueReceipts.current.has(key)) {
                 cueReceipts.current.add(key);
                 const first =
                     cues.current.get(track.cues[0])?.start ??
                     track.cues[0].startTime;
                 console.info(
-                    `PictureshowPlayback subtitle-cues item=${item.Id} session=${viewing.current.decision?.playSessionId ?? "none"} stream=${origin.index} firstCueAtMs=${Math.floor(first * 1000)} selection=${subtitleSelection.current}`,
+                    `PictureshowPlayback subtitle-cues item=${item.Id} session=${viewing.current.decision?.playSessionId ?? "none"} stream=${origin.index} firstCueAtMs=${Math.floor(first * 1000)} selection=${origin.selection}`,
                 );
             }
         }
@@ -1925,14 +1972,97 @@ export function Player({
     }[preferences.subtitleSize ?? "System"];
     const captionClass = `caption-${preferences.subtitleBackground ?? "System"}`;
     useEffect(() => {
-        safeCaptionLine.current =
-            nextEligible || segment || seekPreview !== undefined
-                ? 30
-                : controls || panel
-                  ? 55
-                  : 90;
-        applyCaptions();
-    }, [nextEligible, segmentKey, seekPreview, controls, panel]);
+        const player = root.current,
+            media = video.current;
+        if (!player || !media) return;
+        let frame: number | undefined;
+        const overlays = Array.from(
+            player.querySelectorAll<HTMLElement>(
+                ".player-controls > .transport, .player-timeline, .track-controls, .skip-segment, .next-episode, .trickplay-preview",
+            ),
+        );
+        const measure = () => {
+            const bounds = media.getBoundingClientRect();
+            const occupied = overlays
+                .filter(
+                    (element) =>
+                        element.getClientRects().length &&
+                        getComputedStyle(element).visibility !== "hidden",
+                )
+                .map((element) => element.getBoundingClientRect())
+                .filter(
+                    (rect) =>
+                        rect.height > 0 &&
+                        rect.width > 0 &&
+                        rect.bottom > bounds.top &&
+                        rect.top < bounds.bottom,
+                );
+            if (!occupied.length || !bounds.height)
+                safeCaptionLine.current = null;
+            else {
+                const edge = Math.min(...occupied.map((rect) => rect.top));
+                const rootFont =
+                    parseFloat(
+                        getComputedStyle(document.documentElement).fontSize,
+                    ) || 16;
+                const font =
+                    preferences.subtitleSize &&
+                    preferences.subtitleSize !== "System"
+                        ? rootFont * 1.3 * size
+                        : Math.max(16, bounds.height * 0.05);
+                const rows = Math.max(
+                    1,
+                    ...Array.from(
+                        media.textTracks[0]?.activeCues ?? [],
+                        (cue) =>
+                            cue instanceof VTTCue
+                                ? cue.text.split("\n").length
+                                : 1,
+                    ),
+                );
+                // Reserve the current caption's line box plus breathing room.
+                // Overlay rectangles already include the layout's safe-area insets.
+                const margin =
+                    font * 1.3 * rows + Math.max(8, bounds.height * 0.01);
+                safeCaptionLine.current = Math.max(
+                    0,
+                    Math.min(
+                        95,
+                        ((edge - bounds.top - margin) / bounds.height) * 100,
+                    ),
+                );
+            }
+            applyCaptions();
+        };
+        const schedule = () => {
+            if (frame !== undefined) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(measure);
+        };
+        const observer =
+            typeof ResizeObserver === "undefined"
+                ? undefined
+                : new ResizeObserver(schedule);
+        observer?.observe(media);
+        for (const overlay of overlays) observer?.observe(overlay);
+        media.textTracks[0]?.addEventListener("cuechange", schedule);
+        window.addEventListener("resize", schedule);
+        measure();
+        return () => {
+            if (frame !== undefined) cancelAnimationFrame(frame);
+            observer?.disconnect();
+            media.textTracks[0]?.removeEventListener("cuechange", schedule);
+            window.removeEventListener("resize", schedule);
+        };
+    }, [
+        nextEligible,
+        segmentKey,
+        seekPreview,
+        controls,
+        panel,
+        size,
+        preferences.subtitleSize,
+        subtitleBlob,
+    ]);
     const preview = seekPreview !== undefined && tp && frame !== undefined && (
         <aside
             className="trickplay-preview"

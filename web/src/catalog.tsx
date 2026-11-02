@@ -100,6 +100,8 @@ const playable = (item: Item) =>
     ["Movie", "Episode", "Video"].includes(item.Type);
 const accountKey = (client: Jellyfin) =>
     `${client.server.id}:${client.account!.user.Id}`;
+const reportFailureMessage =
+    "Playback progress could not be saved. Resume may start earlier.";
 const errorText = (error: unknown) =>
     error instanceof Error
         ? error.message
@@ -927,12 +929,10 @@ export function Detail({
         if (error !== undefined) {
             cancelReady();
             cue(
-                `Playback progress could not be saved. ${errorText(error)} Retry saving progress is available.`,
+                `${reportFailureMessage} Retry saving progress is available.`,
                 "failure",
             );
-            setReportError(
-                `Playback progress could not be saved. The latest viewing position may be missing. ${errorText(error)}`,
-            );
+            setReportError(reportFailureMessage);
         }
         setAttempt((value) => value + 1);
     }
@@ -1333,11 +1333,9 @@ export function Detail({
         }
         void process();
     }
-    function actionLabel(kind: PendingAction["kind"], normal: string) {
+    function queuedActionName(kind: PendingAction["kind"]) {
         if (!queue.current.some((p) => p.action.kind === kind))
-            return !readyRef.current && graceElapsed && !readError
-                ? `${normal} when ready`
-                : normal;
+            return undefined;
         const noun =
             kind === "play"
                 ? "Play"
@@ -1348,6 +1346,78 @@ export function Detail({
                     : "Favorite";
         return `${noun} already requested`;
     }
+    function actionLabel(kind: PendingAction["kind"], normal: string) {
+        const requested = queuedActionName(kind);
+        if (requested)
+            return requested.replace(" already requested", " requested");
+        return !readyRef.current && graceElapsed && !readError
+            ? kind === "restart"
+                ? "Restart when ready"
+                : `${normal} when ready`
+            : normal;
+    }
+    const readRecovery = readError ? (
+        <div className="catalog-error" aria-live="off">
+            <p>
+                {loading ? (
+                    <>
+                        Loading item. Please wait.
+                        <small className="catalog-previous-reason">
+                            Previous attempt: {readError}
+                        </small>
+                    </>
+                ) : (
+                    readError
+                )}
+            </p>
+            <button
+                data-focus="detail-retry"
+                aria-description={
+                    requestExpired.current
+                        ? "The previous request expired and will not run"
+                        : undefined
+                }
+                ref={retryRef}
+                aria-disabled={loading}
+                onClick={retryDetail}
+            >
+                {loading ? "Retrying…" : "Retry"}
+            </button>
+        </div>
+    ) : null;
+    const reportRecovery = reportError ? (
+        <div className="catalog-error" aria-live="off">
+            <p>{reportError}</p>
+            {retryReport ? (
+                <button
+                    ref={reportRetryRef}
+                    onClick={() => void retrySavingProgress()}
+                    aria-disabled={
+                        savingReport || clearReportErrorOnRead.current
+                    }
+                >
+                    {savingReport
+                        ? "Saving progress…"
+                        : clearReportErrorOnRead.current
+                          ? "Loading item…"
+                          : "Retry saving progress"}
+                </button>
+            ) : (
+                <button
+                    onClick={() => {
+                        if (!loading) {
+                            readyRef.current = false;
+                            setLoading(true);
+                            setAttempt((value) => value + 1);
+                        }
+                    }}
+                    aria-disabled={loading}
+                >
+                    Reload item information
+                </button>
+            )}
+        </div>
+    ) : null;
     const feedbackNode = (
         <div
             className="catalog-reader-feedback"
@@ -1399,6 +1469,8 @@ export function Detail({
                 onFocusCapture={detailFocus}
             >
                 {feedbackNode}
+                {readRecovery}
+                {reportRecovery}
                 <div className="catalog-loading-slots">
                     <h1>
                         {readError && !loading
@@ -1413,6 +1485,7 @@ export function Detail({
                             ref={primaryRef}
                             className="primary"
                             data-focus="play"
+                            aria-label={queuedActionName("play")}
                             data-autofocus
                             aria-disabled="true"
                             onClick={() => offer({ kind: "play" })}
@@ -1421,6 +1494,7 @@ export function Detail({
                         </button>
                         <button
                             data-focus="watched"
+                            aria-label={queuedActionName("watched")}
                             aria-disabled="true"
                             onClick={() =>
                                 offer({ kind: "watched", desired: true })
@@ -1431,6 +1505,7 @@ export function Detail({
                         <button
                             ref={favoriteRef}
                             data-focus="favorite"
+                            aria-label={queuedActionName("favorite")}
                             aria-disabled="true"
                             onClick={() =>
                                 offer({ kind: "favorite", desired: true })
@@ -1440,6 +1515,7 @@ export function Detail({
                         </button>
                         <button
                             data-focus="restart"
+                            aria-label={queuedActionName("restart")}
                             aria-disabled="true"
                             onClick={() => offer({ kind: "restart" })}
                         >
@@ -1447,58 +1523,7 @@ export function Detail({
                         </button>
                     </div>
                 </div>
-                {reportError && (
-                    <div className="catalog-error" aria-live="off">
-                        <p>{reportError}</p>
-                        {retryReport && (
-                            <button
-                                ref={reportRetryRef}
-                                onClick={() => void retrySavingProgress()}
-                                aria-disabled={
-                                    savingReport ||
-                                    clearReportErrorOnRead.current
-                                }
-                            >
-                                {savingReport
-                                    ? "Saving progress…"
-                                    : clearReportErrorOnRead.current
-                                      ? "Loading item…"
-                                      : "Retry saving progress"}
-                            </button>
-                        )}
-                    </div>
-                )}
-                {readError ? (
-                    <div className="catalog-error" aria-live="off">
-                        <p>
-                            {loading ? (
-                                <>
-                                    Loading item. Please wait.
-                                    <small className="catalog-previous-reason">
-                                        Previous attempt: {readError}
-                                    </small>
-                                </>
-                            ) : (
-                                readError
-                            )}
-                        </p>
-                        <button
-                            data-focus="detail-retry"
-                            aria-description={
-                                requestExpired.current
-                                    ? "The previous request expired and will not run"
-                                    : undefined
-                            }
-                            ref={retryRef}
-                            onClick={() => {
-                                retryDetail();
-                            }}
-                            aria-disabled={loading}
-                        >
-                            {loading ? "Retrying…" : "Retry"}
-                        </button>
-                    </div>
-                ) : (
+                {!readError && !reportError && !writeError && (
                     <p aria-live="off">
                         {pendingMessage ||
                             (savingReport
@@ -1554,6 +1579,8 @@ export function Detail({
             onFocusCapture={detailFocus}
         >
             {feedbackNode}
+            {readRecovery}
+            {reportRecovery}
             <article aria-label={shown.Name}>
                 <section className="catalog-detail-hero">
                     <div className="catalog-detail-copy">
@@ -1593,6 +1620,7 @@ export function Detail({
                                         ref={primaryRef}
                                         className="primary"
                                         data-focus="play"
+                                        aria-label={queuedActionName("play")}
                                         data-autofocus
                                         aria-disabled={!ready || !target}
                                         disabled={!target && !loading}
@@ -1609,6 +1637,9 @@ export function Detail({
                                     !initial && (
                                         <button
                                             data-focus="restart"
+                                            aria-label={queuedActionName(
+                                                "restart",
+                                            )}
                                             aria-disabled={!ready}
                                             onClick={() =>
                                                 offer({ kind: "restart" })
@@ -1624,6 +1655,7 @@ export function Detail({
                                     )}
                                 <button
                                     data-focus="watched"
+                                    aria-label={queuedActionName("watched")}
                                     aria-pressed={
                                         ready ||
                                         (presentedCompletion.current &&
@@ -1653,6 +1685,7 @@ export function Detail({
                                 <button
                                     ref={favoriteRef}
                                     data-focus="favorite"
+                                    aria-label={queuedActionName("favorite")}
                                     aria-pressed={
                                         ready ? acceptedFavorite : undefined
                                     }
@@ -1677,6 +1710,9 @@ export function Detail({
                                     initial && (
                                         <button
                                             data-focus="restart"
+                                            aria-label={queuedActionName(
+                                                "restart",
+                                            )}
                                             aria-disabled={!ready || !target}
                                             disabled={!target && !loading}
                                             onClick={() =>
@@ -1717,91 +1753,27 @@ export function Detail({
                             </div>
                         ))}
                 </section>
-                {(!ready || pendingMessage) && (
-                    <div
-                        className="catalog-detail-status"
-                        aria-live="off"
-                        ref={statusRef}
-                    >
-                        {pendingMessage ||
-                            (savingReport
-                                ? loading
-                                    ? "Saving progress…"
-                                    : "Item loaded. Saving progress…"
-                                : loading
-                                  ? isContainer
-                                      ? "Loading episodes…"
-                                      : "Loading item…"
-                                  : reportError && !reportReady.current
-                                    ? "Item loaded. Playback progress still needs saving."
-                                    : "")}
-                    </div>
-                )}
-                {readError && (
-                    <div className="catalog-error" aria-live="off">
-                        <p>
-                            {loading ? (
-                                <>
-                                    Loading item. Please wait.
-                                    <small className="catalog-previous-reason">
-                                        Previous attempt: {readError}
-                                    </small>
-                                </>
-                            ) : (
-                                readError
-                            )}
-                        </p>
-                        <button
-                            data-focus="detail-retry"
-                            aria-description={
-                                requestExpired.current
-                                    ? "The previous request expired and will not run"
-                                    : undefined
-                            }
-                            ref={retryRef}
-                            aria-disabled={loading}
-                            onClick={() => {
-                                retryDetail();
-                            }}
+                {!readError &&
+                    !reportError &&
+                    !writeError &&
+                    (!ready || pendingMessage) && (
+                        <div
+                            className="catalog-detail-status"
+                            aria-live="off"
+                            ref={statusRef}
                         >
-                            {loading ? "Retrying…" : "Retry"}
-                        </button>
-                    </div>
-                )}
-                {reportError && (
-                    <div className="catalog-error" aria-live="off">
-                        <p>{reportError}</p>
-                        {retryReport ? (
-                            <button
-                                ref={reportRetryRef}
-                                onClick={() => void retrySavingProgress()}
-                                aria-disabled={
-                                    savingReport ||
-                                    clearReportErrorOnRead.current
-                                }
-                            >
-                                {savingReport
-                                    ? "Saving progress…"
-                                    : clearReportErrorOnRead.current
-                                      ? "Loading item…"
-                                      : "Retry saving progress"}
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    if (!loading) {
-                                        readyRef.current = false;
-                                        setLoading(true);
-                                        setAttempt((value) => value + 1);
-                                    }
-                                }}
-                                aria-disabled={loading}
-                            >
-                                Reload item information
-                            </button>
-                        )}
-                    </div>
-                )}
+                            {pendingMessage ||
+                                (savingReport
+                                    ? loading
+                                        ? "Saving progress…"
+                                        : "Item loaded. Saving progress…"
+                                    : loading
+                                      ? isContainer
+                                          ? "Loading episodes…"
+                                          : "Loading item…"
+                                      : "")}
+                        </div>
+                    )}
                 {writeError && (
                     <RetryNotice
                         announce={false}
