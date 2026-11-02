@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -137,6 +138,16 @@ internal fun PlayerScreen(
 
 private data class EpisodeLookup(val attempt: Int, val result: ClientResult<MediaItem?>)
 
+private class PlayerTrackChooserRequest(
+    val type: MediaStreamType,
+    val preparation: PlayerTrackMenuPreparation,
+    val awaitingFirstSource: Boolean,
+    initiallyOpen: Boolean,
+    var selectedIndex: Int
+) {
+    var opened by mutableStateOf(initiallyOpen)
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlayerItemScreen(
@@ -175,7 +186,9 @@ internal fun PlayerItemScreen(
     var controlsTop by remember { mutableStateOf<Int?>(null) }
     var actionsTop by remember { mutableStateOf<Int?>(null) }
     var playerTop by remember { mutableIntStateOf(0) }
-    var chooser by remember { mutableStateOf<MediaStreamType?>(null) }
+    val trackMenus = rememberPlayerTrackMenus(state.decision?.mediaSourceId, state.decision?.mediaSource?.mediaStreams.orEmpty())
+    var chooserRequest by remember { mutableStateOf<PlayerTrackChooserRequest?>(null) }
+    val chooser = chooserRequest?.type
     var interaction by remember { mutableLongStateOf(0) }
     var position by remember { mutableLongStateOf(startMs) }
     var duration by remember { mutableLongStateOf(0) }
@@ -218,6 +231,7 @@ internal fun PlayerItemScreen(
     var exitRequested by remember { mutableStateOf(false) }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
+        chooserRequest = null
         if (!exitRequested && !switching) {
             PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=$reason"))
         }
@@ -281,7 +295,7 @@ internal fun PlayerItemScreen(
             }
             chooser != null -> {
                 returnFocus = if (chooser == MediaStreamType.Audio) audioFocus else subtitleFocus
-                chooser = null
+                chooserRequest = null
             }
             controls -> {
                 controls = false
@@ -404,12 +418,35 @@ internal fun PlayerItemScreen(
         }
     }
     LaunchedEffect(controls) { if (controls) controlsFeedback = null }
+    // Pending opens have no window to hand off. A ready panel closes through its native scope below.
+    LaunchedEffect(chooserRequest, trackMenus, trackMenus.menus, state.decision != null) {
+        val request = chooserRequest ?: return@LaunchedEffect
+        if (!request.opened) {
+            if (request.preparation !== trackMenus) {
+                if (request.awaitingFirstSource && state.decision != null) {
+                    // A request made during initial loading follows the first real source.
+                    chooserRequest = PlayerTrackChooserRequest(
+                        request.type,
+                        trackMenus,
+                        false,
+                        false,
+                        if (request.type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
+                    )
+                } else {
+                    chooserRequest = null
+                    returnFocus = if (request.type == MediaStreamType.Audio) audioFocus else subtitleFocus
+                }
+            } else if (trackMenus.menus != null && state.decision != null && error == null && !switching && !exitRequested) {
+                request.opened = true
+            }
+        }
+    }
     LaunchedEffect(error) {
         if (error != null) {
             restoringSeekFocus = false
             returnFocus = null
             seekOpen = false
-            chooser = null
+            chooserRequest = null
             chaptersOpen = false
         }
     }
@@ -450,7 +487,12 @@ internal fun PlayerItemScreen(
         rootFocus.requestFocus()
     }
     DisposableEffect(lifecycle, output) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) output.pause() }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                if (chooserRequest?.opened == false) chooserRequest = null
+                output.pause()
+            }
+        }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
@@ -611,10 +653,22 @@ internal fun PlayerItemScreen(
                             interaction++
                         }
                         Button(scale = playerButtonScale(), onClick = {
-                            chooser = MediaStreamType.Audio
+                            chooserRequest = PlayerTrackChooserRequest(
+                                MediaStreamType.Audio,
+                                trackMenus,
+                                state.decision == null,
+                                trackMenus.menus != null && state.decision != null,
+                                state.audioIndex
+                            )
                         }, modifier = Modifier.focusRequester(audioFocus)) { Text("Audio") }
                         Button(scale = playerButtonScale(), onClick = {
-                            chooser = MediaStreamType.Subtitle
+                            chooserRequest = PlayerTrackChooserRequest(
+                                MediaStreamType.Subtitle,
+                                trackMenus,
+                                state.decision == null,
+                                trackMenus.menus != null && state.decision != null,
+                                state.subtitleIndex
+                            )
                         }, modifier = Modifier.focusRequester(subtitleFocus)) { Text("Subtitles") }
                         if (metadata.chapters.isNotEmpty()) {
                             Button(scale = playerButtonScale(), onClick = {
@@ -674,25 +728,51 @@ internal fun PlayerItemScreen(
                     }
                 }
             }
-            chooser?.let { type ->
-                val menu = rememberPlayerTrackMenu(state.decision?.mediaSource?.mediaStreams.orEmpty(), type)
+            chooserRequest?.takeIf { it.opened && error == null && !switching && !exitRequested }?.let { request ->
+                val type = request.type
+                val menu = request.preparation.menus?.get(type) ?: return@let
                 val streams = menu.streams
-                val selected = if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
+                val selected = if (request.preparation === trackMenus) {
+                    if (type == MediaStreamType.Audio) state.audioIndex else state.subtitleIndex
+                } else {
+                    request.selectedIndex
+                }
+                SideEffect { request.selectedIndex = selected }
                 val title = if (type == MediaStreamType.Audio) "Audio" else "Subtitles"
-                PlayerPanel(title, {
-                    chooser = null
-                    returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
-                }, scrollable = false) {
+                val currentPreparation by rememberUpdatedState(trackMenus)
+                val closeChooser: () -> Unit = {
+                    if (chooserRequest === request) {
+                        chooserRequest = null
+                        returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
+                    }
+                }
+                PlayerPanel(title, closeChooser, scrollable = false) {
+                    // Retain the captured rows while the existing native-window focus handoff completes.
+                    LaunchedEffect(trackMenus) {
+                        if (request.preparation !== trackMenus) close(closeChooser)
+                    }
                     TrackChoices(
                         menu.choices,
                         selected,
                         onSelect = { index ->
-                            select({
-                                controller?.select(type, index)
-                                interaction++
-                            }) {
-                                chooser = null
-                                returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
+                            // Native callbacks can outlive the composition that supplied their rows.
+                            val active = controller?.state?.value
+                            val currentSource = request.preparation === currentPreparation &&
+                                active?.decision?.mediaSourceId == request.preparation.sourceId &&
+                                active?.decision?.mediaSource?.mediaStreams.orEmpty() == request.preparation.mediaStreams
+                            if (chooserRequest === request &&
+                                currentSource &&
+                                !exitRequested &&
+                                !switching &&
+                                setupError == null &&
+                                active?.error == null
+                            ) {
+                                select({
+                                    controller?.select(type, index)
+                                    interaction++
+                                }, closeChooser)
+                            } else {
+                                close(closeChooser)
                             }
                         },
                         title = title
