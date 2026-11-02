@@ -260,13 +260,19 @@ internal fun PlayerItemScreen(
     }
 
     fun seek(delta: Long) {
-        val active = player ?: return
-        val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
-        val target = ((pendingSeek ?: seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
-        pendingSeek = target
-        position = target
-        seekPreview = target
-        applyPendingSeek()
+        val serverTarget = controller?.stepSeek(delta)
+        if (serverTarget != null) {
+            position = serverTarget
+            seekPreview = serverTarget
+        } else {
+            val active = player ?: return
+            val limit = active.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE
+            val target = ((pendingSeek ?: seekPreview ?: active.currentPosition) + delta).coerceIn(0, limit)
+            pendingSeek = target
+            position = target
+            seekPreview = target
+            applyPendingSeek()
+        }
         controls = true
         interaction++
     }
@@ -475,7 +481,7 @@ internal fun PlayerItemScreen(
     LaunchedEffect(player) {
         while (true) {
             player?.let {
-                position = if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
+                position = state.seekTargetMs ?: if (ended) output.position().milliseconds else it.currentPosition.coerceAtLeast(0)
                 duration = it.duration.takeIf { value -> value != C.TIME_UNSET && value > 0 } ?: 0
             }
             view.keepScreenOn = player?.playWhenReady == true && state.error == null
@@ -626,7 +632,9 @@ internal fun PlayerItemScreen(
                     )
                     // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                     // The visual clock keeps moving; it is not a live accessibility announcement.
-                    val announcedPosition = remember(paused, seekPreview, duration, ended) { position }
+                    val announcedPosition = remember(paused, seekPreview, state.seekTargetMs, duration, ended) {
+                        state.seekTargetMs ?: position
+                    }
                     PlayerTimeline(
                         position,
                         announcedPosition,

@@ -18,6 +18,7 @@ import app.pictureshow.core.playback.PlaybackReportFailure
 import app.pictureshow.core.playback.PlaybackReports
 import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PlaybackStopInfo
+import app.pictureshow.core.playback.SeekSteps
 import app.pictureshow.core.playback.TranscodeSeek
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
@@ -113,7 +114,8 @@ internal data class PlaybackState(
     val reportError: String? = null,
     val bufferingSlow: Boolean = false,
     val audioIndex: Int = -1,
-    val subtitleIndex: Int = -1
+    val subtitleIndex: Int = -1,
+    val seekTargetMs: Long? = null
 )
 
 /** Used on the player thread: network transitions are serialized; buffering feedback has its own deadline. */
@@ -194,7 +196,11 @@ internal class PlaybackSession(
             return@enqueue
         }
         ready = true
-        mutable.value = mutable.value.copy(preparing = false, reportError = null)
+        mutable.value = mutable.value.copy(
+            preparing = false,
+            reportError = null,
+            seekTargetMs = mutable.value.seekTargetMs.takeUnless { it == target && pendingSeek == null }
+        )
         if (started) {
             reportProgress()
         } else {
@@ -261,6 +267,21 @@ internal class PlaybackSession(
         }
     }
 
+    /** Relative remote input belongs to the viewing, even while Compose still holds a retiring player. */
+    fun stepSeek(deltaMs: Long): Long? {
+        val current = decision ?: seekSource ?: return null
+        if (!TranscodeSeek.required(current)) return null
+        val target = SeekSteps.target(
+            output.position().milliseconds,
+            mutable.value.seekTargetMs,
+            deltaMs,
+            requireNotNull(current.mediaSource.runTimeTicks) / 10_000
+        )
+        if (!seek(target, current)) return null
+        trace("seek-step", "deltaMs=$deltaMs targetMs=$target")
+        return target
+    }
+
     /** Coalesce held/rapid remote steps before stopping the old encode and negotiating the final target. */
     fun seek(positionMs: Long, source: PlayDecision? = decision): Boolean {
         if (closing ||
@@ -281,6 +302,7 @@ internal class PlaybackSession(
         }
         pendingSeek = positionMs.coerceIn(0, requireNotNull(source.mediaSource.runTimeTicks) / 10_000)
         seekSource = source
+        mutable.value = mutable.value.copy(seekTargetMs = pendingSeek)
         output.beginSeek()
         buffering(true, source)
         if (seeking) return true
