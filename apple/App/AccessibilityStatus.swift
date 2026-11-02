@@ -31,12 +31,12 @@ struct AccessibilityCue: Equatable {
     private var pending: (cue: AccessibilityCue, until: TimeInterval)?
     private var active = true
     private var pendingExpiry: Task<Void, Never>?
-    private let enabled: () -> Bool
+    private let enabled: @MainActor () -> Bool
     private let now: () -> TimeInterval
-    private let post: (AccessibilityCue, NSAttributedString) -> Void
-    init(enabled: @escaping () -> Bool = { UIAccessibility.isVoiceOverRunning },
+    private let post: @MainActor (AccessibilityCue, NSAttributedString) -> Void
+    init(enabled: @escaping @MainActor () -> Bool = { UIAccessibility.isVoiceOverRunning },
          now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-         post: @escaping (AccessibilityCue, NSAttributedString) -> Void = { cue, speech in
+         post: @escaping @MainActor (AccessibilityCue, NSAttributedString) -> Void = { cue, speech in
              UIAccessibility.post(notification: .announcement, argument: speech)
              detailDiagnostic("event=cuePosted cue=\(cue.id) kind=\(cue.message == "Ready" ? "Ready" : "other") queued=true")
          }) { self.enabled = enabled; self.now = now; self.post = post }
