@@ -223,6 +223,9 @@ struct TrackMenuPresentation: Identifiable, Equatable {
             let menu = await Task.detached(priority: .userInitiated) { builder(values, generation) }.value
             guard let self, !Task.isCancelled, self.cacheRevision == generation else { return }
             self.labelsBuilt += menu.audio.count + menu.subtitles.count
+            #if DEBUG
+            Logger(subsystem: "app.pictureshow", category: "Playback").notice("track-menu-prepared generation=\(generation) pending=\(self.pending != nil)")
+            #endif
             self.prepared = menu
             if let request = self.pending {
                 self.pending = nil; self.waitingToOpen = false
@@ -238,6 +241,9 @@ struct TrackMenuPresentation: Identifiable, Equatable {
     /// initial-loading request; any subsequent metadata/source replacement cancels it.
     func requestOpen(completion: @escaping (TrackMenuPresentation?) -> Void = { _ in }) {
         cancelOpen(handoff: false); requestID += 1
+        #if DEBUG
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("track-menu-request generation=\(self.cacheRevision) prepared=\(self.prepared != nil)")
+        #endif
         if let prepared {
             let presentation = TrackMenuPresentation(id: requestID, menu: prepared)
             openMenu = presentation; completion(presentation)
@@ -375,7 +381,11 @@ struct NativePlayer: UIViewControllerRepresentable {
         #if os(tvOS)
         let continuation = session.nextCountdown != nil ? session.nextItem : nil
         context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown)
-        let signature = "\(session.trackLabels.cacheRevision)|\(session.trackLabels.prepared?.generation ?? -1)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
+        // A deferred provider must finish into the still-open native chooser.
+        // Replacing AVKit's transport items during that handoff discards its
+        // presentation. Rebuild the prepared static menu after Back/selection.
+        let preparedSignature = session.trackLabels.openMenu == nil ? session.trackLabels.prepared?.generation ?? -1 : -1
+        let signature = "\(session.trackLabels.cacheRevision)|\(preparedSignature)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
         if context.coordinator.menuSignature != signature {
             context.coordinator.menuSignature = signature
             session.diagnostics.record("nativePlayer.menuBuilt")
