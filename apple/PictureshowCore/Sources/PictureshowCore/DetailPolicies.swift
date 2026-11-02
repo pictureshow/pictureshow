@@ -33,7 +33,7 @@ public enum DetailFeedback {
         newRevision && (refreshed || container) && !(refreshed && alreadyConfirmed)
     }
     public static func readHasFailure(readFailed: Bool, reason: String?, mutationReady: Bool) -> Bool { reason != nil && (readFailed || !mutationReady) }
-    public static func requestCueRemainsActive(active: Bool, readerLeftAction: Bool, requested: Bool = true) -> Bool { active && requested && !readerLeftAction }
+    public static func requestCueRemainsActive(active: Bool, readerLeftAction: Bool, requested: Bool = true, presented: Bool = true) -> Bool { active && requested && (!readerLeftAction || !presented) }
     public static func hasConfirmedLeafRead(readSucceeded: Bool, sameUserData: Bool, container: Bool) -> Bool { readSucceeded && sameUserData && !container }
     public static func readRequiresDependents(type: String) -> Bool { ["Series", "Season"].contains(type) }
 
@@ -92,6 +92,29 @@ public enum DetailFeedback {
         wasPending && !handoffFinished
     }
 
+    public static func pendingPresentationVisible(waiting: Bool, resumed: Bool, published: Bool) -> Bool { waiting && resumed && published }
+    public static func pendingPresentationLabel(held: Bool, requested: Bool, available: Bool, plain: String, pending: String) -> String { held || requested || !available ? pending : plain }
+    public static func heldLabelPresented(selectedWhileHeld: Bool, heldLabelRequested: Bool) -> Bool { selectedWhileHeld && heldLabelRequested }
+    public static func feedbackSource(currentPage: Bool, selectedAction: Bool) -> Bool { currentPage && selectedAction }
+    public static func quietDepartingChange(handoff: Bool, action: Bool, onlyLabelChanged: Bool) -> Bool { handoff && action && onlyLabelChanged }
+    public static func quietRequestRediscovery(action: Bool, onlyLabelChanged: Bool, rediscovery: Bool) -> Bool { action && onlyLabelChanged && rediscovery }
+    public static func readerFocusMayClear(currentPage: Bool, ownedHeader: Bool, sameNativeNode: Bool) -> Bool { currentPage && ownedHeader && sameNativeNode }
+    public static func retryDescription(reason: String) -> String {
+        let reason = reason.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return "Retry. Loading failed. \(reason)"
+    }
+    public static func retryFailureCue(baseline: Int64?, attempt: Int64, loading: Bool, failed: Bool, resumed: Bool) -> Bool {
+        baseline.map { attempt > $0 } == true && !loading && failed && resumed
+    }
+    public static func retryAttemptSucceeded(baseline: Int64, attempt: Int64, loading: Bool, failed: Bool) -> Bool { attempt > baseline && !loading && !failed }
+    public static func retryCueCanWait(accessibilityEnabled: Bool, elapsedMillis: Int64) -> Bool { accessibilityEnabled && elapsedMillis < 30_000 }
+    public static func completionPresentedPlayed(played: Bool, completionIntent: Bool) -> Bool { played || completionIntent }
+    public static func completionIntentRetained(reportFailed: Bool, reportPending: Bool, rawReadSucceeded: Bool) -> Bool { !reportFailed && (reportPending || !rawReadSucceeded) }
+    public static func rawReadMatchesAcknowledgement(raw: ItemUserData?, acknowledged: ItemUserData) -> Bool { raw == acknowledged }
+    public static func playedRequestNotice(wanted: Bool, current: Bool) -> String? {
+        wanted == current ? "Nothing changed. This item is already \(current ? "watched" : "unwatched")." : nil
+    }
+
 }
 
 public enum DetailAvailability {
@@ -116,12 +139,41 @@ public struct DetailReadLifecycle: Sendable {
 public struct DetailReadyFeedback: Sendable {
     private var wasHeld = false
     private var previousFocus: String?
+    private var presentedFocus: String?
     public init() { }
-    public mutating func update(held: Bool, focused: String?, resumed: Bool, usable: Bool = true) -> String? {
-        let sameFocus = focused != nil && focused == previousFocus
-        let cue: String? = wasHeld && !held && usable && sameFocus && resumed ? "Ready" : nil
-        wasHeld = held || (wasHeld && !usable && sameFocus)
+    public mutating func update(held: Bool, focused: String?, resumed: Bool, usable: Bool = true, presented: Bool = true, cancelled: Bool = false, nativePresented: String? = nil, submitted: Bool = true) -> String? {
+        guard resumed, !cancelled, let focused else {
+            wasHeld = false; previousFocus = nil; presentedFocus = nil
+            return nil
+        }
+        let sameFocus = focused == previousFocus
+        if !sameFocus { presentedFocus = nil }
+        if held && presented { presentedFocus = focused }
+        // Native label queries can arrive before the SwiftUI settlement publication.
+        // They must name this same selected held episode, never a prefetched peer.
+        if sameFocus && wasHeld && nativePresented == focused { presentedFocus = focused }
+        let cue: String? = wasHeld && !held && usable && sameFocus && presentedFocus == focused ? "Ready" : nil
+        wasHeld = held || (wasHeld && sameFocus && (!usable || (cue != nil && !submitted)))
+        if cue != nil && submitted { presentedFocus = nil }
         previousFocus = focused
         return cue
+    }
+}
+
+/// Request identity belongs to the accepted event, independently of observer restarts.
+/// A rejected native submission remains eligible; only a successful one consumes it.
+public struct DetailRequestOnceFeedback: Sendable {
+    private var consumed: Set<Int64> = []
+    public init() { }
+    public mutating func update(request: Int64?, eligible: Bool, submitted: Bool = true) -> Bool {
+        guard let request, eligible, !consumed.contains(request) else { return false }
+        if submitted { consumed.insert(request) }
+        return true
+    }
+}
+
+public enum PlaybackVisibility {
+    public static func playWhenReady(requested: Bool, foregroundRequired: Bool, foreground: Bool, pauseLatched: Bool) -> Bool {
+        requested && !pauseLatched && (!foregroundRequired || foreground)
     }
 }

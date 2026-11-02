@@ -72,13 +72,19 @@ public enum Captions {
         guard enabled, let configuration, configuration.subtitleMode.lowercased() != "none" else { return nil }
         return configuration.subtitleLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? deviceLanguage : configuration.subtitleLanguage
     }
+    public static func usableDefaultIndex(source: MediaSource) -> Int? {
+        guard let index = source.defaultSubtitleStreamIndex else { return nil }
+        return index == -1 || (index >= 0 && source.mediaStreams.contains { $0.type == "Subtitle" && $0.index == index }) ? index : nil
+    }
     public static func index(source: MediaSource, preferredLanguage: String) -> Int? {
+        // A user-scoped server default may be a remembered choice from any client.
+        // Keep Off distinct from missing, even when the system preference disagrees.
+        if let index = usableDefaultIndex(source: source) { return index }
         guard let language = PlaybackSelection.language(preferredLanguage) else { return nil }
         return source.mediaStreams.filter { $0.type == "Subtitle" && PlaybackSelection.language($0.language) == language }.sorted {
             if $0.isForced != $1.isForced { return !$0.isForced }
             if $0.isHearingImpaired != $1.isHearingImpaired { return $0.isHearingImpaired }
             if isText($0) != isText($1) { return isText($0) }
-            if ($0.index == source.defaultSubtitleStreamIndex) != ($1.index == source.defaultSubtitleStreamIndex) { return $0.index == source.defaultSubtitleStreamIndex }
             if $0.isDefault != $1.isDefault { return $0.isDefault }
             return $0.index < $1.index
         }.first?.index

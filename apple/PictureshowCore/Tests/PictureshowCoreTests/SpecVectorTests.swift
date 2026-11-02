@@ -42,6 +42,9 @@ final class SpecVectorTests:XCTestCase {
     func decisionJSON(_ d:PlayDecision,urlParts:Bool=false)->[String:Any]{["method":d.method.rawValue,"mediaSourceId":d.source.id as Any? ?? NSNull(),"url":urlParts ? parts(d.url):d.url.absoluteString as Any,"headers":d.headers,"playSessionId":d.playSessionId as Any? ?? NSNull(),"transcodeReasons":d.transcodeReasons]}
     func parts(_ url:URL)->[String:Any]{let c=URLComponents(url:url,resolvingAgainstBaseURL:false)!;var q:[String:[String]]=[:];for x in c.queryItems ?? []{q[x.name,default:[]].append(x.value ?? "")};return ["scheme":c.scheme!,"host":c.host!,"port":c.port ?? (c.scheme == "https" ? 443:80),"path":c.percentEncodedPath,"query":q]}
     func testAllSharedVectors() async throws { try await runVectors() }
+    func testRC28PolicyVectors() async throws {
+        try await runVectors(operations: ["caption-index", "detail-ready-feedback", "detail-request-cue-active", "detail-pending-presentation-visible", "detail-pending-presentation-label", "detail-held-label-presentation", "detail-feedback-source", "detail-quiet-departing-change", "detail-quiet-request-rediscovery", "detail-reader-focus-clear", "detail-retry-description", "detail-retry-failure-cue", "detail-retry-attempt-succeeded", "detail-retry-cue-can-wait", "detail-completion-presented-played", "detail-completion-intent-retained", "detail-raw-read-acknowledgement", "detail-played-request-notice", "detail-request-once-feedback", "visibility-play"])
+    }
     func testF4PolicyVectors() async throws {
         try await runVectors(operations: ["detail-completion-read", "detail-cold-pending", "detail-requested-label", "catalog-refresh-revision", "detail-read-band", "detail-session-read", "detail-read-failure", "detail-request-cue-active", "detail-confirmed-leaf", "detail-read-dependencies", "seek-step", "playback-report-fields"])
     }
@@ -97,6 +100,26 @@ final class SpecVectorTests:XCTestCase {
         let server=Server(url:URL(string:text(serverJSON,"url","https://media.example.test/jellyfin"))!);let account=Account(server:server,userId:text(credentials,"userId","viewer"),username:"Viewer",accessToken:text(credentials,"token","fixture-token"),deviceID:text(credentials,"deviceId",text(identity,"deviceId","install")))
         let client=JellyfinClient(deviceID:text(identity,"deviceId","install"),deviceName:text(identity,"deviceName","Fixture TV"),version:text(identity,"version","0.1.0"))
         switch operation{
+        case "detail-pending-presentation-visible":return DetailFeedback.pendingPresentationVisible(waiting:try required(Bool.self,i,"waiting"),resumed:try required(Bool.self,i,"resumed"),published:try required(Bool.self,i,"published"))
+        case "detail-pending-presentation-label":return DetailFeedback.pendingPresentationLabel(held:try required(Bool.self,i,"held"),requested:try required(Bool.self,i,"requested"),available:try required(Bool.self,i,"available"),plain:try required(String.self,i,"plain"),pending:try required(String.self,i,"pending"))
+        case "detail-held-label-presentation":return DetailFeedback.heldLabelPresented(selectedWhileHeld:try required(Bool.self,i,"selectedWhileHeld"),heldLabelRequested:try required(Bool.self,i,"heldLabelRequested"))
+        case "detail-feedback-source":return DetailFeedback.feedbackSource(currentPage:try required(Bool.self,i,"currentPage"),selectedAction:try required(Bool.self,i,"selectedAction"))
+        case "detail-quiet-departing-change":return DetailFeedback.quietDepartingChange(handoff:try required(Bool.self,i,"handoff"),action:try required(Bool.self,i,"action"),onlyLabelChanged:try required(Bool.self,i,"onlyLabelChanged"))
+        case "detail-quiet-request-rediscovery":return DetailFeedback.quietRequestRediscovery(action:try required(Bool.self,i,"action"),onlyLabelChanged:try required(Bool.self,i,"onlyLabelChanged"),rediscovery:try required(Bool.self,i,"rediscovery"))
+        case "detail-reader-focus-clear":return DetailFeedback.readerFocusMayClear(currentPage:try required(Bool.self,i,"currentPage"),ownedHeader:try required(Bool.self,i,"ownedHeader"),sameNativeNode:try required(Bool.self,i,"sameNativeNode"))
+        case "detail-retry-description":return DetailFeedback.retryDescription(reason:try required(String.self,i,"reason"))
+        case "detail-retry-failure-cue":return DetailFeedback.retryFailureCue(baseline:try required(Int64?.self,i,"baseline"),attempt:try required(Int64.self,i,"attempt"),loading:try required(Bool.self,i,"loading"),failed:try required(Bool.self,i,"failed"),resumed:try required(Bool.self,i,"resumed"))
+        case "detail-retry-attempt-succeeded":return DetailFeedback.retryAttemptSucceeded(baseline:try required(Int64.self,i,"baseline"),attempt:try required(Int64.self,i,"attempt"),loading:try required(Bool.self,i,"loading"),failed:try required(Bool.self,i,"failed"))
+        case "detail-retry-cue-can-wait":return DetailFeedback.retryCueCanWait(accessibilityEnabled:try required(Bool.self,i,"accessibilityEnabled"),elapsedMillis:try required(Int64.self,i,"elapsedMillis"))
+        case "detail-completion-presented-played":return DetailFeedback.completionPresentedPlayed(played:try required(Bool.self,i,"played"),completionIntent:try required(Bool.self,i,"completionIntent"))
+        case "detail-completion-intent-retained":return DetailFeedback.completionIntentRetained(reportFailed:try required(Bool.self,i,"reportFailed"),reportPending:try required(Bool.self,i,"reportPending"),rawReadSucceeded:try required(Bool.self,i,"rawReadSucceeded"))
+        case "detail-raw-read-acknowledgement":return DetailFeedback.rawReadMatchesAcknowledgement(raw:try required(ItemUserData?.self,i,"raw"),acknowledged:try required(ItemUserData.self,i,"acknowledged"))
+        case "detail-played-request-notice":return DetailFeedback.playedRequestNotice(wanted:try required(Bool.self,i,"wanted"),current:try required(Bool.self,i,"current")) as Any? ?? NSNull()
+        case "detail-request-once-feedback":
+            struct Step: Decodable { let request: Int64?; let eligible: Bool; let submitted: Bool }
+            var feedback = DetailRequestOnceFeedback()
+            return try required([Step].self,i,"steps").map { feedback.update(request:$0.request,eligible:$0.eligible,submitted:$0.submitted) }
+        case "visibility-play":return PlaybackVisibility.playWhenReady(requested:try required(Bool.self,i,"requested"),foregroundRequired:try required(Bool.self,i,"foregroundRequired"),foreground:try required(Bool.self,i,"foreground"),pauseLatched:try required(Bool.self,i,"pauseLatched"))
         case "detail-completion-read":return DetailFeedback.readCanReplaceCompletion(completionItem:try required(String.self,i,"completionItem"),completionRead:try required(Int64.self,i,"completionRead"),item:try required(String.self,i,"item"),read:try required(Int64.self,i,"read"),succeeded:try required(Bool.self,i,"succeeded"))
         case "detail-cold-pending":return DetailFeedback.needsPendingControls(loading:try required(Bool.self,i,"loading"),firstArrival:try required(Bool.self,i,"firstArrival"),canQueue:try required(Bool.self,i,"canQueue"),returningFromPlayback:try defaulted(Bool.self,i,"returningFromPlayback",false))
         case "detail-requested-label":return DetailFeedback.requestedActionLabel(target:try required(String.self,i,"target"),newlyAccepted:try required(Bool.self,i,"newlyAccepted"))
@@ -104,7 +127,7 @@ final class SpecVectorTests:XCTestCase {
         case "detail-read-band":return DetailFeedback.readBandText(retrying:try required(Bool.self,i,"retrying"),reason:try required(String.self,i,"reason"))
         case "detail-session-read":return DetailFeedback.sessionNeedsRead(newRevision:try required(Bool.self,i,"newRevision"),refreshed:try required(Bool.self,i,"refreshed"),container:try required(Bool.self,i,"container"),alreadyConfirmed:try required(Bool.self,i,"alreadyConfirmed"))
         case "detail-read-failure":return DetailFeedback.readHasFailure(readFailed:try required(Bool.self,i,"readFailed"),reason:try required(String?.self,i,"reason"),mutationReady:try required(Bool.self,i,"mutationReady"))
-        case "detail-request-cue-active":return DetailFeedback.requestCueRemainsActive(active:try required(Bool.self,i,"active"),readerLeftAction:try required(Bool.self,i,"readerLeftAction"),requested:try defaulted(Bool.self,i,"requested",true))
+        case "detail-request-cue-active":return DetailFeedback.requestCueRemainsActive(active:try required(Bool.self,i,"active"),readerLeftAction:try required(Bool.self,i,"readerLeftAction"),requested:try defaulted(Bool.self,i,"requested",true),presented:try defaulted(Bool.self,i,"presented",true))
         case "detail-confirmed-leaf":return DetailFeedback.hasConfirmedLeafRead(readSucceeded:try required(Bool.self,i,"readSucceeded"),sameUserData:try required(Bool.self,i,"sameUserData"),container:try required(Bool.self,i,"container"))
         case "detail-read-dependencies":return DetailFeedback.readRequiresDependents(type:try required(String.self,i,"type"))
         case "seek-step":return SeekSteps.target(positionMs:try required(Int64.self,i,"positionMs"),pendingMs:try required(Int64?.self,i,"pendingMs"),deltaMs:try required(Int64.self,i,"deltaMs"),durationMs:try required(Int64.self,i,"durationMs"))
@@ -115,9 +138,9 @@ final class SpecVectorTests:XCTestCase {
         case "detail-held-label":return DetailFeedback.heldActionLabel(target:try required(String.self,i,"target"))
         case "detail-unavailable-label":return DetailFeedback.unavailableActionLabel(target:try required(String.self,i,"target"))
         case "detail-ready-feedback":
-            struct Step: Decodable { let held: Bool; let focused: String?; let resumed: Bool; let usable: Bool? }
+            struct Step: Decodable { let held: Bool; let focused: String?; let resumed: Bool; let usable: Bool?; let presented: Bool?; let cancelled: Bool?; let nativePresented: String?; let submitted: Bool? }
             var feedback = DetailReadyFeedback()
-            return try required([Step].self,i,"steps").map { feedback.update(held:$0.held,focused:$0.focused,resumed:$0.resumed,usable:$0.usable ?? true) as Any? ?? NSNull() }
+            return try required([Step].self,i,"steps").map { feedback.update(held:$0.held,focused:$0.focused,resumed:$0.resumed,usable:$0.usable ?? true,presented:$0.presented ?? false,cancelled:$0.cancelled ?? false,nativePresented:$0.nativePresented,submitted:$0.submitted ?? true) as Any? ?? NSNull() }
         case "detail-read-lifecycle":
             var lifecycle = DetailReadLifecycle()
             return try required([Bool].self,i,"resumes").map { _ in lifecycle.resumed() }
