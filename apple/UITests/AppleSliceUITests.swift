@@ -3320,56 +3320,78 @@ func testF5DemoHeldWatchedRequestIsSingleAndReadRetryRecovers() async throws {
     app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = itemID
     app.launch()
 
-    let play = app.buttons["play"]
     let watched = app.buttons["watched"]
-    XCTAssertTrue(play.waitForExistence(timeout: 25))
-    XCTAssertTrue(watched.waitForExistence(timeout: 10))
+    let favorite = app.buttons["favorite"]
+    XCTAssertTrue(watched.waitForExistence(timeout: 25))
+    XCTAssertTrue(favorite.waitForExistence(timeout: 10))
+    XCTAssertTrue(waitUntil(timeout: 10) { ["Add favorite", "Remove favorite"].contains(favorite.label) })
+    let favoriteAfterToggle = favorite.label == "Add favorite" ? "Remove favorite" : "Add favorite"
     let initialStatus = try await f5Status()
     let initialWrites = f5Seen("POST:played_write", in: initialStatus)
-    capture("F5 live detail before held Watched")
+    capture("F5 before favorite refresh and queued Watched")
 
-    try await f5Arm("item_detail", action: "hold_fail", count: 1, status: 503)
+    // A successful unrelated Favorite command starts a real authoritative item
+    // refresh. Hold that GET so the following Watched press must stay queued.
+    try await f5Arm("item_detail", action: "hold", count: 1)
     var releaseNeeded = true
     defer {
         if releaseNeeded { Task { try? await f5Release("item_detail") } }
     }
-    activate(watched)
-    let readHeld = try await f5WaitForPending("item_detail", count: 1, timeout: 15)
-    XCTAssertTrue(readHeld, "The real item refresh after the Watched action should be held")
-    XCTAssertTrue(waitUntil(timeout: 10) { watched.label == "Watched already requested" })
+    activate(favorite)
+    XCTAssertTrue(waitUntil(timeout: 10) { favorite.label == favoriteAfterToggle })
+    let favoriteReadHeld = try await f5WaitForPending("item_detail", count: 1, timeout: 15)
+    XCTAssertTrue(favoriteReadHeld, "The Favorite action's item refresh should be held")
+    capture("F5 favorite refresh held before Watched press")
 
-    // A repeated native activation while the authoritative item read is held
-    // must remain idempotent. The proxy counts writes without retaining item IDs.
-    if watched.isEnabled { activate(watched) }
-    let oneWriteArrived = try await f5WaitForSeen("POST:played_write", count: initialWrites + 1, timeout: 10)
-    XCTAssertTrue(oneWriteArrived)
-    let heldStatus = try await f5Status()
-    let heldWrites = f5Seen("POST:played_write", in: heldStatus)
-    XCTAssertEqual(heldWrites, initialWrites + 1, "One accepted watched intent produces one server write")
-    capture("F5 live detail held Watched request remains single")
+    activate(watched)
+    XCTAssertTrue(waitUntil(timeout: 5) { watched.label == "Watched already requested" },
+                  "The accepted Watched press should remain visibly requested while queued")
+    XCTAssertTrue(watched.isEnabled, "A held pending action must remain activatable")
+    activate(watched)
+    XCTAssertTrue(waitUntil(timeout: 2) { watched.label == "Watched already requested" },
+                  "A repeated press must not create a second queued intent")
+    let beforeRelease = try await f5Status()
+    XCTAssertEqual(f5Seen("POST:played_write", in: beforeRelease), initialWrites,
+                   "Watched cannot reach Jellyfin before its authoritative refresh completes")
+    capture("F5 held Favorite read retains one queued Watched intent")
+
+    // Arm the next GET before unblocking the Favorite read. The single queued
+    // Watched write runs after that read, then its own refresh receives a 503.
+    try await f5Arm("item_detail", action: "hold_fail", count: 1, status: 503)
+    try await f5Release("item_detail", preservePolicy: true)
+    let watchedReadHeld = try await f5WaitForPending("item_detail", count: 1, timeout: 20)
+    XCTAssertTrue(watchedReadHeld, "The post-Watched authoritative refresh should be held then fail")
+    let oneWatchedWrite = try await f5WaitForSeen("POST:played_write", count: initialWrites + 1, timeout: 10)
+    XCTAssertTrue(oneWatchedWrite)
+    let failedReadHeld = try await f5Status()
+    XCTAssertEqual(f5Seen("POST:played_write", in: failedReadHeld), initialWrites + 1,
+                   "Exactly one Watched write should precede the failed refresh")
+    XCTAssertEqual(f5InjectedFailures("item_detail", in: failedReadHeld), 0,
+                   "The read fault is injected only when its hold is released")
+    capture("F5 queued Watched wrote once and its refresh is held")
 
     try await f5Release("item_detail")
     releaseNeeded = false
     let retry = app.buttons["detailRetry"]
-    XCTAssertTrue(retry.waitForExistence(timeout: 30), "The held real read should fail through the normal detail Retry state")
+    XCTAssertTrue(retry.waitForExistence(timeout: 30), "The held read should produce the normal detail Retry state")
     let retryValue = try XCTUnwrap(retry.value as? String)
     let prefix = "Retry. Loading failed. "
     XCTAssertTrue(retryValue.hasPrefix(prefix))
     let reason = String(retryValue.dropFirst(prefix.count))
     XCTAssertFalse(reason.isEmpty)
     XCTAssertTrue(app.staticTexts[reason].waitForExistence(timeout: 5))
-    capture("F5 live detail truthful read failure")
+    capture("F5 queued Watched truthful read failure")
 
     let priorDetailReads = f5Seen("GET:item_detail", in: try await f5Status())
     activate(retry)
-    let retryStarted = try await f5WaitForSeen("GET:item_detail", count: priorDetailReads + 1, timeout: 10)
-    XCTAssertTrue(retryStarted)
-    XCTAssertTrue(waitUntil(timeout: 20) { !retry.exists && watched.exists && watched.value as? String == "Watched" })
+    let retryReadStarted = try await f5WaitForSeen("GET:item_detail", count: priorDetailReads + 1, timeout: 10)
+    XCTAssertTrue(retryReadStarted)
+    XCTAssertTrue(waitUntil(timeout: 20) { !retry.exists && watched.value as? String == "Watched" })
     let finalStatus = try await f5Status()
-    let finalWrites = f5Seen("POST:played_write", in: finalStatus)
-    XCTAssertEqual(finalWrites, initialWrites + 1, "Retrying the read must not repeat the watched write")
-    capture("F5 live detail fresh authoritative Watched state")
-    print("F5_DETAIL_HELD_WATCHED writes=1 retryRead=true")
+    XCTAssertEqual(f5Seen("POST:played_write", in: finalStatus), initialWrites + 1,
+                   "Retrying the authoritative read must not repeat the watched write")
+    capture("F5 fresh authoritative Watched state after Retry")
+    print("F5_DETAIL_HELD_WATCHED queued=true duplicateGuarded=true writes=1 retryRead=true")
 }
 
 // MARK: - F5 real demo completion projection recovery
@@ -3420,7 +3442,7 @@ func testF5DemoFailedCompletionWithdrawsProjectionWhileFreshReadIsHeld() async t
     XCTAssertTrue(detailReadHeld, "Returning from playback should start the fresh detail read and hold it")
     let watched = app.buttons["watched"]
     XCTAssertTrue(watched.waitForExistence(timeout: 15))
-    XCTAssertEqual(watched.label, "Mark unwatched when ready", "Successful completion provisionally presents its played projection")
+    XCTAssertTrue(waitUntil(timeout: 10) { watched.label == "Mark unwatched when ready" }, "Successful completion provisionally presents its played projection")
     capture("F5 completion provisional played projection before failed Stop")
 
     try await f5Arm("stopped_report", action: "fail", count: 1, status: 503)
