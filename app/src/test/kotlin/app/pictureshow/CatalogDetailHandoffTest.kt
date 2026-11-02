@@ -14,9 +14,11 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -817,7 +819,7 @@ class CatalogDetailHandoffTest {
             }
             compose.onNodeWithTag("detail:play-pending").assertIsFocused()
             compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
-            compose.onNodeWithText("Play requested").assertExists()
+            compose.onNodeWithContentDescription("Play already requested").assertExists()
         }
     }
 
@@ -902,7 +904,7 @@ class CatalogDetailHandoffTest {
             }
         }
         compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("Play requested").assertExists()
+        compose.onNodeWithContentDescription("Play already requested").assertExists()
         compose.runOnIdle {
             state.value =
                 state.value.copy(item = origin, episodes = listOf(fresh), loading = false, playbackPending = false)
@@ -941,12 +943,15 @@ class CatalogDetailHandoffTest {
             }
         }
         repeat(2) { compose.onNodeWithTag("detail:$target-pending").performSemanticsAction(SemanticsActions.OnClick) { it() } }
-        compose.onNodeWithText(
-            when (target) {
-                "played" -> "Watched change requested"
-                "favorite" -> "Favorite change requested"
-                else -> "Play requested"
-            }
+        val requestedLabel = when (target) {
+            "played" -> "Watched change requested"
+            "favorite" -> "Favorite change requested"
+            else -> "Play requested"
+        }
+        compose.onNode(
+            hasContentDescription(
+                requestedLabel.replace(" change requested", " already requested").replace("Play requested", "Play already requested")
+            )
         ).assertExists()
         compose.runOnIdle {
             assertTrue(calls.isEmpty())
@@ -1148,7 +1153,7 @@ class CatalogDetailHandoffTest {
             }
         }
         compose.onNodeWithTag("detail:play-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("Play requested").assertExists()
+        compose.onNodeWithContentDescription("Play already requested").assertExists()
         time = 31_000L
         compose.mainClock.advanceTimeBy(31_000)
         compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false) }

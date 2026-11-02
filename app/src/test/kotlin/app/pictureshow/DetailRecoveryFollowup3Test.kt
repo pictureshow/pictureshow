@@ -8,13 +8,13 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -127,7 +127,7 @@ class DetailRecoveryFollowup3Test {
         compose.onNodeWithText(failure).assertExists()
         compose.onNodeWithText(oldReason).assertDoesNotExist()
         compose.onNodeWithTag("detail:retry").assertIsFocused().assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. $failure")
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. ${failure.dropLast(1)}")
         )
     }
 
@@ -154,16 +154,16 @@ class DetailRecoveryFollowup3Test {
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ToggleableState))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
-        compose.onNodeWithText("Watched change requested").assertExists()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.onNodeWithContentDescription("Watched already requested").assertExists()
         compose.onNodeWithTag("detail:favorite-pending").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
             .assertIsFocused()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unwatched"))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
-        compose.onNodeWithText("Watched already requested").assertExists()
-        compose.onNodeWithText("Watched change requested").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Watched already requested").assertExists()
+        compose.onNodeWithContentDescription("Watched change requested").assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, requests) }
     }
 
@@ -174,7 +174,7 @@ class DetailRecoveryFollowup3Test {
         compose.runOnIdle { state.value = state.value.copy(loading = false, error = failure, readFailed = true) }
         compose.onNodeWithText(failure).assertExists()
         compose.onNodeWithTag("detail:retry").assertIsFocused().assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. $failure")
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. ${failure.dropLast(1)}")
         )
     }
 
@@ -204,9 +204,17 @@ class DetailRecoveryFollowup3Test {
         }
         var readerOnText = false
         val announcements = mutableListOf<String>()
-        val host = object : android.view.View(compose.activity) {
+        lateinit var host: android.view.View
+        host = object : android.view.View(compose.activity) {
             override fun getAccessibilityNodeProvider() = object : android.view.accessibility.AccessibilityNodeProvider() {
                 override fun findFocus(focus: Int) = android.view.accessibility.AccessibilityNodeInfo.obtain().apply {
+                    setSource(host, 7)
+                    viewIdResourceName = when {
+                        readerOnText -> if (toText) "detail:overview" else "detail:play"
+                        pending -> "detail:played-pending"
+                        else -> "detail:favorite"
+                    }
+                    isEnabled = true
                     className = if (readerOnText && toText) "android.widget.TextView" else "android.widget.Button"
                     isVisibleToUser = true
                     isAccessibilityFocused = true
@@ -257,7 +265,7 @@ class DetailRecoveryFollowup3Test {
         target.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
             .assertIsFocused()
-        compose.onNodeWithText("$action change requested").assertExists()
+        compose.onNodeWithContentDescription("$action already requested").assertExists()
         if (repeatAfterIdle) {
             compose.runOnIdle { state.value = state.value.copy(busy = false) }
             compose.mainClock.advanceTimeBy(100)
@@ -271,9 +279,9 @@ class DetailRecoveryFollowup3Test {
                 state.value = state.value.copy(busy = true)
             }
             target.assertIsFocused().performSemanticsAction(SemanticsActions.OnClick) { it() }
-            compose.onNodeWithText("Favorite change requested").assertExists()
+            compose.onNodeWithContentDescription("Favorite already requested").assertExists()
         }
-        target.assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
+        target.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
         compose.mainClock.advanceTimeBy(100)
         compose.runOnIdle {
             announcements.clear()
@@ -282,8 +290,8 @@ class DetailRecoveryFollowup3Test {
         compose.mainClock.advanceTimeBy(150)
         compose.waitForIdle()
         target.assertIsFocused()
-        compose.onNodeWithText("$action already requested").assertExists()
-        compose.onNodeWithText("$action change requested").assertDoesNotExist()
+        compose.onNodeWithContentDescription("$action already requested").assertExists()
+        compose.onNodeWithContentDescription("$action change requested").assertDoesNotExist()
         target.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, if (pending) "Unwatched" else "Not favorite"))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, androidx.compose.ui.state.ToggleableState.Off))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
@@ -293,7 +301,7 @@ class DetailRecoveryFollowup3Test {
         }
         compose.mainClock.advanceTimeBy(100)
         target.assertIsFocused().performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("$action already requested").assertExists()
+        compose.onNodeWithContentDescription("$action already requested").assertExists()
         compose.runOnIdle {
             assertEquals(if (pending) 1 else 0, accepted)
             assertEquals(if (pending) 0 else 1, firstWrites)

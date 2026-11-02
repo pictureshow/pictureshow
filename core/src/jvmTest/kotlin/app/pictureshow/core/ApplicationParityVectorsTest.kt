@@ -104,7 +104,8 @@ class ApplicationParityVectorsTest {
                         detailRequestCueRemainsActive(
                             input.getValue("active").jsonPrimitive.booleanOrNull!!,
                             input.getValue("readerLeftAction").jsonPrimitive.booleanOrNull!!,
-                            input["requested"]?.jsonPrimitive?.booleanOrNull ?: true
+                            input["requested"]?.jsonPrimitive?.booleanOrNull ?: true,
+                            input["presented"]?.jsonPrimitive?.booleanOrNull ?: true
                         )
                     )
                     "detail-requested-label" -> JsonPrimitive(
@@ -184,17 +185,61 @@ class ApplicationParityVectorsTest {
                         val lifecycle = DetailReadLifecycle()
                         JsonArray(input.getValue("resumes").jsonArray.map { JsonPrimitive(lifecycle.resumed()) })
                     }
+                    "detail-retry-description" -> JsonPrimitive(detailRetryDescription(input.getValue("reason").jsonPrimitive.content))
+                    "detail-request-once-feedback" -> {
+                        val feedback = DetailRequestFeedback()
+                        JsonArray(
+                            input.getValue("steps").jsonArray.map { step ->
+                                val fields = step.jsonObject
+                                val request = fields["request"]?.jsonPrimitive?.longOrNull
+                                val cue = feedback.shouldSend(request, fields.getValue("eligible").jsonPrimitive.booleanOrNull!!)
+                                if (cue && fields.getValue("submitted").jsonPrimitive.booleanOrNull!!) feedback.submitted(request!!)
+                                JsonPrimitive(cue)
+                            }
+                        )
+                    }
+                    "detail-quiet-request-rediscovery" -> JsonPrimitive(
+                        detailQuietsRequestedRediscoveryChange(
+                            input.getValue("action").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("onlyLabelChanged").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("rediscovery").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-quiet-departing-change" -> JsonPrimitive(
+                        detailQuietsDepartingActionChange(
+                            input.getValue("handoff").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("action").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("onlyLabelChanged").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-feedback-source" -> JsonPrimitive(
+                        detailFeedbackCanSubmit(
+                            input["currentPage"]!!.jsonPrimitive.booleanOrNull!!,
+                            input["selectedAction"]!!.jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-held-label-presentation" -> JsonPrimitive(
+                        detailHeldLabelIsPresentation(
+                            input["selectedWhileHeld"]!!.jsonPrimitive.booleanOrNull!!,
+                            input["heldLabelRequested"]!!.jsonPrimitive.booleanOrNull!!
+                        )
+                    )
                     "detail-ready-feedback" -> {
                         val feedback = DetailReadyFeedback()
                         JsonArray(
                             input.getValue("steps").jsonArray.map { step ->
                                 val fields = step.jsonObject
-                                feedback.update(
+                                fields["nativePresented"]?.jsonPrimitive?.contentOrNull?.let(feedback::presented)
+                                val cue = feedback.update(
                                     fields.getValue("held").jsonPrimitive.booleanOrNull!!,
                                     fields["focused"]?.jsonPrimitive?.contentOrNull,
                                     fields.getValue("resumed").jsonPrimitive.booleanOrNull!!,
-                                    fields["usable"]?.jsonPrimitive?.booleanOrNull ?: true
-                                )?.let(::JsonPrimitive) ?: JsonNull
+                                    fields["usable"]?.jsonPrimitive?.booleanOrNull ?: true,
+                                    fields["presented"]?.jsonPrimitive?.booleanOrNull ?: false,
+                                    fields["cancelled"]?.jsonPrimitive?.booleanOrNull ?: false
+                                )
+                                if (cue != null && (fields["submitted"]?.jsonPrimitive?.booleanOrNull ?: true)) feedback.submitted()
+                                cue?.let(::JsonPrimitive) ?: JsonNull
                             }
                         )
                     }

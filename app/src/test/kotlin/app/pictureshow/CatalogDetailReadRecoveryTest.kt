@@ -28,6 +28,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -820,7 +821,7 @@ class CatalogDetailReadRecoveryTest {
             }
         }
         compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.onNodeWithText("Watched change requested").assertExists()
+        compose.onNodeWithContentDescription("Watched already requested").assertExists()
         compose.runOnIdle {
             now = 30_001
             first.complete(ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Timed out")))

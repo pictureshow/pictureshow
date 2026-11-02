@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -55,7 +56,7 @@ class DetailFeedbackTest {
     private val film = MediaItem("film", "Invented feature", "Movie", overview = "An invented description.")
     private val failure = "The server could not complete the request (503)."
 
-    @Test fun settlementAnnouncesOnceOnTheSelectedActionWithoutLeavingReadyOnPeers() {
+    @Test fun anUnpresentedSettlementDoesNotAnnounceAheadOfFocusOrLeaveReadyOnPeers() {
         val speech = mutableListOf<String>()
         val host = object : View(compose.activity) {
             @Suppress("DEPRECATION")
@@ -73,7 +74,7 @@ class DetailFeedbackTest {
         compose.runOnIdle { state.value = state.value.copy(loading = false, playbackPending = false, readSucceeded = true) }
         compose.onNodeWithTag("detail:play").assertIsFocused()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
-        compose.runOnIdle { assertEquals(listOf("Ready"), speech) }
+        compose.runOnIdle { assertTrue(speech.isEmpty()) }
         compose.onNodeWithTag("detail:played").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unwatched"))
         compose.runOnIdle {
@@ -82,7 +83,7 @@ class DetailFeedbackTest {
         compose.onNodeWithTag("detail:played")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Watched"))
         compose.onNodeWithTag("detail:play").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
-        compose.runOnIdle { assertEquals(listOf("Ready"), speech) }
+        compose.runOnIdle { assertTrue(speech.isEmpty()) }
     }
 
     @Test fun anEmptyFreshSeasonCannotAnnounceItsDisabledPlayIsReady() {
@@ -423,8 +424,8 @@ class DetailFeedbackTest {
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:play-pending").assertIsFocused()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
-        compose.onNodeWithText("Play requested").assertIsDisplayed()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.onNodeWithContentDescription("Play already requested").assertIsDisplayed()
     }
 
     @Test fun acceptedWatchedRequestSpeaksTheRequestWithoutRepeatingItsOldValue() {
@@ -446,8 +447,8 @@ class DetailFeedbackTest {
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:played-pending").assertIsFocused()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
-        compose.onNodeWithText("Watched change requested").assertIsDisplayed()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.onNodeWithContentDescription("Watched already requested").assertIsDisplayed()
     }
 
     @Test fun acceptedFavoriteRequestSpeaksTheRequestWithoutRepeatingItsOldValue() {
@@ -469,8 +470,8 @@ class DetailFeedbackTest {
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:favorite-pending").assertIsFocused()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
-        compose.onNodeWithText("Favorite change requested").assertIsDisplayed()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.onNodeWithContentDescription("Favorite already requested").assertIsDisplayed()
     }
 
     @Test fun acceptedRequestPriorityDoesNotSpreadToPeersOrRepeatOnRefocus() {
@@ -496,7 +497,7 @@ class DetailFeedbackTest {
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:play-pending")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
         compose.onNodeWithTag("detail:from-start-pending")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
             .performSemanticsAction(SemanticsActions.RequestFocus) { it() }
@@ -581,7 +582,7 @@ class DetailFeedbackTest {
             SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(androidx.compose.ui.text.AnnotatedString(first)))
         )
         compose.onNodeWithTag("detail:retry")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. $first"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. ${first.dropLast(1)}"))
     }
 
     @Test fun automaticReadReplacementCannotChangeTheVisibleFailureEpisode() {
@@ -598,7 +599,7 @@ class DetailFeedbackTest {
             SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(androidx.compose.ui.text.AnnotatedString(first)))
         )
         compose.onNodeWithTag("detail:retry").assertIsFocused()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. $first"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. ${first.dropLast(1)}"))
     }
 
     @Test fun acceptedRetryStartsANewFailureEpisodeAndSuccessClearsIt() {
@@ -617,7 +618,7 @@ class DetailFeedbackTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading item. Please wait."))
         compose.runOnIdle { state.value = state.value.copy(loading = false, error = failure, readFailed = true) }
         compose.onNodeWithTag("detail:retry").assertIsFocused()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. $failure"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. ${failure.dropLast(1)}"))
         compose.onNodeWithText(first).assertDoesNotExist()
         compose.runOnIdle { state.value = state.value.copy(loading = false, error = null, readFailed = false, readSucceeded = true) }
         compose.onNodeWithTag("detail:retry").assertDoesNotExist()
