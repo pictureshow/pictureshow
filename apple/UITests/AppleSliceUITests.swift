@@ -11,7 +11,8 @@ final class AppleSliceUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         if name.contains("testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback") || name.contains("testF4PhonePreparedMenuInitialSourceBackBackgroundAndReplacement")
-            || name.contains("testF4TVNativeEarlyMenuBackDoesNotReopenAfterWorkerCompletion") {
+            || name.contains("testF4TVNativeEarlyMenuBackDoesNotReopenAfterWorkerCompletion")
+            || name.contains("testF4TVNativeEarlyMenuMountsWhenWorkerCompletesWithoutReopening") {
             app = XCUIApplication()
             return // This named case owns a finite local HTTP fixture, with no live account.
         }
@@ -1225,6 +1226,39 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1, "Fresh open reuses the worker's completed menus")
         XCTAssertEqual(fixture.snapshot.playbackInfoCount, 1)
         print("F4_NATIVE_TV workerThread=background pendingBack=true unsolicitedOpen=false freshOpenReuses=true")
+        #endif
+    }
+
+    @MainActor func testF4TVNativeEarlyMenuMountsWhenWorkerCompletesWithoutReopening() throws {
+        #if os(tvOS)
+        let fixture = try NativeTrackHTTPFixture(durationSeconds: 120)
+        app.launchEnvironment["PICTURESHOW_TEST_TRACK_MENU_GATE"] = try fixture.start()
+        defer { fixture.releaseAllMenuWorkers(); fixture.stop(); app.terminate() }
+        try fixture.launchSignedInDetail(app, activate: { self.activate($0) })
+        activate(app.buttons["play"])
+        let deadline = ProcessInfo.processInfo.systemUptime + 15
+        while (fixture.snapshot.menuWorkerRequests.count != 1 || fixture.snapshot.startCount != 1)
+                && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.05) }
+        XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1)
+        XCTAssertEqual(fixture.snapshot.startCount, 1)
+        XCUIRemote.shared.press(.playPause)
+        let trigger = nativeTVTransportMenu("Audio")
+        activateNativeTVMenuChoice(trigger)
+        let early = try app.snapshot()
+        XCTAssertFalse(tvSnapshotNodes(early).contains { $0.elementType == .cell && nativeTVTrackLabel($0.label, matchesStream: "12") },
+                       "An early native open cannot publish a partial stream row")
+
+        // Keep the same native menu open while the real detached label worker
+        // finishes. A second trigger activation would conceal a failed handoff.
+        fixture.releaseMenuWorker(1)
+        let byIdentifier = app.descendants(matching: .any).matching(identifier: "audio-12").firstMatch
+        let byLabel = app.descendants(matching: .any).matching(NSPredicate(format: "label MATCHES[c] %@", "^(selected,\\s*)?Stream 12(\\s·|$).*" )).firstMatch
+        let choice = byIdentifier.waitForExistence(timeout: 15) ? byIdentifier : byLabel
+        XCTAssertTrue(choice.waitForExistence(timeout: 15), "The held native Audio panel must mount complete prepared rows after the worker finishes")
+        XCTAssertTrue(nativeTVTrackLabel(choice.label, matchesStream: "12"))
+        XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1, "One source preparation must serve the early native open")
+        XCTAssertEqual(fixture.snapshot.playbackInfoCount, 1, "Completing the menu cannot renegotiate playback")
+        print("F4_NATIVE_TV earlyOpenMountedWithoutReopen=true workerThread=background stream=12")
         #endif
     }
 
