@@ -1414,7 +1414,7 @@ final class AppleSliceUITests: XCTestCase {
         let forward = app.buttons["seekForward"]
         XCTAssertTrue(forward.waitForExistence(timeout: 10))
         for index in 0..<3 {
-            forward.tap()
+            activateNativeTVInfoAction(identifier: "seekForward")
             if index < 2 { Thread.sleep(forTimeInterval: 0.8) }
         }
         let wanted = baseline + 30

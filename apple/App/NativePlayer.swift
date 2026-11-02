@@ -793,7 +793,12 @@ private struct SeekOptions: View {
             // automatic row action from activating both opposing seek controls.
             .buttonStyle(.borderless)
             #else
-            .secondaryActionStyle()
+            // AVKit hosts this Info tab in a separate focus environment. Use
+            // native filled buttons and one focus section so the remote can
+            // enter the actions from the tab strip and still read their labels.
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.accent)
+            .focusSection()
             #endif
         }
         .onAppear { target = Ticks.seconds(session.positionTicks) }
