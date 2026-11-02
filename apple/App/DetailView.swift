@@ -337,8 +337,8 @@ struct DetailView: View {
                     .accessibilityHidden(!coldPending && DetailFeedback.arrivalAwaitsAction(loading: state.reading, contentRevealed: contentRevealed, returningFromPlayback: returnedFromPlayback))
             }
             .overlay(alignment: .top) {
-                if state.header != nil && (model.playbackSaving || state.reading) {
-                    Text(model.playbackSaving ? (state.fresh ? "Item loaded. Saving progress…" : "Saving progress…") : state.item?.type == "Series" || state.item?.type == "Season" ? "Loading episodes…" : "Loading item…")
+                if state.header != nil && (model.playbackSaving || state.reading || state.writing) {
+                    Text(model.playbackSaving ? (state.fresh ? "Item loaded. Saving progress…" : "Saving progress…") : state.writing ? "Saving change…" : state.item?.type == "Series" || state.item?.type == "Season" ? "Loading episodes…" : "Loading item…")
                         .padding(12).background(Theme.surface.opacity(0.95), in: Capsule()).padding(.top, 8).accessibilityIdentifier("detailStatus").allowsHitTesting(false)
                 }
             }
@@ -504,8 +504,8 @@ struct DetailView: View {
         let watchedRequest = state.requestedLabel(watchedCommand)
         let favoriteRequest = state.requestedLabel(favoriteCommand)
         let playRequest = state.requestedLabel(.play(true))
-        let watchedLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "played") : watchedRequest != nil ? watchedRequest! : guarded ? (item.isWatched ? "Mark unwatched when ready" : "Mark watched when ready") : item.isWatched ? "Mark unwatched" : "Mark watched"
-        let favoriteLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "favorite") : favoriteRequest != nil ? favoriteRequest! : guarded ? (item.userData.isFavorite ? "Remove favorite when ready" : "Add favorite when ready") : item.userData.isFavorite ? "Remove favorite" : "Add favorite"
+        let watchedLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "played") : watchedRequest != nil ? watchedRequest! : item.isWatched ? "Mark unwatched" : "Mark watched"
+        let favoriteLabel = state.readError != nil ? DetailFeedback.unavailableActionLabel(target: "favorite") : favoriteRequest != nil ? favoriteRequest! : item.userData.isFavorite ? "Remove favorite" : "Add favorite"
         let playLabel = playRequest != nil ? playRequest! : state.requested(.play(false)) ? "Start already requested" : unavailablePlay ? DetailFeedback.unavailableActionLabel(target: "primary") : primaryLabel(item)
         layout {
             if item.isPlayable || ["Series", "Season"].contains(item.type) {
@@ -604,7 +604,6 @@ struct DetailView: View {
         return (state.readFailure?.message ?? state.readError).map { DetailFeedback.readBandText(retrying: false, reason: $0) }
     }
     private func primaryLabel(_ item: MediaItem) -> String {
-        if !state.fresh || model.playbackSaving { return pendingPresentation ? "Play when ready" : "Play" }
         let target = state.target ?? item
         return target.userData.playbackPositionTicks > 0 ? Catalog.resumeLabel(target.userData.playbackPositionTicks) : "Play"
     }
