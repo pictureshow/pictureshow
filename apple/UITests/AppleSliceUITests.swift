@@ -1412,9 +1412,6 @@ final class AppleSliceUITests: XCTestCase {
         _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: first.seconds + 2,
                                               maximum: first.seconds + 12, timeout: 30, metric: "f4_seek_initial_decoder_advance"),
                           "The real demo must decode and advance before testing remote seeks")
-        let information = try XCTUnwrap(openNativeTVInfoTab())
-        XCTAssertEqual(information.method, "Server HLS", "The real high-frame-rate MKV demo should negotiate the server path")
-        XCUIRemote.shared.press(.menu)
         XCUIRemote.shared.press(.playPause)
 
         func clock(_ metric: String) throws -> Int {
@@ -1450,6 +1447,13 @@ final class AppleSliceUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.2)
         XCTAssertLessThanOrEqual(abs(try clock("initial pause stability") - initialPaused), 1,
                                  "Physical Play/Pause must establish paused playback before pacing")
+        let information = try XCTUnwrap(openNativeTVInfoTab())
+        XCTAssertEqual(information.method, "Server HLS", "The real high-frame-rate MKV demo should negotiate the server path")
+        XCUIRemote.shared.press(.menu)
+        let afterInfo = try clock("pause after Info")
+        Thread.sleep(forTimeInterval: 1.2)
+        XCTAssertLessThanOrEqual(abs(try clock("pause after Info stability") - afterInfo), 1,
+                                 "Closing Info must preserve the paused viewing before remote steps")
         let scenarios: [(String, [XCUIRemote.Button], Double)] = [
             ("threeRightSpaced", [.right, .right, .right], 0.8),
             ("threeRightBurst", [.right, .right, .right], 0.1),
