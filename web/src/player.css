@@ -35,8 +35,8 @@
     background: linear-gradient(
         var(--color-app-playerControls),
         transparent 28%,
-        transparent 52%,
-        var(--color-app-playerPanel) 72%,
+        transparent calc(var(--controls-top, 72%) - 8px),
+        var(--color-app-playerPanel) var(--controls-top, 72%),
         var(--color-app-playerPanel)
     );
     pointer-events: none;
@@ -344,7 +344,7 @@
     .player-overlay .player-controls {
         padding: 1rem;
         padding-bottom: max(1rem, env(safe-area-inset-bottom));
-        background: linear-gradient(var(--color-app-playerControls), transparent 28%, transparent 55%, var(--color-app-playerPanel) 65%, var(--color-app-playerPanel));
+        background: linear-gradient(var(--color-app-playerControls), transparent 28%, transparent calc(var(--controls-top, 65%) - 8px), var(--color-app-playerPanel) var(--controls-top, 65%), var(--color-app-playerPanel));
     }
     .player-overlay .player-heading {
         top: max(1rem, env(safe-area-inset-top));

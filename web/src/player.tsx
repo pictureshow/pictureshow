@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import {
     Jellyfin,
@@ -68,7 +68,6 @@ type Request = {
 type Viewing = {
     decision?: Decision;
     position: number;
-    offset?: number;
     audio?: number;
     subtitle?: number;
     started: boolean;
@@ -146,6 +145,10 @@ export function Player({
     ) => void;
     preferences?: PlayerPreferences;
 }) {
+    const itemDuration = (item.RunTimeTicks ?? 0) / 1e7;
+    const initialPosition = plausibleDuration(itemDuration)
+        ? Math.min(Math.max(0, start), itemDuration)
+        : Math.max(0, start);
     const video = useRef<HTMLVideoElement>(null),
         root = useRef<HTMLElement>(null),
         playButton = useRef<HTMLButtonElement>(null),
@@ -187,7 +190,7 @@ export function Player({
         ),
         cleanup = useRef<Promise<unknown>>(Promise.resolve());
     const viewing = useRef<Viewing>({
-        position: start,
+        position: initialPosition,
         started: false,
         stopped: false,
         queue: Promise.resolve(),
@@ -202,7 +205,7 @@ export function Player({
         [notice, setNotice] = useState("Preparing playback…"),
         [paused, setPaused] = useState(document.hidden),
         [buffering, setBuffering] = useState(true),
-        [position, setPosition] = useState(start),
+        [position, setPosition] = useState(initialPosition),
         [duration, setDuration] = useState(
             plausibleDuration((item.RunTimeTicks ?? 0) / 1e7)
                 ? item.RunTimeTicks! / 1e7
@@ -378,11 +381,16 @@ export function Player({
         const el = video.current,
             s = viewing.current,
             d = s.decision;
-        if (!el || !d || replacing.current || pendingSeek.current !== undefined)
+        if (
+            !el ||
+            !d ||
+            replacing.current ||
+            pendingSeek.current !== undefined ||
+            (pausedAtPhysicalEnd.current && pauseIntent.current)
+        )
             return pendingSeek.current ?? s.position;
-        const p =
-            (d.method === "Transcode" ? (s.offset ?? 0) : 0) +
-            (Number.isFinite(el.currentTime) ? el.currentTime : 0);
+        // Browser HLS masters and direct media both expose the full item clock.
+        const p = Number.isFinite(el.currentTime) ? el.currentTime : 0;
         s.position = Math.max(0, p);
         if (alive.current) setPosition(s.position);
         return s.position;
@@ -438,7 +446,7 @@ export function Player({
             .catch(() => {
                 stopError.current = stopStages.current.reported
                     ? "Playback stopped, but server cleanup did not finish. Retry cleanup before another viewing."
-                    : "Playback progress could not be saved. Resume may start earlier.";
+                    : "Playback progress could not be saved. Retry saving progress to continue.";
                 if (alive.current) setReportError(stopError.current);
             });
         return s.queue;
@@ -617,28 +625,7 @@ export function Player({
             setPosition(at);
             return;
         }
-        if (
-            viewing.current.decision?.method === "Transcode" &&
-            pauseIntent.current &&
-            duration > 0 &&
-            at >= duration &&
-            video.current &&
-            Number.isFinite(video.current.duration) &&
-            video.current.duration > 0
-        ) {
-            // Reaching a known physical playlist end while paused does not need an empty server reopen.
-            // MSE may request a nonexistent segment at the exact exclusive end; hold the final frame.
-            video.current.currentTime = Math.max(
-                0,
-                video.current.duration - 0.001,
-            );
-            pendingSeek.current = undefined;
-            pausedAtPhysicalEnd.current = true;
-            viewing.current.position =
-                (viewing.current.offset ?? 0) + video.current.duration;
-            setPosition(viewing.current.position);
-            report("progress");
-        } else if (viewing.current.decision?.method === "Transcode")
+        if (viewing.current.decision?.method === "Transcode")
             change(desired.current.audio, desired.current.subtitle, at);
         else if (video.current) {
             video.current.currentTime = at;
@@ -1070,7 +1057,9 @@ export function Player({
         )
             return;
         ended.current = true;
-        sample();
+        // A held final frame represents the logical endpoint, not its 1ms
+        // decoder clamp, including when explicit Play completes the viewing.
+        if (!pausedAtPhysicalEnd.current) sample();
         setPaused(true);
         setControls(true);
 
@@ -1124,7 +1113,9 @@ export function Player({
     }
     const physicalEndRef = useRef(physicalEnd);
     physicalEndRef.current = physicalEnd;
-    useEffect(() => {
+    // Dispose the native/MSE decoder before React detaches its video node.
+    // In particular, WebKit can still own a paused final-frame presentation.
+    useLayoutEffect(() => {
         const el = video.current!;
         let disposed = false,
             hls: Hls | undefined,
@@ -1132,7 +1123,9 @@ export function Player({
             hasPlayed = false,
             needsGesture = false,
             lastProgress = 0,
-            lastPlaybackClock = Number.NaN;
+            lastPlaybackClock = Number.NaN,
+            finalFragmentBuffered = false,
+            mediaDuration: number | undefined;
         let slow: ReturnType<typeof setTimeout> | undefined,
             deadline: ReturnType<typeof setTimeout> | undefined,
             directTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1164,7 +1157,11 @@ export function Player({
             }, 45000);
         }
         function update() {
-            if (disposed || !current || replacing.current) return;
+            if (disposed || !current) return;
+            if (replacing.current) {
+                settleEndpoint();
+                return;
+            }
             sample();
             setPaused(pauseIntent.current);
             const advanced = el.currentTime > lastPlaybackClock;
@@ -1194,6 +1191,120 @@ export function Player({
                 report("progress");
             }
         }
+        // Metadata establishes the item's logical duration. MSE endOfStream
+        // may subsequently trim native duration to its last buffered packet.
+        const fullDuration = () =>
+            mediaDuration ??
+            (plausibleDuration(el.duration) ? el.duration : duration);
+        const logicalStart = () => {
+            const end = fullDuration();
+            return end > 0 ? Math.min(request.position, end) : request.position;
+        };
+        const atLogicalEnd = () =>
+            fullDuration() > 0 && request.position >= fullDuration() - 0.001;
+        const decoderStart = () => {
+            const end = fullDuration(),
+                logical = logicalStart();
+            // HLS has an exclusive physical endpoint. Keep the bounded logical
+            // target while decoding its last available frame, including a stale
+            // resume position beyond the authoritative duration.
+            if (!atLogicalEnd()) return logical;
+            let target = Math.max(0, Math.min(logical, end - 0.001));
+            // The final encoded A/V intersection can end before the playlist's
+            // declared duration. For MSE use the completed final fragment; native
+            // HLS exposes no completion flag and can stay NETWORK_LOADING while
+            // seeking beyond its final packet, so require its bounded tail below.
+            if (
+                (finalFragmentBuffered || hls?.bufferedToEnd || !hls) &&
+                el.buffered.length
+            ) {
+                const last = el.buffered.length - 1;
+                const tail = el.buffered.end(last),
+                    beginning = el.buffered.start(last);
+                // Native idle can mean partial preload, not EOF. A final
+                // frame substitution must remain within the endpoint window.
+                if (target >= tail && end - tail <= 0.5)
+                    target = Math.max(
+                        beginning,
+                        tail - Math.min(0.01, (tail - beginning) / 2),
+                    );
+            }
+            return target;
+        };
+        function settleEndpoint() {
+            if (
+                disposed ||
+                !current ||
+                !replacing.current ||
+                desired.current.revision !== request.revision ||
+                !atLogicalEnd()
+            )
+                return;
+            const target = decoderStart();
+            if (Math.abs(el.currentTime - target) >= 0.0005)
+                try {
+                    el.currentTime = target;
+                } catch {}
+            publishReady();
+        }
+        function publishReady() {
+            if (!current || disposed || !replacing.current) return false;
+            if (desired.current.revision !== request.revision) {
+                setRequest({ ...desired.current });
+                return false;
+            }
+            // Metadata is not an acknowledgement of a requested seek. All
+            // browser engines must actually reach the full-timeline target.
+            if (
+                el.seeking ||
+                el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+                Math.abs(el.currentTime - decoderStart()) >= 0.5
+            )
+                return false;
+            if (!foreground.current || document.hidden)
+                pauseIntent.current = true;
+            replacing.current = false;
+            if (pendingSeek.current === request.position)
+                pendingSeek.current = undefined;
+            pausedAtPhysicalEnd.current = atLogicalEnd();
+            if (pausedAtPhysicalEnd.current) {
+                viewing.current.position = logicalStart();
+                setPosition(viewing.current.position);
+            }
+            releaseTrackCommands();
+            clearTimeout(directTimer);
+            clearWaiting();
+            setBuffering(false);
+            setNotice("");
+            if (!pausedAtPhysicalEnd.current) sample();
+            if (pauseIntent.current) el.pause();
+            setPaused(pauseIntent.current);
+            if (!viewing.current.started) {
+                viewing.current.started = true;
+                report("start");
+            } else report("progress");
+            // A foreground Play may have arrived after metadata while this
+            // request still awaited actual readiness. Apply the latest intent
+            // at acknowledgement rather than losing it behind replacement.
+            if (!pauseIntent.current) {
+                if (pausedAtPhysicalEnd.current) {
+                    el.pause();
+                    void physicalEndRef.current();
+                } else if (el.paused)
+                    void el.play().catch(() => {
+                        if (
+                            disposed ||
+                            desired.current.revision !== request.revision ||
+                            pauseIntent.current
+                        )
+                            return;
+                        pauseIntent.current = true;
+                        setPaused(true);
+                        setNotice("Press Play to start playback.");
+                    });
+            }
+            return true;
+        }
         function playing() {
             if (!current || disposed) return;
             if (!foreground.current || document.hidden)
@@ -1202,26 +1313,25 @@ export function Player({
                 setRequest({ ...desired.current });
                 return;
             }
-            releaseTrackCommands();
             hasPlayed = true;
+            if (replacing.current) {
+                if (!publishReady() && pauseIntent.current) el.pause();
+                return;
+            }
+            releaseTrackCommands();
             clearTimeout(directTimer);
             clearWaiting();
             setBuffering(false);
             setNotice("");
-            replacing.current = false;
             if (
-                pendingSeek.current === request.position &&
-                (current.method !== "DirectPlay" ||
-                    Math.abs(el.currentTime - request.position) < 0.5)
+                pendingSeek.current !== undefined &&
+                Math.abs(el.currentTime - pendingSeek.current) < 0.5
             )
                 pendingSeek.current = undefined;
-            if (pauseIntent.current) {
-                el.pause();
-                setPaused(true);
-            } else setPaused(false);
-            const s = viewing.current;
-            if (!s.started) {
-                s.started = true;
+            if (pauseIntent.current) el.pause();
+            setPaused(pauseIntent.current);
+            if (!viewing.current.started) {
+                viewing.current.started = true;
                 report("start");
             } else report("progress");
         }
@@ -1275,48 +1385,30 @@ export function Player({
                 setRequest({ ...desired.current });
                 return;
             }
-            if (current.method === "DirectPlay")
+            // Native HLS and direct playback use the same full-media timeline.
+            // hls.js also receives this target as startPosition before loading.
+            const target = decoderStart();
+            if (Math.abs(el.currentTime - target) >= 0.0005)
                 try {
-                    el.currentTime = request.position;
+                    el.currentTime = target;
                 } catch {}
             applyCaptions();
-            const measured =
-                (current.method === "Transcode" ? request.position : 0) +
-                el.duration;
-            if (plausibleDuration(measured)) setDuration(measured);
+            if (plausibleDuration(el.duration)) {
+                mediaDuration = el.duration;
+                setDuration(mediaDuration);
+            }
             if (!foreground.current || document.hidden)
                 pauseIntent.current = true;
             if (pauseIntent.current) {
-                replacing.current = false;
-                releaseTrackCommands();
-                if (
-                    pendingSeek.current === request.position &&
-                    (current.method !== "DirectPlay" ||
-                        Math.abs(el.currentTime - request.position) < 0.5)
-                )
-                    pendingSeek.current = undefined;
-                setPaused(true);
-                setBuffering(false);
-                setNotice("");
-                clearWaiting();
-                clearTimeout(directTimer);
                 el.pause();
-                // READY owns the viewing Start even when visibility or a
-                // deliberate pause prevented the decoder from ever playing.
-                // The shared started flag also prevents a second Start on Play.
-                if (!viewing.current.started) {
-                    viewing.current.started = true;
-                    report("start");
-                } else report("progress");
+                setPaused(true);
+                publishReady();
             } else
                 void el.play().catch(() => {
-                    releaseTrackCommands();
                     needsGesture = true;
                     pauseIntent.current = true;
-                    replacing.current = false;
                     setPaused(true);
-                    setBuffering(false);
-                    clearWaiting();
+                    publishReady();
                     setNotice("Press Play to start playback.");
                 });
         }
@@ -1330,10 +1422,13 @@ export function Player({
         };
         const seeked = () => {
             lastPlaybackClock = el.currentTime;
+            if (replacing.current) {
+                publishReady();
+                return;
+            }
             if (
                 !disposed &&
-                !replacing.current &&
-                current?.method === "DirectPlay" &&
+                current &&
                 Math.abs(
                     el.currentTime - (pendingSeek.current ?? el.currentTime),
                 ) < 0.5
@@ -1345,6 +1440,10 @@ export function Player({
         el.addEventListener("seeking", seeking);
         el.addEventListener("seeked", seeked);
         el.addEventListener("loadedmetadata", metadata);
+        el.addEventListener("loadeddata", publishReady);
+        el.addEventListener("canplay", publishReady);
+        el.addEventListener("progress", settleEndpoint);
+        el.addEventListener("suspend", settleEndpoint);
         el.addEventListener("timeupdate", update);
         el.addEventListener("playing", playing);
         el.addEventListener("pause", pause);
@@ -1399,8 +1498,8 @@ export function Player({
                 return;
             }
             viewing.current.decision = d;
-            viewing.current.position = request.position;
-            viewing.current.offset = request.position;
+            viewing.current.position = logicalStart();
+            setPosition(viewing.current.position);
             viewing.current.audio =
                 (trackOrigins.current.audio
                     ? desired.current.audio
@@ -1450,7 +1549,7 @@ export function Player({
                         "This browser has no supported HLS playback engine.",
                     );
                 hls = new Hls({
-                    startPosition: 0,
+                    startPosition: decoderStart(),
                     loader: FetchLoader,
                     fetchSetup(context, init) {
                         return authenticatedMediaRequest(
@@ -1459,6 +1558,16 @@ export function Player({
                             init,
                         );
                     },
+                });
+                hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
+                    if (data.frag.endList) {
+                        finalFragmentBuffered = true;
+                        settleEndpoint();
+                    }
+                });
+                hls.on(Hls.Events.BUFFERED_TO_END, () => {
+                    finalFragmentBuffered = true;
+                    settleEndpoint();
                 });
                 hls.on(Hls.Events.ERROR, (_event, data) => {
                     if (data.fatal) fail();
@@ -1482,6 +1591,9 @@ export function Player({
             }
         });
         return () => {
+            // Preserve the last full-media position before decoder reset, also
+            // for navigation whose final Stop runs in passive cleanup later.
+            sample();
             disposed = true;
             clearInterval(timer);
             clearWaiting();
@@ -1489,6 +1601,10 @@ export function Player({
             el.removeEventListener("seeking", seeking);
             el.removeEventListener("seeked", seeked);
             el.removeEventListener("loadedmetadata", metadata);
+            el.removeEventListener("loadeddata", publishReady);
+            el.removeEventListener("canplay", publishReady);
+            el.removeEventListener("progress", settleEndpoint);
+            el.removeEventListener("suspend", settleEndpoint);
             el.removeEventListener("timeupdate", update);
             el.removeEventListener("playing", playing);
             el.removeEventListener("pause", pause);
@@ -1497,9 +1613,18 @@ export function Player({
             el.removeEventListener("waiting", waiting);
             el.removeEventListener("stalled", waiting);
             el.pause();
-            hls?.destroy();
-            el.removeAttribute("src");
-            el.load();
+            if (hls) {
+                // Release the native decoder's MediaSource before hls.js
+                // removes its SourceBuffers. WebKit can otherwise crash while
+                // destroying a never-played, paused final frame. Hls detects
+                // that its src was cleared and skips its duplicate media reset.
+                el.removeAttribute("src");
+                el.load();
+                hls.destroy();
+            } else {
+                el.removeAttribute("src");
+                if (el.isConnected) el.load();
+            }
             if (current)
                 cleanup.current = cleanup.current
                     .catch(() => {})
@@ -1654,14 +1779,10 @@ export function Player({
         const authoredStarts = new Set(
             Array.from(originals, (cue) => cues.current.get(cue)!.start),
         );
-        const offset =
-            viewing.current.decision?.method === "Transcode"
-                ? (viewing.current.offset ?? 0)
-                : 0;
         for (const cue of originals) {
             const source = cues.current.get(cue)!;
-            const start = source.start - offset + delayRef.current / 1000;
-            let end = source.end - offset + delayRef.current / 1000;
+            const start = source.start + delayRef.current / 1000;
+            let end = source.end + delayRef.current / 1000;
             // Chrome can keep both touching intervals active at an exact paused
             // boundary. Give that boundary to the arriving cue, preserving truly
             // overlapping authored intervals and immutable full-file times.
@@ -1983,6 +2104,23 @@ export function Player({
         );
         const measure = () => {
             const bounds = media.getBoundingClientRect();
+            const transport = player.querySelector<HTMLElement>(
+                ".player-controls > .transport",
+            );
+            const controlsTop =
+                transport && transport.getClientRects().length && bounds.height
+                    ? Math.max(
+                          0,
+                          Math.min(
+                              100,
+                              ((transport.getBoundingClientRect().top -
+                                  bounds.top) /
+                                  bounds.height) *
+                                  100,
+                          ),
+                      )
+                    : 100;
+            player.style.setProperty("--controls-top", `${controlsTop}%`);
             const occupied = overlays
                 .filter(
                     (element) =>

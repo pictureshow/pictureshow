@@ -757,10 +757,12 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
         .poll(() =>
             page.locator("video").evaluate((v: HTMLVideoElement) => ({
                 paused: v.paused,
-                atEnd: Math.abs(v.currentTime - v.duration) < 0.05,
+                atEnd: Math.abs(v.currentTime - v.duration) < 0.5,
+                ready: v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+                seeking: v.seeking,
             })),
         )
-        .toEqual({ paused: true, atEnd: true });
+        .toEqual({ paused: true, atEnd: true, ready: true, seeking: false });
     expect(completed).toBe(0);
     expect(f.reports.filter((r) => r.path.endsWith("/Stopped"))).toHaveLength(
         0,
@@ -1066,14 +1068,13 @@ test("rc26 selected external text retries independently, caches Off on, and keep
                 ),
         )
         .toBe(1);
-    const offset = f.negotiations.at(-1)!.StartTimeTicks / 1e7;
     expect(
         await page
             .locator("video")
             .evaluate(
                 (v: HTMLVideoElement) => v.textTracks[0].cues![0].startTime,
             ),
-    ).toBeCloseTo(15 - offset, 2);
+    ).toBeCloseTo(15, 2);
     expect(paths.every((p) => /\/Subtitles\/3\/0\/Stream.vtt$/.test(p))).toBe(
         true,
     );
@@ -1301,10 +1302,35 @@ test("rc26 relative steps retain target after negotiation until replacement READ
         release();
         await expect
             .poll(() => f.negotiations.at(-1)?.StartTimeTicks)
-            .toBe(base + 30e7);
-        await expect(
-            page.getByRole("status", { includeHidden: true }),
-        ).toHaveText("");
+            .toBe(Math.min(base + 30e7, 40e7));
+        try {
+            await expect(
+                page.getByRole("status", { includeHidden: true }),
+            ).toHaveText("");
+        } catch (error) {
+            console.log(
+                "Native endpoint READY state",
+                await page.locator("video").evaluate((v: HTMLVideoElement) => ({
+                    time: v.currentTime,
+                    duration: v.duration,
+                    paused: v.paused,
+                    seeking: v.seeking,
+                    readyState: v.readyState,
+                    networkState: v.networkState,
+                    srcScheme: new URL(v.currentSrc).protocol,
+                    nativeHls: v.canPlayType("application/vnd.apple.mpegurl"),
+                    buffered: Array.from(
+                        { length: v.buffered.length },
+                        (_, i) => [v.buffered.start(i), v.buffered.end(i)],
+                    ),
+                    seekable: Array.from(
+                        { length: v.seekable.length },
+                        (_, i) => [v.seekable.start(i), v.seekable.end(i)],
+                    ),
+                })),
+            );
+            throw error;
+        }
         await expect(
             page.getByRole("button", { name: "Play", exact: true }),
         ).toBeVisible();

@@ -55,13 +55,21 @@ async function recoveryGeometry(
         [768, 900],
         [800, 900],
         [390, 844],
+        ...(state === "held"
+            ? [
+                  [360, 844],
+                  [375, 844],
+              ]
+            : []),
     ]) {
         await page.setViewportSize({ width, height });
         await page.evaluate(() => window.scrollTo(0, 0));
         if (state === "held") {
             const restart = page.locator('[data-focus="restart"]');
-            await expect(restart).toHaveAccessibleName("Restart when ready");
-            if (width === 390)
+            await expect(restart).toHaveAccessibleName(
+                "Play from start when ready",
+            );
+            if (width < 600)
                 expect(
                     (await restart.boundingBox())!.height,
                 ).toBeLessThanOrEqual(49);
@@ -101,6 +109,13 @@ async function recoveryGeometry(
                     return (
                         !overlaps(r, header) &&
                         footerClear &&
+                        ![
+                            ...document.querySelectorAll(
+                                ".catalog-detail-actions button",
+                            ),
+                        ].some((button) =>
+                            overlaps(r, button.getBoundingClientRect()),
+                        ) &&
                         (getComputedStyle(nav).display === "none" ||
                             !overlaps(r, n)) &&
                         visibleAtPoint
@@ -175,8 +190,13 @@ async function evidence(page: Page, name: string, screenshots = false) {
         ["tablet768", 768, 900],
         ["tablet800", 800, 900],
         ["phone", 390, 844],
+        ["phone360", 360, 844],
+        ["phone375", 375, 844],
     ] as const) {
-        if ((size === "tablet768" || size === "tablet800") && name !== "held")
+        if (
+            ["tablet768", "tablet800", "phone360", "phone375"].includes(size) &&
+            name !== "held"
+        )
             continue;
         await page.setViewportSize({ width, height });
         await page.evaluate(
@@ -194,6 +214,47 @@ async function evidence(page: Page, name: string, screenshots = false) {
             quality: 90,
         });
         await page.screenshot({ path: target, type: "jpeg", quality: 50 });
+        if (name === "completion-failed" && size === "phone") {
+            const keys = ["play", "watched", "favorite", "restart"];
+            await page.locator('[data-focus="play"]').focus();
+            const phoneActions = [];
+            for (let i = 0; i < keys.length; i++) {
+                if (i) await page.keyboard.press("Tab");
+                const button = page.locator(`[data-focus="${keys[i]}"]`);
+                await expect(button).toBeFocused();
+                const bounds = (await button.boundingBox())!;
+                const navTop = await page
+                    .locator(".root-navigation")
+                    .evaluate((e) => e.getBoundingClientRect().top);
+                expect(bounds.y).toBeGreaterThanOrEqual(0);
+                expect(bounds.y + bounds.height).toBeLessThanOrEqual(navTop);
+                phoneActions.push({ key: keys[i], bounds, navTop });
+            }
+            writeFileSync(
+                join(directory, name + "-phone-actions.json"),
+                JSON.stringify(phoneActions, null, 2),
+            );
+            await page.evaluate(() =>
+                window.scrollTo(0, document.documentElement.scrollHeight),
+            );
+            await page.locator('[data-focus="favorite"]').focus();
+            await page.screenshot({
+                path: join(directory, "full", name + "-phone-actions.jpg"),
+                type: "jpeg",
+                quality: 90,
+            });
+            const actionsShot = join(directory, name + "-phone-actions.jpg");
+            await page.screenshot({
+                path: actionsShot,
+                type: "jpeg",
+                quality: 50,
+            });
+            if (process.platform === "darwin")
+                execFileSync("sips", ["-Z", "800", actionsShot], {
+                    stdio: "ignore",
+                });
+            await page.evaluate(() => window.scrollTo(0, 0));
+        }
         if (process.platform === "darwin")
             execFileSync("sips", ["-Z", "800", target], { stdio: "ignore" });
         writeFileSync(
@@ -730,7 +791,7 @@ test("rc28 advancing native media clears a stale stalled latch without another p
         .click();
 });
 
-test("rc28 rebased captions own exact boundaries and restore an expired cue after delay", async ({
+test("rc28 full-timeline HLS seeks to resume, owns caption boundaries, and restores delayed cues", async ({
     page,
 }) => {
     const f = await fixture(page);
@@ -757,7 +818,7 @@ test("rc28 rebased captions own exact boundaries and restore an expired cue afte
         route.fulfill({
             headers,
             contentType: "text/vtt",
-            body: "WEBVTT\n\n00:09.000 --> 00:10.000\nExpired\n\n00:10.000 --> 00:11.000\nCurrent\n\n00:11.000 --> 00:40.000\nNext\n",
+            body: "WEBVTT\n\n00:00.000 --> 00:00.100\nEarly\n\n00:09.000 --> 00:10.000\nExpired\n\n00:10.000 --> 00:11.000\nCurrent\n\n00:11.000 --> 00:40.000\nNext\n",
         }),
     );
     await openDetail(page);
@@ -775,20 +836,15 @@ test("rc28 rebased captions own exact boundaries and restore an expired cue afte
             timeout: 20000,
         })
         .toBeGreaterThanOrEqual(2);
+    // PlaybackInfo's master has no start query: its decoder clock must seek to
+    // the requested 10s instead of adding a fictitious UI/subtitle offset.
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+        .toBeGreaterThanOrEqual(10);
     await video.evaluate((v: HTMLVideoElement) => {
         v.pause();
-        v.currentTime = 0;
+        v.currentTime = 10;
     });
-    await expect
-        .poll(() =>
-            video.evaluate(
-                (v: HTMLVideoElement) =>
-                    [...(v.textTracks[0].cues ?? [])].filter(
-                        (c) => c.endTime <= 0,
-                    ).length,
-            ),
-        )
-        .toBe(0);
     const active = () =>
         video.evaluate((v: HTMLVideoElement) =>
             [...(v.textTracks[0].activeCues ?? [])].map(
@@ -797,30 +853,43 @@ test("rc28 rebased captions own exact boundaries and restore an expired cue afte
         );
     await expect.poll(active).toEqual(["Current"]);
     await video.evaluate((v: HTMLVideoElement) => {
-        v.currentTime = 1;
+        v.currentTime = 11;
     });
     await expect.poll(active).toEqual(["Next"]);
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    // A negative delay moves the early cue before native zero. Its immutable
+    // original must return when delay is reset, without another subtitle fetch.
+    await page.getByRole("button", { name: "Earlier", exact: true }).click();
+    await expect
+        .poll(() =>
+            video.evaluate((v: HTMLVideoElement) =>
+                [...(v.textTracks[0].cues ?? [])].some(
+                    (c) => (c as VTTCue).text === "Early",
+                ),
+            ),
+        )
+        .toBe(false);
     await page.getByRole("button", { name: "Later", exact: true }).click();
     await expect
         .poll(() =>
             video.evaluate((v: HTMLVideoElement) =>
                 [...(v.textTracks[0].cues ?? [])].some(
-                    (c) => (c as VTTCue).text === "Expired" && c.endTime > 0,
+                    (c) => (c as VTTCue).text === "Early" && c.endTime > 0,
                 ),
             ),
         )
         .toBe(true);
+    await page.getByRole("button", { name: "Earlier", exact: true }).click();
     await page.getByRole("button", { name: "Reset", exact: true }).click();
     await expect
         .poll(() =>
             video.evaluate((v: HTMLVideoElement) =>
                 [...(v.textTracks[0].cues ?? [])].some(
-                    (c) => (c as VTTCue).text === "Expired",
+                    (c) => (c as VTTCue).text === "Early" && c.startTime === 0,
                 ),
             ),
         )
-        .toBe(false);
+        .toBe(true);
     await page.keyboard.press("Escape");
     for (const [width, height] of [
         [1920, 1080],
@@ -836,6 +905,23 @@ test("rc28 rebased captions own exact boundaries and restore an expired cue afte
                     const top = document
                         .querySelector(".transport")!
                         .getBoundingClientRect().top;
+                    const player =
+                        document.querySelector<HTMLElement>(".player-overlay")!;
+                    const controlsTop =
+                        player.style.getPropertyValue("--controls-top");
+                    const gradient = getComputedStyle(
+                        document.querySelector(".player-controls")!,
+                    ).backgroundImage;
+                    if (
+                        !controlsTop ||
+                        ![...gradient.matchAll(/([0-9]+(?:\.[0-9]+)?)%/g)].some(
+                            (match) =>
+                                Math.abs(
+                                    Number(match[1]) - parseFloat(controlsTop),
+                                ) < 0.01,
+                        )
+                    )
+                        return false;
                     return (
                         cue &&
                         typeof cue.line === "number" &&
@@ -846,6 +932,167 @@ test("rc28 rebased captions own exact boundaries and restore an expired cue afte
             )
             .toBe(true);
     }
+    await page
+        .getByRole("button", { name: "Stop and go back", exact: true })
+        .click();
+});
+
+test("rc28 hidden HLS resume beyond media end reaches a paused bounded READY and completes only on Play", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    // Stale catalog runtime must not let the deep-link clamp mask native bounds.
+    await page.route(
+        /^https:\/\/jellyfin\.example\/Items\/movie(?:\?|$)/,
+        (route) =>
+            route.fulfill({
+                headers,
+                body: JSON.stringify({ ...movie, RunTimeTicks: 50e7 }),
+            }),
+    );
+    const source = {
+        ...movie.MediaSources[0],
+        SupportsDirectPlay: false,
+        TranscodingUrl: "/Videos/movie/master.m3u8",
+    };
+    await page.route(
+        "https://jellyfin.example/Items/movie/PlaybackInfo",
+        (route) => {
+            f.negotiations.push(route.request().postDataJSON());
+            return route.fulfill({
+                headers,
+                body: JSON.stringify({
+                    PlaySessionId: "stale-end",
+                    MediaSources: [source],
+                }),
+            });
+        },
+    );
+    await signIn(page);
+    await visible(page, false);
+    await page.evaluate(() => {
+        location.hash = "item=movie&positionMs=45000";
+    });
+    const video = page.locator("video");
+    await expect
+        .poll(
+            () =>
+                f.reports.filter((r) => r.path === "/Sessions/Playing").length,
+            { timeout: 20000 },
+        )
+        .toBe(1);
+    const start = f.reports.find((r) => r.path === "/Sessions/Playing")!.body;
+    expect(f.negotiations[0].StartTimeTicks).toBe(45e7);
+    expect(start.IsPaused).toBe(true);
+    expect(start.PositionTicks).toBe(40e7);
+    expect(
+        await video.evaluate((v: HTMLVideoElement) => ({
+            paused: v.paused,
+            atEnd: Math.abs(v.currentTime - v.duration) < 0.5,
+            buffered: Array.from({ length: v.buffered.length }, (_, i) => [
+                v.buffered.start(i),
+                v.buffered.end(i),
+            ]).some(
+                ([start, end]) => v.currentTime >= start && v.currentTime < end,
+            ),
+            seeking: v.seeking,
+            ready: v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+        })),
+    ).toEqual({
+        paused: true,
+        atEnd: true,
+        buffered: true,
+        seeking: false,
+        ready: true,
+    });
+    await expect(page.locator(".playback-feedback")).toHaveText("");
+    expect(f.reports.filter((r) => r.path.endsWith("/Stopped"))).toHaveLength(
+        0,
+    );
+    await visible(page, true);
+    await expect(
+        page.getByRole("button", { name: "Play", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    await expect(page.locator("video")).toHaveCount(0);
+    expect(
+        f.reports.filter((r) => r.path === "/Sessions/Playing"),
+    ).toHaveLength(1);
+    expect(f.reports.filter((r) => r.path.endsWith("/Stopped"))).toHaveLength(
+        1,
+    );
+    expect(
+        f.reports.find((r) => r.path.endsWith("/Stopped"))!.body.PositionTicks,
+    ).toBe(40e7);
+});
+
+test("rc28 foreground Play before decoder READY is retained and applied when preparation settles", async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        const state = window as any;
+        state.holdDecoderReady = true;
+        const descriptor = Object.getOwnPropertyDescriptor(
+            HTMLMediaElement.prototype,
+            "readyState",
+        )!;
+        const read = descriptor.get!;
+        state.actualDecoderReady = () => {
+            const video = document.querySelector("video");
+            return video ? read.call(video) : 0;
+        };
+        Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
+            ...descriptor,
+            get() {
+                const actual = read.call(this);
+                return state.holdDecoderReady ? Math.min(actual, 1) : actual;
+            },
+        });
+    });
+    const f = await fixture(page);
+    await signIn(page);
+    await visible(page, false);
+    await page.evaluate(() => {
+        location.hash = "item=movie&positionMs=10000";
+    });
+    const video = page.locator("video");
+    await expect
+        .poll(() => page.evaluate(() => (window as any).actualDecoderReady()), {
+            timeout: 20000,
+        })
+        .toBeGreaterThanOrEqual(2);
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.seeking))
+        .toBe(false);
+    expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+    expect(
+        f.reports.filter((r) => r.path === "/Sessions/Playing"),
+    ).toHaveLength(0);
+    await visible(page, true);
+    const before = await video.evaluate((v: HTMLVideoElement) => v.currentTime);
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    expect(
+        f.reports.filter((r) => r.path === "/Sessions/Playing"),
+    ).toHaveLength(0);
+    await page.evaluate(() => {
+        (window as any).holdDecoderReady = false;
+        document.querySelector("video")!.dispatchEvent(new Event("canplay"));
+    });
+    await expect
+        .poll(
+            () =>
+                f.reports.filter((r) => r.path === "/Sessions/Playing").length,
+        )
+        .toBe(1);
+    expect(
+        f.reports.find((r) => r.path === "/Sessions/Playing")!.body.IsPaused,
+    ).toBe(false);
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime), {
+            timeout: 8000,
+        })
+        .toBeGreaterThan(before + 0.1);
+    expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
     await page
         .getByRole("button", { name: "Stop and go back", exact: true })
         .click();

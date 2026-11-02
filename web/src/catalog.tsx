@@ -101,7 +101,7 @@ const playable = (item: Item) =>
 const accountKey = (client: Jellyfin) =>
     `${client.server.id}:${client.account!.user.Id}`;
 const reportFailureMessage =
-    "Playback progress could not be saved. Resume may start earlier.";
+    "Playback progress could not be saved. Retry saving progress to continue.";
 const errorText = (error: unknown) =>
     error instanceof Error
         ? error.message
@@ -928,10 +928,7 @@ export function Detail({
         clearReportErrorOnRead.current = error === undefined;
         if (error !== undefined) {
             cancelReady();
-            cue(
-                `${reportFailureMessage} Retry saving progress is available.`,
-                "failure",
-            );
+            cue(reportFailureMessage, "failure");
             setReportError(reportFailureMessage);
         }
         setAttempt((value) => value + 1);
@@ -1349,12 +1346,19 @@ export function Detail({
     function actionLabel(kind: PendingAction["kind"], normal: string) {
         const requested = queuedActionName(kind);
         if (requested)
-            return requested.replace(" already requested", " requested");
-        return !readyRef.current && graceElapsed && !readError
-            ? kind === "restart"
-                ? "Restart when ready"
-                : `${normal} when ready`
-            : normal;
+            return (
+                <span className="catalog-requested-label">
+                    {requested.slice(0, -" already requested".length)}{" "}
+                    <small>already requested</small>
+                </span>
+            );
+        return !readyRef.current && graceElapsed && !readError ? (
+            <span className="catalog-requested-label">
+                {normal} <small>when ready</small>
+            </span>
+        ) : (
+            normal
+        );
     }
     const readRecovery = readError ? (
         <div className="catalog-error" aria-live="off">
@@ -1571,6 +1575,27 @@ export function Detail({
                 item.ParentIndexNumber ===
                     data.seasons.find((s) => s.Id === season)?.IndexNumber,
         ) ?? [];
+    const detailStatus = !readError &&
+        !reportError &&
+        !writeError &&
+        (!ready || pendingMessage) && (
+            <div
+                className="catalog-detail-status"
+                aria-live="off"
+                ref={statusRef}
+            >
+                {pendingMessage ||
+                    (savingReport
+                        ? loading
+                            ? "Saving progress…"
+                            : "Item loaded. Saving progress…"
+                        : loading
+                          ? isContainer
+                              ? "Loading episodes…"
+                              : "Loading item…"
+                          : "")}
+            </div>
+        );
     return (
         <div
             className={`catalog-page catalog-detail-page${isLibrary ? " catalog-library-page" : ""}${shown.Type === "Person" ? " catalog-person-page" : ""}${shown.Type === "Episode" ? " catalog-episode-page" : ""}`}
@@ -1581,6 +1606,7 @@ export function Detail({
             {feedbackNode}
             {readRecovery}
             {reportRecovery}
+            {detailStatus}
             <article aria-label={shown.Name}>
                 <section className="catalog-detail-hero">
                     <div className="catalog-detail-copy">
@@ -1753,27 +1779,6 @@ export function Detail({
                             </div>
                         ))}
                 </section>
-                {!readError &&
-                    !reportError &&
-                    !writeError &&
-                    (!ready || pendingMessage) && (
-                        <div
-                            className="catalog-detail-status"
-                            aria-live="off"
-                            ref={statusRef}
-                        >
-                            {pendingMessage ||
-                                (savingReport
-                                    ? loading
-                                        ? "Saving progress…"
-                                        : "Item loaded. Saving progress…"
-                                    : loading
-                                      ? isContainer
-                                          ? "Loading episodes…"
-                                          : "Loading item…"
-                                      : "")}
-                        </div>
-                    )}
                 {writeError && (
                     <RetryNotice
                         announce={false}

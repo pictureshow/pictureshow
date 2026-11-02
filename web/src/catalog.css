@@ -223,19 +223,15 @@
     opacity: 0.75;
 }
 .catalog-detail-status {
-    position: fixed;
-    z-index: 20;
-    bottom: 7rem;
-    left: 50%;
-    transform: translateX(-50%);
+    position: static;
+    width: fit-content;
+    max-width: 100%;
     padding: 0.7rem 1.1rem;
+    margin: 1rem 0;
     border: 1px solid var(--color-app-accent);
     border-radius: 1rem;
     background: #202635f0;
-    width: max-content;
-    max-width: min(90vw, 560px);
-    text-align: center;
-    pointer-events: none;
+    text-align: start;
 }
 .catalog-season-chips [aria-pressed="true"] {
     border-color: var(--color-app-accent);
@@ -426,7 +422,6 @@
         flex: 1;
     }
     .catalog-detail-status {
-        bottom: calc(88px + env(safe-area-inset-bottom));
         padding: 0.5rem 0.8rem;
         font-size: 0.85rem;
     }
@@ -543,14 +538,6 @@
     box-shadow: none;
 }
 
-/* Centre the snackbar in the content column beside the tablet/desktop rail. */
-@media (min-width: 600px) and (max-width: 1499px) {
-    .catalog-detail-status {
-        left: calc(50% + 48px);
-        max-width: min(calc(100vw - 144px), 560px);
-    }
-}
-
 /* The narrow content column uses the same stable action grid as a phone. */
 @media (min-width: 600px) and (max-width: 800px) {
     .catalog-detail-hero {
@@ -581,5 +568,51 @@
 @media (max-width: 599px) {
     .catalog-error button {
         width: 100%;
+    }
+}
+
+.catalog-requested-label small {
+    display: block;
+    font-size: 0.8em;
+    line-height: 1.25;
+}
+.catalog-page h1[tabindex="-1"]:focus {
+    border-radius: 0.5rem;
+}
+
+/* Keep state qualifiers inside the same target size as ready actions. */
+.catalog-detail-actions button {
+    height: 48px;
+    min-height: 48px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    line-height: 1.1;
+}
+.catalog-requested-label small {
+    font-size: 0.75em;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+.catalog-error {
+    margin-bottom: 2rem;
+}
+@media (max-width: 800px) {
+    .catalog-detail-actions button {
+        padding-inline: 0.35rem;
+    }
+}
+@media (min-width: 1500px) {
+    .catalog-detail-actions button {
+        height: 64px;
+        min-height: 64px;
+        padding: 2px 10px;
+    }
+}
+@media (max-width: 599px) {
+    html {
+        scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+    main {
+        padding-bottom: calc(96px + env(safe-area-inset-bottom));
     }
 }
