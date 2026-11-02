@@ -44,8 +44,9 @@ async function observe(page: Page) {
     });
 }
 async function evidence(page: Page, name: string, screenshots = false) {
-    const directory = process.env.WEB_F3_EVIDENCE;
-    if (!directory) return;
+    const requestedDirectory = process.env.WEB_F3_EVIDENCE;
+    if (!requestedDirectory) return;
+    const directory = join(requestedDirectory, test.info().project.name);
     mkdirSync(directory, { recursive: true });
     mkdirSync(join(directory, "full"), { recursive: true });
     const base = join(directory, name);
