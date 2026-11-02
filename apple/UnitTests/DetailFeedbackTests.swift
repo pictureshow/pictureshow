@@ -91,6 +91,18 @@ private final class DetailFixtureProtocol: URLProtocol {
         model.finishPlayedReport(raw.id, owner: owner, success: false)
         XCTAssertFalse(model.presented(raw).isWatched, "Failed Stop must find the retained owner")
     }
+    func testF5SuccessfulStopRetryRestoresIntentUntilARealRawReadSettles() {
+        let model = AppModel(client: client(), account: account)
+        let raw = MediaItem(id: "title", name: "Title", type: "Episode")
+        let token = model.beginPlayedProjection(raw.id, rawPlayed: false)
+        model.finishPlayedProjection(raw.id, owner: token, success: true)
+        model.finishPlayedReport(raw.id, owner: token, success: false)
+        XCTAssertFalse(model.presented(raw).isWatched)
+        model.finishPlayedReport(raw.id, owner: token, success: true)
+        XCTAssertTrue(model.presented(raw).isWatched, "A failed post-retry read must not withdraw the acknowledged completion")
+        model.settlePlayedProjection(raw, reporting: false)
+        XCTAssertFalse(model.presented(raw).isWatched, "Only the successful raw read settles it")
+    }
     func testF5FailureExpiresHeldRequestWithOneRetryCue() {
         let state = DetailState()
         XCTAssertTrue(state.enqueue(.play(true)))

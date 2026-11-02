@@ -98,7 +98,7 @@ struct AccountSnapshot: Codable {
     func finishPlayedReport(_ itemID: String, owner: UUID, success: Bool) {
         guard var projection = playedProjections[itemID], projection.owner == owner else { return }
         projection.awaitingReport = false
-        if !success { projection.failed = true }
+        projection.failed = !success
         playedProjections[itemID] = projection
     }
     func withdrawPlayedProjection(_ itemID: String, owner: UUID) {
