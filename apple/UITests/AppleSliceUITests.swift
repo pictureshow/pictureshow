@@ -1114,10 +1114,27 @@ final class AppleSliceUITests: XCTestCase {
             return try XCTUnwrap(candidates.count == 1 ? candidates.first : nil)
         }
         for (title, index) in [("Audio", NativeTrackHTTPFixture.selectedAudioIndex), ("Subtitles", NativeTrackHTTPFixture.selectedSubtitleIndex)] {
-            _ = nativeTVTrackChoice(menuTitle: title, index: String(index))
-            // The helper opens the trigger and resolves a row; it does not move
-            // toward that row. Judge entry before any row-navigation helper.
-            let entry = try app.snapshot()
+            // Opening the trigger is separate from resolving a row. AVKit can
+            // expose duplicate inactive/live cells that defeat a live query even
+            // while the presented focused menu is present in the native snapshot.
+            let trigger = nativeTVTransportMenu(title)
+            activateNativeTVMenuChoice(trigger)
+            var entry = try app.snapshot()
+            let entryDeadline = ProcessInfo.processInfo.systemUptime + 10
+            func ownsTrackFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
+                tvSnapshotNodes(snapshot).contains { node in
+                    node.elementType == .collectionView && node.children.contains { row in
+                        row.elementType == .cell && row.hasFocus
+                            && (row.label.hasPrefix("Stream ") || row.label.hasPrefix("selected, Stream "))
+                    }
+                }
+            }
+            while !ownsTrackFocus(entry) && ProcessInfo.processInfo.systemUptime < entryDeadline {
+                Thread.sleep(forTimeInterval: 0.1)
+                entry = try app.snapshot()
+            }
+            // Entry is judged before any row-navigation input. Settling above
+            // depends only on some track receiving focus, never the expected index.
             let nodes = try activeTrackRows(entry)
             let prefix = title == "Audio" ? "audio-" : "subtitle-"
             func row(_ nodes: [XCUIElementSnapshot], _ index: Int) -> XCUIElementSnapshot? {
