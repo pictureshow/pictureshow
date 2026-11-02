@@ -68,7 +68,10 @@ struct PlayerScreen: View {
                 .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.surface)
             }
             #else
-            NativePlayer(session: session, close: finish).ignoresSafeArea()
+            NativePlayer(session: session, close: finish, openPendingTracks: {
+                trackMenus.requestOpen()
+                panel = "tracks"
+            }).ignoresSafeArea()
             #endif
             if session.waitingForVideo || session.error != nil || session.reportError != nil {
                 VStack(spacing: 20) {
@@ -266,6 +269,7 @@ struct TrackMenuPresentation: Identifiable, Equatable {
 
 struct PlayerOptions: View {
     @ObservedObject var session: PlaybackSession
+    @ObservedObject private var trackMenus: TrackLabelCache
     @Environment(\.dismiss) private var dismiss
     let kind: String
     let done: () -> Void
@@ -275,6 +279,7 @@ struct PlayerOptions: View {
     @State private var subtitle: Int?
     init(session: PlaybackSession, kind: String, done: @escaping () -> Void) {
         self.session = session; self.kind = kind; self.done = done
+        _trackMenus = ObservedObject(wrappedValue: session.trackLabels)
         _presentation = State(initialValue: session.trackLabels.openMenu)
         _menu = State(initialValue: session.trackLabels.openMenu?.menu ?? session.trackLabels.prepared)
         _audio = State(initialValue: session.decision?.audioIndex)
@@ -295,24 +300,28 @@ struct PlayerOptions: View {
                             .accessibilityValue(currentChapter(index) ? "Current chapter" : "")
                     }
                 } else {
-                    if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
-                    #if DEBUG
-                    if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"] != nil {
-                        Button("Replace fixture source") { Task { await session.selectTrack(type: "Audio", index: session.decision?.audioIndex == 13 ? 14 : 13) } }
-                            .accessibilityIdentifier("fixtureReplaceTrackSourceInPanel")
+                    if menu == nil {
+                        ProgressView("Preparing audio and subtitles…").accessibilityIdentifier("preparingTracks")
+                    } else {
+                        if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
+                        #if DEBUG
+                        if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"] != nil {
+                            Button("Replace fixture source") { Task { await session.selectTrack(type: "Audio", index: session.decision?.audioIndex == 13 ? 14 : 13) } }
+                                .accessibilityIdentifier("fixtureReplaceTrackSourceInPanel")
+                        }
+                        #endif
+                        Section("Audio") {
+                            track("Off", index: -1, type: "Audio", selected: audio == -1)
+                            ForEach(menu?.audio ?? []) { track($0.title, index: $0.id, type: "Audio", selected: audio == $0.id) }
+                        }
+                        Section("Subtitles") {
+                            track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
+                            ForEach(menu?.subtitles ?? []) { track($0.title, index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
+                            Text(session.subtitleTimingExplanation).font(.caption)
+                            if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
+                        }
+                        if let error = session.extrasError { Text(error) }
                     }
-                    #endif
-                    Section("Audio") {
-                        track("Off", index: -1, type: "Audio", selected: audio == -1)
-                        ForEach(menu?.audio ?? []) { track($0.title, index: $0.id, type: "Audio", selected: audio == $0.id) }
-                    }
-                    Section("Subtitles") {
-                        track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
-                        ForEach(menu?.subtitles ?? []) { track($0.title, index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
-                        Text(session.subtitleTimingExplanation).font(.caption)
-                        if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
-                    }
-                    if let error = session.extrasError { Text(error) }
                 }
             }
             .pictureshowNavigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : "Audio and subtitles")
@@ -323,6 +332,15 @@ struct PlayerOptions: View {
         }
         .onChange(of: session.decision?.subtitleIndex) { _, value in
             if menu?.generation == session.trackLabels.cacheRevision { subtitle = value }
+        }
+        .onChange(of: trackMenus.openMenu) { _, value in
+            if let value {
+                menu = value.menu; presentation = value
+                audio = session.decision?.audioIndex; subtitle = session.decision?.subtitleIndex
+            } else if presentation != nil { closePanel() }
+        }
+        .onChange(of: trackMenus.waitingToOpen) { _, waiting in
+            if !waiting && trackMenus.openMenu == nil && menu == nil { closePanel() }
         }
     }
     private func closePanel() { done(); dismiss() }
@@ -352,9 +370,10 @@ struct PlayerOptions: View {
 struct NativePlayer: UIViewControllerRepresentable {
     @ObservedObject var session: PlaybackSession
     var close: () -> Void
+    var openPendingTracks: () -> Void
     @ObservedObject private var trackMenus: TrackLabelCache
-    init(session: PlaybackSession, close: @escaping () -> Void) {
-        self.session = session; self.close = close; trackMenus = session.trackLabels
+    init(session: PlaybackSession, close: @escaping () -> Void, openPendingTracks: @escaping () -> Void = {}) {
+        self.session = session; self.close = close; self.openPendingTracks = openPendingTracks; trackMenus = session.trackLabels
     }
     func makeUIViewController(context: Context) -> PictureshowPlayerViewController {
         let controller = PictureshowPlayerViewController()
@@ -381,15 +400,14 @@ struct NativePlayer: UIViewControllerRepresentable {
         #if os(tvOS)
         let continuation = session.nextCountdown != nil ? session.nextItem : nil
         context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown)
-        // A deferred provider must finish into the still-open native chooser.
-        // Replacing AVKit's transport items during that handoff discards its
-        // presentation. Rebuild the prepared static menu after Back/selection.
+        // Keep the early loading action while its sheet is open. Rebuild the
+        // complete native menu after Back/selection dismisses that sheet.
         let preparedSignature = session.trackLabels.openMenu == nil ? session.trackLabels.prepared?.generation ?? -1 : -1
         let signature = "\(session.trackLabels.cacheRevision)|\(preparedSignature)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
         if context.coordinator.menuSignature != signature {
             context.coordinator.menuSignature = signature
             session.diagnostics.record("nativePlayer.menuBuilt")
-            func tracks(_ type: String) -> UIMenu {
+            func tracks(_ type: String) -> UIMenuElement {
                 let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
                 if let prepared = session.trackLabels.prepared {
                     // AVKit's transport can omit a menu whose only child is a
@@ -410,29 +428,17 @@ struct NativePlayer: UIViewControllerRepresentable {
                                   options: .singleSelection,
                                   children: [action("Off", index: -1)] + prepared.values(type).map { action($0.menuTitle, index: $0.id) })
                 }
-                // Before preparation, one immediate child keeps the AVKit menu
-                // reachable. The deferred provider holds an actual early open
-                // until its source-bound pair of menus is complete.
-                let waiting = UIAction(title: "Preparing tracks…", attributes: .disabled) { _ in }
-                let children = UIDeferredMenuElement.uncached { completion in
+                // AVKit ignores a deferred child of its transport UIMenu: the
+                // early menu never invokes requestOpen. One native action opens
+                // a focusable loading sheet, which mounts complete rows later.
+                return UIAction(title: type == "Audio" ? "Audio" : "Subtitles",
+                                image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"),
+                                identifier: .init("pending\(type)")) { _ in
                     Task { @MainActor in
-                        guard session.error == nil, !session.terminal else { completion([]); return }
-                        session.trackLabels.requestOpen { presentation in
-                            guard let presentation else { completion([]); return }
-                            func action(_ title: String, index: Int) -> UIAction {
-                                UIAction(title: title, identifier: .init("\(type.lowercased())-\(index)"), state: selected == index ? .on : .off) { _ in
-                                    Task { @MainActor in
-                                        guard session.trackLabels.accepts(presentation), session.error == nil, !session.terminal else { return }
-                                        session.trackLabels.cancelOpen()
-                                        await session.selectTrack(type: type, index: index, menuGeneration: presentation.menu.generation)
-                                    }
-                                }
-                            }
-                            completion([action("Off", index: -1)] + presentation.menu.values(type).map { action($0.menuTitle, index: $0.id) })
-                        }
+                        guard session.error == nil, !session.terminal else { return }
+                        openPendingTracks()
                     }
                 }
-                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), options: .singleSelection, children: [waiting, children])
             }
             let chapters = UIMenu(title: "Chapters", image: UIImage(systemName: "list.bullet"), children: session.chapters.enumerated().map { index, chapter in
                 UIAction(title: chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name, subtitle: clock(chapter.startTicks)) { _ in session.seek(toTicks: chapter.startTicks) }
@@ -509,7 +515,7 @@ struct NativePlayer: UIViewControllerRepresentable {
             #endif
             Task { @MainActor in
                 session.controlsVisible = visible
-                if !visible { session.trackLabels.cancelOpen() }
+                if !visible && !session.panelOpen { session.trackLabels.cancelOpen() }
             }
         }
         func playerViewController(_ controller: AVPlayerViewController, timeToSeekAfterUserNavigatedFrom oldTime: CMTime, to targetTime: CMTime) -> CMTime {
