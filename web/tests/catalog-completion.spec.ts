@@ -114,7 +114,11 @@ test("rc26 newer authoritative detail releases Saving progress while the complet
         .poll(() => page.evaluate(() => (window as any).nativeEnds))
         .toBe(1);
     const retry = page.getByRole("button", { name: "Retry", exact: true });
-    await expect(retry).toBeFocused();
+    await expect(retry).toBeVisible();
+    // Read failure publishes a polite cue without moving the reader to Retry.
+    await expect(page.locator("[data-detail-feedback]")).toContainText(
+        "Retry is available",
+    );
     releaseStop();
     await expect.poll(() => reads).toBe(2);
     await expect(page.locator(".catalog-detail-status")).toContainText(

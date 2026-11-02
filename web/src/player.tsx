@@ -15,7 +15,7 @@ import {
 } from "@pictureshow/core";
 import "./player.css";
 import { readCompletionDetail, invalidateCatalogAccount } from "./detail-reads";
-import { captionIndex } from "@pictureshow/core/parity";
+import { beginCompletion, finishCompletion } from "./completion-intents";
 import {
     playbackReportFields,
     externalSubtitleRetryDelay,
@@ -154,7 +154,14 @@ export function Player({
     const alive = useRef(true),
         leaving = useRef(false),
         replacing = useRef(true),
-        pauseIntent = useRef(false),
+        // Browser policy requires a visible document. Keep intent before any decoder exists.
+        foreground = useRef(!document.hidden),
+        visibilityGeneration = useRef(0),
+        pauseIntent = useRef(document.hidden),
+        completionDeferred = useRef(false),
+        completionSaved = useRef(false),
+        completionProjection = useRef<number | undefined>(undefined),
+        completionHandedOff = useRef(false),
         ended = useRef(false),
         pausedAtPhysicalEnd = useRef(false),
         completing = useRef(false),
@@ -193,7 +200,7 @@ export function Player({
         [reportError, setReportError] = useState(""),
         [completionError, setCompletionError] = useState(false),
         [notice, setNotice] = useState("Preparing playback…"),
-        [paused, setPaused] = useState(false),
+        [paused, setPaused] = useState(document.hidden),
         [buffering, setBuffering] = useState(true),
         [position, setPosition] = useState(start),
         [duration, setDuration] = useState(
@@ -325,15 +332,12 @@ export function Player({
             muted,
             (outcome) => {
                 console.info(
-                    `PictureshowPlayback report item=${d.itemId} session=${d.playSessionId ?? "none"} seq=${sequence} ${fields} status=${outcome.status ?? "none"} failure=${outcome.failure?.toLowerCase() ?? "none"} elapsedMs=${Math.max(0, Math.floor(outcome.elapsedMs))}`,
+                    `PictureshowPlayback report item=${d.itemId} session=${d.playSessionId ?? "none"} seq=${sequence} ${fields} status=${outcome.status ?? "none"} failure=${outcome.failure?.toLowerCase() ?? "none"} elapsedMs=${Math.max(0, Math.floor(outcome.elapsedMs))} paused=${event === "stop" ? "omitted" : pausedState}`,
                 );
             },
         );
     }
-    const report = (
-        event: "start" | "progress",
-        pausedState = pauseIntent.current,
-    ) => {
+    const report = (event: "start" | "progress") => {
         const s = viewing.current;
         if (!s.decision || s.stopped || (event === "progress" && !s.started))
             return;
@@ -346,7 +350,9 @@ export function Player({
                     d,
                     event,
                     s.position,
-                    pausedState,
+                    !foreground.current ||
+                        document.hidden ||
+                        pauseIntent.current,
                     origins.audio ? s.audio : undefined,
                     origins.subtitle ? s.subtitle : undefined,
                     origins,
@@ -465,6 +471,10 @@ export function Player({
     async function leave(failed = false) {
         if (leaving.current) return;
         leaving.current = true;
+        if (completionProjection.current !== undefined) {
+            finishCompletion(client, item.Id, completionProjection.current);
+            completionProjection.current = undefined;
+        }
         releaseTrackCommands();
         pendingPanel.current = undefined;
         setPanel(undefined);
@@ -626,7 +636,7 @@ export function Player({
             viewing.current.position =
                 (viewing.current.offset ?? 0) + video.current.duration;
             setPosition(viewing.current.position);
-            report("progress", true);
+            report("progress");
         } else if (viewing.current.decision?.method === "Transcode")
             change(desired.current.audio, desired.current.subtitle, at);
         else if (video.current) {
@@ -724,6 +734,13 @@ export function Player({
     }
     function toggle() {
         if (completing.current || leaving.current) return;
+        // A media-session Play delivered while hidden cannot clear the pause latch.
+        if (!foreground.current || document.hidden) return;
+        if (completionDeferred.current) {
+            completionDeferred.current = false;
+            void complete(completionNext.current);
+            return;
+        }
         pauseIntent.current = !pauseIntent.current;
         setPaused(pauseIntent.current);
         lastActivity.current = Date.now();
@@ -760,6 +777,14 @@ export function Player({
         alive.current = true;
         return () => {
             alive.current = false;
+            if (
+                !completionHandedOff.current &&
+                completionProjection.current !== undefined
+            ) {
+                leaving.current = true;
+                finishCompletion(client, item.Id, completionProjection.current);
+                completionProjection.current = undefined;
+            }
             void stop();
         };
     }, []);
@@ -785,20 +810,49 @@ export function Player({
         if (preferences.screenReader) setReader(true);
     }, [preferences.screenReader]);
     useEffect(() => {
-        const hidden = () => {
-            if (document.hidden) {
-                pendingPanel.current = undefined;
-                setPanel(undefined);
-                pauseIntent.current = true;
-                setPaused(true);
-                setControls(true);
-                sample();
-                video.current?.pause();
-                report("progress", true);
+        const suspend = () => {
+            foreground.current = false;
+            visibilityGeneration.current++;
+            pendingPanel.current = undefined;
+            setPanel(undefined);
+            pauseIntent.current = true;
+            setPaused(true);
+            setControls(true);
+            sample();
+            video.current?.pause();
+            report("progress");
+            console.info(
+                `PictureshowPlayback lifecycle foreground=false paused=true positionMs=${Math.floor(viewing.current.position * 1000)}`,
+            );
+        };
+        const visibility = () => {
+            if (document.hidden) suspend();
+            else {
+                // Visibility alone never resumes a stopped/covered viewing.
+                foreground.current = true;
+                console.info(
+                    `PictureshowPlayback lifecycle foreground=true paused=${pauseIntent.current} positionMs=${Math.floor(viewing.current.position * 1000)}`,
+                );
             }
         };
-        document.addEventListener("visibilitychange", hidden);
-        return () => document.removeEventListener("visibilitychange", hidden);
+        const restore = () => {
+            foreground.current = !document.hidden;
+        };
+        const pagehide = (event: PageTransitionEvent) => {
+            suspend();
+            // BFCache retains this viewing. A permanent document departure ends
+            // it, with a best-effort keepalive Stop before the page disappears.
+            if (!event.persisted) void stop(false, true);
+        };
+        document.addEventListener("visibilitychange", visibility);
+        window.addEventListener("pagehide", pagehide);
+        window.addEventListener("pageshow", restore);
+        visibility();
+        return () => {
+            document.removeEventListener("visibilitychange", visibility);
+            window.removeEventListener("pagehide", pagehide);
+            window.removeEventListener("pageshow", restore);
+        };
     }, []);
     useEffect(() => {
         if (!("mediaSession" in navigator)) return;
@@ -914,9 +968,48 @@ export function Player({
             live = false;
         };
     }, [item.Id]);
-    async function complete(nextItem?: Item | null, retry = false) {
-        if (completing.current || leaving.current) return;
+    async function saveCompleted(retry = false) {
+        if (completionSaved.current) return;
+        const projection = beginCompletion(client, item.Id);
+        completionProjection.current = projection;
+        let succeeded = false;
+        try {
+            if (retry) await retryFinalReport();
+            await stop();
+            if (stopError.current) throw new Error(stopError.current);
+            if (leaving.current) throw new Error("Completion cancelled.");
+            const fresh = await readCompletionDetail(client, item.Id);
+            if (leaving.current) throw new Error("Completion cancelled.");
+            if (!fresh.UserData?.Played)
+                await client.request(
+                    `UserPlayedItems/${encode(item.Id)}?userId=${encode(client.account!.user.Id)}`,
+                    undefined,
+                    "POST",
+                );
+            succeeded = true;
+            completionSaved.current = true;
+        } finally {
+            finishCompletion(client, item.Id, projection, succeeded);
+            if (completionProjection.current === projection)
+                completionProjection.current = undefined;
+        }
+    }
+    async function complete(
+        nextItem?: Item | null,
+        retry = false,
+        automatic = false,
+    ) {
+        if (
+            completing.current ||
+            leaving.current ||
+            !foreground.current ||
+            document.hidden
+        )
+            return;
+        if (automatic && pauseIntent.current) return;
+        const generation = visibilityGeneration.current;
         completing.current = true;
+        completionDeferred.current = false;
         setError("");
         completionNext.current = nextItem;
         pauseIntent.current = true;
@@ -925,35 +1018,19 @@ export function Player({
         setNotice(
             nextItem ? "Opening next episode…" : "Saving completed playback…",
         );
-        const barrier = (async () => {
-            if (retry) await retryFinalReport();
-            await stop();
-            if (stopError.current) throw new Error(stopError.current);
-            const fresh = await readCompletionDetail(client, item.Id);
-            if (!fresh.UserData?.Played)
-                await client.request(
-                    `UserPlayedItems/${encode(item.Id)}?userId=${encode(client.account!.user.Id)}`,
-                    undefined,
-                    "POST",
-                );
-        })();
+        const barrier = saveCompleted(retry);
         if (!nextItem && onLeaving) {
-            onLeaving(barrier, async () => {
-                await retryFinalReport();
-                const fresh = await readCompletionDetail(client, item.Id);
-                if (!fresh.UserData?.Played)
-                    await client.request(
-                        `UserPlayedItems/${encode(item.Id)}?userId=${encode(client.account!.user.Id)}`,
-                        undefined,
-                        "POST",
-                    );
-            });
+            // The returning detail now owns this barrier and its retry. Ordinary
+            // page teardown must not cancel that intentional ownership transfer.
+            completionHandedOff.current = true;
+            onLeaving(barrier, () => saveCompleted(true));
             return;
         }
         try {
             await barrier;
         } catch (e) {
             completing.current = false;
+            if (!alive.current || leaving.current) return;
             setCompletionError(true);
             setError(
                 e instanceof Error
@@ -963,11 +1040,34 @@ export function Player({
             return;
         }
         if (!alive.current || leaving.current) return;
+        // A Stop already committed before backgrounding cannot be undone. Keep
+        // the completed destination and require an explicit foreground action.
+        if (
+            nextItem &&
+            (!foreground.current ||
+                document.hidden ||
+                visibilityGeneration.current !== generation)
+        ) {
+            completing.current = false;
+            completionDeferred.current = true;
+            setPaused(true);
+            setControls(true);
+            setNotice(
+                "Playback finished. Choose Play now or return to details.",
+            );
+            return;
+        }
         if (nextItem && onNext) onNext(nextItem);
         else onBack(stopError.current || undefined);
     }
     async function physicalEnd() {
-        if (ended.current || pauseIntent.current) return;
+        if (
+            ended.current ||
+            pauseIntent.current ||
+            !foreground.current ||
+            document.hidden
+        )
+            return;
         ended.current = true;
         sample();
         setPaused(true);
@@ -1003,6 +1103,15 @@ export function Player({
                 }
             }
         }
+        if (!alive.current || leaving.current) return;
+        completionNext.current = found;
+        if (!foreground.current || document.hidden || pauseIntent.current) {
+            completionDeferred.current = true;
+            setNotice(
+                "Playback finished. Press Play to continue or return to details.",
+            );
+            return;
+        }
         if (reader && found && !cancelNext) {
             setNext(found);
             setNotice(
@@ -1010,7 +1119,7 @@ export function Player({
             );
             return;
         }
-        await complete(found);
+        await complete(found, false, true);
     }
     const physicalEndRef = useRef(physicalEnd);
     physicalEndRef.current = physicalEnd;
@@ -1063,6 +1172,8 @@ export function Player({
         }
         function playing() {
             if (!current || disposed) return;
+            if (!foreground.current || document.hidden)
+                pauseIntent.current = true;
             if (desired.current.revision !== request.revision) {
                 setRequest({ ...desired.current });
                 return;
@@ -1149,6 +1260,8 @@ export function Player({
                 (current.method === "Transcode" ? request.position : 0) +
                 el.duration;
             if (plausibleDuration(measured)) setDuration(measured);
+            if (!foreground.current || document.hidden)
+                pauseIntent.current = true;
             if (pauseIntent.current) {
                 replacing.current = false;
                 releaseTrackCommands();
@@ -1164,7 +1277,13 @@ export function Player({
                 clearWaiting();
                 clearTimeout(directTimer);
                 el.pause();
-                if (viewing.current.started) report("progress", true);
+                // READY owns the viewing Start even when visibility or a
+                // deliberate pause prevented the decoder from ever playing.
+                // The shared started flag also prevents a second Start on Play.
+                if (!viewing.current.started) {
+                    viewing.current.started = true;
+                    report("start");
+                } else report("progress");
             } else
                 void el.play().catch(() => {
                     releaseTrackCommands();
@@ -1181,10 +1300,6 @@ export function Player({
         const onEnd = () => {
             if (!pauseIntent.current && !disposed)
                 void physicalEndRef.current();
-        };
-        const pagehide = () => {
-            sample();
-            void stop(false, true);
         };
         const seeked = () => {
             if (
@@ -1208,7 +1323,6 @@ export function Player({
         el.addEventListener("error", onError);
         el.addEventListener("waiting", waiting);
         el.addEventListener("stalled", waiting);
-        window.addEventListener("pagehide", pagehide);
         const timer = setInterval(update, 1000);
         waiting();
         void (async () => {
@@ -1229,21 +1343,10 @@ export function Player({
                 desired.current.audio = undefined;
                 desired.current.subtitle = undefined;
             }
-            if (
-                preparedSubtitle === undefined &&
-                source?.DefaultSubtitleStreamIndex !== undefined &&
-                source.DefaultSubtitleStreamIndex >= 0
-            ) {
-                const defaultTrack = source.MediaStreams?.find(
-                    (s) =>
-                        s.Type === "Subtitle" &&
-                        s.Index === source.DefaultSubtitleStreamIndex,
-                );
-                if (defaultTrack?.Language)
-                    preparedSubtitle =
-                        captionIndex(source, defaultTrack.Language) ??
-                        undefined;
-            }
+            // No standard browser API exposes the viewer's OS caption language.
+            // Automatic opening therefore leaves selection to user-scoped PlaybackInfo,
+            // whose valid default (including remembered Off) is authoritative. Only
+            // explicit in-viewing choices are pinned to this source.
             const d = await client.prepare(
                 detail,
                 probe,
@@ -1363,7 +1466,6 @@ export function Player({
             el.removeEventListener("error", onError);
             el.removeEventListener("waiting", waiting);
             el.removeEventListener("stalled", waiting);
-            window.removeEventListener("pagehide", pagehide);
             el.pause();
             hls?.destroy();
             el.removeAttribute("src");
@@ -1644,10 +1746,10 @@ export function Player({
             cancelNext
         )
             return;
-        const t = setInterval(
-            () => setCountdown((n) => Math.max(0, n - 1)),
-            1000,
-        );
+        const t = setInterval(() => {
+            if (foreground.current && !document.hidden && !pauseIntent.current)
+                setCountdown((n) => Math.max(0, n - 1));
+        }, 1000);
         return () => clearInterval(t);
     }, [
         nextEligible,
@@ -1665,11 +1767,14 @@ export function Player({
             nextEligible &&
             !reader &&
             !paused &&
+            foreground.current &&
+            !document.hidden &&
+            !pauseIntent.current &&
             !buffering &&
             !panel &&
             seekPreview === undefined
         )
-            void complete(next);
+            void complete(next, false, true);
     }, [
         countdown,
         nextEligible,
@@ -1969,6 +2074,14 @@ export function Player({
                     <button
                         onClick={() => {
                             setCancelNext(true);
+                            completionNext.current = null;
+                            if (
+                                completionDeferred.current &&
+                                viewing.current.stopped
+                            ) {
+                                void leave();
+                                return;
+                            }
                             video.current?.focus();
                         }}
                     >

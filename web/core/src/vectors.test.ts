@@ -42,6 +42,7 @@ import {
 } from "./parity";
 import { referenceProfile, referenceCompatibility } from "./reference-profile";
 import * as rc26 from "./rc26";
+import * as rc28 from "./rc28";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
@@ -72,6 +73,125 @@ for (const file of files) {
                     ctx = suite.context;
                 let value: unknown;
                 switch (c.operation) {
+                    case "visibility-play":
+                        value = rc28.visibilityPlay(
+                            i.requested,
+                            i.foregroundRequired,
+                            i.foreground,
+                            i.pauseLatched,
+                        );
+                        break;
+                    case "detail-retry-description":
+                        value = rc28.detailRetryDescription(i.reason);
+                        break;
+                    case "detail-quiet-departing-change":
+                        value = rc28.detailQuietDepartingChange(
+                            i.handoff,
+                            i.action,
+                            i.onlyLabelChanged,
+                        );
+                        break;
+                    case "detail-quiet-request-rediscovery":
+                        value = rc28.detailQuietRequestRediscovery(
+                            i.action,
+                            i.onlyLabelChanged,
+                            i.rediscovery,
+                        );
+                        break;
+                    case "detail-request-once-feedback": {
+                        const feedback = new rc28.DetailRequestOnceFeedback();
+                        value = i.steps.map((step: any) =>
+                            feedback.update(
+                                step.request ?? null,
+                                step.eligible,
+                                step.submitted,
+                            ),
+                        );
+                        break;
+                    }
+                    case "detail-held-label-presentation":
+                        value = rc28.detailHeldLabelPresentation(
+                            i.selectedWhileHeld,
+                            i.heldLabelRequested,
+                        );
+                        break;
+                    case "detail-feedback-source":
+                        value = rc28.detailFeedbackSource(
+                            i.currentPage,
+                            i.selectedAction,
+                        );
+                        break;
+                    case "detail-pending-presentation-label":
+                        value = rc28.detailPendingPresentationLabel(
+                            i.held,
+                            i.requested,
+                            i.available,
+                            i.plain,
+                            i.pending,
+                        );
+                        break;
+                    case "detail-completion-presented-played":
+                        value = rc28.detailCompletionPresentedPlayed(
+                            i.played,
+                            i.completionIntent,
+                        );
+                        break;
+                    case "detail-played-request-notice":
+                        value = rc28.detailPlayedRequestNotice(
+                            i.wanted,
+                            i.current,
+                        );
+                        break;
+                    case "detail-reader-focus-clear":
+                        value = rc28.detailReaderFocusClear(
+                            i.currentPage,
+                            i.ownedHeader,
+                            i.sameNativeNode,
+                        );
+                        break;
+                    case "detail-retry-failure-cue":
+                        value = rc28.detailRetryFailureCue(
+                            i.baseline ?? null,
+                            i.attempt,
+                            i.loading,
+                            i.failed,
+                            i.resumed,
+                        );
+                        break;
+                    case "detail-retry-attempt-succeeded":
+                        value = rc28.detailRetryAttemptSucceeded(
+                            i.baseline ?? null,
+                            i.attempt,
+                            i.loading,
+                            i.failed,
+                        );
+                        break;
+                    case "detail-raw-read-acknowledgement":
+                        value = rc28.detailRawReadAcknowledgement(
+                            i.raw,
+                            i.acknowledged,
+                        );
+                        break;
+                    case "detail-pending-presentation-visible":
+                        value = rc28.detailPendingPresentationVisible(
+                            i.waiting,
+                            i.resumed,
+                            i.published,
+                        );
+                        break;
+                    case "detail-completion-intent-retained":
+                        value = rc28.detailCompletionIntentRetained(
+                            i.reportFailed,
+                            i.reportPending,
+                            i.rawReadSucceeded,
+                        );
+                        break;
+                    case "detail-retry-cue-can-wait":
+                        value = rc28.detailRetryCueCanWait(
+                            i.accessibilityEnabled,
+                            i.elapsedMillis,
+                        );
+                        break;
                     case "external-subtitle-loading":
                         value = {
                             retryDelayMs: rc26.externalSubtitleRetryDelay(
@@ -171,6 +291,12 @@ for (const file of files) {
                                 s.focused ?? null,
                                 s.resumed,
                                 s.usable ?? true,
+                                {
+                                    presented: s.presented ?? false,
+                                    cancelled: s.cancelled ?? false,
+                                    submitted: s.submitted ?? true,
+                                    nativePresented: s.nativePresented ?? null,
+                                },
                             ),
                         );
                         break;
@@ -281,6 +407,7 @@ for (const file of files) {
                             i.active,
                             i.readerLeftAction,
                             i.requested ?? true,
+                            i.presented ?? true,
                         );
                         break;
                     case "detail-confirmed-leaf":

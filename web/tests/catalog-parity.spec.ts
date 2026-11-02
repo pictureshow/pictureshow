@@ -347,7 +347,9 @@ test("detail Retry retains its target while loading and hands focus to fresh pri
     await page.locator('[data-focus="latest:library:movie"]').click();
     const retry = page.getByRole("button", { name: "Retry", exact: true });
     await expect(retry).toBeVisible();
-    await expect(retry).toBeFocused();
+    // A failure cue preserves the reader's current control. Retry is reached
+    // deliberately rather than stealing focus when the request fails.
+    await retry.focus();
     await page.keyboard.press("Enter");
     await expect(
         page.getByRole("button", { name: "Retrying…", exact: true }),
@@ -543,7 +545,7 @@ test("fresh unresolved detail accepts one pending Play and negotiates only after
     expect(negotiations).toBe(1);
 });
 
-test("rc26 cold detail holds plain disabled actions, accepts early navigation, and announces Ready only for the same held control", async ({
+test("rc28 cold detail starts plain, then announces Ready only after the same focused held label", async ({
     page,
 }) => {
     let release!: () => void;
@@ -572,6 +574,7 @@ test("rc26 cold detail holds plain disabled actions, accepts early navigation, a
     await expect(watched).toBeFocused();
     await expect(watched).toHaveAccessibleName("Watched");
     await expect(watched).not.toHaveAttribute("aria-pressed");
+    await expect(watched).toHaveAccessibleName("Watched when ready");
     await captureRecovery(page, "held");
     release();
     await expect(watched).toBeFocused();
@@ -603,8 +606,12 @@ test("rc26 Retry qualifies the predecessor reason while publishing current loadi
     });
     await page.locator('[data-focus="latest:library:movie"]').click();
     const retry = page.getByRole("button", { name: "Retry", exact: true });
-    await expect(retry).toBeFocused();
-    await expect(page.getByRole("alert")).toContainText("503");
+    await expect(retry).toBeVisible();
+    await expect(page.locator("[data-detail-feedback]")).toContainText("503");
+    await expect(page.locator("[data-detail-feedback]")).toContainText(
+        "Retry is available",
+    );
+    await expect(page.getByRole("alert")).toHaveCount(0);
     await captureRecovery(page, "failed");
     await retry.click();
     await expect(
@@ -624,8 +631,8 @@ test("rc26 Retry qualifies the predecessor reason while publishing current loadi
     expect(reads).toBe(2);
     release();
     await expect(retry).toBeFocused();
-    await expect(page.getByRole("alert")).toHaveCount(1);
-    await expect(page.getByRole("alert")).toContainText("503");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator("[data-detail-feedback]")).toContainText("503");
     await expect(
         page.getByRole("button", { name: "Watched", exact: true }),
     ).not.toHaveAttribute("aria-pressed");
@@ -707,7 +714,7 @@ test("rc26 failed Series read keeps unknown season and toggle state neutral with
     await opener.click();
     await expect(
         page.getByRole("button", { name: "Retry", exact: true }),
-    ).toBeFocused();
+    ).toBeVisible();
     await expect(selectedSeason).not.toHaveAttribute("aria-pressed");
     await expect(selectedSeason).toHaveAttribute("aria-disabled", "true");
     for (const label of ["Watched", "Favorite"]) {
@@ -715,7 +722,6 @@ test("rc26 failed Series read keeps unknown season and toggle state neutral with
         await expect(action).toHaveAttribute("aria-disabled", "true");
         await expect(action).not.toHaveAttribute("aria-pressed");
     }
-    await expect(page.getByRole("alert")).toHaveCount(1);
-    await expect(page.getByRole("alert")).toContainText("503");
-    await expect(page.locator("[data-detail-feedback]")).toHaveText("");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator("[data-detail-feedback]")).toContainText("503");
 });

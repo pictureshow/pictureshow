@@ -204,6 +204,16 @@ export function captionIndex(
     source: any,
     preferredLanguage: string,
 ): number | null {
+    const serverIndex = source.DefaultSubtitleStreamIndex;
+    if (
+        serverIndex === -1 ||
+        (serverIndex >= 0 &&
+            (source.MediaStreams ?? []).some(
+                (stream: any) =>
+                    stream.Type === "Subtitle" && stream.Index === serverIndex,
+            ))
+    )
+        return serverIndex;
     const key = languageKey(preferredLanguage);
     if (!key) return null;
     return (
@@ -225,8 +235,6 @@ export function captionIndex(
                             !!a.IsTextSubtitleStream ||
                                 TEXT_CAPTION_CODECS.has(a.Codec?.toLowerCase()),
                         ) ||
-                    Number(b.Index === source.DefaultSubtitleStreamIndex) -
-                        Number(a.Index === source.DefaultSubtitleStreamIndex) ||
                     Number(!!b.IsDefault) - Number(!!a.IsDefault) ||
                     a.Index - b.Index,
             )[0]?.Index ?? null

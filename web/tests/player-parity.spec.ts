@@ -1320,13 +1320,13 @@ test("rc26 relative steps retain target after negotiation until replacement READ
     }
 });
 
-test("rc26 automatic same-language captions prefer text with source binding and omit automatic reports", async ({
+test("rc28 automatic captions retain the server text default with source binding and omit automatic reports", async ({
     page,
 }) => {
     const f = await fixture(page);
     const source = {
         ...movie.MediaSources[0],
-        DefaultSubtitleStreamIndex: 4,
+        DefaultSubtitleStreamIndex: 3,
         MediaStreams: [
             ...movie.MediaSources[0].MediaStreams.map((s) =>
                 s.Index === 3 ? { ...s, Language: "eng" } : s,
@@ -1368,7 +1368,7 @@ test("rc26 automatic same-language captions prefer text with source binding and 
     );
     await openMovie(page);
     await pause(page);
-    expect(f.negotiations[0].SubtitleStreamIndex).toBe(3);
+    expect(f.negotiations[0]).not.toHaveProperty("SubtitleStreamIndex");
     expect(f.negotiations[0].MediaSourceId).toBe("source");
     const start = f.reports.find((r) => r.path === "/Sessions/Playing")!.body;
     expect(start).not.toHaveProperty("AudioStreamIndex");
@@ -1566,3 +1566,95 @@ test("rc26 server-declared text with unknown codec loads converted cues and swit
     expect(f.negotiations).toHaveLength(before);
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
+
+for (const action of ["Play now", "Cancel next episode"] as const)
+    test(`rc28 automatic continuation held after hidden during committed Stop requires ${action}`, async ({
+        page,
+    }) => {
+        await page.clock.install();
+        const f = await creditsEpisode(page, true);
+        const successorRequests: string[] = [];
+        page.on("request", (request) => {
+            if (
+                new URL(request.url()).pathname ===
+                "/Items/episode2/PlaybackInfo"
+            )
+                successorRequests.push(request.url());
+        });
+        let release!: () => void, entered!: () => void;
+        const gate = new Promise<void>((resolve) => (release = resolve)),
+            stopped = new Promise<void>((resolve) => (entered = resolve));
+        await page.route(
+            "https://jellyfin.example/Sessions/Playing/Stopped",
+            async (route) => {
+                if (route.request().postDataJSON().ItemId === "episode") {
+                    entered();
+                    await gate;
+                }
+                await route.fallback();
+            },
+        );
+        try {
+            await page.clock.runFor(11000);
+            await stopped;
+            await page.evaluate(() => {
+                Object.defineProperty(document, "hidden", {
+                    configurable: true,
+                    value: true,
+                });
+                document.dispatchEvent(new Event("visibilitychange"));
+            });
+            release();
+            await expect.poll(f.completed).toBe(1);
+            await expect(page.getByRole("status")).toContainText(
+                "Choose Play now",
+            );
+            expect(successorRequests).toHaveLength(0);
+            await page.evaluate(() => {
+                Object.defineProperty(document, "hidden", {
+                    configurable: true,
+                    value: false,
+                });
+                document.dispatchEvent(new Event("visibilitychange"));
+            });
+            await page.clock.runFor(15000);
+            await expect(
+                page.getByRole("heading", {
+                    name: "The Next Morning",
+                    exact: true,
+                }),
+            ).toBeHidden();
+            await page
+                .getByRole("button", { name: action, exact: true })
+                .click();
+            if (action === "Play now") {
+                await expect(
+                    page.getByRole("heading", {
+                        name: "The Next Morning",
+                        exact: true,
+                    }),
+                ).toBeVisible();
+                await page
+                    .getByRole("button", { name: "Stop and go back" })
+                    .click();
+            } else {
+                await expect(page.locator("video")).toBeHidden();
+                await expect(
+                    page.getByRole("heading", {
+                        name: "The Next Morning",
+                        exact: true,
+                    }),
+                ).toBeHidden();
+            }
+            expect(f.completed()).toBe(1);
+            expect(
+                f.reports.filter(
+                    (r) =>
+                        r.path.endsWith("/Stopped") &&
+                        r.body.ItemId === "episode",
+                ),
+            ).toHaveLength(1);
+        } finally {
+            release();
+        }
+    });
