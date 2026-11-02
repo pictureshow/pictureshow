@@ -16,12 +16,13 @@ private final class DeferredSeekPlayer: AVPlayer {
     private(set) var seekTargets: [CMTime] = []
     private(set) var itemReplacementCount = 0
     private(set) var transportCommandCount = 0
+    private(set) var playCount = 0
     private var completions: [(Bool) -> Void] = []
 
     override func replaceCurrentItem(with item: AVPlayerItem?) {
         if item != nil { itemReplacementCount += 1 }
     }
-    override func play() { transportCommandCount += 1; super.play() }
+    override func play() { transportCommandCount += 1; playCount += 1; super.play() }
     override func pause() { transportCommandCount += 1; super.pause() }
     /// Keep wall-clock sampling from the production tick loop from injecting a decoder time
     /// into this callback-order test; PlaybackSession's published position is authoritative.
@@ -196,6 +197,44 @@ private final class SeekRaceProtocol: URLProtocol {
         try await Task.sleep(for: .milliseconds(30))
     }
 
+    func testF5CoveredBeforeReadyAndReturnRemainPausedWithPausedStart() async throws {
+        try await makePreparedSession(startTicks: 0)
+        session.backgrounded()
+        XCTAssertFalse(session.isForeground)
+        XCTAssertFalse(session.nativePlayRequested(), "Covered native Play cannot clear retained pause")
+        session.ready(version: 0)
+        let pendingStart = await waitForStartReport()
+        let start = try XCTUnwrap(pendingStart)
+        XCTAssertEqual(start["IsPaused"] as? Bool, true)
+        XCTAssertTrue(session.isPaused)
+        XCTAssertEqual(player.playCount, 0)
+        session.foregrounded()
+        XCTAssertTrue(session.isPaused, "Visibility restores no Play intent")
+        XCTAssertEqual(player.playCount, 0)
+        XCTAssertTrue(session.nativePlayRequested())
+        XCTAssertFalse(session.isPaused, "Only deliberate foreground Play releases the latch")
+        await session.stop()
+    }
+    func testF5CoveredPendingSeekCannotResumeOrAutomaticallyAdvance() async throws {
+        try await makeReadySession(includeNextEpisode: true)
+        let plays = player.playCount
+        session.seek(by: 10)
+        try await waitForSeekCount(1)
+        session.backgrounded()
+        player.completeSeek(at: 0, success: true)
+        try await drainMainActor()
+        XCTAssertTrue(session.isPaused)
+        XCTAssertEqual(player.playCount, plays)
+        let item = session.item.id
+        await session.advance(automatic: true)
+        XCTAssertEqual(session.item.id, item)
+        session.foregrounded()
+        await session.advance(automatic: true)
+        XCTAssertEqual(session.item.id, item, "Returning with a latched pause cannot trigger Next")
+        await session.stop()
+        let reports = session.diagnostics.reportLines.filter { !$0.contains("kind=stop") }
+        XCTAssertTrue(reports.contains { $0.contains("paused=true") })
+    }
     func testFailedStartIsNotReplayedAndStopRetryHasAnotherReceipt() async throws {
         try await makePreparedSession(startTicks: 0)
         SeekRaceProtocol.reportStatuses = [503]

@@ -95,7 +95,7 @@ enum DetailCommand: Equatable {
         let initial = header == nil
         item = result.item; if header == nil { header = result.item }
         seasons = result.seasons; episodes = result.episodes; selectedSeason = result.season; target = result.target
-        reading = false; fresh = true; readError = nil; deadline = nil; publishedRefreshID = publication
+        reading = false; fresh = true; readError = nil; deadline = nil; publishedRefreshID = publication; cue = nil
         if recoveryVisible { focusRequest = recoveryTarget }
         else if initial && result.item.type != "Person" { focusRequest = recoveryTarget }
     }
@@ -235,7 +235,7 @@ enum DetailCommand: Equatable {
             defer { drainTask = nil; activeCommand = nil; reconcileRequestCue(); writing = false; if !pending.isEmpty { drain(model: model) } }
             while !pending.isEmpty, version == epoch, !departed, (fresh || retryingWrite), !model.playbackSaving {
                 if expirePending() { return }
-                let command = pending.removeFirst(); activeCommand = command; writing = true
+                let command = pending.removeFirst(); activeCommand = command; writing = true; notice = nil
                 beginWriteAttempt()
                 do {
                     switch command {
@@ -247,16 +247,18 @@ enum DetailCommand: Equatable {
                         let desired: Bool
                         if case .watched(let value) = command { desired = value } else { desired = !item.isWatched }
                         if item.userData.played != desired { item.userData = try await model.client.played(account: account, itemID: item.id, value: desired) }
+                        else { notice = "Nothing changed. This item is already \(desired ? "watched" : "unwatched")." }
                         guard version == epoch, !departed else { return }; self.item = item
                     case .favorite, .toggleFavorite:
                         guard var item else { continue }
                         let desired: Bool
                         if case .favorite(let value) = command { desired = value } else { desired = !item.userData.isFavorite }
                         if item.userData.isFavorite != desired { item.userData = try await model.client.favorite(account: account, itemID: item.id, value: desired) }
+                        else { notice = "Nothing changed. This item is already \(desired ? "a favorite" : "not a favorite")." }
                         guard version == epoch, !departed else { return }; self.item = item
                     }
                     guard version == epoch, !departed else { return }
-                    writeError = nil; writeFailure = nil; failedWrite = nil; retryingWrite = false; notice = nil
+                    writeError = nil; writeFailure = nil; failedWrite = nil; retryingWrite = false
                     if case .play = command { } else { model.catalogChanged(); await model.loadHomeIfNeeded(); deadline = nil; refresh(id: item?.id ?? "", model: model, restart: true); return }
                 } catch {
                     guard version == epoch, !departed else { return }; model.handle(error, account: account); publishWriteFailure(error.localizedDescription); failedWrite = command; retryingWrite = false; pending = []; return
@@ -493,8 +495,8 @@ struct DetailView: View {
     }
     @ViewBuilder private func actionRow(_ item: MediaItem, horizontal: Bool) -> some View {
         let layout = horizontal ? AnyLayout(HStackLayout(spacing: 16)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
-        let watchedCommand: DetailCommand = state.item == nil ? .toggleWatched : .watched(!item.isWatched)
-        let favoriteCommand: DetailCommand = state.item == nil ? .toggleFavorite : .favorite(!item.userData.isFavorite)
+        let watchedCommand: DetailCommand = .watched(!item.isWatched)
+        let favoriteCommand: DetailCommand = .favorite(!item.userData.isFavorite)
         let watchedRequest = state.requestedLabel(watchedCommand)
         let favoriteRequest = state.requestedLabel(favoriteCommand)
         let playRequest = state.requestedLabel(.play(true))

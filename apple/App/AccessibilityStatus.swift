@@ -40,7 +40,7 @@ struct AccessibilityCue: Equatable {
              detailDiagnostic("event=cuePosted cue=\(cue.id) kind=\(cue.message == "Ready" ? "Ready" : "other") queued=true")
          }) { self.enabled = enabled; self.now = now; self.post = post }
     func resume() { active = true }
-    func cancel() { active = false; pending = nil }
+    func cancel() { active = false; pending = nil; inFlight = nil; inFlightMessage = nil }
     func submit(_ cue: AccessibilityCue?) {
         guard let cue else { pending = nil; return }
         guard !consumed.contains(cue.id) else { return }
@@ -68,11 +68,9 @@ private struct CueAnnouncement: ViewModifier {
     let cue: AccessibilityCue?
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var delivery = DetailCueDelivery()
-    @State private var submittedMessage: String?
     func body(content: Content) -> some View {
         content.onAppear { delivery.resume(); delivery.submit(cue) }
             .onChange(of: cue, initial: true) { _, current in
-                submittedMessage = current?.message
                 delivery.submit(current)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.announcementDidFinishNotification)) { note in
@@ -119,7 +117,7 @@ private struct DetailActionState: ViewModifier {
         // controls publish the platform's native disabled accessibility property.
         let disabled = unavailable || (held && !acceptsHeldRequest)
         content.opacity(disabled ? 0.55 : 1).accessibilityRepresentation {
-            content.accessibilityLabel(label).accessibilityValue(requestStatus ?? (disabled ? "" : value)).disabled(disabled)
+            content.accessibilityLabel(requestStatus ?? label).accessibilityValue(requestStatus != nil || disabled ? "" : value).disabled(disabled)
         }
     }
 }
