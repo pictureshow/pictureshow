@@ -1213,6 +1213,11 @@ final class AppleSliceUITests: XCTestCase {
         let rowsBefore = try app.snapshot()
         XCTAssertFalse(tvSnapshotNodes(rowsBefore).contains { $0.elementType == .cell && $0.label.contains("Stream 12 ·") },
                        "A native early open must not mount partial or stale track rows")
+        let cancel = app.buttons["cancelPendingTracks"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5), "The pending sheet needs a focusable cancel control")
+        let focusDeadline = ProcessInfo.processInfo.systemUptime + 5
+        while !cancel.hasFocus && ProcessInfo.processInfo.systemUptime < focusDeadline { Thread.sleep(forTimeInterval: 0.1) }
+        XCTAssertTrue(cancel.hasFocus, "Remote Back must be routed through the pending sheet")
         XCUIRemote.shared.press(.menu)
         let dismissedDeadline = ProcessInfo.processInfo.systemUptime + 5
         while app.buttons["playerOptionsDone"].exists && ProcessInfo.processInfo.systemUptime < dismissedDeadline {

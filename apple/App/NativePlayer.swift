@@ -277,6 +277,9 @@ struct PlayerOptions: View {
     @State private var presentation: TrackMenuPresentation?
     @State private var audio: Int?
     @State private var subtitle: Int?
+    #if os(tvOS)
+    @FocusState private var pendingCancelFocused: Bool
+    #endif
     init(session: PlaybackSession, kind: String, done: @escaping () -> Void) {
         self.session = session; self.kind = kind; self.done = done
         _trackMenus = ObservedObject(wrappedValue: session.trackLabels)
@@ -302,6 +305,11 @@ struct PlayerOptions: View {
                 } else {
                     if menu == nil {
                         ProgressView("Preparing audio and subtitles…").accessibilityIdentifier("preparingTracks")
+                        #if os(tvOS)
+                        Button("Cancel", action: closePanel)
+                            .accessibilityIdentifier("cancelPendingTracks")
+                            .focused($pendingCancelFocused)
+                        #endif
                     } else {
                         if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
                         #if DEBUG
@@ -345,6 +353,9 @@ struct PlayerOptions: View {
         .onChange(of: trackMenus.waitingToOpen) { _, waiting in
             if !waiting && trackMenus.openMenu == nil && menu == nil { closePanel() }
         }
+        #if os(tvOS)
+        .onAppear { if kind == "tracks" && menu == nil { pendingCancelFocused = true } }
+        #endif
     }
     private func trackTitle(_ value: TrackLabel) -> String {
         #if os(tvOS)
