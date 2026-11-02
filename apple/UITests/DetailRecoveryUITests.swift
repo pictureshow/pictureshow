@@ -196,7 +196,15 @@ final class DetailRecoveryUITests: XCTestCase {
         #endif
     }
     private func capture(_ name: String, app: XCUIApplication) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        #if os(iOS)
+        // App-element captures can crop rotated iPad windows. Capture the actual
+        // display so landscape evidence includes the entire status bar and edge.
+        let screenshot = UIDevice.current.userInterfaceIdiom == .pad
+            ? XCUIScreen.main.screenshot() : app.screenshot()
+        #else
+        let screenshot = app.screenshot()
+        #endif
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
     }
 }
