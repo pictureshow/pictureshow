@@ -1214,6 +1214,11 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertFalse(tvSnapshotNodes(rowsBefore).contains { $0.elementType == .cell && $0.label.contains("Stream 12 ·") },
                        "A native early open must not mount partial or stale track rows")
         XCUIRemote.shared.press(.menu)
+        let dismissedDeadline = ProcessInfo.processInfo.systemUptime + 5
+        while app.buttons["playerOptionsDone"].exists && ProcessInfo.processInfo.systemUptime < dismissedDeadline {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        XCTAssertFalse(app.buttons["playerOptionsDone"].exists, "Menu must dismiss the pending Tracks sheet before its worker finishes")
         fixture.releaseMenuWorker(1)
         Thread.sleep(forTimeInterval: 0.5)
         let after = try app.snapshot()

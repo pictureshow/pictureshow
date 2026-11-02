@@ -327,6 +327,9 @@ struct PlayerOptions: View {
             .pictureshowNavigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : trackPanelTitle)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone") } }
         }
+        #if os(tvOS)
+        .onExitCommand { closePanel() }
+        #endif
         .onChange(of: session.decision?.audioIndex) { _, value in
             if menu?.generation == session.trackLabels.cacheRevision { audio = value }
         }
