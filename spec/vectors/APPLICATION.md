@@ -59,6 +59,18 @@ Server indices are authoritative even if absent from the supplied stream list; i
 platform demuxer is a later concern. The server's default audio index carries its user audio-language and remembered
 selection decisions; client language fallback does not override it.
 
+The `tracks.prepared-menu.current-source-server-index` fixture uses this operation to verify only the current
+source's selected subtitle index. Its native preparation/lifecycle source references are acceptance provenance, not
+additional operations executed by the vector runner. Eager preparation of both menus off the UI thread, reuse across
+opens, source-generation invalidation, stale-worker rejection, and cancellation of pending opens on Back or stop are
+PLAY-08 native acceptance requirements in [player.md](../features/player.md). Android's executable application-vector
+gate is `ApplicationParityVectorsTest` under `:core:jvmTest`; it does not drive `PlayerScreen`, Compose or lifecycle
+callbacks. Track entry focus, the native modal boundary and opener return additionally require the track
+focus/accessibility suites and installed-device acceptance; this core index-policy vector does not execute them or
+establish installed TalkBack speech/focus. The `panel-open title=... inActivityWindow=...` diagnostic is a first-layout
+timing receipt, not an accessibility or presentation oracle. Keep native preparation/input/lifecycle acceptance
+alongside the vector gate on each platform.
+
 The JVM reference normalizes with Java `Locale`: blank and literal `und` become null; underscores become hyphens;
 `Locale.forLanguageTag(value).isO3Language` supplies the ISO 639-2 language, and a thrown conversion falls back to
 `value.lowercase()`. Region tags such as `fr-CA` match `fra`, while `en` matches `eng`. These language conversions

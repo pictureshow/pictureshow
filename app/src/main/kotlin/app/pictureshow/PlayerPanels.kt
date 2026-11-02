@@ -141,6 +141,13 @@ internal fun PlayerPanel(
     content: @Composable PlayerPanelScope.() -> Unit
 ) {
     val activityHost = LocalView.current
+    val layoutReceipt = remember(title, inActivityWindow) { booleanArrayOf(false) }
+    val firstLayout = Modifier.onGloballyPositioned {
+        if (!layoutReceipt[0]) {
+            layoutReceipt[0] = true
+            PlaybackDiagnostics.write("panel-open title=$title inActivityWindow=$inActivityWindow")
+        }
+    }
     var closingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val panelScope = remember {
         PlayerPanelScope { before, after ->
@@ -163,7 +170,7 @@ internal fun PlayerPanel(
         PlayerPanelContent(
             title,
             scrollable,
-            Modifier.focusProperties { onExit = { cancelFocusChange() } }.focusGroup(),
+            firstLayout.focusProperties { onExit = { cancelFocusChange() } }.focusGroup(),
             announcePane = false
         ) { panelScope.content() }
         return
@@ -203,7 +210,7 @@ internal fun PlayerPanel(
                 }
             }
         }
-        PlayerPanelContent(title, scrollable) { panelScope.content() }
+        PlayerPanelContent(title, scrollable, firstLayout) { panelScope.content() }
     }
 }
 

@@ -3054,7 +3054,7 @@
     {
       "id": "tracks.large-panel.selected-near-end",
       "operation": "default-stream",
-      "source": "app/src/test/kotlin/app/pictureshow/TrackPanelResponsivenessTest.kt; spec/features/player.md PLAY-07",
+      "source": "app/src/test/kotlin/app/pictureshow/TrackPanelResponsivenessTest.kt; spec/features/player.md PLAY-08",
       "input": {
         "streams": [
           {
@@ -3239,6 +3239,39 @@
         "preferredLanguage": "en"
       },
       "expected": 43
+    },
+    {
+      "id": "tracks.prepared-menu.current-source-server-index",
+      "operation": "default-stream",
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/StreamDefaults.kt; app/src/test/kotlin/app/pictureshow/PlayerTrackMenuPreparationTest.kt; spec/features/player.md PLAY-08 (native preparation/lifecycle acceptance is separate)",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 7,
+            "Language": "eng",
+            "Codec": "aac"
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 43,
+            "Language": "fra",
+            "Codec": "srt",
+            "Title": "French captions"
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 73,
+            "Language": "eng",
+            "Codec": "srt",
+            "Title": "Updated English captions"
+          }
+        ],
+        "type": "Subtitle",
+        "serverIndex": 73,
+        "preferredLanguage": "en"
+      },
+      "expected": 73
     },
     {
       "id": "detail.feedback.held-label.primary",
