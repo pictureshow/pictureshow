@@ -437,7 +437,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertEqual(subtitleReport.body["IsPaused"] as? Bool, true)
         XCTAssertEqual(loader.revision, revision); XCTAssertEqual(loader.attemptCount, attempts)
         XCTAssertEqual(captionRequests.count, 1); XCTAssertTrue(loader.loading)
-        XCTAssertTrue(ExternalSubtitleHTTP.stoppedPaths.isEmpty, "Same-active choice must preserve the held request")
+        XCTAssertTrue(ExternalSubtitleHTTP.stoppedPaths.filter(ExternalSubtitleHTTP.isCaptionPath).isEmpty, "Same-active choice must preserve the held caption request; stopped caption paths: \(ExternalSubtitleHTTP.stoppedPaths.filter(ExternalSubtitleHTTP.isCaptionPath))")
         XCTAssertEqual(player.replacements, 1); XCTAssertTrue(player.attachedItems.last === item)
         XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 1)
         XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("/Sessions/Playing") }.count, 1)

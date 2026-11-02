@@ -10,6 +10,10 @@ final class AppleSliceUITests: XCTestCase {
     var sampleFolderOpen = false
     override func setUpWithError() throws {
         continueAfterFailure = false
+        if name.contains("testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback") {
+            app = XCUIApplication()
+            return // This named case owns a finite local HTTP fixture, with no live account.
+        }
         let json = try XCTUnwrap(ProcessInfo.processInfo.environment["PICTURESHOW_PILOT_JSON"], "Supply a private pilot configuration to run the live simulator suite")
         config = try JSONDecoder().decode([String:String].self, from: Data(json.utf8))
         app = XCUIApplication()
@@ -1061,6 +1065,59 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(app.buttons["signIn"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["quickCode"].waitForNonExistence(timeout: 10), "Cancellation should remove the one-time code")
         }
+    }
+    func testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback() throws {
+        #if os(tvOS)
+        let fixture = try NativeTrackHTTPFixture(durationSeconds: 60)
+        try fixture.start()
+        defer { fixture.stop() }
+        try fixture.launchSignedInDetail(app, activate: { self.activate($0) })
+        defer { app.terminate() }
+        activate(app.buttons["play"])
+        let deadline = ProcessInfo.processInfo.systemUptime + 30
+        while fixture.snapshot.startCount == 0 && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.1) }
+        XCTAssertEqual(fixture.snapshot.startCount, 1, "The real AVPlayer must reach Ready and queue one Start")
+        XCUIRemote.shared.press(.playPause)
+        XCUIRemote.shared.press(.up)
+        let elapsed = app.descendants(matching: .any).matching(identifier: "AXElapsedTime").firstMatch
+        XCTAssertTrue(elapsed.waitForExistence(timeout: 10))
+        let paused = seconds(elapsed.label)
+        Thread.sleep(forTimeInterval: 1.2)
+        XCTAssertLessThanOrEqual(seconds(elapsed.label), paused + 1)
+        let before = fixture.snapshot
+        for (title, index) in [("Audio", NativeTrackHTTPFixture.selectedAudioIndex), ("Subtitles", NativeTrackHTTPFixture.selectedSubtitleIndex)] {
+            _ = nativeTVTrackChoice(menuTitle: title, index: String(index))
+            // The helper opens the trigger and resolves a row; it does not move
+            // toward that row. Judge entry before any row-navigation helper.
+            let entry = try app.snapshot()
+            let nodes = tvSnapshotNodes(entry)
+            let prefix = title == "Audio" ? "audio-" : "subtitle-"
+            func row(_ nodes: [XCUIElementSnapshot], _ index: Int) -> XCUIElementSnapshot? {
+                nodes.first { $0.identifier == prefix + String(index) && $0.elementType == .cell }
+                    ?? nodes.first { $0.elementType == .cell && nativeTVTrackLabel($0.label, matchesStream: String(index)) }
+            }
+            let selected = try XCTUnwrap(row(nodes, index), "The chosen middle row must exist in the native menu")
+            XCTAssertTrue(selected.hasFocus, "The selected row must receive entry focus before any navigation")
+            let value = (selected.value as? String ?? "").lowercased()
+            XCTAssertTrue(selected.isSelected || ["selected", "on", "1"].contains(value) || selected.label.lowercased().hasPrefix("selected,"))
+            capture("F3 native \(title) selected middle entry focus")
+            XCUIRemote.shared.press(.down)
+            let movedNodes = tvSnapshotNodes(try app.snapshot())
+            let moved = try XCTUnwrap(row(movedNodes, index + 1))
+            XCTAssertTrue(moved.hasFocus, "One Down must move to the adjacent row")
+            Thread.sleep(forTimeInterval: 1.3)
+            let lateNodes = tvSnapshotNodes(try app.snapshot())
+            XCTAssertTrue(try XCTUnwrap(row(lateNodes, index + 1)).hasFocus, "Periodic updates cannot pull focus back to the selected row")
+            XCTAssertFalse(try XCTUnwrap(row(lateNodes, index)).hasFocus)
+            capture("F3 native \(title) no late focus pullback")
+            print("F3_NATIVE_MENU title=\(title) selectedIndex=\(index) entryFocus=true firstDownIndex=\(index + 1) lateFocusRetained=true tracks=45")
+            XCUIRemote.shared.press(.menu)
+        }
+        let after = fixture.snapshot
+        XCTAssertEqual(after.playbackInfoCount, before.playbackInfoCount)
+        XCTAssertEqual(after.startCount, 1); XCTAssertEqual(after.stoppedCount, 0)
+        XCTAssertEqual(after.subtitleRequestCount, before.subtitleRequestCount)
+        #endif
     }
     func testNativeTVDirectPlaybackMenusInfoAndRemoteScrub() throws {
         #if os(tvOS)
