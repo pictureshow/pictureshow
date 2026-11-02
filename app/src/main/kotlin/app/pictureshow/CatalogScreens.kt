@@ -734,7 +734,6 @@ fun CatalogDetail(
     var recoveryFocusOwned by remember { mutableStateOf(false) }
     var recoveryTarget by remember { mutableStateOf<String?>(null) }
     var recoveryTargetInputRevision by remember { mutableIntStateOf(-1) }
-    var recoveryHandoffMessage by remember { mutableStateOf<String?>(null) }
     var retryFocused by remember { mutableStateOf(false) }
     var recoverySelectKey by remember { mutableStateOf<Key?>(null) }
     var mutationDataReady by remember {
@@ -742,7 +741,14 @@ fun CatalogDetail(
     }
     // Report acknowledgement can precede this model's authoritative read. Keep its
     // existing header live until loading and item readiness agree on the fresh state.
+    val coldWaiting = app.pictureshow.core.detailNeedsPendingControls(
+        state.loading,
+        arrivalPending,
+        onPendingAction != null,
+        playbackReturn || state.playbackPending
+    )
     val playbackWaiting = state.playbackPending ||
+        coldWaiting ||
         (playbackReturn && state.error == null && state.loading)
     var semanticsRevealed by remember { mutableStateOf(false) }
     var pendingSemanticsRevealed by remember { mutableStateOf(false) }
@@ -764,7 +770,7 @@ fun CatalogDetail(
     }
     // A failed authoritative read (unlike a failed write) cannot expose stale commands.
     // The action budget ends in this same recovery state, before the transport timer fires.
-    val readFailure = state.readFailed || (state.error != null && !mutationDataReady)
+    val readFailure = app.pictureshow.core.detailReadHasFailure(state.readFailed, state.error, mutationDataReady)
     val readSettled = !state.loading &&
         state.error == null &&
         !state.readFailed &&
@@ -804,7 +810,7 @@ fun CatalogDetail(
         if (state.playbackPending && state.error == null && !pendingFailed) playbackReturn = true
         if (playbackWaiting) {
             playbackLayout = true
-            if (playbackHeader == null) playbackHeader = state.item ?: origin
+            if (!coldWaiting && playbackHeader == null) playbackHeader = state.item ?: origin
         }
         if (playbackWaiting && !recoveryActive && !pendingFailed && state.error == null && lifecycleState == Lifecycle.State.RESUMED) {
             onPendingQueueNeeded()
@@ -900,13 +906,9 @@ fun CatalogDetail(
     SideEffect { previousFailure = presentedFailure }
     val recoveryReason = presentedFailure?.message ?: rawRecoveryReason
     val writeFailure = presentedFailure?.message?.takeIf { failureKey?.startsWith("write:") == true }
-    SideEffect {
-        // Snapshot the whole published reason, including an expired intent. Settlement
-        // clears the recovery model immediately; that must not announce a different error.
-        if (recoveryActive) recoveryHandoffMessage = recoveryReason
-    }
     fun requestReadRetry() {
         if (!retryWorking && !recoveryHandoff) {
+            previousFailure = null
             retryWorking = true
             onRetry()
         }
@@ -972,7 +974,7 @@ fun CatalogDetail(
             commandNotice = null
             pendingExpired = false
             expiryReported = false
-            if (!pendingFailed) playbackReturn = true
+            if (!pendingFailed && !coldWaiting) playbackReturn = true
             pendingSemanticsRevealed = false
             readerMovement.reset()
             pendingFocusRestored = false
@@ -1053,20 +1055,20 @@ fun CatalogDetail(
             requestedTargets = pendingQueuedTargets + if (playQueued != null) setOf("primary", "from-start") else emptySet(),
             playLabel = when {
                 pendingExpired || expiryReported -> app.pictureshow.core.detailUnavailableActionLabel("primary")
-                playQueued == "resume" -> "Play requested"
+                playQueued == "resume" -> app.pictureshow.core.detailRequestedActionLabel("primary", requestCueTarget == "primary")
                 playQueued == "start" -> "Start already requested"
                 else -> "Play when ready"
             },
             fromStartLabel = when {
                 pendingExpired || expiryReported -> app.pictureshow.core.detailUnavailableActionLabel("from-start")
-                playQueued == "start" -> "Start requested"
+                playQueued == "start" -> app.pictureshow.core.detailRequestedActionLabel("from-start", requestCueTarget == "from-start")
                 playQueued == "resume" -> "Play already requested"
                 else -> "Play from start when ready"
             },
             playedLabel = if (pendingExpired || expiryReported) {
                 app.pictureshow.core.detailUnavailableActionLabel("played")
             } else if ("played" in pendingQueuedTargets) {
-                "Watched change requested"
+                app.pictureshow.core.detailRequestedActionLabel("played", requestCueTarget == "played")
             } else if (pendingItem?.isWatched == true) {
                 "Mark unwatched when ready"
             } else {
@@ -1075,7 +1077,7 @@ fun CatalogDetail(
             favoriteLabel = if (pendingExpired || expiryReported) {
                 app.pictureshow.core.detailUnavailableActionLabel("favorite")
             } else if ("favorite" in pendingQueuedTargets) {
-                "Favorite change requested"
+                app.pictureshow.core.detailRequestedActionLabel("favorite", requestCueTarget == "favorite")
             } else if (pendingItem?.userData?.isFavorite == true) {
                 "Unfavorite when ready"
             } else {
@@ -1154,6 +1156,14 @@ fun CatalogDetail(
     } else {
         null
     }
+    val requestedCueTargets = readyQueuedTargets + pendingActions?.requestedTargets.orEmpty()
+    val cueRequested = requestCueTarget?.let { it in requestedCueTargets } == true
+    SideEffect {
+        // Consumption ends this acceptance episode even when input and reader focus stay put.
+        if (!app.pictureshow.core.detailRequestCueRemainsActive(requestCueTarget != null, false, cueRequested)) {
+            requestCueTarget = null
+        }
+    }
     fun headerFocus(target: String, focused: Boolean) {
         if (!focused && requestCueTarget == target) requestCueTarget = null
         if (focused) {
@@ -1164,17 +1174,27 @@ fun CatalogDetail(
         }
     }
     // Reader navigation can select static text without changing Compose input focus.
-    LaunchedEffect(playbackWaiting, pendingSemanticsRevealed, lifecycleState) {
+    LaunchedEffect(playbackWaiting, pendingSemanticsRevealed, lifecycleState, requestCueTarget) {
         val accessibility = focusHost.context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
-        if (playbackWaiting &&
-            pendingSemanticsRevealed &&
+        val observingPendingFocus = playbackWaiting && pendingSemanticsRevealed
+        if ((observingPendingFocus || requestCueTarget != null) &&
             lifecycleState == Lifecycle.State.RESUMED &&
             accessibility.isEnabled
         ) {
             val started = android.os.SystemClock.uptimeMillis()
-            while (android.os.SystemClock.uptimeMillis() - started < app.pictureshow.core.ApiTimeouts.REQUEST_MILLIS) {
-                if (readerMovement.observe(playbackReaderTarget(focusHost))) {
+            while (android.os.SystemClock.uptimeMillis() - started < app.pictureshow.core.ApiTimeouts.REQUEST_MILLIS &&
+                (observingPendingFocus || requestCueTarget != null)
+            ) {
+                val readerTarget = playbackReaderTarget(focusHost)
+                if (!app.pictureshow.core.detailRequestCueRemainsActive(
+                        requestCueTarget != null,
+                        readerTarget in setOf(PlaybackReaderTarget.TEXT, PlaybackReaderTarget.OTHER_ACTION)
+                    )
+                ) {
+                    requestCueTarget = null
+                }
+                if (observingPendingFocus && readerMovement.observe(readerTarget)) {
                     pendingViewerMoved = true
                     reportPendingFocus()
                 }
@@ -1534,7 +1554,7 @@ fun CatalogDetail(
                                             }
                                     ) { Text(if (retryWorking || recoveryHandoff) "Retrying…" else "Retry") }
                                     Text(
-                                        if (recoveryHandoff) recoveryHandoffMessage ?: recoveryReason else recoveryReason,
+                                        app.pictureshow.core.detailReadBandText(retryWorking || recoveryHandoff, recoveryReason),
                                         color = Color(0xFFFFCCB8),
                                         modifier = Modifier.testTag("detail:read-error")
                                     )
@@ -1542,8 +1562,9 @@ fun CatalogDetail(
                             }
                         } else if (commandNotice != null || (playbackWaiting && state.error == null)) {
                             val status = commandNotice ?: when {
-                                state.readSucceeded && !state.loading && !state.playbackReportFinished -> "Item loaded. Saving progress…"
-                                state.playbackReportFinished -> "Loading item…"
+                                state.readSucceeded && !state.loading && state.playbackPending && !state.playbackReportFinished ->
+                                    "Item loaded. Saving progress…"
+                                !state.playbackPending || state.playbackReportFinished -> "Loading item…"
                                 else -> "Saving progress…"
                             }
                             Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
@@ -2052,7 +2073,7 @@ private fun DetailActions(
                 pending?.playedLabel ?: if (blocked) {
                     app.pictureshow.core.detailUnavailableActionLabel("played")
                 } else if ("played" in readyQueuedTargets) {
-                    "Watched change requested"
+                    app.pictureshow.core.detailRequestedActionLabel("played", requestCueTarget == "played")
                 } else if (item.isWatched) {
                     "Mark unwatched"
                 } else {
@@ -2063,7 +2084,7 @@ private fun DetailActions(
                 pending?.favoriteLabel ?: if (blocked) {
                     app.pictureshow.core.detailUnavailableActionLabel("favorite")
                 } else if ("favorite" in readyQueuedTargets) {
-                    "Favorite change requested"
+                    app.pictureshow.core.detailRequestedActionLabel("favorite", requestCueTarget == "favorite")
                 } else if (item.userData.isFavorite) {
                     "Unfavorite"
                 } else {
@@ -2071,6 +2092,9 @@ private fun DetailActions(
                 }
                 )
         )
+
+        val requestedTargets = readyQueuedTargets + pending?.requestedTargets.orEmpty()
+        val activeRequestCue = requestCueTarget?.takeIf { it in requestedTargets }
 
         // The parent supplies the plain action name and native disabled property.
         // Keep this wording visible without also merging it into TalkBack's label.
@@ -2121,10 +2145,10 @@ private fun DetailActions(
                         "favorite" -> if (item.userData.isFavorite) "Favorite" else "Not favorite"
                         else -> null
                     }
-                    val requested = target in readyQueuedTargets || target in pending?.requestedTargets.orEmpty()
+                    val requested = target in requestedTargets
                     // A newly accepted request must beat the previous focus speech. Ordinary
                     // state-description events queue behind it and can be dropped by the next key.
-                    // Priority ends when focus leaves; revisiting an already queued action is quiet.
+                    // Priority ends when input or reader focus leaves; rediscovery is quiet.
                     if (app.pictureshow.core.detailRequestFeedbackIsUrgent(
                             requestCueTarget == target,
                             requested,
@@ -2135,7 +2159,7 @@ private fun DetailActions(
                     }
                     app.pictureshow.core.detailActionDescription(
                         currentState,
-                        available
+                        available && activeRequestCue != target
                     )?.let { stateDescription = it }
                 }.onPreviewKeyEvent {
                     // Handle pending Select at DOWN, before a fresh callback can replace it.
@@ -2209,7 +2233,9 @@ private fun DetailActions(
                         )
                         .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                         .then(actionModifier("played", "played", click)).semantics {
-                            if (!blocked && pending?.available != false) toggleableState = ToggleableState(item.isWatched)
+                            if (!blocked && pending?.available != false && activeRequestCue != "played") {
+                                toggleableState = ToggleableState(item.isWatched)
+                            }
                         }
                 ) {
                     Text(labels.getValue("played"), modifier = labelSemantics)
@@ -2234,7 +2260,9 @@ private fun DetailActions(
                         )
                         .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                         .then(actionModifier("favorite", "favorite", click)).semantics {
-                            if (!blocked && pending?.available != false) toggleableState = ToggleableState(item.userData.isFavorite)
+                            if (!blocked && pending?.available != false && activeRequestCue != "favorite") {
+                                toggleableState = ToggleableState(item.userData.isFavorite)
+                            }
                         }
                 ) {
                     Text(labels.getValue("favorite"), modifier = labelSemantics)

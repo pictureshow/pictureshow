@@ -427,7 +427,7 @@ class DetailFeedbackTest {
         compose.onNodeWithText("Play requested").assertIsDisplayed()
     }
 
-    @Test fun acceptedWatchedRequestKeepsActualValueAndAnnouncesItsRequestedLabel() {
+    @Test fun acceptedWatchedRequestSpeaksTheRequestWithoutRepeatingItsOldValue() {
         compose.setContent {
             PictureshowTheme {
                 CatalogDetail(
@@ -445,12 +445,12 @@ class DetailFeedbackTest {
         compose.onNodeWithTag("detail:played-pending").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:played-pending").assertIsFocused()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Unwatched"))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
         compose.onNodeWithText("Watched change requested").assertIsDisplayed()
     }
 
-    @Test fun acceptedFavoriteRequestKeepsActualValueAndAnnouncesItsRequestedLabel() {
+    @Test fun acceptedFavoriteRequestSpeaksTheRequestWithoutRepeatingItsOldValue() {
         compose.setContent {
             PictureshowTheme {
                 CatalogDetail(
@@ -468,7 +468,7 @@ class DetailFeedbackTest {
         compose.onNodeWithTag("detail:favorite-pending").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("detail:favorite-pending").assertIsFocused()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not favorite"))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
         compose.onNodeWithText("Favorite change requested").assertIsDisplayed()
     }

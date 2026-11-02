@@ -94,3 +94,51 @@ fun detailSuppressesEmptyHostFocus(
 
 /** Once the first handoff finishes, a later lifecycle pause is not another arrival. */
 fun detailArrivalStillPending(wasPending: Boolean, handoffFinished: Boolean): Boolean = wasPending && !handoffFinished
+
+/** A successful full read started after the completion check can replace its older snapshot. */
+fun detailReadCanReplaceCompletion(completionItem: String, completionRead: Long, item: String, read: Long, succeeded: Boolean): Boolean =
+    succeeded && completionItem == item && read > completionRead
+
+/** A cold destination offers the same guarded requests as a returning destination. */
+fun detailNeedsPendingControls(
+    loading: Boolean,
+    firstArrival: Boolean,
+    canQueue: Boolean,
+    returningFromPlayback: Boolean = false
+): Boolean = loading && firstArrival && canQueue && !returningFromPlayback
+
+/** Request acceptance is a cue; rediscovery describes an outstanding request instead. */
+fun detailRequestedActionLabel(target: String, newlyAccepted: Boolean): String = if (newlyAccepted) {
+    when (target) {
+        "primary" -> "Play requested"
+        "from-start" -> "Start requested"
+        else -> "${detailHeldActionLabel(target)} change requested"
+    }
+} else {
+    "${detailHeldActionLabel(target)} already requested"
+}
+
+/** Session bookkeeping without a data revision cannot invalidate retained catalog reads. */
+fun catalogRevisionNeedsRefresh(previous: Long?, current: Long): Boolean = previous == null || previous != current
+
+/** A pending attempt reports current work, never the previous attempt's reason. */
+fun detailReadBandText(retrying: Boolean, reason: String): String = if (retrying) "Loading item. Please wait." else reason
+
+/** A matching full leaf read already contains the acknowledged completion's current values. */
+fun detailSessionNeedsRead(newRevision: Boolean, refreshed: Boolean, container: Boolean, alreadyConfirmed: Boolean): Boolean =
+    newRevision && (refreshed || container) && !(refreshed && alreadyConfirmed)
+
+/** A failure flag alone does not supply a reason for a superseding pending attempt. */
+fun detailReadHasFailure(readFailed: Boolean, reason: String?, mutationReady: Boolean): Boolean =
+    reason != null && (readFailed || !mutationReady)
+
+/** Reader navigation to another node ends acceptance even when Compose input focus stays. */
+fun detailRequestCueRemainsActive(active: Boolean, readerLeftAction: Boolean, requested: Boolean = true): Boolean =
+    active && requested && !readerLeftAction
+
+/** Only an applied full leaf result can already confirm a matching report refresh. */
+fun detailHasConfirmedLeafRead(readSucceeded: Boolean, sameUserData: Boolean, container: Boolean): Boolean =
+    readSucceeded && sameUserData && !container
+
+/** Series and Season readiness includes their dependent episode reads. */
+fun detailReadRequiresDependents(type: String): Boolean = type in setOf("Series", "Season")
