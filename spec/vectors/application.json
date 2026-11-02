@@ -5348,6 +5348,111 @@
       },
       "expected": false,
       "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.completion-intent-lifetime.in-flight",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": true,
+        "rawReadSucceeded": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.completion-intent-lifetime.in-flight-raw-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": true,
+        "rawReadSucceeded": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.completion-intent-lifetime.failed",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": true,
+        "reportPending": true,
+        "rawReadSucceeded": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.completion-intent-lifetime.failed-with-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": true,
+        "reportPending": false,
+        "rawReadSucceeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.completion-intent-lifetime.acknowledged-awaiting-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": false,
+        "rawReadSucceeded": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.completion-intent-lifetime.settled-raw-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": false,
+        "rawReadSucceeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.retry-cue-lifetime.enabled",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.retry-cue-lifetime.disabled",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": false,
+        "elapsedMillis": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.retry-cue-lifetime.before-budget",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 29999
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.retry-cue-lifetime.budget",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.retry-cue-lifetime.expired",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 30001
+      },
+      "expected": false
     }
   ]
 }

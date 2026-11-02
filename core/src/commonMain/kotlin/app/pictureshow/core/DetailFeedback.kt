@@ -224,3 +224,11 @@ fun detailRetryAttemptSucceeded(baseline: Long?, attempt: Long, loading: Boolean
 
 /** Only the raw successful read can confirm an ACK; projected completion state cannot. */
 fun detailReadMatchesAcknowledgement(raw: ItemUserData?, acknowledged: ItemUserData?): Boolean = raw != null && raw == acknowledged
+
+/** A failed report ends its claim; a successful raw read ends it once reporting is over. */
+fun detailCompletionIntentRetained(reportFailed: Boolean, reportPending: Boolean, rawReadSucceeded: Boolean): Boolean =
+    !reportFailed && (reportPending || !rawReadSucceeded)
+
+/** No reader can receive a cue while accessibility is disabled; pending delivery is bounded. */
+fun detailRetryCueCanWait(accessibilityEnabled: Boolean, elapsedMillis: Long): Boolean =
+    accessibilityEnabled && elapsedMillis < ApiTimeouts.REQUEST_MILLIS

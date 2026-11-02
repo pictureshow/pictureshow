@@ -108,6 +108,19 @@ class ApplicationParityVectorsTest {
                             input.getValue("pending").jsonPrimitive.content
                         )
                     )
+                    "detail-completion-intent-retained" -> JsonPrimitive(
+                        detailCompletionIntentRetained(
+                            input.getValue("reportFailed").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("reportPending").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("rawReadSucceeded").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-retry-cue-can-wait" -> JsonPrimitive(
+                        detailRetryCueCanWait(
+                            input.getValue("accessibilityEnabled").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("elapsedMillis").jsonPrimitive.long
+                        )
+                    )
                     "detail-completion-presented-played" -> JsonPrimitive(
                         detailCompletionPresentedPlayed(
                             input.getValue("played").jsonPrimitive.booleanOrNull!!,
