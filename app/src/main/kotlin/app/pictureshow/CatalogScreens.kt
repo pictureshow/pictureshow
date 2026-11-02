@@ -973,14 +973,21 @@ fun CatalogDetail(
                 lifecycleState == Lifecycle.State.RESUMED
             )
         ) {
+            val baseline = retryCueBaseline
             val started = android.os.SystemClock.uptimeMillis()
             val reason = recoveryReason.trim().trimEnd('.')
-            while (android.os.SystemClock.uptimeMillis() - started < app.pictureshow.core.ApiTimeouts.REQUEST_MILLIS) {
-                if (feedbackChannel.sendReadFailure("Loading failed. $reason. Retry is available.")) {
-                    retryCueBaseline = null
-                    break
+            try {
+                while (app.pictureshow.core.detailRetryCueCanWait(
+                        feedbackChannel.accessibilityEnabled,
+                        android.os.SystemClock.uptimeMillis() - started
+                    )
+                ) {
+                    if (feedbackChannel.sendReadFailure("Loading failed. $reason. Retry is available.")) break
+                    delay(50)
                 }
-                delay(50)
+            } finally {
+                // Timeout, disabled accessibility and cancellation also end this Retry episode.
+                if (retryCueBaseline == baseline) retryCueBaseline = null
             }
         }
     }

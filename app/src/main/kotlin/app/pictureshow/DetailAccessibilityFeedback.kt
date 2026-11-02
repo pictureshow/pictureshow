@@ -60,6 +60,12 @@ internal class DetailFeedbackChannel internal constructor(
     private val bridge: DetailPresentationBridge,
     private val owner: Any
 ) {
+    val accessibilityEnabled: Boolean
+        get() = (
+            host.context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+                as android.view.accessibility.AccessibilityManager
+            ).isEnabled
+
     fun sendReadFailure(message: String): Boolean {
         val provider = host.accessibilityNodeProvider as? DetailPresentationProvider
             ?: bridge.delegate.getAccessibilityNodeProvider(host)?.provider as? DetailPresentationProvider

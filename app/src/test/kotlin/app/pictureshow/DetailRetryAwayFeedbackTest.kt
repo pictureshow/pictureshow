@@ -197,6 +197,47 @@ class DetailRetryAwayFeedbackTest {
         assertEquals(1, fixture.retryCalls)
     }
 
+    @Test fun anUndeliverableRetryCueExpiresBeforeAnUnrelatedFailure() {
+        val fixture = fixture()
+        beginRetry(fixture)
+        fixture.native.readerFocusedId = -1
+        fixture.state.value = fixture.state.value.copy(loading = false, error = failure, readFailed = true)
+        compose.waitForIdle()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(30_001))
+        compose.mainClock.advanceTimeBy(100)
+        compose.waitForIdle()
+        unrelatedFailureOnHeading(fixture)
+        assertTrue(retryAwayCues(fixture).isEmpty(), "A timed-out cue cannot own another failed read")
+    }
+
+    @Test fun accessibilityOffEndsTheCueInsteadOfWaitingForALaterReader() {
+        val fixture = fixture()
+        beginRetry(fixture)
+        val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+            as android.view.accessibility.AccessibilityManager
+        Shadows.shadowOf(manager).setEnabled(false)
+        fixture.state.value = fixture.state.value.copy(loading = false, error = failure, readFailed = true)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(100)
+        Shadows.shadowOf(manager).setEnabled(true)
+        unrelatedFailureOnHeading(fixture)
+        assertTrue(retryAwayCues(fixture).isEmpty(), "Enabling accessibility cannot revive an old Retry cue")
+    }
+
+    private fun unrelatedFailureOnHeading(fixture: NativeFixture) {
+        fixture.state.value = fixture.state.value.copy(
+            loading = true,
+            error = null,
+            readFailed = false,
+            readAttempt = fixture.state.value.readAttempt + 1
+        )
+        compose.waitForIdle()
+        moveReaderToHeading(fixture)
+        fixture.parent.events.clear()
+        fixture.state.value = fixture.state.value.copy(loading = false, error = failure, readFailed = true)
+        compose.waitForIdle()
+    }
+
     private data class NativeEvent(
         val type: Int,
         val changeTypes: Int,
