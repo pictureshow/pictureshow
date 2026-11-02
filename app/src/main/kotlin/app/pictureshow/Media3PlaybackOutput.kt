@@ -63,6 +63,28 @@ internal class Media3PlaybackOutput(
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
     private var current: PlayDecision? = null
     private var saved = PlaybackPosition(0, false)
+    private val mutableForeground = MutableStateFlow(true)
+    val foreground = mutableForeground.asStateFlow()
+    private val mutablePauseIntent = MutableStateFlow(false)
+    val pauseIntent = mutablePauseIntent.asStateFlow()
+
+    var stopGeneration: Long = 0
+        private set
+
+    /** Stop belongs to the viewing, including opens that have not published a player yet. */
+    fun setForeground(value: Boolean) {
+        if (!value && mutableForeground.value) stopGeneration++
+        mutableForeground.value = value
+        if (!value) pause()
+        val snapshot = position()
+        PlaybackDiagnostics.write("lifecycle foreground=$value paused=${snapshot.paused} positionMs=${snapshot.milliseconds}")
+    }
+
+    private fun playIntent(requested: Boolean): Boolean {
+        if (requested && !mutableForeground.value) return false
+        if (requested) mutablePauseIntent.value = false
+        return requested
+    }
     private var completedPosition: PlaybackPosition? = null
     private var audio = -1
     private var subtitle = -1
@@ -84,7 +106,10 @@ internal class Media3PlaybackOutput(
         }
     }
 
-    override fun position(): PlaybackPosition = completedPosition ?: mutablePlayer.value?.let(::boundedPlaybackPosition) ?: saved
+    override fun position(): PlaybackPosition {
+        val snapshot = completedPosition ?: mutablePlayer.value?.let(::boundedPlaybackPosition) ?: saved
+        return if (mutablePauseIntent.value || !mutableForeground.value) snapshot.copy(paused = true) else snapshot
+    }
 
     override fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean) {
         releasePlayer(closeSession = false)
@@ -94,7 +119,7 @@ internal class Media3PlaybackOutput(
         captions.selected(subtitleIndex, paused, positionMs)
         audio = audioIndex
         subtitle = subtitleIndex
-        saved = PlaybackPosition(positionMs, paused)
+        saved = PlaybackPosition(positionMs, paused || mutablePauseIntent.value || !mutableForeground.value)
         completedPosition = null
         val selector = PictureshowTrackSelector(context, decision.method == PlayMethod.Transcode)
         selector.parameters = selector.buildUponParameters()
@@ -269,7 +294,7 @@ internal class Media3PlaybackOutput(
             }
         })
         val gated = ReleaseGatedPlayer(next)
-        val managed = ReopeningPlayer(gated)
+        val managed = ReopeningPlayer(gated, ::playIntent)
         reopenState = managed
         val exposed = if (serverSeek) {
             TranscodeSeekPlayer(managed, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
@@ -312,7 +337,7 @@ internal class Media3PlaybackOutput(
                     PlaybackDiagnostics.write(
                         decision,
                         "ready",
-                        "requestedMs=$readyTargetMs appliedMs=${readyPosition.milliseconds} seekable=${next.isCurrentMediaItemSeekable} durationMs=${exposed.duration}"
+                        "requestedMs=$readyTargetMs appliedMs=${readyPosition.milliseconds} paused=${readyPosition.paused} foreground=${mutableForeground.value} seekable=${next.isCurrentMediaItemSeekable} durationMs=${exposed.duration}"
                     )
                     if (!initialReady) {
                         initialReady = true
@@ -326,6 +351,15 @@ internal class Media3PlaybackOutput(
                     onReady(decision, readyPosition, readyTargetMs)
                 }
                 if (playbackState == Player.STATE_ENDED) endSignal.ended()
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (activePlayer === next) {
+                    PlaybackDiagnostics.write(
+                        decision,
+                        "play-state",
+                        "playing=$isPlaying paused=${position().paused} foreground=${mutableForeground.value} positionMs=${position().milliseconds}"
+                    )
+                }
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (activePlayer === next) {
@@ -421,7 +455,8 @@ internal class Media3PlaybackOutput(
             }
             next.setMediaSource(source, if (serverSeek) 0 else positionMs)
         }
-        next.playWhenReady = !paused
+        next.playWhenReady =
+            app.pictureshow.core.playback.PlaybackVisibility.playWhenReady(!paused, true, mutableForeground.value, mutablePauseIntent.value)
         // Publish a prepared replacement: IDLE would advertise no media to external controllers.
         gated.hold()
         playbackThread.prepare {
@@ -500,7 +535,11 @@ internal class Media3PlaybackOutput(
     }
 
     override fun pause() {
+        mutablePauseIntent.value = true
+        saved = saved.copy(paused = true)
+        completedPosition = completedPosition?.copy(paused = true)
         mutablePlayer.value?.pause()
+        activePlayer?.pause()
     }
 
     override fun beginSeek() {

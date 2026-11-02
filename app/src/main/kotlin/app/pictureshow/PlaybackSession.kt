@@ -693,12 +693,24 @@ internal class PlaybackSession(
     private suspend fun reportProgress(start: Boolean = false): ClientResult<Unit> {
         val info = progressInfo()
         val observe =
-            reportDiagnostic(if (start) "start" else "progress", info.positionTicks, info.audioStreamIndex, info.subtitleStreamIndex)
+            reportDiagnostic(
+                if (start) "start" else "progress",
+                info.positionTicks,
+                info.audioStreamIndex,
+                info.subtitleStreamIndex,
+                info.isPaused
+            )
         return if (start) gateway.start(info, observe) else gateway.progress(info, observe)
     }
 
     /** Capture the same immutable fields/provenance as the body, before suspending in HTTP. */
-    private fun reportDiagnostic(kind: String, positionTicks: Long, audio: Int?, subtitle: Int?): (PlaybackHttpOutcome) -> Unit {
+    private fun reportDiagnostic(
+        kind: String,
+        positionTicks: Long,
+        audio: Int?,
+        subtitle: Int?,
+        paused: Boolean? = null
+    ): (PlaybackHttpOutcome) -> Unit {
         val current = decision ?: reportingDecision
         val sequence = ++reportSequence
         val fields = "seq=$sequence " + app.pictureshow.core.playback.PlaybackReportFields.describe(
@@ -716,7 +728,7 @@ internal class PlaybackSession(
                     current,
                     "report",
                     "$fields status=${outcome.status ?: "none"} " +
-                        "failure=${outcome.failure?.name?.lowercase() ?: "none"} elapsedMs=${sent.elapsedNow().inWholeMilliseconds}"
+                        "failure=${outcome.failure?.name?.lowercase() ?: "none"} elapsedMs=${sent.elapsedNow().inWholeMilliseconds} paused=${paused ?: "omitted"}"
                 )
             )
         }

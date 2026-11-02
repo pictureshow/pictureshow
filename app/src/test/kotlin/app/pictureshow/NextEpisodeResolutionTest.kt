@@ -68,6 +68,10 @@ class NextEpisodeResolutionTest {
     private val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
     private val episode = MediaItem("episode", "An episode", "Episode", seriesId = "series")
     private val releaseLookup = CompletableDeferred<Unit>()
+    private val initialPrepareEntered = CompletableDeferred<Unit>()
+    private val initialPrepareGate = CompletableDeferred<Unit>()
+    private var stopReportGate: CompletableDeferred<Unit>? = null
+    private val reportBodies = java.util.Collections.synchronizedList(mutableListOf<String>())
     private val metadataGate = CompletableDeferred<Unit>()
     private val lookups = AtomicInteger()
     private val reachedEnd = java.util.concurrent.atomic.AtomicBoolean()
@@ -83,11 +87,94 @@ class NextEpisodeResolutionTest {
 
     @After fun cleanup() {
         reopenedManifest.countDown()
+        initialPrepareGate.complete(Unit)
+        stopReportGate?.complete(Unit)
         releaseLookup.complete(Unit)
         metadataGate.complete(Unit)
         compose.runOnIdle { if (::output.isInitialized) output.release() }
         stopKoin()
         if (::http.isInitialized) http.close()
+    }
+
+    private fun lifecycle(event: androidx.lifecycle.Lifecycle.Event) = compose.runOnIdle {
+        val registry = compose.activity.lifecycle as androidx.lifecycle.LifecycleRegistry
+        registry.handleLifecycleEvent(event)
+        if (event ==
+            androidx.lifecycle.Lifecycle.Event.ON_START
+        ) {
+            registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_RESUME)
+        }
+    }
+
+    @Test fun stoppedInitialPrepareReportsPausedAndReturningDoesNotResume() {
+        launch(holdInitial = true)
+        lifecycle(androidx.lifecycle.Lifecycle.Event.ON_STOP)
+        initialPrepareGate.complete(Unit)
+        waitUntil { output.player.value != null }
+        compose.runOnIdle {
+            assertTrue(!output.player.value!!.playWhenReady)
+            output.onReady(decision(), output.position(), 42_000)
+        }
+        waitUntil { reportBodies.any { "IsPaused" in it } }
+        assertTrue(reportBodies.all { !it.contains("\"IsPaused\":false") }, reportBodies.toString())
+        assertTrue(reports.none { it == "/Sessions/Playing/Stopped" })
+        lifecycle(androidx.lifecycle.Lifecycle.Event.ON_START)
+        compose.runOnIdle {
+            assertTrue(!output.player.value!!.playWhenReady)
+            assertEquals(PlaybackPosition(42_000, true), output.position())
+            assertTrue(next.isEmpty())
+            output.player.value!!.play()
+            assertTrue(output.player.value!!.playWhenReady)
+        }
+    }
+
+    @Test fun aLateNextLookupCannotAdvanceWhileStoppedOrOnReturn() {
+        launch()
+        reopenAndEnd()
+        lifecycle(androidx.lifecycle.Lifecycle.Event.ON_STOP)
+        releaseLookup.complete(Unit)
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        assertTrue(next.isEmpty())
+        lifecycle(androidx.lifecycle.Lifecycle.Event.ON_START)
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        assertTrue(next.isEmpty(), "Return cannot restart an ended automatic continuation")
+        compose.onNodeWithTag("next:play").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        waitUntil { next.isNotEmpty() }
+        assertEquals(listOf("next"), next)
+    }
+
+    @Test fun backgroundingDuringCommittedAdvanceRetainsAnExplicitNextDestination() = committedAdvance(false)
+
+    @Test fun cancellingADeferredAdvanceExitsWithoutStartingItsNextEpisode() = committedAdvance(true)
+
+    private fun committedAdvance(cancel: Boolean) {
+        launch()
+        stopReportGate = CompletableDeferred()
+        reopenAndEnd()
+        releaseLookup.complete(Unit)
+        waitUntil {
+            org.robolectric.shadows.ShadowLog.getLogs().any { it.tag == "PictureshowPlayback" && it.msg.contains("reason=next-episode") }
+        }
+        lifecycle(androidx.lifecycle.Lifecycle.Event.ON_STOP)
+        stopReportGate!!.complete(Unit)
+        waitUntil { org.robolectric.shadows.ShadowLog.getLogs().any { it.msg.startsWith("continuation-deferred ") } }
+        assertTrue(next.isEmpty(), "An already committed Stop cannot route to a new viewing behind HOME")
+        lifecycle(androidx.lifecycle.Lifecycle.Event.ON_START)
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        assertTrue(next.isEmpty())
+        if (cancel) {
+            compose.onNodeWithTag("next:cancel").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+            waitUntil { exits > 0 }
+            assertEquals(1, exits)
+            assertTrue(next.isEmpty(), "Cancel cannot leave a Play path to the deferred successor")
+        } else {
+            compose.onNodeWithTag("next:play").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+            waitUntil { next.isNotEmpty() }
+            assertEquals(listOf("next"), next)
+        }
     }
 
     @Test fun pausedSeekToEndAfterTrackReopenWaitsForPendingLookupThenPlaysExactlyOnce() {
@@ -172,7 +259,13 @@ class NextEpisodeResolutionTest {
         }
     }
 
-    private fun launch(failFirst: Boolean = false, accessible: Boolean = false, noNext: Boolean = false, failAlways: Boolean = false) {
+    private fun launch(
+        failFirst: Boolean = false,
+        accessible: Boolean = false,
+        noNext: Boolean = false,
+        failAlways: Boolean = false,
+        holdInitial: Boolean = false
+    ) {
         val store = object : DataStore<Preferences> {
             override val data = MutableStateFlow(emptyPreferences())
             override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
@@ -199,6 +292,10 @@ class NextEpisodeResolutionTest {
                         }
                         path.endsWith("/PlaybackInfo") -> {
                             val count = preparations.incrementAndGet()
+                            if (holdInitial && count == 1) {
+                                initialPrepareEntered.complete(Unit)
+                                initialPrepareGate.await()
+                            }
                             """{"PlaySessionId":"encode-$count","MediaSources":[{"Id":"source","RunTimeTicks":600000000,
                             "SupportsTranscoding":true,"TranscodingContainer":"ts","TranscodingSubProtocol":"hls",
                             "TranscodingUrl":"/Videos/episode/master.m3u8","DefaultSubtitleStreamIndex":0,
@@ -213,6 +310,10 @@ class NextEpisodeResolutionTest {
                         path.startsWith("/MediaSegments") -> """{"Items":[]}"""
                         else -> {
                             reports += path
+                            if (path.startsWith("/Sessions/Playing")) {
+                                reportBodies += (request.body as io.ktor.http.content.TextContent).text
+                                if (path.endsWith("/Stopped")) stopReportGate?.await()
+                            }
                             return@addHandler respond("", HttpStatusCode.NoContent)
                         }
                     }
@@ -246,6 +347,10 @@ class NextEpisodeResolutionTest {
             PictureshowTheme {
                 PlayerItemScreen(account, episode, 42_000, catalog, { next += it.id }, { exits++ }, providedOutput = output)
             }
+        }
+        if (holdInitial) {
+            waitUntil { initialPrepareEntered.isCompleted }
+            return
         }
         try {
             waitUntil { (output.player.value?.duration ?: 0) > 0 && lookups.get() > 0 }

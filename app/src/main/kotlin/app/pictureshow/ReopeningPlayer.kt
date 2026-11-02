@@ -11,7 +11,7 @@ import androidx.media3.common.text.CueGroup
 import com.google.common.util.concurrent.ListenableFuture
 
 /** Retiring a decoder is buffering within a viewing, with the same timeline and play/pause intent. */
-internal class ReopeningPlayer(player: Player) : ForwardingSimpleBasePlayer(player) {
+internal class ReopeningPlayer(player: Player, private val playIntent: (Boolean) -> Boolean = { it }) : ForwardingSimpleBasePlayer(player) {
     private var reopening: State? = null
 
     override fun getState(): State {
@@ -45,8 +45,9 @@ internal class ReopeningPlayer(player: Player) : ForwardingSimpleBasePlayer(play
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
+        val allowed = playIntent(playWhenReady)
         reopening = reopening?.buildUpon()
-            ?.setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)?.build()
-        return super.handleSetPlayWhenReady(playWhenReady)
+            ?.setPlayWhenReady(allowed, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)?.build()
+        return super.handleSetPlayWhenReady(allowed)
     }
 }
