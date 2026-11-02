@@ -33,22 +33,28 @@ private final class ExternalSubtitleHTTP: URLProtocol {
         var selected: [String: Any] = ["Index": encoded ? 0 : 4, "Type": "Subtitle", "Codec": embedded ? "mov_text" : encoded ? "subrip" : "vtt", "IsExternal": !embedded,
                                       "DeliveryMethod": embedded ? "Embed" : encoded ? "Encode" : "External"]
         if !embedded, let reference { selected["DeliveryUrl"] = reference }
-        return [
-        "Id": "source", "Container": "mp4", "SupportsDirectPlay": true,
-        "DefaultAudioStreamIndex": encoded ? 2 : 1, "DefaultSubtitleStreamIndex": encoded ? 0 : 4,
-        "MediaStreams": [
+        var streams: [[String: Any]] = [
             ["Index": encoded ? 1 : 0, "Type": "Video", "Codec": "h264"],
-            ["Index": encoded ? 2 : 1, "Type": "Audio", "Codec": "aac"],
-            selected,
+            ["Index": encoded ? 2 : 1, "Type": "Audio", "Codec": "aac"], selected,
             ["Index": encoded ? 3 : 5, "Type": "Subtitle", "Codec": "vtt", "IsExternal": true,
              "DeliveryMethod": "External", "DeliveryUrl": "/captions/unselected.vtt"]
-        ] + (expanded ? (6...47).map { index -> [String: Any] in
-            ["Index": index, "Type": index % 2 == 0 ? "Audio" : "Subtitle", "Codec": index % 2 == 0 ? "aac" : "mov_text",
-             "Language": ["eng", "fra", "jpn"][index % 3], "Title": "Fixture track \(index)", "IsForced": index % 7 == 0,
-             "IsHearingImpaired": index % 5 == 0]
-        } : [])
         ]
+        if expanded {
+            for index in 6...47 {
+                let audio = index % 2 == 0
+                var stream: [String: Any] = ["Index": index, "Type": audio ? "Audio" : "Subtitle", "Codec": audio ? "aac" : "mov_text"]
+                stream["Language"] = ["eng", "fra", "jpn"][index % 3]
+                stream["Title"] = "Fixture track \(index)"
+                stream["IsForced"] = index % 7 == 0
+                stream["IsHearingImpaired"] = index % 5 == 0
+                streams.append(stream)
+            }
+        }
+        return ["Id": "source", "Container": "mp4", "SupportsDirectPlay": true,
+                "DefaultAudioStreamIndex": encoded ? 2 : 1, "DefaultSubtitleStreamIndex": encoded ? 0 : 4,
+                "MediaStreams": streams]
     }
+
     static func reset(_ value: Delivery, captionReference: String? = "/captions/selected.vtt", encodedExternalSubrip: Bool = false, embeddedSelectedTrack: Bool = false, expandedTracks: Bool = false) {
         lock.lock(); defer { lock.unlock() }
         delivery = value; self.captionReference = captionReference; self.encodedExternalSubrip = encodedExternalSubrip; self.embeddedSelectedTrack = embeddedSelectedTrack; self.expandedTracks = expandedTracks
