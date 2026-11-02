@@ -334,7 +334,7 @@ it("detail uses authoritative container counts and refuses failed freshness proj
     expect(d.UserData?.Played).toBe(false);
     const stale = fake([movie, { Items: [] }]).client;
     await expect(stale.detail("movie")).rejects.toMatchObject({
-        kind: "NOT_FOUND",
+        kind: "INVALID_RESPONSE",
     });
 });
 it("muted audio is reported honestly without changing the stop payload", () => {
