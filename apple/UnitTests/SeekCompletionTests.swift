@@ -319,12 +319,43 @@ private final class SeekRaceProtocol: URLProtocol {
         session.nativeSeekCompleted(.init(generation: -1, revision: 2, target: Ticks.from(seconds: 100)), success: true)
         session.nativeSeekCompleted(.init(generation: 0, revision: 2, target: Ticks.from(seconds: 100)), success: false)
         XCTAssertEqual(session.diagnostics.counts["seek.nativeCompleted", default: 0], 0)
-        XCTAssertEqual(Ticks.seconds(session.seek(by: 10)), 110)
+        XCTAssertEqual(Ticks.seconds(session.positionTicks), 80)
+        XCTAssertEqual(Ticks.seconds(session.seek(by: 10)), 90)
         // Ordinary seek invalidates every outstanding native receipt as well.
         session.nativeSeekCompleted(.init(generation: 0, revision: 2, target: Ticks.from(seconds: 100)), success: true)
-        XCTAssertEqual(Ticks.seconds(session.positionTicks), 110)
+        XCTAssertEqual(Ticks.seconds(session.positionTicks), 90)
         XCTAssertEqual(session.diagnostics.counts["seek.nativeCompleted", default: 0], 0)
         player.completeSeek(at: 0, success: true)
+        try await drainMainActor()
+        await session.stop()
+    }
+
+    func testFailedMatchingNativeSeekReturnsToObservedClockForReportAndNextStep() async throws {
+        try await makeReadySession()
+        XCTAssertEqual(session.nativeSeekTarget(from: 80, to: 90), 90)
+        session.nativeSeekCompleted(.init(generation: 0, revision: 1, target: Ticks.from(seconds: 90)), success: false)
+        XCTAssertEqual(Ticks.seconds(session.positionTicks), 80)
+        XCTAssertEqual(session.diagnostics.counts["seek.nativeFailed", default: 0], 1)
+        for _ in 0..<100 {
+            if SeekRaceProtocol.reportBodies.contains(where: { $0.0 == "progress" && ($0.1["PositionTicks"] as? NSNumber)?.int64Value == Ticks.from(seconds: 80) }) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(SeekRaceProtocol.reportBodies.contains(where: { $0.0 == "progress" && ($0.1["PositionTicks"] as? NSNumber)?.int64Value == Ticks.from(seconds: 80) }),
+                      "A failed native seek must report the observed clock, never the unvisited target")
+        XCTAssertEqual(Ticks.seconds(session.seek(by: 10)), 90)
+        player.completeSeek(at: 0, success: true)
+        try await drainMainActor()
+        await session.stop()
+    }
+
+    func testFailedProgrammaticSeekAlsoReconcilesBeforeNextRelativeStep() async throws {
+        try await makeReadySession()
+        session.seek(toTicks: Ticks.from(seconds: 30))
+        player.completeSeek(at: 0, success: false)
+        try await drainMainActor()
+        XCTAssertEqual(session.positionTicks, 0)
+        XCTAssertEqual(Ticks.seconds(session.seek(by: 10)), 10)
+        player.completeSeek(at: 1, success: true)
         try await drainMainActor()
         await session.stop()
     }
