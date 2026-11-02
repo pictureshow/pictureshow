@@ -141,7 +141,7 @@ public struct DetailReadyFeedback: Sendable {
     private var previousFocus: String?
     private var presentedFocus: String?
     public init() { }
-    public mutating func update(held: Bool, focused: String?, resumed: Bool, usable: Bool = true, presented: Bool = true, cancelled: Bool = false, nativePresented: String? = nil, submitted: Bool = true) -> String? {
+    public mutating func update(held: Bool, focused: String?, resumed: Bool, usable: Bool = true, presented: Bool = false, cancelled: Bool = false, nativePresented: String? = nil, submitted: Bool = true) -> String? {
         guard resumed, !cancelled, let focused else {
             wasHeld = false; previousFocus = nil; presentedFocus = nil
             return nil
