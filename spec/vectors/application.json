@@ -3280,7 +3280,8 @@
           {
             "held": false,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           }
         ]
       },
@@ -3296,27 +3297,32 @@
           {
             "held": true,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": true
           },
           {
             "held": false,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           },
           {
             "held": false,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           },
           {
             "held": false,
             "focused": "played",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           },
           {
             "held": false,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           }
         ]
       },
@@ -3336,17 +3342,20 @@
           {
             "held": true,
             "focused": null,
-            "resumed": true
+            "resumed": true,
+            "presented": true
           },
           {
             "held": false,
             "focused": null,
-            "resumed": true
+            "resumed": true,
+            "presented": false
           },
           {
             "held": false,
             "focused": "played",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           }
         ]
       },
@@ -3364,12 +3373,14 @@
           {
             "held": true,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": true
           },
           {
             "held": false,
             "focused": "played",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           }
         ]
       },
@@ -3386,17 +3397,20 @@
           {
             "held": true,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": true
           },
           {
             "held": false,
             "focused": "primary",
-            "resumed": false
+            "resumed": false,
+            "presented": false
           },
           {
             "held": false,
             "focused": "primary",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           }
         ]
       },
@@ -3414,22 +3428,26 @@
           {
             "held": true,
             "focused": "played",
-            "resumed": true
+            "resumed": true,
+            "presented": true
           },
           {
             "held": false,
             "focused": "played",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           },
           {
             "held": true,
             "focused": "played",
-            "resumed": true
+            "resumed": true,
+            "presented": true
           },
           {
             "held": false,
             "focused": "played",
-            "resumed": true
+            "resumed": true,
+            "presented": false
           }
         ]
       },
@@ -3497,19 +3515,22 @@
             "held": true,
             "focused": "primary",
             "resumed": true,
-            "usable": false
+            "usable": false,
+            "presented": true
           },
           {
             "held": false,
             "focused": "primary",
             "resumed": true,
-            "usable": false
+            "usable": false,
+            "presented": false
           },
           {
             "held": false,
             "focused": "favorite",
             "resumed": true,
-            "usable": true
+            "usable": true,
+            "presented": false
           }
         ]
       },
@@ -3528,19 +3549,22 @@
             "held": true,
             "focused": "primary",
             "resumed": true,
-            "usable": false
+            "usable": false,
+            "presented": true
           },
           {
             "held": false,
             "focused": "primary",
             "resumed": true,
-            "usable": false
+            "usable": false,
+            "presented": false
           },
           {
             "held": false,
             "focused": "primary",
             "resumed": true,
-            "usable": true
+            "usable": true,
+            "presented": false
           }
         ]
       },
@@ -3559,19 +3583,22 @@
             "held": false,
             "focused": "played",
             "resumed": true,
-            "usable": true
+            "usable": true,
+            "presented": false
           },
           {
             "held": false,
             "focused": "played",
             "resumed": true,
-            "usable": false
+            "usable": false,
+            "presented": false
           },
           {
             "held": false,
             "focused": "played",
             "resumed": true,
-            "usable": true
+            "usable": true,
+            "presented": false
           }
         ]
       },
@@ -4273,6 +4300,637 @@
       "operation": "detail-read-dependencies",
       "input": {
         "type": "Folder"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.unpresented-hold",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.presented-hold",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready"
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.failed-publication",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.consumed-request",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.departed-page",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.retry-period",
+      "operation": "detail-retry-description",
+      "input": {
+        "reason": "The server could not complete the request (503)."
+      },
+      "expected": "Retry. Loading failed. The server could not complete the request (503)"
+    },
+    {
+      "id": "detail.feedback.f4.retry-none",
+      "operation": "detail-retry-description",
+      "input": {
+        "reason": "Connection lost"
+      },
+      "expected": "Retry. Loading failed. Connection lost"
+    },
+    {
+      "id": "detail.feedback.f4.retry-spaces",
+      "operation": "detail-retry-description",
+      "input": {
+        "reason": "Try again.  "
+      },
+      "expected": "Retry. Loading failed. Try again"
+    },
+    {
+      "id": "detail.feedback.f4.departing-000",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": false,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-001",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": false,
+        "onlyLabelChanged": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-010",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": true,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-011",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": true,
+        "onlyLabelChanged": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-100",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": false,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-101",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": false,
+        "onlyLabelChanged": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-110",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": true,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-111",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": true,
+        "onlyLabelChanged": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f4.request-waits-for-reader-arrival",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true,
+        "presented": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f4.request-ends-after-reader-arrival",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true,
+        "presented": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.request-consumed-before-reader-arrival",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true,
+        "presented": false,
+        "requested": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.ready.unowned-player",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.f4.ready.assigned-but-unqueried",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.f4.request.automatic-label",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": true,
+        "onlyLabelChanged": true,
+        "rediscovery": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f4.request.explicit-cue",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": true,
+        "onlyLabelChanged": true,
+        "rediscovery": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.request.structure",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": true,
+        "onlyLabelChanged": false,
+        "rediscovery": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.request.other-node",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": false,
+        "onlyLabelChanged": true,
+        "rediscovery": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.ready.parent-query-without-label",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.observer-restart",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          },
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.new-acceptance",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          },
+          {
+            "request": 2,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        true,
+        true
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.not-focused",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": false,
+            "submitted": false
+          },
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.not-submitted",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": false
+          },
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        true,
+        true
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.cancelled",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": null,
+            "eligible": true,
+            "submitted": false
+          },
+          {
+            "request": 1,
+            "eligible": false,
+            "submitted": false
+          }
+        ]
+      },
+      "expected": [
+        false,
+        false
+      ]
+    },
+    {
+      "id": "detail.ready.rejected-submission-retries-once",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "submitted": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        "Ready",
+        null
+      ]
+    },
+    {
+      "id": "detail.ready.native-label-query-before-publication",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "nativePresented": "primary"
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null
+      ]
+    },
+    {
+      "id": "detail.ready.departure-cancels-rejected-cue",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "submitted": false
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.ready.prefetch-is-not-selection",
+      "operation": "detail-held-label-presentation",
+      "input": {
+        "selectedWhileHeld": false,
+        "heldLabelRequested": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.ready.selection-before-label",
+      "operation": "detail-held-label-presentation",
+      "input": {
+        "selectedWhileHeld": true,
+        "heldLabelRequested": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.ready.selection-without-label",
+      "operation": "detail-held-label-presentation",
+      "input": {
+        "selectedWhileHeld": true,
+        "heldLabelRequested": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.departed-page-cannot-speak-on-new-action",
+      "operation": "detail-feedback-source",
+      "input": {
+        "currentPage": false,
+        "selectedAction": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.current-page-selected-action",
+      "operation": "detail-feedback-source",
+      "input": {
+        "currentPage": true,
+        "selectedAction": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.current-page-other-action",
+      "operation": "detail-feedback-source",
+      "input": {
+        "currentPage": true,
+        "selectedAction": false
       },
       "expected": false
     }

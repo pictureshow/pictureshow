@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -184,7 +185,7 @@ class CatalogDetailBusyFocusTest {
         compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.mainClock.advanceTimeBy(100)
-        compose.onNodeWithText("Favorite change requested").assertExists()
+        compose.onNodeWithContentDescription("Favorite already requested").assertExists()
         compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.mainClock.advanceTimeBy(100)
         compose.runOnIdle { assertEquals(listOf("played"), calls, "The first write still owns the mutation slot") }

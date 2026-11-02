@@ -29,18 +29,35 @@ class DetailReadLifecycle {
     }
 }
 
-/** A readiness transition belongs to the same selected control, never to later focus visits. */
+/** Readiness belongs only to a held control already presented to the reader. */
 class DetailReadyFeedback {
-    private var wasHeld = false
+    private var presentedHold = false
     private var previousFocus: String? = null
 
-    fun update(held: Boolean, focused: String?, resumed: Boolean, usable: Boolean = true): String? {
+    /** The platform supplied this held label while the same control was selected. */
+    fun presented(target: String) {
+        presentedHold = true
+        previousFocus = target
+    }
+    fun submitted() {
+        presentedHold = false
+    }
+    fun cancel() {
+        presentedHold = false
+    }
+
+    fun update(
+        held: Boolean,
+        focused: String?,
+        resumed: Boolean,
+        usable: Boolean = true,
+        presented: Boolean = false,
+        cancelled: Boolean = false
+    ): String? {
         val sameFocus = focused != null && focused == previousFocus
-        val cue = "Ready".takeIf { wasHeld && !held && usable && sameFocus && resumed }
-        // A fresh empty container cannot make its selected Play usable. Preserve only
-        // that existing hold until it becomes usable or selection leaves; ordinary busy
-        // controls never start a new held episode.
-        wasHeld = held || (wasHeld && !usable && sameFocus)
+        if (!sameFocus || !resumed || cancelled) presentedHold = false
+        if (held && presented && resumed && !cancelled && focused != null) presentedHold = true
+        val cue = "Ready".takeIf { presentedHold && !held && usable && sameFocus && resumed && !cancelled }
         previousFocus = focused
         return cue
     }
@@ -132,9 +149,13 @@ fun detailSessionNeedsRead(newRevision: Boolean, refreshed: Boolean, container: 
 fun detailReadHasFailure(readFailed: Boolean, reason: String?, mutationReady: Boolean): Boolean =
     reason != null && (readFailed || !mutationReady)
 
-/** Reader navigation to another node ends acceptance even when Compose input focus stays. */
-fun detailRequestCueRemainsActive(active: Boolean, readerLeftAction: Boolean, requested: Boolean = true): Boolean =
-    active && requested && !readerLeftAction
+/** After the reader reaches a request, leaving it ends acceptance even if input focus stays. */
+fun detailRequestCueRemainsActive(
+    active: Boolean,
+    readerLeftAction: Boolean,
+    requested: Boolean = true,
+    presented: Boolean = true
+): Boolean = active && requested && !(presented && readerLeftAction)
 
 /** Only an applied full leaf result can already confirm a matching report refresh. */
 fun detailHasConfirmedLeafRead(readSucceeded: Boolean, sameUserData: Boolean, container: Boolean): Boolean =
@@ -142,3 +163,30 @@ fun detailHasConfirmedLeafRead(readSucceeded: Boolean, sameUserData: Boolean, co
 
 /** Series and Season readiness includes their dependent episode reads. */
 fun detailReadRequiresDependents(type: String): Boolean = type in setOf("Series", "Season")
+
+/** TalkBack supplies punctuation between the state description and the role/label. */
+fun detailRetryDescription(reason: String): String = "Retry. Loading failed. ${reason.trimEnd().trimEnd('.')}"
+
+/** During the established Retry handoff, its focus event replaces old action-label chatter. */
+fun detailQuietsDepartingActionChange(handoff: Boolean, action: Boolean, onlyLabelChanged: Boolean): Boolean =
+    handoff && action && onlyLabelChanged
+
+/** Rediscovery is supplied by focus; acceptance has its own one-shot event. */
+fun detailQuietsRequestedRediscoveryChange(action: Boolean, onlyLabelChanged: Boolean, rediscovery: Boolean): Boolean =
+    action && onlyLabelChanged && rediscovery
+
+/** Submission belongs to an accepted request, not an observer or layout lifetime. */
+class DetailRequestFeedback {
+    private var lastSubmitted: Long? = null
+    fun shouldSend(request: Long?, eligible: Boolean): Boolean = request != null && eligible && request != lastSubmitted
+    fun submitted(request: Long) {
+        lastSubmitted = request
+    }
+}
+
+/** Framework prefetch cannot turn an unselected placeholder into a readiness cue. */
+fun detailHeldLabelIsPresentation(selectedWhileHeld: Boolean, heldLabelRequested: Boolean): Boolean =
+    selectedWhileHeld && heldLabelRequested
+
+/** A logical action name is insufficient if its announcing page has departed. */
+fun detailFeedbackCanSubmit(currentPage: Boolean, selectedAction: Boolean): Boolean = currentPage && selectedAction

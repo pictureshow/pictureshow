@@ -46,7 +46,7 @@ class DetailRecoveryAccessibilityTest {
         }
         compose.onNodeWithTag("detail:retry").assertIsFocused()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. $failure"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. ${failure.dropLast(1)}"))
         // An independent live reason could occupy speech before the Retry label.
         compose.onNodeWithTag("detail:read-error")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
@@ -69,7 +69,7 @@ class DetailRecoveryAccessibilityTest {
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading item. Please wait."))
             compose.runOnIdle { state.value = state.value.copy(loading = false, error = failure, readFailed = true) }
             compose.onNodeWithTag("detail:retry").assertIsFocused()
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. $failure"))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Retry. Loading failed. ${failure.dropLast(1)}"))
             assertEquals(id, compose.onNodeWithTag("detail:retry").fetchSemanticsNode().id)
         }
     }
