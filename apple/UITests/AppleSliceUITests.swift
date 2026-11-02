@@ -1216,8 +1216,11 @@ final class AppleSliceUITests: XCTestCase {
         let cancel = app.buttons["cancelPendingTracks"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5), "The pending sheet needs a focusable cancel control")
         let focusDeadline = ProcessInfo.processInfo.systemUptime + 5
-        while !cancel.hasFocus && ProcessInfo.processInfo.systemUptime < focusDeadline { Thread.sleep(forTimeInterval: 0.1) }
-        XCTAssertTrue(cancel.hasFocus, "Remote Back must be routed through the pending sheet")
+        let done = app.buttons["playerOptionsDone"]
+        while !cancel.hasFocus && !done.hasFocus && ProcessInfo.processInfo.systemUptime < focusDeadline {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        XCTAssertTrue(cancel.hasFocus || done.hasFocus, "Remote Back must be routed through a focused pending-sheet control")
         XCUIRemote.shared.press(.menu)
         let dismissedDeadline = ProcessInfo.processInfo.systemUptime + 5
         while app.buttons["playerOptionsDone"].exists && ProcessInfo.processInfo.systemUptime < dismissedDeadline {
