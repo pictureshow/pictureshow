@@ -143,11 +143,13 @@ private final class ExternalSubtitleHTTP: URLProtocol {
 
 private final class SubtitleInertPlayer: AVPlayer {
     private(set) var replacements = 0
+    private(set) var attachedItems: [AVPlayerItem] = []
     private(set) var automaticCriteriaAtAttachment: [Bool] = []
     private(set) var seekTargets: [CMTime] = []
     override func replaceCurrentItem(with item: AVPlayerItem?) {
         if item != nil {
             replacements += 1
+            attachedItems.append(item!)
             automaticCriteriaAtAttachment.append(appliesMediaSelectionCriteriaAutomatically)
         }
     }
@@ -369,6 +371,39 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
             !session.waitingForVideo && ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing") }
         }
         return (session, player)
+    }
+
+    func testSameEmbeddedTrackPickPreservesItemAndViewing() async throws {
+        ExternalSubtitleHTTP.reset(.valid, embeddedSelectedTrack: true)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, player) = try await readySession(loader: loader, expectedCaptionPath: nil)
+        let first = try XCTUnwrap(player.attachedItems.first)
+        await session.changeTracks(audio: session.decision?.audioIndex, subtitle: session.decision?.subtitleIndex)
+        XCTAssertEqual(player.replacements, 1, "Picking the active embedded track must not construct or attach another item")
+        XCTAssertTrue(player.attachedItems.last === first)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 1)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("/Sessions/Playing") }.count, 1)
+        XCTAssertFalse(ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing/Stopped") })
+        await session.stop()
+    }
+
+    func testAutomaticTrackIntentDoesNotBecomeRememberedReportSelection() async throws {
+        ExternalSubtitleHTTP.reset(.valid)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, _) = try await readySession(loader: loader)
+        XCTAssertEqual(session.decision?.audioIndex, 1, "Playback still uses the negotiated audio")
+        XCTAssertEqual(session.decision?.subtitleIndex, 4, "Playback still uses the automatic caption intent")
+        session.backgrounded()
+        await session.stop()
+        let reports = ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("/Sessions/Playing") || $0.path.hasSuffix("/Sessions/Playing/Progress") }
+        XCTAssertTrue(reports.contains { $0.path.hasSuffix("/Sessions/Playing") })
+        XCTAssertTrue(reports.contains { $0.path.hasSuffix("/Sessions/Playing/Progress") })
+        for report in reports {
+            XCTAssertNil(report.body["AudioStreamIndex"], "Automatic audio must not overwrite the viewer's remembered track")
+            XCTAssertNil(report.body["SubtitleStreamIndex"], "Automatic captions must not overwrite the viewer's remembered track")
+        }
     }
 
     func testRelativeAndAbsoluteDeliveryURLsReachTheirExactResolvedCaptionPaths() async throws {
