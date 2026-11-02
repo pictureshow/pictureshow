@@ -1464,6 +1464,8 @@ final class AppleSliceUITests: XCTestCase {
         let later = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: returned.seconds, maximum: returned.seconds + 1, timeout: 15, metric: "f5_background_still_paused"))
         XCTAssertLessThanOrEqual(abs(later.seconds - returned.seconds), 1)
         capture("F5 real demo TV remains paused after Home return")
+        XCUIRemote.shared.press(.playPause)
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: later.seconds + 2, maximum: later.seconds + 15, timeout: 30, metric: "f5_foreground_deliberate_play"))
         leaveNativeTVPlayer(returningTo: play)
         #else
         XCTAssertTrue(position.waitForExistence(timeout: 30))
@@ -1472,6 +1474,12 @@ final class AppleSliceUITests: XCTestCase {
         let later = try XCTUnwrap(parsedClockSeconds(position.label))
         XCTAssertLessThanOrEqual(abs(later - returned), 1)
         capture("F5 real demo phone remains paused after Home return")
+        let native = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
+        let nativePlay = native.buttons.matching(NSPredicate(format: "label ==[c] %@", "Play")).firstMatch
+        if !nativePlay.isHittable { native.tap() }
+        XCTAssertTrue(nativePlay.waitForExistence(timeout: 5) && nativePlay.isHittable)
+        nativePlay.tap()
+        XCTAssertTrue(waitForPlaybackClock(position, minimum: later + 2, timeout: 30, metric: "f5_foreground_deliberate_play"))
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(play.waitForExistence(timeout: 20))
         #endif

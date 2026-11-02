@@ -320,9 +320,10 @@ final class DetailRecoveryUITests: XCTestCase {
         print("F5_VO_INITIAL utterance=\(initial)")
         XCTAssertFalse(initial.localizedCaseInsensitiveContains("when ready"))
         fixture.holdDetailReads()
-        activate(app.buttons["favorite"], in: app)
+        _ = try f5Speech(service, matching: "Add favorite")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
         XCTAssertTrue(waitUntil(timeout: 10) { fixture.heldReadCount == 1 })
-        let held = try f5Speech(service, matching: "Mark watched")
+        let held = try f5Speech(service, matching: "Mark watched", forward: false)
         print("F5_VO_HELD utterance=\(held)")
         let watched = app.buttons["watched"]
         // An iOS VoiceOver double tap activates its current accessible action.
@@ -338,10 +339,11 @@ final class DetailRecoveryUITests: XCTestCase {
         print("F5_VO_RUN_ONCE writes=\(fixture.playedWriteMethods.count)")
     }
     @available(iOS 27.0, *)
-    @MainActor private func f5Speech(_ service: XCUIVoiceOverService, matching text: String) throws -> String {
-        if let current = try service.currentSpeech(), current.utterance.localizedCaseInsensitiveContains(text) { return current.utterance }
+    @MainActor private func f5Speech(_ service: XCUIVoiceOverService, matching text: String, forward: Bool = true) throws -> String {
+        if let current = try? service.currentSpeech(), current.utterance.localizedCaseInsensitiveContains(text) { return current.utterance }
         for _ in 0..<20 {
-            if let output = try service.moveForward(), output.utterance.localizedCaseInsensitiveContains(text) { return output.utterance }
+            let output = try forward ? service.moveForward() : service.moveBackward()
+            if let output, output.utterance.localizedCaseInsensitiveContains(text) { return output.utterance }
         }
         throw NSError(domain: "F5VoiceOver", code: 1, userInfo: [NSLocalizedDescriptionKey: "VoiceOver did not reach the requested action"])
     }
