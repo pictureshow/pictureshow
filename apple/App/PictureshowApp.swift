@@ -373,7 +373,7 @@ struct AccountSnapshot: Codable {
             await session.stop()
             guard accountGeneration == accountVersion, let account else { return }
             playbackSaveError = session.reportError
-            if session.reportError != nil {
+            if session.completionReportingFailed {
                 for (itemID, token) in sessionPlayedOwners[session.id] ?? [:] { withdrawPlayedProjection(itemID, owner: token) }
             }
             pendingPlaybackSave = session

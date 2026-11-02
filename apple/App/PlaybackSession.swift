@@ -727,6 +727,7 @@ final class ViewingAVPlayer: AVPlayer {
             catch { failedEncodings.append(decision); reportError = "The server could not stop an encoding. Retry saving progress from details." }
         }
     }
+    var completionReportingFailed: Bool { failedPlayedID != nil || failedStop != nil }
     var requiresPlayedSave: Bool { failedPlayedID != nil || (completionTask != nil && !completionCommitted) }
     func retrySaving() async {
         await reportTail?.value

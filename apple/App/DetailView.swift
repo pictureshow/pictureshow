@@ -373,7 +373,7 @@ struct DetailView: View {
                 detailDiagnostic("event=heldLabelsPublished")
             }
             .onChange(of: readySnapshot, initial: true) { _, snapshot in
-                if let message = readiness.update(held: snapshot.held, focused: snapshot.focused, resumed: snapshot.active, usable: snapshot.usable) {
+                if let message = readiness.update(held: snapshot.held, focused: snapshot.focused, resumed: snapshot.active, usable: snapshot.usable, presented: pendingPresentation, cancelled: state.readError != nil || state.writeError != nil || !state.pending.isEmpty || state.activeCommand != nil) {
                     let cue = AccessibilityCue(message: message, urgent: false)
                     detailDiagnostic("event=readyGenerated cue=\(cue.id) selected=\(snapshot.focused ?? "none") active=\(snapshot.active)")
                     state.cue = cue
