@@ -480,7 +480,7 @@ function App() {
             live = false;
             window.removeEventListener("hashchange", consume);
         };
-    }, [verified, account?.accessToken]);
+    }, [verified, client]);
 
     async function logout() {
         if (busy) return;
