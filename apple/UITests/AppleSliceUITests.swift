@@ -1066,7 +1066,7 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["quickCode"].waitForNonExistence(timeout: 10), "Cancellation should remove the one-time code")
         }
     }
-    func testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback() throws {
+    @MainActor func testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback() throws {
         #if os(tvOS)
         let fixture = try NativeTrackHTTPFixture(durationSeconds: 60)
         try fixture.start()
@@ -1111,7 +1111,21 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertFalse(try XCTUnwrap(row(lateNodes, index)).hasFocus)
             capture("F3 native \(title) no late focus pullback")
             print("F3_NATIVE_MENU title=\(title) selectedIndex=\(index) entryFocus=true firstDownIndex=\(index + 1) lateFocusRetained=true tracks=45")
-            XCUIRemote.shared.press(.menu)
+            // Activate the already-selected row through the real remote path.
+            // It must report intent without another negotiation or viewing.
+            XCUIRemote.shared.press(.up)
+            XCTAssertTrue(try XCTUnwrap(row(tvSnapshotNodes(try app.snapshot()), index)).hasFocus)
+            let progressBefore = fixture.snapshot.progressCount
+            XCUIRemote.shared.press(.select)
+            let reportDeadline = ProcessInfo.processInfo.systemUptime + 10
+            while fixture.snapshot.progressCount == progressBefore && ProcessInfo.processInfo.systemUptime < reportDeadline { Thread.sleep(forTimeInterval: 0.1) }
+            let progress = fixture.snapshot.requests.last { $0.path == "/Sessions/Playing/Progress" }
+            XCTAssertGreaterThan(fixture.snapshot.progressCount, progressBefore)
+            XCTAssertEqual(title == "Audio" ? progress?.audioIndex : progress?.subtitleIndex, index)
+            XCTAssertEqual(progress?.paused, true)
+            XCTAssertEqual(fixture.snapshot.playbackInfoCount, before.playbackInfoCount)
+            XCTAssertEqual(fixture.snapshot.startCount, 1); XCTAssertEqual(fixture.snapshot.stoppedCount, 0)
+            print("F3_NATIVE_SAME_PICK type=\(title) index=\(index) progress=true newPlaybackInfo=0 newViewing=0 paused=true")
         }
         let after = fixture.snapshot
         XCTAssertEqual(after.playbackInfoCount, before.playbackInfoCount)
