@@ -505,9 +505,9 @@ private struct DetailRecoverySurface: ViewModifier {
     func body(content: Content) -> some View {
         #if os(tvOS)
         content.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.surface).accessibilityIdentifier("detailRecoverySurface").padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+            .background(Theme.surface).accessibilityElement(children: .contain).accessibilityIdentifier("detailRecoverySurface").padding(.horizontal, Theme.gutter).padding(.vertical, 8)
         #else
-        content.padding(12).frame(maxWidth: 440, alignment: .leading).background(Theme.surface).accessibilityIdentifier("detailRecoverySurface").padding(8)
+        content.padding(12).frame(maxWidth: 440, alignment: .leading).background(Theme.surface).accessibilityElement(children: .contain).accessibilityIdentifier("detailRecoverySurface").padding(8)
         #endif
     }
 }

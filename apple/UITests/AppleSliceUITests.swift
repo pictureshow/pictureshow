@@ -1085,12 +1085,25 @@ final class AppleSliceUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.2)
         XCTAssertLessThanOrEqual(seconds(elapsed.label), paused + 1)
         let before = fixture.snapshot
+        func activeTrackRows(_ snapshot: XCUIElementSnapshot) throws -> [XCUIElementSnapshot] {
+            // AVKit publishes an inactive source collection and the presented
+            // menu with duplicate Stream N cells. Pick the collection owning
+            // any focused track, independently of which index should be focused.
+            let collections = tvSnapshotNodes(snapshot).filter { $0.elementType == .collectionView }
+            let candidates = collections.map { $0.children.filter { $0.elementType == .cell } }.filter { rows in
+                rows.contains { $0.label.hasPrefix("Stream ") || $0.label.hasPrefix("selected, Stream ") }
+                    && rows.contains { $0.hasFocus }
+            }
+            XCTAssertEqual(candidates.count, 1, "Exactly one presented track menu must own native focus")
+            print("F3_NATIVE_MENU_COLLECTION candidates=\(candidates.count) focusedRows=\(candidates.first?.filter { $0.hasFocus }.count ?? 0)")
+            return try XCTUnwrap(candidates.count == 1 ? candidates.first : nil)
+        }
         for (title, index) in [("Audio", NativeTrackHTTPFixture.selectedAudioIndex), ("Subtitles", NativeTrackHTTPFixture.selectedSubtitleIndex)] {
             _ = nativeTVTrackChoice(menuTitle: title, index: String(index))
             // The helper opens the trigger and resolves a row; it does not move
             // toward that row. Judge entry before any row-navigation helper.
             let entry = try app.snapshot()
-            let nodes = tvSnapshotNodes(entry)
+            let nodes = try activeTrackRows(entry)
             let prefix = title == "Audio" ? "audio-" : "subtitle-"
             func row(_ nodes: [XCUIElementSnapshot], _ index: Int) -> XCUIElementSnapshot? {
                 nodes.first { $0.identifier == prefix + String(index) && $0.elementType == .cell }
@@ -1102,11 +1115,11 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(selected.isSelected || ["selected", "on", "1"].contains(value) || selected.label.lowercased().hasPrefix("selected,"))
             capture("F3 native \(title) selected middle entry focus")
             XCUIRemote.shared.press(.down)
-            let movedNodes = tvSnapshotNodes(try app.snapshot())
+            let movedNodes = try activeTrackRows(app.snapshot())
             let moved = try XCTUnwrap(row(movedNodes, index + 1))
             XCTAssertTrue(moved.hasFocus, "One Down must move to the adjacent row")
             Thread.sleep(forTimeInterval: 1.3)
-            let lateNodes = tvSnapshotNodes(try app.snapshot())
+            let lateNodes = try activeTrackRows(app.snapshot())
             XCTAssertTrue(try XCTUnwrap(row(lateNodes, index + 1)).hasFocus, "Periodic updates cannot pull focus back to the selected row")
             XCTAssertFalse(try XCTUnwrap(row(lateNodes, index)).hasFocus)
             capture("F3 native \(title) no late focus pullback")
@@ -1114,7 +1127,7 @@ final class AppleSliceUITests: XCTestCase {
             // Activate the already-selected row through the real remote path.
             // It must report intent without another negotiation or viewing.
             XCUIRemote.shared.press(.up)
-            XCTAssertTrue(try XCTUnwrap(row(tvSnapshotNodes(try app.snapshot()), index)).hasFocus)
+            XCTAssertTrue(try XCTUnwrap(row(try activeTrackRows(app.snapshot()), index)).hasFocus)
             let progressBefore = fixture.snapshot.progressCount
             XCUIRemote.shared.press(.select)
             let reportDeadline = ProcessInfo.processInfo.systemUptime + 10

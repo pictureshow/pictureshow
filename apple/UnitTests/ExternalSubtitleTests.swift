@@ -777,9 +777,9 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertFalse(ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing/Stopped") || $0.path.contains("UserPlayedItems") })
         let negotiation = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("PlaybackInfo") })
         XCTAssertEqual((negotiation.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, -1, "A/V must negotiate captions Off")
-        XCTAssertEqual(session.decision?.subtitleIndex, 4, "The selected optional track remains the user-facing/reporting choice")
+        XCTAssertEqual(session.decision?.subtitleIndex, 4, "The selected optional track remains the automatic user-facing choice")
         let start = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("/Sessions/Playing") })
-        XCTAssertEqual((start.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, 4)
+        XCTAssertNil(start.body["SubtitleStreamIndex"], "An automatic optional-caption choice must not become a remembered server choice under PLAY-20")
         XCTAssertFalse(session.showStartupWaitHint(version: 0), "Ready A/V must reject a late startup deadline")
         await session.changeTracks(audio: session.decision?.audioIndex, subtitle: -1)
         let countAtOff = captionRequests.count
