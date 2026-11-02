@@ -88,7 +88,9 @@ struct PlayerScreen: View {
         .announceStatus(session.subtitleStatus)
         .onDisappear { session.beginClosing() }
         .onChange(of: session.terminal) { _, value in if value, session.error == nil { finish() } }
-        .onChange(of: scenePhase) { _, value in if value != .active { session.backgrounded() } }
+        .onChange(of: scenePhase, initial: true) { _, value in
+            if value == .active { session.foregrounded() } else { session.backgrounded() }
+        }
         .onChange(of: trackMenus.openMenu) { _, value in
             #if os(iOS)
             if value != nil { panel = "tracks" }
