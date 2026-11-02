@@ -72,8 +72,9 @@ struct AccountSnapshot: Codable {
         let defaults = UserDefaults.standard
         let deviceID = defaults.string(forKey: "deviceID") ?? UUID().uuidString
         defaults.set(deviceID, forKey: "deviceID"); installationID = deviceID
-        authenticatedClient = JellyfinClient(deviceID: deviceID, supportsHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC))
+        authenticatedClient = JellyfinClient(deviceID: deviceID, supportsHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC), hevcTranscodeCapabilities: { await AppleHEVCQualification.shared.capabilities() })
         restore()
+        Task { await AppleHEVCQualification.shared.warmUp() }
     }
     func restore() {
         do {
@@ -84,7 +85,7 @@ struct AccountSnapshot: Codable {
             storageError = nil
         } catch { storageError = error.localizedDescription }
     }
-    func makeClient(_ id: String) -> JellyfinClient { JellyfinClient(deviceID: id, supportsHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)) }
+    func makeClient(_ id: String) -> JellyfinClient { JellyfinClient(deviceID: id, supportsHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC), hevcTranscodeCapabilities: { await AppleHEVCQualification.shared.capabilities() }) }
     /// Every new authentication gets a fresh device identity. Saved viewers retain theirs.
     func beginSignIn(server: Server? = nil, username: String = "") {
         authenticatedClient = makeClient(UUID().uuidString)

@@ -178,7 +178,7 @@ public enum PlayDecisions {
 /// Conservative AVFoundation profile: unsupported containers/codecs negotiate server HLS.
 /// No Android decoder, passthrough or software-FFmpeg claims apply to Apple devices.
 public enum AppleProfile {
-    public static func json(supportsHEVC: Bool = false, maxStreamingBitrate: Int = 200_000_000) -> [String:Any] {
+    public static func json(supportsHEVC: Bool = false, maxStreamingBitrate: Int = 200_000_000, hevcTranscodeCapabilities: DeviceCapabilities? = nil, forceAVCTranscode: Bool = false) -> [String:Any] {
         func condition(_ name: String, _ property: String, _ value: String) -> [String:Any] {
             ["Condition": name, "Property": property, "Value": value, "IsRequired": false]
         }
@@ -199,7 +199,22 @@ public enum AppleProfile {
         // Positive subtitle selections still explicitly negotiate server burn-in.
         let embedded = [["Format": "mov_text", "Method": "Embed", "Container": "mp4,m4v,mov"]]
         let subtitles = embedded + ["srt", "ass", "ssa", "sub", "pgssub", "dvdsub", "vtt", "webvtt"].map { ["Format": $0, "Method": "Encode"] }
+        var profiles = [transcode]
+        var codecs = [h264, hevc, audio]
+        if !forceAVCTranscode, let capabilities = hevcTranscodeCapabilities, ReferenceDeviceProfile.prefersHevcTranscode(capabilities) {
+            var preferred = transcode
+            preferred["Container"] = "mp4"; preferred["VideoCodec"] = "hevc"
+            profiles.insert(preferred, at: 0)
+            // Used only after baseline negotiation has ruled out Direct. These
+            // constraints never narrow the original Direct-play capability claim.
+            codecs[1] = ["Type": "Video", "Codec": "hevc", "Conditions": [
+                condition("LessThanEqual", "VideoBitDepth", "8"), condition("EqualsAny", "VideoProfile", "main"),
+                condition("LessThanEqual", "VideoLevel", "120"), condition("LessThanEqual", "Width", "1920"),
+                condition("LessThanEqual", "Height", "1080"), condition("LessThanEqual", "VideoFramerate", "30"),
+                condition("EqualsAny", "VideoRangeType", "SDR")
+            ]]
+        }
         return ["Name": "Pictureshow Apple", "MaxStreamingBitrate": maxStreamingBitrate, "MaxStaticBitrate": maxStreamingBitrate,
-                "DirectPlayProfiles": [direct], "TranscodingProfiles": [transcode], "CodecProfiles": [h264, hevc, audio], "SubtitleProfiles": subtitles]
+                "DirectPlayProfiles": [direct], "TranscodingProfiles": profiles, "CodecProfiles": codecs, "SubtitleProfiles": subtitles]
     }
 }

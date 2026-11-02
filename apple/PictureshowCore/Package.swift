@@ -6,5 +6,5 @@ let package = Package(
     name: "PictureshowCore",
     platforms: [.iOS(.v17), .tvOS(.v17), .macOS(.v14)],
     products: [.library(name: "PictureshowCore", targets: ["PictureshowCore"])],
-    targets: [.target(name: "PictureshowCore"), .testTarget(name: "PictureshowCoreTests", dependencies: ["PictureshowCore"])]
+    targets: [.target(name: "PictureshowCore"), .testTarget(name: "PictureshowCoreTests", dependencies: ["PictureshowCore"], resources: [.copy("Fixtures")])]
 )

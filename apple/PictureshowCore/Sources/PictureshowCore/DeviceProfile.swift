@@ -76,7 +76,7 @@ public enum ReferenceDeviceProfile {
     }
     static func score(_ d:VideoDecoder)->Double { Double(d.maxWidth)*Double(d.maxHeight)*d.maxFrameRate }
     /// Evaluate a single reported hardware Main decoder, preserving its own size, speed and level tuple.
-    static func prefersHevcTranscode(_ capabilities:DeviceCapabilities)->Bool {
+    public static func prefersHevcTranscode(_ capabilities:DeviceCapabilities)->Bool {
         let display=capabilities.display
         return capabilities.videoDecoders.contains { decoder in
             let tuples=decoder.profileCapabilities ?? []

@@ -2122,13 +2122,13 @@ final class AppleSliceUITests: XCTestCase {
             guard closed else {
                 captureFullScreen("Native TV Info must close before \(title) transport menu")
                 XCTFail("Back must close the custom Info page while retaining the native player before track navigation")
-                return app.cells.matching(NSPredicate(format: "label == %@ AND identifier != %@", title, "AVLegibleSettings")).firstMatch
+                return app.cells.matching(NSPredicate(format: "label == %@ AND identifier != %@ AND identifier != %@", title, "AVLegibleSettings", "AVAudibleSettings")).firstMatch
             }
         }
         XCUIRemote.shared.press(.up)
-        // AVKit can retain its built-in legible menu alongside the app's server
+        // AVKit can retain its built-in audible/legible menus alongside the app's server
         // menu. Only the custom menu contains the negotiated Stream N actions.
-        let query = app.cells.matching(NSPredicate(format: "label == %@ AND identifier != %@", title, "AVLegibleSettings"))
+        let query = app.cells.matching(NSPredicate(format: "label == %@ AND identifier != %@ AND identifier != %@", title, "AVLegibleSettings", "AVAudibleSettings"))
         let matching = query.firstMatch
         // AVKit moves this row upward while Info is expanded. Bind the exact
         // native cell to its containing transport collection, not a screen band.
@@ -2138,7 +2138,7 @@ final class AppleSliceUITests: XCTestCase {
             } ?? []
             return rows.flatMap { row in
                 tvSnapshotNodes(row).filter {
-                    $0.elementType == .cell && $0.label == title && $0.identifier != "AVLegibleSettings"
+                    $0.elementType == .cell && $0.label == title && $0.identifier != "AVLegibleSettings" && $0.identifier != "AVAudibleSettings"
                         && $0.frame.width > 0 && $0.frame.height > 0
                         && row.frame.contains($0.frame)
                 }.map { (row: row, cell: $0) }

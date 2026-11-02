@@ -70,6 +70,7 @@ import MediaAccessibility
     private var timelineReady = false
     private var stopped = false
     private var fallbackUsed = false
+    private var hevcFallbackUsed = false
     private var closed = false
     private var generation = 0
     private var closeTask: Task<Void, Never>?
@@ -126,7 +127,7 @@ import MediaAccessibility
         if usesExternalText { selectedSubtitle = requestedSubtitle }
         var next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
             audioIndex: audio, subtitleIndex: selectedSubtitle, forceTranscode: forceVideoTranscode,
-            mediaSourceID: decision?.source.id ?? item.mediaSources.first?.id, preferences: preferences, forceHLS: forceHLS || audio != nil, externalTextSubtitle: usesExternalText)
+            mediaSourceID: decision?.source.id ?? item.mediaSources.first?.id, preferences: preferences, forceHLS: forceHLS || audio != nil, externalTextSubtitle: usesExternalText, forceAVCTranscode: hevcFallbackUsed)
         guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
         // Episode/list responses need not contain streams. Apply captions to the fresh
         // negotiated source, never to the previous episode's metadata.
@@ -135,7 +136,7 @@ import MediaAccessibility
             usesExternalText = externalTextStream(preferred, source: next.source) != nil
             next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
                 audioIndex: audio, subtitleIndex: preferred, forceTranscode: forceVideoTranscode,
-                mediaSourceID: sourceID, preferences: preferences, forceHLS: forceHLS || audio != nil, externalTextSubtitle: usesExternalText)
+                mediaSourceID: sourceID, preferences: preferences, forceHLS: forceHLS || audio != nil, externalTextSubtitle: usesExternalText, forceAVCTranscode: hevcFallbackUsed)
         }
         guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
         // A discovery response may be the first place external stream metadata
@@ -146,7 +147,7 @@ import MediaAccessibility
             next = try await client.prepare(account: account, itemID: item.id, startTicks: startTicks,
                 audioIndex: audio, subtitleIndex: next.subtitleIndex, forceTranscode: forceVideoTranscode,
                 mediaSourceID: next.source.id, preferences: preferences, forceHLS: forceHLS || audio != nil,
-                externalTextSubtitle: true)
+                externalTextSubtitle: true, forceAVCTranscode: hevcFallbackUsed)
         }
         guard !closed, generation == version else { try? await client.stopEncoding(account: account, decision: next); throw CancellationError() }
         let url: URL
@@ -158,7 +159,11 @@ import MediaAccessibility
         selectExternalText(for: next)
         // Session identifiers support scoped encoder cleanup after an interrupted pilot.
         // Never log the asset URL, request headers or viewer credential.
-        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Negotiated viewing=\(self.viewingID.uuidString, privacy: .public) playSession=\(next.playSessionId ?? "none", privacy: .public) item=\(next.itemID, privacy: .public) source=\(next.source.id ?? "none", privacy: .public) method=\(String(describing: next.method), privacy: .public)")
+        let hevcHLS = AppleHEVCTranscoding.isHEVC(next) && next.source.transcodingSubProtocol?.lowercased() == "hls"
+        let selectedContainer = next.method == .transcode ? next.source.transcodingContainer : next.source.container
+        // Container diagnostics are a fixed vocabulary, never a server-supplied string.
+        let container = selectedContainer.map { ["mp4", "m4v", "mov", "ts", "mpegts"].contains($0.lowercased()) ? $0.lowercased() : "other" } ?? "unknown"
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("Negotiated viewing=\(self.viewingID.uuidString, privacy: .public) playSession=\(next.playSessionId ?? "none", privacy: .public) item=\(next.itemID, privacy: .public) source=\(next.source.id ?? "none", privacy: .public) method=\(String(describing: next.method), privacy: .public) hevcHLS=\(hevcHLS, privacy: .public) boundedHEVC=\(AppleHEVCTranscoding.isBounded(next), privacy: .public) container=\(container, privacy: .public)")
         status = playbackMethodStatus
         player.isMuted = audio == -1
         let avItem = AVPlayerItem(url: url)
@@ -444,7 +449,7 @@ import MediaAccessibility
         }
         externalSubtitles.release(); subtitleCue = nil
         item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil
-        viewingID = UUID(); audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false
+        viewingID = UUID(); audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false; hevcFallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
         segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
         do { try await prepare(startTicks: 0, audio: nil, subtitle: nil) } catch { self.error = "Could not start the next episode. Go back and try again." }
@@ -660,7 +665,11 @@ import MediaAccessibility
         let failure = player.currentItem?.error as NSError?
         Logger(subsystem: "app.pictureshow", category: "Playback").error("Native playback failure domain=\(failure?.domain ?? "unknown", privacy: .public) code=\(failure?.code ?? 0)")
         if let underlying = failure?.userInfo[NSUnderlyingErrorKey] as? NSError { Logger(subsystem: "app.pictureshow", category: "Playback").error("Underlying domain=\(underlying.domain, privacy: .public) code=\(underlying.code)") }
-        guard !fallbackUsed else { error = "Playback failed. Go back to details and try again."; await stop(); return }
+        let isHEVC = decision.map { AppleHEVCTranscoding.isHEVC($0) } ?? false
+        guard ApplePlaybackRecovery.canRetry(fallbackUsed: fallbackUsed, hevcFallbackUsed: hevcFallbackUsed, isHEVCTranscode: isHEVC) else { error = "Playback failed. Go back to details and try again."; await stop(); return }
+        // HEVC gets one separate AVC recovery even after an earlier Direct retry.
+        // Keep this suppression for all later track changes in the same viewing.
+        if isHEVC { hevcFallbackUsed = true }
         fallbackUsed = true
         await changeTracks(audio: decision?.audioIndex, subtitle: decision?.subtitleIndex, forceVideoTranscode: true)
     }

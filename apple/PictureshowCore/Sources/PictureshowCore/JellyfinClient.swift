@@ -17,12 +17,14 @@ public final class JellyfinClient: @unchecked Sendable {
     private let session: URLSession
     private var decoder: JSONDecoder { JSONDecoder() }
     private let supportsHEVC: Bool
+    private let hevcTranscodeCapabilities: (@Sendable () async -> DeviceCapabilities?)?
     private let deviceName: String
     private let version: String
     private let fields = "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
     /// Injected sessions are intended for tests. Production defaults pin redirects to each request's origin.
-    public init(deviceID: String, session: URLSession? = nil, supportsHEVC: Bool = false, deviceName: String = "Apple", version: String = "0.1.0") {
+    public init(deviceID: String, session: URLSession? = nil, supportsHEVC: Bool = false, deviceName: String = "Apple", version: String = "0.1.0", hevcTranscodeCapabilities: (@Sendable () async -> DeviceCapabilities?)? = nil) {
         self.deviceID = deviceID; self.supportsHEVC = supportsHEVC; self.deviceName = deviceName; self.version = version
+        self.hevcTranscodeCapabilities = hevcTranscodeCapabilities
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60; configuration.timeoutIntervalForResource = 90
         self.session = session ?? URLSession(configuration: configuration, delegate: OriginRedirects(), delegateQueue: nil)
@@ -211,10 +213,56 @@ public final class JellyfinClient: @unchecked Sendable {
         request.setValue("image/*", forHTTPHeaderField: "Accept")
         return try await responseData(for: request, server: account.server)
     }
-    public func prepare(account: Account, itemID: String, startTicks: Int64 = 0, audioIndex: Int? = nil, subtitleIndex: Int? = nil, forceTranscode: Bool = false, mediaSourceID: String? = nil, preferences: PlaybackPreferences = PlaybackPreferences(), forceHLS: Bool = false, externalTextSubtitle: Bool = false) async throws -> PlayDecision {
+    public func prepare(account: Account, itemID: String, startTicks: Int64 = 0, audioIndex: Int? = nil, subtitleIndex: Int? = nil, forceTranscode: Bool = false, mediaSourceID: String? = nil, preferences: PlaybackPreferences = PlaybackPreferences(), forceHLS: Bool = false, externalTextSubtitle: Bool = false, forceAVCTranscode: Bool = false) async throws -> PlayDecision {
         let videoSubtitle = externalTextSubtitle ? -1 : subtitleIndex
-        let body = PlaybackRequests.body(userID: account.userId, profile: AppleProfile.json(supportsHEVC: supportsHEVC, maxStreamingBitrate: preferences.maxStreamingBitrate), maxStreamingBitrate: preferences.maxStreamingBitrate, startTicks: max(0,startTicks), mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: videoSubtitle, enableDirectPlay: !forceTranscode && !forceHLS && (videoSubtitle ?? -1) < 0, enableDirectStream: false, allowVideoStreamCopy: !forceTranscode && (videoSubtitle ?? -1) < 0, allowAudioStreamCopy: !forceTranscode, alwaysBurnIn: true)
-        return try await negotiate(account: account, itemID: itemID, body: body, startTicks: startTicks, mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex)
+        let forceAVC = forceTranscode || forceAVCTranscode
+        // Preserve the original Direct negotiation, including every codec profile.
+        // Narrow HEVC output constraints belong only to the later transcode request.
+        let body = PlaybackRequests.body(userID: account.userId, profile: AppleProfile.json(supportsHEVC: supportsHEVC, maxStreamingBitrate: preferences.maxStreamingBitrate), maxStreamingBitrate: preferences.maxStreamingBitrate, startTicks: max(0,startTicks), mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: videoSubtitle, enableDirectPlay: !forceAVC && !forceHLS && (videoSubtitle ?? -1) < 0, enableDirectStream: false, allowVideoStreamCopy: !forceAVC && (videoSubtitle ?? -1) < 0, allowAudioStreamCopy: !forceAVC, alwaysBurnIn: true)
+        let baseline = try await negotiate(account: account, itemID: itemID, body: body, startTicks: startTicks, mediaSourceID: mediaSourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex)
+        if forceAVC {
+            guard baseline.method == .transcode, let fallback = Self.disableStreamCopy(baseline) else { throw ClientError.noCompatibleSource }
+            // An opaque URL remains the original H264-only negotiation contract.
+            // Reject explicit contradictory codec output without requiring new URL fields.
+            if let codec = Self.videoCodec(fallback), codec != "h264" { throw ClientError.noCompatibleSource }
+            return fallback
+        }
+        guard baseline.method == .transcode, let provider = hevcTranscodeCapabilities,
+              let capabilities = await provider(), ReferenceDeviceProfile.prefersHevcTranscode(capabilities),
+              let sourceID = baseline.source.id, !sourceID.isEmpty else { return baseline }
+        do {
+            let preferredBody = PlaybackRequests.body(userID: account.userId,
+                profile: AppleProfile.json(supportsHEVC: supportsHEVC, maxStreamingBitrate: preferences.maxStreamingBitrate, hevcTranscodeCapabilities: capabilities),
+                maxStreamingBitrate: preferences.maxStreamingBitrate, startTicks: max(0,startTicks), mediaSourceID: sourceID,
+                audioIndex: audioIndex, subtitleIndex: videoSubtitle, enableDirectPlay: false, enableDirectStream: false,
+                allowVideoStreamCopy: false, allowAudioStreamCopy: false, alwaysBurnIn: true)
+            let selected = try await negotiate(account: account, itemID: itemID, body: preferredBody, startTicks: startTicks,
+                                               mediaSourceID: sourceID, audioIndex: audioIndex, subtitleIndex: subtitleIndex)
+            // PlaybackInfo does not serialize all copy flags. Set them on the actual
+            // HLS request too, then require every advertised output bound to survive.
+            guard let preferred = Self.disableStreamCopy(selected), AppleHEVCTranscoding.isBounded(preferred) else { return baseline }
+            return preferred
+        } catch is CancellationError { throw CancellationError() }
+        catch ClientError.invalidCredentials { throw ClientError.invalidCredentials }
+        catch { return baseline }
+    }
+    private static func videoCodec(_ decision: PlayDecision) -> String? {
+        let items = URLComponents(url: decision.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let codecs = items.filter { $0.name.caseInsensitiveCompare("VideoCodec") == .orderedSame }
+        return codecs.count == 1 ? codecs.first?.value?.lowercased() : nil
+    }
+    private static func disableStreamCopy(_ decision: PlayDecision) -> PlayDecision? {
+        guard decision.method == .transcode, var components = URLComponents(url: decision.url, resolvingAgainstBaseURL: false) else { return nil }
+        let items = components.queryItems ?? []
+        var names = Set<String>()
+        guard items.allSatisfy({ $0.value != nil && names.insert($0.name.lowercased()).inserted }) else { return nil }
+        let flags = ["allowvideostreamcopy", "allowaudiostreamcopy", "enableautostreamcopy"]
+        components.queryItems = items.filter { !flags.contains($0.name.lowercased()) } + [
+            URLQueryItem(name: "AllowVideoStreamCopy", value: "false"), URLQueryItem(name: "AllowAudioStreamCopy", value: "false"),
+            URLQueryItem(name: "EnableAutoStreamCopy", value: "false")]
+        guard let url = components.url else { return nil }
+        var result = decision; result.url = url
+        return result
     }
     /// The portable reference profile uses the same wire negotiation as the Apple runtime. Only profile
     /// construction and deliberate platform request flags differ; source binding and decisions are shared.
