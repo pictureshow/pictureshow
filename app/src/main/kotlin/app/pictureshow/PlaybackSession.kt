@@ -71,6 +71,7 @@ internal class ServerPlaybackGateway(
         val index = captionSubtitleIndex(decision.mediaSource, captionLanguage) ?: return prepared
         if (index == decision.mediaSource.defaultSubtitleStreamIndex) return prepared
         val sourceId = decision.mediaSourceId?.takeIf(String::isNotBlank) ?: return prepared
+        // Only fill an unusable/missing server selection; a valid track or remembered Off wins.
         // Never open the first URL. A fresh PlaybackInfo with the source and track pinned lets the server
         // negotiate extraction, remuxing or burn-in, just as it does for an explicit track choice.
         return client.prepare(account, itemId, snapshot, request.copy(mediaSourceId = sourceId, subtitleStreamIndex = index))

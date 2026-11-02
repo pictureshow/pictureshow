@@ -168,6 +168,70 @@ class TrackReportingSessionTest {
     }
 
     @Test
+    fun viewerSubtitleAndOffSurviveStopAndReopenWithSystemCaptions() = runTest {
+        for (picked in listOf(4, -1)) {
+            var remembered: Int? = null
+            var prepares = 0
+            val reports = mutableListOf<JsonObject>()
+            val http = HttpClient(MockEngine) {
+                engine {
+                    dispatcher = StandardTestDispatcher(testScheduler)
+                    addHandler { request ->
+                        val body = Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
+                        val response = if (request.url.encodedPath.endsWith("PlaybackInfo")) {
+                            prepares++
+                            val chosen = body["SubtitleStreamIndex"]?.jsonPrimitive?.intOrNull ?: remembered
+                            """{"MediaSources":[{"Id":"source","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":${chosen ?: "null"},
+                            "MediaStreams":[{"Type":"Subtitle","Index":3,"Language":"eng","Codec":"ass"},
+                            {"Type":"Subtitle","Index":4,"Language":"ara","Codec":"ass"}]}]}"""
+                        } else {
+                            if (request.url.encodedPath.endsWith("Progress")) {
+                                body["SubtitleStreamIndex"]?.jsonPrimitive?.intOrNull?.let { remembered = it }
+                            }
+                            reports += body
+                            "{}"
+                        }
+                        respond(response, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                    }
+                }
+            }
+            try {
+                val account = Account(Server("server", "Fixture", "https://example.test", "12"), User("viewer", "Viewer"), "fictional")
+                val gateway = ServerPlaybackGateway(PlaybackClient(http, ClientIdentity("TV", "fixture")), account, "item", {
+                    DeviceCapabilities("TV", emptyList(), DisplayCapabilities(1920, 1080, 60.0), emptyList(), AudioOutput(2))
+                }, "eng", markPlayed = { ClientResult.Success(Unit) })
+                val first = PlaybackSession(gateway, Output(), backgroundScope, "en")
+                first.start(0)
+                runCurrent()
+                assertEquals(3, first.state.value.subtitleIndex)
+                first.ready()
+                first.select(MediaStreamType.Subtitle, picked)
+                runCurrent()
+                assertEquals(picked, remembered)
+                first.close()
+                runCurrent()
+                val beforeReopen = prepares
+                reports.clear()
+                val reopened = PlaybackSession(gateway, Output(), backgroundScope, "en")
+                reopened.start(0)
+                runCurrent()
+                assertEquals(picked, reopened.state.value.subtitleIndex)
+                assertEquals(beforeReopen + 1, prepares, "Reopening the remembered track needs no caption override request")
+                reopened.ready()
+                reopened.progress()
+                runCurrent()
+                assertTrue(reports.isNotEmpty())
+                reports.forEach { assertNull(it["SubtitleStreamIndex"], "Reopening does not invent a fresh viewer choice") }
+                reopened.close()
+                runCurrent()
+                assertEquals(picked, remembered)
+            } finally {
+                http.close()
+            }
+        }
+    }
+
+    @Test
     fun captionOverrideAndAutomaticAudioFallbackAreAbsentOnTheWireUntilTheirOwnViewerChoice() = runTest {
         val reports = mutableListOf<JsonObject>()
         val http = HttpClient(MockEngine) {
@@ -176,7 +240,7 @@ class TrackReportingSessionTest {
                 addHandler { request ->
                     val body = Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
                     val response = if (request.url.encodedPath.endsWith("PlaybackInfo")) {
-                        val subtitle = body["SubtitleStreamIndex"]?.jsonPrimitive?.intOrNull ?: -1
+                        val subtitle = body["SubtitleStreamIndex"]?.jsonPrimitive?.intOrNull?.toString() ?: "null"
                         """{"MediaSources":[{"Id":"source","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":$subtitle,
                         "MediaStreams":[{"Type":"Audio","Index":2,"IsDefault":true},
                         {"Type":"Subtitle","Index":3,"Language":"eng","Codec":"subrip","IsDefault":true}]}]}"""

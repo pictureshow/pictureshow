@@ -93,6 +93,49 @@ class CaptionSubtitlesTest {
         assertNull(captionSubtitleIndex(source, "und"))
     }
 
+    @Test
+    fun matchingServerDefaultSurvivesCaptionPreferenceWithoutPinnedReprepare() = runTest {
+        for ((codec, forced, language) in listOf(
+            Triple("ass", false, "eng"),
+            Triple("pgssub", false, "eng"),
+            Triple("subrip", true, "eng"),
+            Triple("ass", false, "ara")
+        )) {
+            val sent = mutableListOf<kotlinx.serialization.json.JsonObject>()
+            val http = HttpClient(MockEngine) {
+                engine {
+                    dispatcher = StandardTestDispatcher(testScheduler)
+                    addHandler { request ->
+                        sent += Json.parseToJsonElement(request.body.toByteArray().decodeToString()).jsonObject
+                        respond(
+                            """{"MediaSources":[{"Id":"source","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":4,
+                            "MediaStreams":[{"Type":"Subtitle","Index":3,"Language":"eng","Codec":"subrip","IsHearingImpaired":true},
+                            {"Type":"Subtitle","Index":4,"Language":"$language","Codec":"$codec","IsForced":$forced}]}]}""",
+                            headers = headersOf(HttpHeaders.ContentType, "application/json")
+                        )
+                    }
+                }
+            }
+            try {
+                val gateway = ServerPlaybackGateway(
+                    PlaybackClient(http, ClientIdentity("TV", "device")),
+                    account,
+                    "item",
+                    { DeviceCapabilities("TV", emptyList(), DisplayCapabilities(1920, 1080, 60.0), emptyList(), AudioOutput(2)) },
+                    "en-US",
+                    markPlayed = { ClientResult.Success(Unit) }
+                )
+                val result =
+                    assertIs<PlayOutcome.Play>(assertIs<ClientResult.Success<PlayOutcome>>(gateway.prepare(PlaybackRequest())).value)
+                assertEquals(4, result.decision.mediaSource.defaultSubtitleStreamIndex)
+                assertEquals(1, sent.size, "A usable server default must not trigger a caption override reprepare")
+                assertNull(sent.single()["SubtitleStreamIndex"])
+            } finally {
+                http.close()
+            }
+        }
+    }
+
     /** No output opens the initial decision; selected subtitles must be negotiated before decoding, including burn-in. */
     @Test
     fun matchingNonDefaultTextAndBitmapTracksAreNegotiatedWithResumeAndSourcePreserved() = runTest {
@@ -108,8 +151,8 @@ class CaptionSubtitlesTest {
                         respond(
                             """{"MediaSources":[{"Id":"other","SupportsDirectPlay":$selected},
                             {"Id":"source","Container":"mkv","SupportsDirectPlay":${!selected || codec == "subrip"},
-                            "SupportsTranscoding":true,"TranscodingUrl":"/Videos/item/master.m3u8?SubtitleStreamIndex=${if (selected) 4 else -1}",
-                            "DefaultSubtitleStreamIndex":${if (selected) 4 else -1},"MediaStreams":[
+                            "SupportsTranscoding":true,"TranscodingUrl":"/Videos/item/master.m3u8?SubtitleStreamIndex=${if (selected) 4 else "null"}",
+                            "DefaultSubtitleStreamIndex":${if (selected) 4 else "null"},"MediaStreams":[
                             {"Type":"Subtitle","Index":2,"Language":"eng","Codec":"subrip","IsDefault":true},
                             {"Type":"Subtitle","Index":3,"Language":"fra","Codec":"$codec","IsForced":true},
                             {"Type":"Subtitle","Index":4,"Language":"fra","Codec":"$codec","IsExternal":${codec == "subrip"},
@@ -170,7 +213,7 @@ class CaptionSubtitlesTest {
                     ).jsonObject["SubtitleStreamIndex"]?.jsonPrimitive?.intOrNull
                     sent += chosen
                     respond(
-                        """{"MediaSources":[{"Id":"source","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":${chosen ?: -1},
+                        """{"MediaSources":[{"Id":"source","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":${chosen ?: "null"},
                     "MediaStreams":[{"Type":"Subtitle","Index":4,"Language":"eng","Codec":"subrip"}]}]}""",
                         headers = headersOf(HttpHeaders.ContentType, "application/json")
                     )
