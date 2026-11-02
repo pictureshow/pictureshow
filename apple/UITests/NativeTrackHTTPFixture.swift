@@ -122,7 +122,14 @@ final class NativeTrackHTTPFixture {
         if !signIn.isHittable { app.swipeUp() }
         #endif
         activate(signIn)
-        guard app.buttons["play"].waitForExistence(timeout: 20) else { throw SetupError.controlMissing("play") }
+        #if os(tvOS)
+        guard app.buttons["openSettings"].waitForExistence(timeout: 15) else { throw SetupError.controlMissing("authenticated navigation") }
+        #else
+        guard app.buttons.matching(identifier: "Settings").firstMatch.waitForExistence(timeout: 15)
+            || app.tabBars.buttons["Settings"].waitForExistence(timeout: 15) else { throw SetupError.controlMissing("authenticated adaptive shell") }
+        #endif
+        app.terminate(); app.launch()
+        guard app.buttons["play"].waitForExistence(timeout: 20) else { throw SetupError.controlMissing("play after persisted-account launch") }
     }
     private func receive(_ connection: NWConnection, buffered: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { [weak self] data, _, complete, error in

@@ -262,6 +262,15 @@ final class DetailRecoveryUITests: XCTestCase {
         if !signIn.isHittable { app.swipeUp() }
         #endif
         activate(signIn, in: app)
+        #if os(tvOS)
+        XCTAssertTrue(app.buttons["openSettings"].waitForExistence(timeout: 15), "Synthetic sign-in must reach authenticated navigation")
+        #else
+        let settings = UIDevice.current.userInterfaceIdiom == .pad
+            ? app.buttons["Settings"] : app.tabBars.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 15), "Synthetic sign-in must reach the authenticated adaptive shell")
+        #endif
+        // The persisted-account launch consumes the detail hook consistently on both platforms.
+        app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 20))
         return app
     }

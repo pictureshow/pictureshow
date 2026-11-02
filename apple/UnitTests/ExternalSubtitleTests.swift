@@ -427,6 +427,8 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         try await eventually("Selected optional request did not begin") { self.captionRequests.count == 1 }
         let item = try XCTUnwrap(player.attachedItems.first)
         let revision = loader.revision, attempts = loader.attemptCount
+        XCTAssertEqual(session.diagnostics.counts["subtitle-select"], 1, "Opening the automatic choice emits one selection receipt")
+        XCTAssertEqual(loader.selected?.selectionCount, 1)
         session.backgrounded()
         await session.selectTrack(type: "Subtitle", index: 4)
         try await eventually("A ready same-active subtitle pick must report its real index") {
@@ -436,6 +438,8 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertNil(subtitleReport.body["AudioStreamIndex"], "Choosing captions cannot make automatic audio a remembered choice")
         XCTAssertEqual(subtitleReport.body["IsPaused"] as? Bool, true)
         XCTAssertEqual(loader.revision, revision); XCTAssertEqual(loader.attemptCount, attempts)
+        XCTAssertEqual(session.diagnostics.counts["subtitle-select"], 2, "An explicit same-active choice emits its own receipt")
+        XCTAssertEqual(loader.selected?.selectionCount, 1, "The held load keeps its captured selection identity")
         XCTAssertEqual(captionRequests.count, 1); XCTAssertTrue(loader.loading)
         XCTAssertTrue(ExternalSubtitleHTTP.stoppedPaths.filter(ExternalSubtitleHTTP.isCaptionPath).isEmpty, "Same-active choice must preserve the held caption request; stopped caption paths: \(ExternalSubtitleHTTP.stoppedPaths.filter(ExternalSubtitleHTTP.isCaptionPath))")
         XCTAssertEqual(player.replacements, 1); XCTAssertTrue(player.attachedItems.last === item)
