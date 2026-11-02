@@ -4,6 +4,8 @@ import XCTest
 import Foundation
 import AVFoundation
 import UIKit
+import SwiftUI
+import Combine
 import PictureshowCore
 #if os(tvOS)
 @testable import Pictureshow_tvOS
@@ -24,9 +26,10 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     private static var captionReference: String? = "/captions/selected.vtt"
     private static var encodedExternalSubrip = false
     private static var embeddedSelectedTrack = false
+    private static var expandedTracks = false
     static let caption = Data("WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nSelected caption\n".utf8)
     static var source: [String: Any] {
-        lock.lock(); let reference = captionReference, encoded = encodedExternalSubrip, embedded = embeddedSelectedTrack; lock.unlock()
+        lock.lock(); let reference = captionReference, encoded = encodedExternalSubrip, embedded = embeddedSelectedTrack, expanded = expandedTracks; lock.unlock()
         var selected: [String: Any] = ["Index": encoded ? 0 : 4, "Type": "Subtitle", "Codec": embedded ? "mov_text" : encoded ? "subrip" : "vtt", "IsExternal": !embedded,
                                       "DeliveryMethod": embedded ? "Embed" : encoded ? "Encode" : "External"]
         if !embedded, let reference { selected["DeliveryUrl"] = reference }
@@ -39,12 +42,16 @@ private final class ExternalSubtitleHTTP: URLProtocol {
             selected,
             ["Index": encoded ? 3 : 5, "Type": "Subtitle", "Codec": "vtt", "IsExternal": true,
              "DeliveryMethod": "External", "DeliveryUrl": "/captions/unselected.vtt"]
-        ]
+        ] + (expanded ? (6...47).map { index -> [String: Any] in
+            ["Index": index, "Type": index % 2 == 0 ? "Audio" : "Subtitle", "Codec": index % 2 == 0 ? "aac" : "mov_text",
+             "Language": ["eng", "fra", "jpn"][index % 3], "Title": "Fixture track \(index)", "IsForced": index % 7 == 0,
+             "IsHearingImpaired": index % 5 == 0]
+        } : [])
         ]
     }
-    static func reset(_ value: Delivery, captionReference: String? = "/captions/selected.vtt", encodedExternalSubrip: Bool = false, embeddedSelectedTrack: Bool = false) {
+    static func reset(_ value: Delivery, captionReference: String? = "/captions/selected.vtt", encodedExternalSubrip: Bool = false, embeddedSelectedTrack: Bool = false, expandedTracks: Bool = false) {
         lock.lock(); defer { lock.unlock() }
-        delivery = value; self.captionReference = captionReference; self.encodedExternalSubrip = encodedExternalSubrip; self.embeddedSelectedTrack = embeddedSelectedTrack
+        delivery = value; self.captionReference = captionReference; self.encodedExternalSubrip = encodedExternalSubrip; self.embeddedSelectedTrack = embeddedSelectedTrack; self.expandedTracks = expandedTracks
         recorded = []; cancelled = []; held = [:]
     }
     // Shared resolve-24/25 append even slash-prefixed references to the configured
@@ -406,6 +413,180 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         }
     }
 
+    func testViewerSameActivePickReportsOnlyChosenTypeAndPreservesOptionalRetry() async throws {
+        ExternalSubtitleHTTP.reset(.held)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, player) = try await readySession(loader: loader)
+        try await eventually("Selected optional request did not begin") { self.captionRequests.count == 1 }
+        let item = try XCTUnwrap(player.attachedItems.first)
+        let revision = loader.revision, attempts = loader.attemptCount
+        session.backgrounded()
+        await session.selectTrack(type: "Subtitle", index: 4)
+        try await eventually("A ready same-active subtitle pick must report its real index") {
+            ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Progress") && ($0.body["SubtitleStreamIndex"] as? NSNumber)?.intValue == 4 }
+        }
+        let subtitleReport = try XCTUnwrap(ExternalSubtitleHTTP.requests.last { $0.path.hasSuffix("/Progress") })
+        XCTAssertNil(subtitleReport.body["AudioStreamIndex"], "Choosing captions cannot make automatic audio a remembered choice")
+        XCTAssertEqual(subtitleReport.body["IsPaused"] as? Bool, true)
+        XCTAssertEqual(loader.revision, revision); XCTAssertEqual(loader.attemptCount, attempts)
+        XCTAssertEqual(captionRequests.count, 1); XCTAssertTrue(loader.loading)
+        XCTAssertTrue(ExternalSubtitleHTTP.stoppedPaths.isEmpty, "Same-active choice must preserve the held request")
+        XCTAssertEqual(player.replacements, 1); XCTAssertTrue(player.attachedItems.last === item)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 1)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("/Sessions/Playing") }.count, 1)
+        await session.selectTrack(type: "Audio", index: 1)
+        await session.stop()
+        let both = try XCTUnwrap(ExternalSubtitleHTTP.requests.last { $0.path.hasSuffix("/Progress") })
+        XCTAssertEqual((both.body["AudioStreamIndex"] as? NSNumber)?.intValue, 1)
+        XCTAssertEqual((both.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, 4)
+        XCTAssertEqual(player.replacements, 1)
+    }
+
+    func testViewerPickBeforeReadyReportsAtStartWithoutReplacingItem() async throws {
+        ExternalSubtitleHTTP.reset(.valid, embeddedSelectedTrack: true)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let client = JellyfinClient(deviceID: "pending-track-test", session: URLSession(configuration: ExternalSubtitleHTTP.configuration()))
+        let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "pending-track-test")
+        let player = SubtitleInertPlayer()
+        let session = PlaybackSession(client: client, account: account, item: MediaItem(id: "movie", name: "Movie", type: "Movie"), player: player, externalSubtitles: loader)
+        try await session.prepare(startTicks: 0, audio: nil, subtitle: 4)
+        await session.selectTrack(type: "Subtitle", index: 4)
+        XCTAssertEqual(player.replacements, 1)
+        XCTAssertFalse(ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing") || $0.path.hasSuffix("/Progress") })
+        session.ready(version: 0)
+        try await eventually("Pending viewer choice must report when Ready") { ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing") } }
+        let start = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("/Sessions/Playing") })
+        XCTAssertEqual((start.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, 4)
+        XCTAssertNil(start.body["AudioStreamIndex"])
+        await session.stop()
+    }
+
+    func testSubtitleDiagnosticsCaptureVisibleOriginAndRejectStaleCallbacks() async throws {
+        var events: [ExternalTextSubtitles.DiagnosticEvent] = []
+        let loader = ExternalTextSubtitles(fetch: { _ in ExternalSubtitleHTTP.caption }, diagnostics: { events.append($0) })
+        defer { loader.release() }
+        loader.setContext(itemID: "first-item", viewingID: "first-viewing")
+        let first = ExternalTextSubtitles.Asset(id: "opaque-first", url: URL(string: "https://media.example.test/first.vtt")!, format: "vtt", originMs: 30_000, streamIndex: 4, sourceID: "source-a", selectionCount: 7)
+        loader.select(first)
+        try await eventually("Selected text must finish parsing") { !loader.loading && !loader.cues.isEmpty }
+        let revision = loader.revision
+        XCTAssertEqual(events.map(\.kind), ["subtitle-loaded"])
+        loader.didDisplayVisibleText(selection: revision)
+        XCTAssertEqual(events.count, 1, "Loading alone cannot claim a visible cue")
+        XCTAssertEqual(loader.text(atFullMediaMs: 151_000), "Selected caption")
+        loader.didDisplayVisibleText(selection: revision)
+        loader.didDisplayVisibleText(selection: revision)
+        let visible = try XCTUnwrap(events.last)
+        XCTAssertEqual(events.map(\.kind), ["subtitle-loaded", "subtitle-cues"])
+        XCTAssertEqual(visible.selectionCount, 7); XCTAssertEqual(visible.streamIndex, 4)
+        XCTAssertEqual(visible.sourceID, "source-a"); XCTAssertEqual(visible.originMs, 30_000)
+        XCTAssertEqual(visible.firstCueAtMs, 150_000); XCTAssertEqual(visible.visibleAtMs, 151_000)
+        XCTAssertEqual(visible.itemID, "first-item"); XCTAssertEqual(visible.viewingID, "first-viewing")
+        loader.setContext(itemID: "second-item", viewingID: "second-viewing")
+        loader.select(.init(id: "opaque-second", url: URL(string: "https://media.example.test/second.vtt")!, format: "vtt", originMs: 0, streamIndex: 9, sourceID: "source-b", selectionCount: 8))
+        try await eventually("New selected text must finish parsing") { !loader.loading && !loader.cues.isEmpty }
+        let before = events.count
+        loader.didDisplayVisibleText(selection: revision)
+        XCTAssertEqual(events.count, before, "Old layout cannot attribute a cue to a newly selected stream")
+        XCTAssertEqual(loader.text(atFullMediaMs: 121_000), "Selected caption")
+        loader.didDisplayVisibleText(selection: loader.revision)
+        XCTAssertEqual(events.last?.selectionCount, 8); XCTAssertEqual(events.last?.streamIndex, 9)
+        XCTAssertEqual(events.last?.sourceID, "source-b"); XCTAssertEqual(events.last?.itemID, "second-item")
+    }
+
+    func testCaptionAppearanceObserverRegistersOnceAcrossOverlayVisibility() {
+        let controller = PictureshowPlayerViewController()
+        controller.loadViewIfNeeded()
+        XCTAssertEqual(controller.captionObserverRegistrations, 1)
+        for visible in [true, false, true, false] {
+            controller.showSubtitle("Fixture cue", controlsVisible: visible, preferences: .init())
+            controller.loadViewIfNeeded()
+            #if os(tvOS)
+            controller.setInformationVisible(visible)
+            #endif
+            controller.viewDidLayoutSubviews()
+        }
+        XCTAssertEqual(controller.captionObserverRegistrations, 1, "HUD and Info transitions cannot re-register system caption listeners")
+    }
+
+    #if os(iOS)
+    func testPhonePaused45TrackPanelKeepsLabelsCached() async throws {
+        try await measurePausedTrackPanels()
+    }
+    #else
+    func testTVPausedExpandedInfo45TracksKeepsLabelsCached() async throws {
+        try await measurePausedTrackPanels()
+    }
+    #endif
+    private func measurePausedTrackPanels() async throws {
+        ExternalSubtitleHTTP.reset(.valid, embeddedSelectedTrack: true, expandedTracks: true)
+        let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
+        defer { loader.release(); clock.finish() }
+        let (session, _) = try await readySession(loader: loader, expectedCaptionPath: nil)
+        session.backgrounded()
+        XCTAssertEqual(session.trackLabels.audio.count + session.trackLabels.subtitles.count, 45)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        let root = UIViewController()
+        window.rootViewController = root; window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        func attach(_ child: UIViewController, frame: CGRect) {
+            root.addChild(child); child.view.frame = frame
+            root.view.addSubview(child.view); child.didMove(toParent: root)
+        }
+        let frame = window.bounds
+        let native = UIHostingController(rootView: NativePlayer(session: session, close: {}))
+        attach(native, frame: CGRect(x: 0, y: 0, width: frame.width, height: frame.height / 2))
+        #if os(iOS)
+        let panel = UIHostingController(rootView: PlayerOptions(session: session, kind: "tracks", done: {}))
+        attach(panel, frame: CGRect(x: 0, y: frame.height / 2, width: frame.width, height: frame.height / 2))
+        let event = "phonePlayerOptions.body"
+        #else
+        func playerController(_ parent: UIViewController) -> PictureshowPlayerViewController? {
+            if let found = parent as? PictureshowPlayerViewController { return found }
+            return parent.children.compactMap { playerController($0) }.first
+        }
+        try await eventually("Hosted NativePlayer did not construct its controller") { playerController(native) != nil }
+        let controller = try XCTUnwrap(playerController(native))
+        let panel = try XCTUnwrap(controller.customInfoViewControllers.first)
+        // This measures real Info content invalidation. Native expansion/focus is
+        // a separate XCUI case; manually hosting it makes no transport claim.
+        attach(panel, frame: CGRect(x: 0, y: frame.height / 2, width: frame.width, height: frame.height / 2))
+        let event = "expandedInfo.body"
+        try await eventually("Info lifecycle must gate continuation while visible") { session.panelOpen && controller.informationVisible }
+        #endif
+        try await eventually("The actual hosted panel body did not render") { session.diagnostics.counts[event, default: 0] > 0 }
+        root.view.layoutIfNeeded()
+        let labels = session.trackLabels.labelsBuilt, revision = session.trackLabels.cacheRevision
+        let body = session.diagnostics.counts[event, default: 0]
+        let snapshots = session.diagnostics.counts["nativePlayer.snapshot", default: 0]
+        var ticks = 0
+        let observation = session.$positionTicks.dropFirst().sink { _ in ticks += 1 }
+        defer { observation.cancel() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(8))
+        while ticks < 8 && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertGreaterThanOrEqual(ticks, 8, "Measure real 500 ms periodic publications while paused")
+        let bodyDelta = session.diagnostics.counts[event, default: 0] - body
+        let snapshotDelta = session.diagnostics.counts["nativePlayer.snapshot", default: 0] - snapshots
+        XCTAssertGreaterThan(bodyDelta, 0, "The measurement must include actual panel reevaluations")
+        XCTAssertGreaterThan(snapshotDelta, 0, "The native wrapper must receive the periodic updates")
+        XCTAssertEqual(session.trackLabels.labelsBuilt - labels, 0)
+        XCTAssertEqual(session.trackLabels.cacheRevision - revision, 0)
+        XCTAssertTrue(session.isPaused)
+        XCTAssertEqual(ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count, 1)
+        print("F3_PANEL_MEASUREMENT event=\(event) tracks=45 ticks=\(ticks) bodies=\(bodyDelta) nativeSnapshots=\(snapshotDelta) labelsBuiltDelta=\(session.trackLabels.labelsBuilt - labels) cacheRevisionDelta=\(session.trackLabels.cacheRevision - revision)")
+        // Sensitivity control: relevant metadata must invalidate the cached labels.
+        var streams = try XCTUnwrap(session.decision?.source.mediaStreams)
+        let index = try XCTUnwrap(streams.firstIndex { $0.type == "Audio" })
+        streams[index].title = "Changed relevant track title"
+        session.trackLabels.update(streams)
+        XCTAssertEqual(session.trackLabels.cacheRevision, revision + 1)
+        XCTAssertEqual(session.trackLabels.labelsBuilt - labels, 45)
+        await session.stop()
+    }
+
     func testRelativeAndAbsoluteDeliveryURLsReachTheirExactResolvedCaptionPaths() async throws {
         for (reference, expectedPath) in [
             ("/captions/selected.vtt", "/jellyfin/captions/selected.vtt"),
@@ -484,7 +665,11 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertEqual((negotiations.first?.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, -1)
         XCTAssertEqual(session.decision?.subtitleIndex, 0, "Zero is a selected stream, not Off")
         let start = try XCTUnwrap(ExternalSubtitleHTTP.requests.first { $0.path.hasSuffix("/Sessions/Playing") })
-        XCTAssertEqual((start.body["SubtitleStreamIndex"] as? NSNumber)?.intValue, 0)
+        XCTAssertNil(start.body["SubtitleStreamIndex"], "The automatic external index zero is playback intent, not a remembered viewer choice")
+        await session.selectTrack(type: "Subtitle", index: 0)
+        try await eventually("An explicit same-active index zero must be reported") {
+            ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Progress") && ($0.body["SubtitleStreamIndex"] as? NSNumber)?.intValue == 0 }
+        }
         XCTAssertEqual(player.replacements, 1); XCTAssertNil(session.error)
         let explanation = session.subtitleTimingExplanation.lowercased()
         XCTAssertTrue(explanation.contains("pictureshow") && explanation.contains("external text") && explanation.contains("overlay"),

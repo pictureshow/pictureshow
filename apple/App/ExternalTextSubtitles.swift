@@ -2,6 +2,7 @@
 // Copyright (c) Legitimate LLC.
 import Foundation
 import Combine
+import OSLog
 import PictureshowCore
 
 /// Optional text delivery has no reference to AVPlayer or its readiness deadline.
@@ -12,13 +13,61 @@ import PictureshowCore
         let url: URL
         let format: String
         let originMs: Int64
+        let streamIndex: Int?
+        let sourceID: String?
+        let selectionCount: Int?
+        init(id: String, url: URL, format: String, originMs: Int64, streamIndex: Int? = nil, sourceID: String? = nil, selectionCount: Int? = nil) {
+            self.id = id; self.url = url; self.format = format; self.originMs = originMs
+            self.streamIndex = streamIndex; self.sourceID = sourceID; self.selectionCount = selectionCount
+        }
     }
     @Published private(set) var cues: [TextSubtitleCue] = []
     @Published private(set) var loading = false
     @Published private(set) var unavailable = false
     private(set) var selected: Asset?
     private var task: Task<Void, Never>?
-    private var revision = 0
+    private(set) var revision = 0
+    struct DiagnosticEvent: Equatable {
+        let kind: String
+        /// Loader revision, used only to reject stale callbacks.
+        let selection: Int
+        /// Logical subtitle-select receipt captured when the asset was selected.
+        let selectionCount: Int
+        let attempts: Int
+        let originMs: Int64
+        let streamIndex: Int?
+        let sourceID: String?
+        /// Authored start of the first visibly delivered cue, on full-media time.
+        let firstCueAtMs: Int64?
+        let visibleAtMs: Int64?
+        let itemID: String
+        let viewingID: String
+    }
+    private let diagnosticSink: (DiagnosticEvent) -> Void
+    private(set) var attemptCount = 0
+    private(set) var cacheHits = 0
+    private var visibleTextRevision: Int?
+    private var visibleTextAsset: Asset?
+    private var visibleCueAtMs: Int64?
+    private var visibleAtMs: Int64?
+    private var deliveredRevision: Int?
+    private var context = (itemID: "", viewingID: "")
+    private var selectionContext = (itemID: "", viewingID: "")
+    func setContext(itemID: String, viewingID: String) { context = (itemID, viewingID) }
+    private func emit(_ kind: String, asset: Asset, firstCueAtMs: Int64? = nil, visibleAtMs: Int64? = nil) {
+        diagnosticSink(.init(kind: kind, selection: revision, selectionCount: asset.selectionCount ?? revision, attempts: attemptCount, originMs: asset.originMs,
+                             streamIndex: asset.streamIndex, sourceID: asset.sourceID,
+                             firstCueAtMs: firstCueAtMs, visibleAtMs: visibleAtMs,
+                             itemID: selectionContext.itemID, viewingID: selectionContext.viewingID))
+    }
+    /// Called only after the selected text has reached the visible overlay.
+    /// A stale layout callback cannot attribute old text to a newer request.
+    func didDisplayVisibleText(selection: Int) {
+        guard selection == revision, visibleTextRevision == revision, deliveredRevision != revision,
+              let asset = visibleTextAsset else { return }
+        deliveredRevision = revision
+        emit("subtitle-cues", asset: asset, firstCueAtMs: visibleCueAtMs, visibleAtMs: visibleAtMs)
+    }
     private var cache: [String: [TextSubtitleCue]] = [:]
     private var cacheOrder: [String] = []
     private var cachedTextBytes = 0
@@ -26,26 +75,34 @@ import PictureshowCore
     private let sleep: (Int64) async throws -> Void
 
     init(fetch: @escaping (URL) async throws -> Data = { try await ExternalTextSubtitles.fetchBounded($0) },
-         sleep: @escaping (Int64) async throws -> Void = { try await Task.sleep(for: .milliseconds($0)) }) {
-        self.fetch = fetch; self.sleep = sleep
+         sleep: @escaping (Int64) async throws -> Void = { try await Task.sleep(for: .milliseconds($0)) },
+         diagnostics: @escaping (DiagnosticEvent) -> Void = { event in
+             let stream = event.streamIndex.map(String.init) ?? "unknown"
+             let source = event.sourceID ?? "unknown"
+             Logger(subsystem: "app.pictureshow", category: "Playback").notice("\(event.kind, privacy: .public) stream=\(stream, privacy: .public) source=\(source, privacy: .public) selectionCount=\(event.selectionCount) loaderRevision=\(event.selection) attempts=\(event.attempts) firstCueAtMs=\(event.firstCueAtMs ?? -1) visibleAtMs=\(event.visibleAtMs ?? -1) originMs=\(event.originMs) item=\(event.itemID, privacy: .public) viewing=\(event.viewingID, privacy: .public)")
+         }) {
+        self.fetch = fetch; self.sleep = sleep; self.diagnosticSink = diagnostics
     }
     func select(_ asset: Asset?) {
         guard selected != asset else { return }
         revision += 1; let version = revision
+        attemptCount = 0; visibleTextRevision = nil; visibleTextAsset = nil; visibleCueAtMs = nil; visibleAtMs = nil; deliveredRevision = nil; selectionContext = context
         task?.cancel(); task = nil; selected = asset; cues = []; unavailable = false; loading = false
         guard let asset else { return }
-        if let cached = cache[asset.id] { cues = cached; return }
+        if let cached = cache[asset.id] { cacheHits += 1; cues = cached; emit("subtitle-cache", asset: asset); return }
         loading = true
         task = Task { [weak self] in
             guard let self else { return }
             var failures = 0
             while !Task.isCancelled, self.revision == version {
                 do {
+                    self.attemptCount += 1
                     let data = try await self.fetch(asset.url)
                     try Task.checkCancellation()
                     let parsed = try await Task.detached(priority: .utility) { try TextSubtitles.parse(data: data, format: asset.format) }.value
                     guard self.revision == version else { return }
                     self.cues = parsed; self.loading = false; self.unavailable = false
+                    self.emit("subtitle-loaded", asset: asset)
                     // Bound optional cue storage to one period and 16 MiB of text.
                     let size = parsed.reduce(0) { $0 + $1.text.utf8.count }
                     while self.cachedTextBytes + size > TextSubtitles.maximumBytes || self.cacheOrder.count >= 16 {
@@ -71,7 +128,20 @@ import PictureshowCore
         guard let selected else { return nil }
         let local = position.subtractingReportingOverflow(selected.originMs)
         guard !local.overflow else { return nil }
-        return TextSubtitles.text(cues: cues, positionMs: local.partialValue)
+        let text = TextSubtitles.text(cues: cues, positionMs: local.partialValue)
+        if text?.isEmpty == false {
+            visibleTextRevision = revision; visibleTextAsset = selected; visibleAtMs = position
+            // Attribute only a cue actually active in the text handed to UIKit.
+            // Neither an opaque cache id nor a later requested track is an origin.
+            let start = cues.first { local.partialValue >= $0.startMs && local.partialValue < $0.endMs }?.startMs
+            visibleCueAtMs = start.flatMap {
+                let full = $0.addingReportingOverflow(selected.originMs)
+                return full.overflow ? nil : full.partialValue
+            }
+        } else {
+            visibleTextRevision = nil; visibleTextAsset = nil; visibleCueAtMs = nil; visibleAtMs = nil
+        }
+        return text
     }
     func release() {
         select(nil); cache = [:]; cacheOrder = []; cachedTextBytes = 0

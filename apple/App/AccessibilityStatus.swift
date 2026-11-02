@@ -43,27 +43,24 @@ private struct StatusAnnouncement: ViewModifier {
 private struct DetailActionState: ViewModifier {
     let value: String
     let unavailable: Bool
+    let held: Bool
+    let label: String
     func body(content: Content) -> some View {
-        // Keep the native input node in the focus chain while exposing its real
-        // availability to assistive technology. The action also guards activation.
-        #if os(tvOS)
-        // The stable action stays focusable during recovery, but should not
-        // look available while its activation is guarded.
-        content.opacity(unavailable ? 0.55 : 1).accessibilityRepresentation {
-            content.accessibilityValue(value).disabled(unavailable)
+        // Disable only the hidden accessibility representation. The visible native
+        // Button retains input focus and its existing deferred-command guards.
+        // SwiftUI has no public notEnabled AccessibilityTraits member; disabled
+        // controls publish the platform's native disabled accessibility property.
+        let disabled = held || unavailable
+        content.opacity(disabled ? 0.55 : 1).accessibilityRepresentation {
+            content.accessibilityLabel(label).accessibilityValue(disabled ? "" : value).disabled(disabled)
         }
-        #else
-        content.opacity(unavailable ? 0.55 : 1).accessibilityRepresentation {
-            content.accessibilityValue(value).disabled(unavailable)
-        }
-        #endif
     }
 }
 
 extension View {
     func announceStatus(_ value: String?) -> some View { modifier(StatusAnnouncement(value: value)) }
     func announceCue(_ cue: AccessibilityCue?) -> some View { modifier(CueAnnouncement(cue: cue)) }
-    func detailActionState(value: String, unavailable: Bool) -> some View { modifier(DetailActionState(value: value, unavailable: unavailable)) }
+    func detailActionState(value: String, unavailable: Bool, held: Bool, label: String) -> some View { modifier(DetailActionState(value: value, unavailable: unavailable, held: held, label: label)) }
 }
 
 /// Apply only to catalog path mutations. Playback dismissal keeps its existing

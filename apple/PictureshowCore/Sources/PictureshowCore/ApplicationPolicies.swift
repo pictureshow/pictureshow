@@ -64,6 +64,10 @@ public struct PlaybackPreferences: Codable, Equatable, Sendable {
     }
 }
 public enum Captions {
+    private static let textCodecs: Set<String> = ["subrip", "srt", "ass", "ssa", "webvtt", "vtt", "ttml", "mov_text", "tx3g", "text", "smi", "sami"]
+    public static func isText(_ stream: MediaStream) -> Bool {
+        stream.isTextSubtitleStream || textCodecs.contains(stream.codec?.lowercased() ?? "")
+    }
     public static func language(enabled: Bool, configuration: UserConfiguration?, deviceLanguage: String) -> String? {
         guard enabled, let configuration, configuration.subtitleMode.lowercased() != "none" else { return nil }
         return configuration.subtitleLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? deviceLanguage : configuration.subtitleLanguage
@@ -73,6 +77,7 @@ public enum Captions {
         return source.mediaStreams.filter { $0.type == "Subtitle" && PlaybackSelection.language($0.language) == language }.sorted {
             if $0.isForced != $1.isForced { return !$0.isForced }
             if $0.isHearingImpaired != $1.isHearingImpaired { return $0.isHearingImpaired }
+            if isText($0) != isText($1) { return isText($0) }
             if ($0.index == source.defaultSubtitleStreamIndex) != ($1.index == source.defaultSubtitleStreamIndex) { return $0.index == source.defaultSubtitleStreamIndex }
             if $0.isDefault != $1.isDefault { return $0.isDefault }
             return $0.index < $1.index

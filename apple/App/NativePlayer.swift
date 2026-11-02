@@ -4,6 +4,7 @@ import SwiftUI
 import AVKit
 import PictureshowCore
 import OSLog
+import MediaAccessibility
 
 struct PlayerScreen: View {
     @ObservedObject var session: PlaybackSession
@@ -98,7 +99,7 @@ private struct PlayerActionStyle: ButtonStyle {
 }
 #endif
 
-private func trackName(_ stream: MediaStream, indexFirst: Bool = false) -> String {
+private func trackDescriptionParts(_ stream: MediaStream) -> [String] {
     var parts = [stream.label]
     let lower = stream.label.lowercased()
     let labelTokens = lower.split { !$0.isLetter && !$0.isNumber && $0 != "-" }
@@ -109,13 +110,39 @@ private func trackName(_ stream: MediaStream, indexFirst: Bool = false) -> Strin
     if let channels = stream.channels, !lower.contains("\(channels) channel") { parts.append("\(channels) channels") }
     if stream.isForced && (!lower.contains("forced") || lower.contains("non-forced") || lower.contains("non forced")) { parts.append("Forced") }
     if stream.isHearingImpaired && !lower.contains("hearing impaired") && !lower.contains("sdh") { parts.append("Hearing impaired") }
-    // AVKit's TV popover truncates long track titles. Keep the distinguishing
-    // stream number visible there while preserving the full spoken metadata.
-    if indexFirst { parts.insert("Stream \(stream.index)", at: 0) }
-    else { parts.append("Stream \(stream.index)") }
-    return parts.joined(separator: " · ")
+    return parts
 }
+
 private func clock(_ ticks: Int64) -> String { Catalog.resumeLabel(ticks).replacingOccurrences(of: "Resume from ", with: "") }
+
+struct TrackLabel: Identifiable {
+    let id: Int
+    let title: String
+    let menuTitle: String
+}
+@MainActor final class TrackLabelCache {
+    private var streams: [MediaStream] = []
+    private(set) var audio: [TrackLabel] = []
+    private(set) var subtitles: [TrackLabel] = []
+    private(set) var labelsBuilt = 0
+    private(set) var cacheRevision = 0
+    func update(_ values: [MediaStream]) {
+        let values = values.filter { $0.type == "Audio" || $0.type == "Subtitle" }
+        guard values != streams else { return }
+        streams = values; cacheRevision += 1
+        func labels(_ type: String) -> [TrackLabel] {
+            values.filter { $0.type == type }.map {
+                labelsBuilt += 1
+                let parts = trackDescriptionParts($0), index = "Stream \($0.index)"
+                // Reuse the description work for phone and TV ordering.
+                return TrackLabel(id: $0.index, title: (parts + [index]).joined(separator: " · "),
+                                  menuTitle: ([index] + parts).joined(separator: " · "))
+            }
+        }
+        audio = labels("Audio"); subtitles = labels("Subtitle")
+    }
+    func values(_ type: String) -> [TrackLabel] { type == "Audio" ? audio : subtitles }
+}
 
 struct PlayerOptions: View {
     @ObservedObject var session: PlaybackSession
@@ -125,6 +152,7 @@ struct PlayerOptions: View {
     private var audio: Int? { session.decision?.audioIndex }
     private var subtitle: Int? { session.decision?.subtitleIndex }
     var body: some View {
+        let _ = session.diagnostics.record("phonePlayerOptions.body")
         NavigationStack {
             List {
                 if kind == "seek" {
@@ -141,11 +169,11 @@ struct PlayerOptions: View {
                     if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
                     Section("Audio") {
                         track("Off", index: -1, type: "Audio", selected: audio == -1)
-                        ForEach(streams("Audio")) { track(trackName($0), index: $0.index, type: "Audio", selected: audio == $0.index) }
+                        ForEach(session.trackLabels.audio) { track($0.title, index: $0.id, type: "Audio", selected: audio == $0.id) }
                     }
                     Section("Subtitles") {
                         track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
-                        ForEach(streams("Subtitle")) { track(trackName($0), index: $0.index, type: "Subtitle", selected: subtitle == $0.index) }
+                        ForEach(session.trackLabels.subtitles) { track($0.title, index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
                         Text(session.subtitleTimingExplanation).font(.caption)
                         if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
                     }
@@ -157,20 +185,17 @@ struct PlayerOptions: View {
         }
     }
     private func closePanel() { done(); dismiss() }
-    private func streams(_ type: String) -> [MediaStream] { session.decision?.source.mediaStreams.filter { $0.type == type } ?? [] }
     private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
         Button {
             #if DEBUG
             Logger(subsystem: "app.pictureshow", category: "Playback").notice("Track action type=\(type, privacy: .public) index=\(index)")
             #endif
-            let chosenAudio = type == "Audio" ? index : session.decision?.audioIndex
-            let chosenSubtitle = type == "Subtitle" ? index : session.decision?.subtitleIndex
             closePanel()
-            Task { await session.changeTracks(audio: chosenAudio, subtitle: chosenSubtitle) }
+            Task { await session.selectTrack(type: type, index: index) }
         } label: {
             HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }.minimumTouchTarget()
-        }.disabled(session.changingTracks)
-            .accessibilityValue(session.changingTracks ? "Applying tracks" : selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
+        }
+            .accessibilityValue(selected ? "Selected" : "").accessibilityIdentifier("\(type.lowercased())-\(index)")
     }
     private func currentChapter(_ index: Int) -> Bool {
         session.chapters[index].startTicks <= session.positionTicks && (index + 1 == session.chapters.count || session.chapters[index + 1].startTicks > session.positionTicks)
@@ -196,26 +221,30 @@ struct NativePlayer: UIViewControllerRepresentable {
         return controller
     }
     func updateUIViewController(_ controller: PictureshowPlayerViewController, context: Context) {
+        session.diagnostics.record("nativePlayer.snapshot")
         context.coordinator.close = close
+        let subtitleSelection = session.externalSubtitles.revision
+        controller.subtitleDidDisplay = { [weak session] in session?.externalSubtitles.didDisplayVisibleText(selection: subtitleSelection) }
         controller.showSubtitle(session.subtitleCue, controlsVisible: session.controlsVisible, preferences: session.preferences)
         #if os(tvOS)
         let continuation = session.nextCountdown != nil ? session.nextItem : nil
         context.coordinator.updateContinuation(continuation, countdown: session.nextCountdown)
-        let signature = "\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
+        let signature = "\(session.trackLabels.cacheRevision)|\(continuation?.id ?? "")|\(session.item.id)|\(session.decision?.playSessionId ?? "")|\(session.decision?.audioIndex ?? -999)|\(session.decision?.subtitleIndex ?? -999)|\(session.chapters.count)|\(session.changingTracks)"
         if context.coordinator.menuSignature != signature {
             context.coordinator.menuSignature = signature
+            session.diagnostics.record("nativePlayer.menuBuilt")
             func tracks(_ type: String) -> UIMenu {
-                let values = session.decision?.source.mediaStreams.filter { $0.type == type } ?? []
+                let values = session.trackLabels.values(type)
                 let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
-                let off = UIAction(title: "Off", identifier: UIAction.Identifier("\(type.lowercased())--1"), attributes: session.changingTracks ? [.disabled] : [], state: selected == -1 ? .on : .off) { _ in
-                    Task { await session.changeTracks(audio: type == "Audio" ? -1 : session.decision?.audioIndex, subtitle: type == "Subtitle" ? -1 : session.decision?.subtitleIndex) }
+                let off = UIAction(title: "Off", identifier: UIAction.Identifier("\(type.lowercased())--1"), state: selected == -1 ? .on : .off) { _ in
+                    Task { await session.selectTrack(type: type, index: -1) }
                 }
                 let actions = values.map { stream in
-                    UIAction(title: trackName(stream, indexFirst: true), subtitle: nil, identifier: UIAction.Identifier("\(type.lowercased())-\(stream.index)"), attributes: session.changingTracks ? [.disabled] : [], state: selected == stream.index ? .on : .off) { _ in
-                        Task { await session.changeTracks(audio: type == "Audio" ? stream.index : session.decision?.audioIndex, subtitle: type == "Subtitle" ? stream.index : session.decision?.subtitleIndex) }
+                    UIAction(title: stream.menuTitle, subtitle: nil, identifier: UIAction.Identifier("\(type.lowercased())-\(stream.id)"), state: selected == stream.id ? .on : .off) { _ in
+                        Task { await session.selectTrack(type: type, index: stream.id) }
                     }
                 }
-                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), children: [off] + actions)
+                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), options: .singleSelection, children: [off] + actions)
             }
             let chapters = UIMenu(title: "Chapters", image: UIImage(systemName: "list.bullet"), children: session.chapters.enumerated().map { index, chapter in
                 UIAction(title: chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name, subtitle: clock(chapter.startTicks)) { _ in session.seek(toTicks: chapter.startTicks) }
@@ -300,8 +329,30 @@ struct NativePlayer: UIViewControllerRepresentable {
 /// Optional plain-text captions live in AVKit's video overlay, never in its asset.
 /// Loading failure cannot hold the transport or change its media clock.
 final class PictureshowPlayerViewController: AVPlayerViewController {
+    var subtitleDidDisplay: (() -> Void)?
     private let caption = UILabel()
     private var controlsVisible = false
+    private var captionPreferences = PlaybackPreferences()
+    private(set) var captionObserverRegistrations = 0
+    private var observesCaptionAppearance = false
+    private func observeCaptionAppearance() {
+        guard !observesCaptionAppearance else { return }
+        observesCaptionAppearance = true; captionObserverRegistrations += 1
+        CFNotificationCenterAddObserver(CFNotificationCenterGetLocalCenter(), Unmanaged.passUnretained(self).toOpaque(), { _, observer, _, _, _ in
+            guard let observer else { return }
+            // MediaAccessibility delivers a CF notification; marshal UIKit work.
+            let controller = Unmanaged<PictureshowPlayerViewController>.fromOpaque(observer).takeUnretainedValue()
+            Task { @MainActor [weak controller] in
+                guard let controller else { return }
+                controller.showSubtitle(controller.caption.text, controlsVisible: controller.controlsVisible, preferences: controller.captionPreferences)
+            }
+        }, kMACaptionAppearanceSettingsChangedNotification, nil, .deliverImmediately)
+    }
+    deinit {
+        if observesCaptionAppearance {
+            CFNotificationCenterRemoveObserver(CFNotificationCenterGetLocalCenter(), Unmanaged.passUnretained(self).toOpaque(), CFNotificationName(rawValue: kMACaptionAppearanceSettingsChangedNotification), nil)
+        }
+    }
     #if os(tvOS)
     private(set) var informationVisible = false
     func setInformationVisible(_ visible: Bool) {
@@ -322,6 +373,7 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
     #endif
     override func viewDidLoad() {
         super.viewDidLoad()
+        observeCaptionAppearance()
         caption.numberOfLines = 0; caption.textAlignment = .center
         caption.textColor = .white; caption.isUserInteractionEnabled = false
         caption.isAccessibilityElement = false // Clock/cue ticks are not announcements.
@@ -329,6 +381,7 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
     }
     func showSubtitle(_ text: String?, controlsVisible: Bool, preferences: PlaybackPreferences) {
         loadViewIfNeeded()
+        captionPreferences = preferences
         caption.text = text; caption.isHidden = text == nil
         self.controlsVisible = controlsVisible
         #if os(tvOS)
@@ -336,8 +389,11 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         #else
         let base: CGFloat = 22
         #endif
-        caption.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: base * CGFloat(preferences.subtitleSize.scale ?? 1)))
-        caption.backgroundColor = preferences.subtitleBackground == .box ? UIColor.black.withAlphaComponent(0.8) : .clear
+        caption.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: base * CGFloat(preferences.subtitleSize.scale ?? Double(MACaptionAppearanceGetRelativeCharacterSize(.user, nil)))))
+        caption.textColor = UIColor(cgColor: MACaptionAppearanceCopyForegroundColor(.user, nil).takeRetainedValue()).withAlphaComponent(MACaptionAppearanceGetForegroundOpacity(.user, nil))
+        caption.backgroundColor = preferences.subtitleBackground == .system
+            ? UIColor(cgColor: MACaptionAppearanceCopyBackgroundColor(.user, nil).takeRetainedValue()).withAlphaComponent(MACaptionAppearanceGetBackgroundOpacity(.user, nil))
+            : preferences.subtitleBackground == .box ? UIColor.black.withAlphaComponent(0.8) : .clear
         caption.layer.shadowColor = UIColor.black.cgColor
         caption.layer.shadowOpacity = preferences.subtitleBackground == .none ? 0 : 1
         caption.layer.shadowRadius = 2; caption.layer.shadowOffset = CGSize(width: 1, height: 1)
@@ -372,6 +428,7 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         let captionHeight = min(video.height * 0.6, video.height - inset,
                                 caption.sizeThatFits(CGSize(width: captionWidth, height: .greatestFiniteMagnitude)).height + 8)
         caption.frame = CGRect(x: video.midX - captionWidth / 2, y: max(video.minY, video.maxY - inset - captionHeight), width: captionWidth, height: captionHeight)
+        if view.window != nil, !caption.isHidden, captionHeight > 0, !(caption.text ?? "").isEmpty { subtitleDidDisplay?() }
     }
 }
 
@@ -392,6 +449,7 @@ private final class PlaybackInformationController: UIHostingController<PlaybackI
 private struct PlaybackInformation: View {
     @ObservedObject var session: PlaybackSession
     var body: some View {
+        let _ = session.diagnostics.record("expandedInfo.body")
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(session.item.name).font(.title2).accessibilityAddTraits(.isHeader)

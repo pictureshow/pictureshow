@@ -19,9 +19,10 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
     public var realFrameRate: Double?
     public var averageFrameRate: Double?
     public var isForced: Bool
+    public var isTextSubtitleStream: Bool
     public var id: Int { index }
     public var label: String { displayTitle ?? title ?? [language, codec].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "Track \(index)" }
-    enum CodingKeys: String, CodingKey { case index = "Index", type = "Type", codec = "Codec", language = "Language", displayTitle = "DisplayTitle", title = "Title", channels = "Channels", isExternal = "IsExternal", isDefault = "IsDefault", isForced = "IsForced", isHearingImpaired = "IsHearingImpaired", deliveryMethod = "DeliveryMethod", realFrameRate = "RealFrameRate", averageFrameRate = "AverageFrameRate", deliveryURL = "DeliveryUrl", isExternalURL = "IsExternalUrl" }
+    enum CodingKeys: String, CodingKey { case index = "Index", type = "Type", codec = "Codec", language = "Language", displayTitle = "DisplayTitle", title = "Title", channels = "Channels", isExternal = "IsExternal", isDefault = "IsDefault", isForced = "IsForced", isHearingImpaired = "IsHearingImpaired", deliveryMethod = "DeliveryMethod", realFrameRate = "RealFrameRate", averageFrameRate = "AverageFrameRate", deliveryURL = "DeliveryUrl", isExternalURL = "IsExternalUrl", isTextSubtitleStream = "IsTextSubtitleStream" }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         index = try c.decodeIfPresent(Int.self, forKey: .index) ?? 0
@@ -34,6 +35,7 @@ public struct MediaStream: Codable, Equatable, Sendable, Identifiable {
         isExternal = try c.decodeIfPresent(Bool.self, forKey: .isExternal) ?? false
         isDefault = try c.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
         isForced = try c.decodeIfPresent(Bool.self, forKey: .isForced) ?? false
+        isTextSubtitleStream = try c.decodeIfPresent(Bool.self, forKey: .isTextSubtitleStream) ?? false
         isHearingImpaired = try c.decodeIfPresent(Bool.self, forKey: .isHearingImpaired) ?? false
         deliveryMethod = try c.decodeIfPresent(String.self, forKey: .deliveryMethod)
         deliveryURL = try c.decodeIfPresent(String.self, forKey: .deliveryURL)

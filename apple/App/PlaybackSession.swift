@@ -13,7 +13,7 @@ import MediaAccessibility
     let id = UUID()
     let player: AVPlayer
     @Published private(set) var item: MediaItem
-    @Published private(set) var decision: PlayDecision?
+    @Published private(set) var decision: PlayDecision? { didSet { trackLabels.update(decision?.source.mediaStreams ?? []) } }
     @Published private(set) var status = "Preparing playback…"
     @Published private(set) var error: String?
     @Published private(set) var reportError: String?
@@ -33,6 +33,17 @@ import MediaAccessibility
     let externalSubtitles: ExternalTextSubtitles
     @Published private(set) var subtitleCue: String?
     @Published private(set) var subtitleStatus: String?
+    let trackLabels = TrackLabelCache()
+    let diagnostics: PlaybackDiagnostics
+    private(set) var audioChosenByViewer = false
+    private(set) var subtitleChosenByViewer = false
+    private var trackTail: Task<Void, Never>?
+    private var nativeSelectionBaseline: [String: Int] = [:]
+    private var nativeSelectionRevision = 0
+    private var selectionIntentRevision = 0
+    private var subtitleSelectionCount = 0
+    private var observedSubtitleSelection = false
+    private var observedSubtitleIndex: Int?
     private var subtitleObservation: AnyCancellable?
     private let client: JellyfinClient
     private let account: Account
@@ -47,7 +58,7 @@ import MediaAccessibility
     private var timeoutTask: Task<Void, Never>?
     private var reportTail: Task<Void, Never>?
     private var reportsQueued = 0
-    private var failedStart: (PlayDecision, Int64, Bool)?
+    private var failedStart: (PlayDecision, Int64, Bool, Bool)?
     private var failedProgress: (PlayDecision, Int64, Bool)?
     private var finalReport: (PlayDecision, Int64, Bool)?
     private var failedStop: (PlayDecision, Int64, Bool)?
@@ -82,8 +93,9 @@ import MediaAccessibility
     private var stalledSince: Date?
     private var lastObservedTicks: Int64 = 0
 
-    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer(), externalSubtitles: ExternalTextSubtitles? = nil) {
+    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer(), externalSubtitles: ExternalTextSubtitles? = nil, diagnostics: PlaybackDiagnostics = PlaybackDiagnostics()) {
         self.client = client; self.account = account; self.item = item; self.preferences = preferences; self.player = player
+        self.diagnostics = diagnostics
         self.externalSubtitles = externalSubtitles ?? ExternalTextSubtitles()
         subtitleObservation = self.externalSubtitles.$loading.combineLatest(self.externalSubtitles.$unavailable)
             .map { loading, unavailable -> String? in
@@ -142,6 +154,7 @@ import MediaAccessibility
                                              token: account.accessToken, requiredHeaders: next.headers) }
         catch { try? await client.stopEncoding(account: account, decision: next); throw error }
         decision = next; positionTicks = startTicks
+        observeSubtitleSelection(next.subtitleIndex)
         selectExternalText(for: next)
         // Session identifiers support scoped encoder cleanup after an interrupted pilot.
         // Never log the asset URL, request headers or viewer credential.
@@ -256,6 +269,9 @@ import MediaAccessibility
                 break
             }
             self.pendingSeekTicks = nil; self.positionTicks = target
+            // Initial AVKit/programmatic selection is a baseline, never a choice.
+            await self.recordNativeSelection(self.player.currentItem, establishingBaseline: true)
+            guard !Task.isCancelled, !self.closed, self.generation == version else { return }
             self.timelineReady = true; self.waitingForVideo = false
             self.status = self.playbackMethodStatus
             Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native ready viewing=\(self.viewingID.uuidString, privacy: .public) durationSeconds=\(self.durationSeconds ?? -1) targetTicks=\(target)")
@@ -267,7 +283,6 @@ import MediaAccessibility
                 self.started = true
                 self.enqueueReport(decision: decision, kind: "start", ticks: target, paused: self.pauseIntent)
             } else { self.enqueueProgress() }
-            await self.recordNativeSelection(self.player.currentItem)
             self.installChapterMarkers()
         }
     }
@@ -429,7 +444,7 @@ import MediaAccessibility
         }
         externalSubtitles.release(); subtitleCue = nil
         item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil
-        viewingID = UUID(); started = false; stopped = false; completionCommitted = false; fallbackUsed = false
+        viewingID = UUID(); audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
         segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
         do { try await prepare(startTicks: 0, audio: nil, subtitle: nil) } catch { self.error = "Could not start the next episode. Go back and try again." }
@@ -437,6 +452,9 @@ import MediaAccessibility
     }
     private func enqueueReport(decision: PlayDecision, kind: String, ticks: Int64, paused: Bool) {
         if kind == "progress", reportsQueued >= 2 { return }
+        // Value snapshot at enqueue time: retries cannot inherit a later choice.
+        let muted = decision.audioIndex == -1
+        let decision = reportingDecision(decision)
         reportsQueued += 1
         #if DEBUG
         Logger(subsystem: "app.pictureshow", category: "Reports").notice("Queued report kind=\(kind, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public) ticks=\(ticks) paused=\(paused)")
@@ -446,13 +464,13 @@ import MediaAccessibility
             await previous?.value
             defer { reportsQueued -= 1 }
             do {
-                if kind != "start", let (first, position, paused) = failedStart {
-                    try await client.reportStart(account: account, decision: first, positionTicks: position, paused: paused)
+                if kind != "start", let (first, position, paused, firstMuted) = failedStart {
+                    try await client.reportStart(account: account, decision: first, positionTicks: position, paused: paused, isMuted: firstMuted)
                     failedStart = nil
                 }
-                if kind == "start" { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused) }
+                if kind == "start" { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused, isMuted: muted) }
                 else if kind == "stop" { try await client.reportStopped(account: account, decision: decision, positionTicks: ticks, failed: error != nil) }
-                else { try await client.reportProgress(account: account, decision: decision, positionTicks: ticks, paused: paused) }
+                else { try await client.reportProgress(account: account, decision: decision, positionTicks: ticks, paused: paused, isMuted: muted) }
                 #if DEBUG
                 Logger(subsystem: "app.pictureshow", category: "Reports").notice("Accepted report kind=\(kind, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public) ticks=\(ticks)")
                 #endif
@@ -461,7 +479,7 @@ import MediaAccessibility
                 if kind == "stop" { failedStop = nil; failedProgress = nil }
                 clearReportErrorIfRecovered()
             } catch {
-                if kind == "start" { failedStart = (decision, ticks, paused) }
+                if kind == "start" { failedStart = (decision, ticks, paused, muted) }
                 if kind == "progress" { failedProgress = (decision, ticks, paused) }
                 if kind == "stop" { failedStop = (decision, ticks, self.error != nil) }
                 reportError = "The server could not save progress. Resume may be unavailable. Check your connection."
@@ -477,6 +495,7 @@ import MediaAccessibility
     func stop() async { beginClosing(); await closeTask?.value }
     private func releaseStream() async {
         positionTicks = completedTicks ?? currentTicks; generation += 1; timelineReady = false
+        nativeSelectionBaseline = [:]; nativeSelectionRevision += 1
         timeoutTask?.cancel(); timeoutTask = nil
         startTask?.cancel(); await startTask?.value; startTask = nil
         statusObservation = nil; controlObservation = nil
@@ -495,8 +514,8 @@ import MediaAccessibility
             do { _ = try await client.played(account: account, itemID: failedPlayedID, value: true); self.failedPlayedID = nil; completionCommitted = true }
             catch { reportError = "The server could not mark this title watched. Check your connection and retry." }
         }
-        if let (decision, ticks, paused) = failedStart {
-            do { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused); failedStart = nil }
+        if let (decision, ticks, paused, muted) = failedStart {
+            do { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused, isMuted: muted); failedStart = nil }
             catch { reportError = "The server could not record playback. Check your connection and retry."; return }
         }
         if failedStop == nil, failedProgress != nil, let finalReport { failedStop = finalReport }
@@ -518,17 +537,58 @@ import MediaAccessibility
     private func finishViewing() async {
         guard !stopped else { return }; positionTicks = completedTicks ?? currentTicks; stopped = true
         extrasTask?.cancel(); timeoutTask?.cancel()
-        let last = decision
+        let last = decision.map(reportingDecision)
         await releaseStream()
         if started, let last { finalReport = (last, positionTicks, error != nil); enqueueReport(decision: last, kind: "stop", ticks: positionTicks, paused: true) }
         await reportTail?.value; status = "Stopped"; waitingForVideo = false
     }
+    /// A panel submits only the chosen type. The other type is read when this
+    /// serialized command executes, after any earlier replacement completes.
+    func selectTrack(type: String, index: Int) async {
+        guard type == "Audio" || type == "Subtitle", !closed else { return }
+        let viewing = viewingID
+        let previous = trackTail
+        let command = Task { [weak self] in
+            await previous?.value
+            guard let self, !self.closed, self.viewingID == viewing, let current = self.decision else { return }
+            self.selectionIntentRevision += 1
+            if type == "Audio" { self.audioChosenByViewer = true }
+            else {
+                self.subtitleChosenByViewer = true
+                self.observeSubtitleSelection(index, explicit: true)
+            }
+            let selected = type == "Audio" ? current.audioIndex : current.subtitleIndex
+            if let selected, TrackSelection.unchanged(currentIndex: selected, pickedIndex: index) {
+                if self.timelineReady { self.enqueueProgress() }
+                return // A same-active pick changes provenance only.
+            }
+            await self.applyTracks(audio: type == "Audio" ? index : current.audioIndex,
+                                   subtitle: type == "Subtitle" ? index : current.subtitleIndex)
+        }
+        trackTail = command
+        await command.value
+    }
+    /// Decoder recovery/legacy callers preserve provenance. Viewer UI uses selectTrack.
     func changeTracks(audio: Int?, subtitle: Int?, forceVideoTranscode: Bool = false) async {
-        guard !changingTracks, !closed else { return }
+        let viewing = viewingID
+        let previous = trackTail
+        let command = Task { [weak self] in
+            await previous?.value
+            guard let self, !self.closed, self.viewingID == viewing else { return }
+            await self.applyTracks(audio: forceVideoTranscode ? self.decision?.audioIndex : audio, subtitle: forceVideoTranscode ? self.decision?.subtitleIndex : subtitle, forceVideoTranscode: forceVideoTranscode)
+        }
+        trackTail = command
+        await command.value
+    }
+    private func applyTracks(audio: Int?, subtitle: Int?, forceVideoTranscode: Bool = false) async {
+        guard !closed else { return }
+        if !forceVideoTranscode, let current = decision,
+           audio == current.audioIndex, subtitle == current.subtitleIndex { enqueueProgress(); return }
         if !forceVideoTranscode, var current = decision, audio == current.audioIndex,
            externalSubtitles.selected != nil || current.subtitleIndex == -1,
            subtitle == -1 || externalTextStream(subtitle, source: current.source) != nil {
             current.subtitleIndex = subtitle; decision = current
+            observeSubtitleSelection(current.subtitleIndex)
             selectExternalText(for: current); subtitleCue = externalSubtitles.text(atFullMediaMs: currentTicks / 10_000)
             enqueueProgress()
             return // A text choice does not replace, pause or seek the A/V item.
@@ -543,6 +603,21 @@ import MediaAccessibility
         catch { self.error = "Could not apply the selected tracks. Go back and try again." }
         changingTracks = false
     }
+    private func reportingDecision(_ value: PlayDecision) -> PlayDecision {
+        var report = value
+        report.audioIndex = TrackSelectionReporting.index(selectedIndex: value.audioIndex, chosenByViewer: audioChosenByViewer)
+        report.subtitleIndex = TrackSelectionReporting.index(selectedIndex: value.subtitleIndex, chosenByViewer: subtitleChosenByViewer)
+        return report
+    }
+    /// One logical receipt per accepted open/changed choice or explicit pick.
+    /// A prepare following that pick reuses the receipt rather than logging twice.
+    private func observeSubtitleSelection(_ index: Int?, explicit: Bool = false) {
+        guard explicit || !observedSubtitleSelection || observedSubtitleIndex != index else { return }
+        observedSubtitleSelection = true; observedSubtitleIndex = index; subtitleSelectionCount += 1
+        diagnostics.record("subtitle-select")
+        let stream = index.map { $0 == -1 ? "off" : String($0) } ?? "unknown"
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("subtitle-select stream=\(stream, privacy: .public) paused=\(self.pauseIntent) positionMs=\(self.currentTicks / 10_000) selectionCount=\(self.subtitleSelectionCount) item=\(self.item.id, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public)")
+    }
     private func externalTextStream(_ index: Int?, source: MediaSource?) -> MediaStream? {
         source?.mediaStreams.first { stream in
             stream.index == index && stream.type == "Subtitle"
@@ -553,6 +628,7 @@ import MediaAccessibility
         }
     }
     private func selectExternalText(for decision: PlayDecision) {
+        externalSubtitles.setContext(itemID: item.id, viewingID: viewingID.uuidString)
         guard let stream = externalTextStream(decision.subtitleIndex, source: decision.source),
               let sourceID = decision.source.id else { externalSubtitles.select(nil); subtitleCue = nil; return }
         do {
@@ -572,7 +648,7 @@ import MediaAccessibility
             // server-rebased text needs its extraction origin added back.
             let originMs = rebased ? max(0, originTicks / 10_000) : 0
             let format = reference.pathExtension.lowercased() == "vtt" ? "vtt" : (stream.codec ?? "vtt")
-            externalSubtitles.select(.init(id: "\(item.id)|\(sourceID)|\(stream.index)|\(originMs)", url: url, format: format, originMs: originMs))
+            externalSubtitles.select(.init(id: "\(item.id)|\(sourceID)|\(stream.index)|\(originMs)", url: url, format: format, originMs: originMs, streamIndex: stream.index, sourceID: sourceID, selectionCount: subtitleSelectionCount))
         } catch {
             // An unsafe optional subtitle route cannot fail the negotiated video.
             externalSubtitles.select(nil); subtitleCue = nil
@@ -588,8 +664,14 @@ import MediaAccessibility
         fallbackUsed = true
         await changeTracks(audio: decision?.audioIndex, subtitle: decision?.subtitleIndex, forceVideoTranscode: true)
     }
-    private func recordNativeSelection(_ avItem: AVPlayerItem?) async {
-        guard let avItem, player.currentItem === avItem, timelineReady, !closed, var value = decision, value.method != .transcode else { return }
+    private func recordNativeSelection(_ avItem: AVPlayerItem?, establishingBaseline: Bool = false) async {
+        guard let avItem, player.currentItem === avItem, (timelineReady || establishingBaseline), !closed,
+              var value = decision, value.method != .transcode else { return }
+        let version = generation
+        let intentRevision = selectionIntentRevision
+        nativeSelectionRevision += 1
+        let revision = nativeSelectionRevision
+        var indices: [String: Int] = [:]
         for type in ["Audio", "Subtitle"] {
             if type == "Audio", player.isMuted, value.audioIndex == -1 { continue }
             if type == "Subtitle", externalSubtitles.selected != nil { continue }
@@ -604,9 +686,25 @@ import MediaAccessibility
             let title = option?.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let titled = candidates.filter { stream in [stream.title, stream.displayTitle].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.contains(title ?? "") }
             let index = option == nil ? -1 : candidates.count == 1 ? candidates[0].index : titled.count == 1 ? titled[0].index : nil
-            if type == "Audio" { value.audioIndex = index } else { value.subtitleIndex = index }
+            if let index { indices[type] = index }
         }
-        guard player.currentItem === avItem, !closed else { return }; decision = value
+        guard player.currentItem === avItem, !closed, generation == version, nativeSelectionRevision == revision, selectionIntentRevision == intentRevision else { return }
+        var changed = false
+        for (type, index) in indices {
+            if !establishingBaseline, let baseline = nativeSelectionBaseline[type], baseline != index {
+                if type == "Audio" { audioChosenByViewer = true }
+                else { subtitleChosenByViewer = true; observeSubtitleSelection(index, explicit: true) }
+                changed = true
+            }
+            if type == "Audio" { value.audioIndex = index }
+            else {
+                value.subtitleIndex = index
+                if establishingBaseline { observeSubtitleSelection(index) }
+            }
+        }
+        nativeSelectionBaseline = indices
+        decision = value
+        if changed { enqueueProgress() }
     }
     func chapterImage(index: Int) async -> UIImage? {
         guard chapters.indices.contains(index), let tag = chapters[index].imageTag,
@@ -637,5 +735,17 @@ import MediaAccessibility
         }
         player.currentItem?.navigationMarkerGroups = groups.isEmpty ? [] : [AVNavigationMarkersGroup(title: nil, timedNavigationMarkers: groups)]
         #endif
+    }
+}
+
+/// Non-published counters avoid triggering the view work they measure. Tests can
+/// inject a sink; payloads never contain subtitle text, URLs or credentials.
+@MainActor final class PlaybackDiagnostics {
+    private(set) var counts: [String: Int] = [:]
+    private let sink: (String, Int) -> Void
+    init(sink: @escaping (String, Int) -> Void = { _, _ in }) { self.sink = sink }
+    func record(_ event: String) {
+        counts[event, default: 0] += 1
+        sink(event, counts[event, default: 0])
     }
 }

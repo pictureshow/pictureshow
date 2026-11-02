@@ -37,7 +37,11 @@ final class SpecVectorTests:XCTestCase {
     func errorName(_ error:Error)->String{switch error as? ClientError{case .serverRefused:return "SERVER_REFUSED";case .sourceNotFound:return "SOURCE_NOT_FOUND";case .noCompatibleSource:return "NO_COMPATIBLE_SOURCE";case .unsafeStreamURL:return "UNSAFE_STREAM_URL";default:return "UNEXPECTED_\(error)"}}
     func decisionJSON(_ d:PlayDecision,urlParts:Bool=false)->[String:Any]{["method":d.method.rawValue,"mediaSourceId":d.source.id as Any? ?? NSNull(),"url":urlParts ? parts(d.url):d.url.absoluteString as Any,"headers":d.headers,"playSessionId":d.playSessionId as Any? ?? NSNull(),"transcodeReasons":d.transcodeReasons]}
     func parts(_ url:URL)->[String:Any]{let c=URLComponents(url:url,resolvingAgainstBaseURL:false)!;var q:[String:[String]]=[:];for x in c.queryItems ?? []{q[x.name,default:[]].append(x.value ?? "")};return ["scheme":c.scheme!,"host":c.host!,"port":c.port ?? (c.scheme == "https" ? 443:80),"path":c.percentEncodedPath,"query":q]}
-    func testAllSharedVectors()async throws{
+    func testAllSharedVectors() async throws { try await runVectors() }
+    func testRC24PolicyVectors() async throws {
+        try await runVectors(operations: ["caption-index", "detail-action-state", "detail-held-label", "detail-unavailable-label", "detail-ready-feedback", "detail-read-lifecycle", "detail-metadata-handoff", "detail-host-focus-handoff", "detail-arrival-pending", "report-track-index", "track-selection-unchanged", "subtitle-selection-local"])
+    }
+    private func runVectors(operations: Set<String>? = nil) async throws {
         let root:URL
         if let override=ProcessInfo.processInfo.environment["PICTURESHOW_SPEC_DIR"]{root=URL(fileURLWithPath:override)}else{var p=URL(fileURLWithPath:#filePath);for _ in 0..<5{p.deleteLastPathComponent()};root=p.appendingPathComponent("spec")}
         let vectors=root.appendingPathComponent("vectors");let files=try XCTUnwrap(FileManager.default.enumerator(at:vectors,includingPropertiesForKeys:nil)).compactMap{$0 as? URL}.filter{$0.pathExtension == "json"}.sorted{$0.path<$1.path}
@@ -60,9 +64,10 @@ final class SpecVectorTests:XCTestCase {
         var count=0;var counts:[String:Int]=[:];var failures:[String]=[]
         for (document,cases) in documents{
             let suite=text(document,"suite")
-            for vector in cases{let id=text(vector,"id");do{let result=try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]);let actual=try json(result),expected=try json(vector["expected"]!);if actual != expected{failures.append("\(id)\n expected: \(expected)\n actual: \(actual)")}}catch{failures.append("\(id): \(error)")};count+=1;counts[suite,default:0]+=1}
+            for vector in cases{if let operations, !operations.contains(text(vector,"operation")) { continue };let id=text(vector,"id");do{let result=try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]);let actual=try json(result),expected=try json(vector["expected"]!);if actual != expected{failures.append("\(id)\n expected: \(expected)\n actual: \(actual)")}}catch{failures.append("\(id): \(error)")};count+=1;counts[suite,default:0]+=1}
         }
-        print("Shared vectors: \(count) executed \(counts), \(failures.count) failures; no skipped cases.")
+        XCTAssertGreaterThan(count, 0)
+        print("\(operations == nil ? "Shared" : "Targeted") vectors: \(count) executed \(counts), \(failures.count) failures; no skipped cases within the selected cohort.")
         XCTAssertTrue(failures.isEmpty,failures.joined(separator:"\n"))
     }
     func execute(_ operation:String,input i:[String:Any],context:[String:Any])async throws->Any{
@@ -72,7 +77,24 @@ final class SpecVectorTests:XCTestCase {
         switch operation{
         case "external-subtitle-loading":return ["retryDelayMs":ExternalSubtitleLoading.retryDelayMs(errorCount:try required(Int.self,i,"errorCount")),"sourceOffsetMs":ExternalSubtitleLoading.sourceOffsetMs(fullTimeline:try required(Bool.self,i,"fullTimeline"),serverStartMs:try required(Int64.self,i,"serverStartMs"))]
         case "detail-empty":return DetailAvailability.showEmptyState(itemType:try required(String?.self,i,"itemType"),loading:try required(Bool.self,i,"loading"),readSucceeded:try required(Bool.self,i,"readSucceeded"),readFailed:try required(Bool.self,i,"readFailed"),episodeCount:try required(Int.self,i,"episodeCount"),seasonCount:try required(Int.self,i,"seasonCount"))
-        case "detail-action-state":return DetailFeedback.actionDescription(currentState:try required(String?.self,i,"currentState"),pending:try required(Bool.self,i,"pending"),available:try required(Bool.self,i,"available"),ready:try required(Bool.self,i,"ready"),requested:try required(Bool.self,i,"requested")) as Any? ?? NSNull()
+        case "detail-action-state":return DetailFeedback.actionDescription(currentState:try required(String?.self,i,"currentState"),available:try required(Bool.self,i,"available")) as Any? ?? NSNull()
+        case "detail-held-label":return DetailFeedback.heldActionLabel(target:try required(String.self,i,"target"))
+        case "detail-unavailable-label":return DetailFeedback.unavailableActionLabel(target:try required(String.self,i,"target"))
+        case "detail-ready-feedback":
+            struct Step: Decodable { let held: Bool; let focused: String?; let resumed: Bool; let usable: Bool? }
+            var feedback = DetailReadyFeedback()
+            return try required([Step].self,i,"steps").map { feedback.update(held:$0.held,focused:$0.focused,resumed:$0.resumed,usable:$0.usable ?? true) as Any? ?? NSNull() }
+        case "detail-read-lifecycle":
+            var lifecycle = DetailReadLifecycle()
+            return try required([Bool].self,i,"resumes").map { _ in lifecycle.resumed() }
+        case "detail-metadata-handoff":return DetailFeedback.metadataAwaitsHandoff(hasActions:try required(Bool.self,i,"hasActions"),handoffFinished:try required(Bool.self,i,"handoffFinished"),returningFromPlayback:try required(Bool.self,i,"returningFromPlayback"),failed:try required(Bool.self,i,"failed"))
+        case "detail-host-focus-handoff":return DetailFeedback.suppressesEmptyHostFocus(ordinaryArrivalWithActions:try required(Bool.self,i,"ordinaryArrivalWithActions"),handoffFinished:try required(Bool.self,i,"handoffFinished"),returningFromPlayback:try required(Bool.self,i,"returningFromPlayback"),recoveryHandoff:try required(Bool.self,i,"recoveryHandoff"),failed:try required(Bool.self,i,"failed"))
+        case "detail-arrival-pending":
+            var pending = true
+            return try required([Bool].self,i,"restored").map { pending = DetailFeedback.arrivalStillPending(wasPending:pending,handoffFinished:$0); return pending }
+        case "report-track-index":return TrackSelectionReporting.index(selectedIndex:try required(Int?.self,i,"selectedIndex"),chosenByViewer:try required(Bool.self,i,"chosenByViewer")) as Any? ?? NSNull()
+        case "track-selection-unchanged":return TrackSelection.unchanged(currentIndex:try required(Int.self,i,"currentIndex"),pickedIndex:try required(Int.self,i,"pickedIndex"))
+        case "subtitle-selection-local":return ExternalSubtitleLoading.canSelectLocally(transcoding:try required(Bool.self,i,"transcoding"),subtitle:try required(Bool.self,i,"subtitle"),currentLocal:try required(Bool.self,i,"currentLocal"),nextLocal:try required(Bool.self,i,"nextLocal"))
         case "detail-failure-key":return DetailFeedback.failureKey(readRecovery:try required(Bool.self,i,"readRecovery"),retrying:try required(Bool.self,i,"retrying"),writeAttempt:try required(Int64?.self,i,"writeAttempt")) as Any? ?? NSNull()
         case "detail-failure-presentation":
             struct Step:Decodable { let key:String?;let message:String? }
