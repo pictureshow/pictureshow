@@ -14,6 +14,15 @@ import {
     type Stream,
 } from "@pictureshow/core";
 import "./player.css";
+import { readCompletionDetail, invalidateCatalogAccount } from "./detail-reads";
+import { captionIndex } from "@pictureshow/core/parity";
+import {
+    playbackReportFields,
+    externalSubtitleRetryDelay,
+} from "@pictureshow/core/rc26";
+export { playerTrackLabels } from "./player-track-labels";
+import { validSubtitleText } from "./player-subtitles";
+import type { TrackMenus } from "./player-track-menus";
 
 type SegmentType = "Intro" | "Recap" | "Preview" | "Commercial" | "Outro";
 export type PlayerPreferences = {
@@ -54,6 +63,7 @@ type Request = {
     subtitle?: number;
     hls: boolean;
     revision: number;
+    sourceId?: string;
 };
 type Viewing = {
     decision?: Decision;
@@ -81,77 +91,6 @@ function usableSegment(s: Segment) {
         s.EndTicks > s.StartTicks &&
         s.EndTicks <= 86400e7 &&
         (s.EndTicks - s.StartTicks) / 1e7 <= max
-    );
-}
-export function playerTrackLabels(streams: Stream[]): string[] {
-    const labels = streams.map((s, i) => {
-        const extra = s as Stream & {
-            Title?: string;
-            IsDefault?: boolean;
-            IsForced?: boolean;
-            IsHearingImpaired?: boolean;
-            IsExternalUrl?: boolean;
-        };
-        const lang =
-            s.Language && s.Language !== "und"
-                ? ({
-                      eng: "English",
-                      spa: "Spanish",
-                      fra: "French",
-                      fre: "French",
-                      deu: "German",
-                      ger: "German",
-                      jpn: "Japanese",
-                      zho: "Chinese",
-                      chi: "Chinese",
-                      kor: "Korean",
-                      por: "Portuguese",
-                      ita: "Italian",
-                      rus: "Russian",
-                      ara: "Arabic",
-                      hin: "Hindi",
-                  }[s.Language] ?? s.Language)
-                : "";
-        const channels =
-            s.Type === "Audio"
-                ? ({ 1: "mono", 2: "stereo", 6: "5.1", 8: "7.1" }[
-                      s.Channels ?? 0
-                  ] ?? (s.Channels ? `${s.Channels} channels` : ""))
-                : "";
-        const title = extra.Title ?? s.DisplayTitle ?? "";
-        const format = [s.Codec?.toUpperCase() ?? "Unknown format", channels]
-            .filter(Boolean)
-            .join(" ");
-        const parts = [lang || title || format];
-        if (!parts[0].toLowerCase().includes(format.toLowerCase()))
-            parts.push(format);
-        if (
-            lang &&
-            title &&
-            !title.toLowerCase().includes(lang.toLowerCase()) &&
-            title.toLowerCase() !== format.toLowerCase()
-        )
-            parts.push(title);
-        if (!lang) parts.push(`Track ${i + 1}`);
-        const named = (word: string) =>
-            new RegExp(`(?<!non[-–—])\\b${word}\\b`, "i").test(title);
-        if (
-            extra.IsDefault &&
-            streams.filter((t) => (t as typeof extra).IsDefault).length === 1 &&
-            streams.length > 1 &&
-            !named("Default")
-        )
-            parts.push("Default");
-        if (extra.IsForced && !named("Forced")) parts.push("Forced");
-        if (extra.IsHearingImpaired && !named("SDH")) parts.push("SDH");
-        if ((s.IsExternal || extra.IsExternalUrl) && !named("External"))
-            parts.push("External");
-        return parts.join(" · ");
-    });
-    return labels.map((label, i) =>
-        labels.filter((v) => v === label).length > 1
-            ? `${label} · Track ${i + 1}`
-            : label,
     );
 }
 function MediaImage({
@@ -223,6 +162,19 @@ export function Player({
         lastActivity = useRef(Date.now()),
         panelOpener = useRef<HTMLElement | null>(null),
         pendingSeek = useRef<number | undefined>(undefined),
+        trackOrigins = useRef({ audio: false, subtitle: false }),
+        subtitleSelection = useRef(0),
+        reportSequence = useRef(0),
+        trackCommands = useRef<Promise<void>>(Promise.resolve()),
+        trackReady = useRef(new Set<() => void>()),
+        playbackFailed = useRef(false),
+        pendingPanel = useRef<
+            { value: Panel; source: string | null } | undefined
+        >(undefined),
+        panelSource = useRef<string | undefined>(undefined),
+        menuGeneration = useRef(0),
+        menuSource = useRef<string | undefined>(undefined),
+        [menus, setMenus] = useState<TrackMenus>(),
         previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
             undefined,
         ),
@@ -294,55 +246,115 @@ export function Player({
                   subtitle?: number;
                   failed: boolean;
                   muted: boolean;
+                  origins: { audio: boolean; subtitle: boolean };
               }
             | undefined
         >(undefined);
-    const streams =
-        decision?.source.MediaStreams ??
-        item.MediaSources?.[0]?.MediaStreams ??
-        [];
+    const activeSource = decision?.source ?? viewing.current.decision?.source;
+    const streams = activeSource?.MediaStreams ?? [];
     const audioIndex =
+        viewing.current.audio ??
         request.audio ??
-        decision?.source.DefaultAudioStreamIndex ??
+        activeSource?.DefaultAudioStreamIndex ??
         streams.find((s) => s.Type === "Audio")?.Index ??
         -1;
     const subtitleIndex =
-        request.subtitle ?? decision?.source.DefaultSubtitleStreamIndex ?? -1;
+        viewing.current.subtitle ??
+        request.subtitle ??
+        activeSource?.DefaultSubtitleStreamIndex ??
+        -1;
     const selectedSubtitle = streams.find(
         (s) => s.Type === "Subtitle" && s.Index === subtitleIndex,
     );
-    const textSubtitle =
-        !!selectedSubtitle &&
-        ["srt", "vtt", "subrip", "mov_text", "webvtt"].includes(
-            selectedSubtitle.Codec?.toLowerCase() ?? "",
+    const isText = (s?: Stream) =>
+        !!s &&
+        (s.IsTextSubtitleStream ||
+            [
+                "srt",
+                "vtt",
+                "subrip",
+                "mov_text",
+                "webvtt",
+                "ass",
+                "ssa",
+                "ttml",
+                "tx3g",
+                "text",
+                "smi",
+                "sami",
+            ].includes(s.Codec?.toLowerCase() ?? ""));
+    const localText = (s?: Stream) =>
+        isText(s) &&
+        !["Encode", "Embed", "Hls", "Drop"].includes(
+            (s as Stream & { DeliveryMethod?: string })?.DeliveryMethod ?? "",
         );
+    const textSubtitle = localText(selectedSubtitle);
     const burned = subtitleIndex >= 0 && !textSubtitle;
+    const [selectionRevision, setSelectionRevision] = useState(0);
+    async function sendReport(
+        d: Decision,
+        event: "start" | "progress" | "stop",
+        at: number,
+        pausedState: boolean,
+        audio: number | undefined,
+        subtitle: number | undefined,
+        origins: { audio: boolean; subtitle: boolean },
+        failed = false,
+        keepalive = false,
+        muted = false,
+    ) {
+        const sequence = ++reportSequence.current;
+        const fields = playbackReportFields(
+            event,
+            ticks(at),
+            audio ?? null,
+            subtitle ?? null,
+            origins.audio,
+            origins.subtitle,
+        );
+        // The outcome comes from the actual attempt; never serialize URLs, titles, tokens or exceptions.
+        await client.report(
+            d,
+            event,
+            at,
+            pausedState,
+            audio,
+            subtitle,
+            failed,
+            keepalive,
+            muted,
+            (outcome) => {
+                console.info(
+                    `PictureshowPlayback report item=${d.itemId} session=${d.playSessionId ?? "none"} seq=${sequence} ${fields} status=${outcome.status ?? "none"} failure=${outcome.failure?.toLowerCase() ?? "none"} elapsedMs=${Math.max(0, Math.floor(outcome.elapsedMs))}`,
+                );
+            },
+        );
+    }
     const report = (
         event: "start" | "progress",
         pausedState = pauseIntent.current,
     ) => {
-        const s = viewing.current,
-            d = s.decision;
-        if (!d || s.stopped || (event === "progress" && !s.started)) return;
-        const at = s.position,
-            audio = s.audio,
-            subtitle = s.subtitle,
-            muted = video.current?.muted ?? false;
+        const s = viewing.current;
+        if (!s.decision || s.stopped || (event === "progress" && !s.started))
+            return;
         s.queue = s.queue
             .catch(() => {})
-            .then(() =>
-                client.report(
+            .then(async () => {
+                const d = s.decision!;
+                const origins = { ...trackOrigins.current };
+                await sendReport(
                     d,
                     event,
-                    at,
+                    s.position,
                     pausedState,
-                    audio,
-                    subtitle,
+                    origins.audio ? s.audio : undefined,
+                    origins.subtitle ? s.subtitle : undefined,
+                    origins,
                     false,
                     false,
-                    muted,
-                ),
-            )
+                    video.current?.muted ?? false,
+                );
+            })
             .then(() => {
                 if (alive.current) setReportError("");
             })
@@ -359,7 +371,8 @@ export function Player({
         const el = video.current,
             s = viewing.current,
             d = s.decision;
-        if (!el || !d || replacing.current) return s.position;
+        if (!el || !d || replacing.current || pendingSeek.current !== undefined)
+            return pendingSeek.current ?? s.position;
         const p =
             (d.method === "Transcode" ? (s.offset ?? 0) : 0) +
             (Number.isFinite(el.currentTime) ? el.currentTime : 0);
@@ -368,6 +381,9 @@ export function Player({
         return s.position;
     };
     async function stop(failed = false, keepalive = false) {
+        pendingPanel.current = undefined;
+        if (alive.current) setPanel(undefined);
+        releaseTrackCommands();
         const s = viewing.current;
         if (s.stopped) return s.queue;
         sample();
@@ -382,6 +398,7 @@ export function Player({
                 subtitle: s.subtitle,
                 failed,
                 muted: video.current?.muted ?? false,
+                origins: { ...trackOrigins.current },
             };
         const snapshot = stopSnapshot.current;
         s.queue = s.queue
@@ -389,18 +406,20 @@ export function Player({
             .then(async () => {
                 try {
                     if (s.started && snapshot) {
-                        await client.report(
+                        await sendReport(
                             snapshot.decision,
                             "stop",
                             snapshot.position,
                             true,
                             snapshot.audio,
                             snapshot.subtitle,
+                            snapshot.origins,
                             snapshot.failed,
                             keepalive,
                             snapshot.muted,
                         );
                         stopStages.current.reported = true;
+                        invalidateCatalogAccount(client);
                     }
                 } finally {
                     if (d && !keepalive) {
@@ -422,18 +441,20 @@ export function Player({
         if (!snapshot || !stopError.current) return;
         // An acknowledged Stop is never resent merely because ActiveEncodings cleanup failed.
         if (!stopStages.current.reported) {
-            await client.report(
+            await sendReport(
                 snapshot.decision,
                 "stop",
                 snapshot.position,
                 true,
                 snapshot.audio,
                 snapshot.subtitle,
+                snapshot.origins,
                 snapshot.failed,
                 false,
                 snapshot.muted,
             );
             stopStages.current.reported = true;
+            invalidateCatalogAccount(client);
         }
         if (!stopStages.current.encodingStopped) {
             await client.stopEncoding(snapshot.decision);
@@ -444,6 +465,9 @@ export function Player({
     async function leave(failed = false) {
         if (leaving.current) return;
         leaving.current = true;
+        releaseTrackCommands();
+        pendingPanel.current = undefined;
+        setPanel(undefined);
         pauseIntent.current = true;
         sample();
         video.current?.pause();
@@ -463,6 +487,7 @@ export function Player({
         if (focus) requestAnimationFrame(() => playButton.current?.focus());
     }
     function hide() {
+        pendingPanel.current = undefined;
         setPanel(undefined);
         setControls(false);
         setNotice("Controls hidden");
@@ -475,6 +500,11 @@ export function Player({
         video.current?.focus();
     }
     function back() {
+        if (pendingPanel.current) {
+            pendingPanel.current = undefined;
+            setNotice("");
+            return;
+        }
         if (completing.current) {
             void leave();
             return;
@@ -491,12 +521,25 @@ export function Player({
     }
     function openPanel(value: Panel, opener?: HTMLElement) {
         panelOpener.current = opener ?? (document.activeElement as HTMLElement);
+        if (value === "Audio" || value === "Subtitles") {
+            pendingPanel.current = {
+                value,
+                source: menuSource.current ?? null,
+            };
+            if (!decision || !menus || menus.source !== menuSource.current) {
+                setNotice(`Preparing ${value.toLowerCase()} choices…`);
+                return;
+            }
+            pendingPanel.current = undefined;
+            panelSource.current = menus.source;
+        }
         setPanel(value);
         setControls(true);
         lastActivity.current = Date.now();
         if (value === "Seek") setSeekPreview(viewing.current.position);
     }
     function closePanel() {
+        pendingPanel.current = undefined;
         const opener = panelOpener.current;
         panelElement.current?.close();
         setPanel(undefined);
@@ -530,6 +573,7 @@ export function Player({
             subtitle,
             hls,
             revision: desired.current.revision + 1,
+            sourceId: viewing.current.decision?.source.Id,
         };
         setPosition(desired.current.position);
         if (replacing.current) return;
@@ -541,6 +585,9 @@ export function Player({
     function seek(to: number) {
         if (completing.current || leaving.current) return;
         const at = Math.max(0, duration ? Math.min(duration, to) : to);
+        pendingSeek.current = at;
+        viewing.current.position = at;
+        setPosition(at);
         pausedAtPhysicalEnd.current = false;
         if (at !== to) setNotice(at === 0 ? "At the beginning" : "At the end");
         setSeekPreview(at);
@@ -574,6 +621,7 @@ export function Player({
                 0,
                 video.current.duration - 0.001,
             );
+            pendingSeek.current = undefined;
             pausedAtPhysicalEnd.current = true;
             viewing.current.position =
                 (viewing.current.offset ?? 0) + video.current.duration;
@@ -586,6 +634,92 @@ export function Player({
             viewing.current.position = at;
             setPosition(at);
             report("progress");
+        }
+    }
+    function seekStep(delta: number) {
+        seek((pendingSeek.current ?? viewing.current.position) + delta);
+    }
+    function releaseTrackCommands() {
+        for (const resolve of trackReady.current) resolve();
+        trackReady.current.clear();
+    }
+    function pickTrack(type: "Audio" | "Subtitles", index: number) {
+        const source = panelSource.current;
+        closePanel();
+        // A later pick compares after the preceding preparation, not the menu's old selection.
+        trackCommands.current = trackCommands.current
+            .catch(() => {})
+            .then(() => applyTrackPick(type, index, source));
+    }
+    function applyTrackPick(
+        type: "Audio" | "Subtitles",
+        index: number,
+        source: string | undefined,
+    ): void | Promise<void> {
+        const d = viewing.current.decision;
+        if (
+            !d ||
+            leaving.current ||
+            playbackFailed.current ||
+            (source &&
+                source !==
+                    `${d.source.Id}:${JSON.stringify(d.source.MediaStreams ?? [])}`)
+        )
+            return;
+        const audio = type === "Audio";
+        const currentStreams = d.source.MediaStreams ?? [];
+        trackOrigins.current[audio ? "audio" : "subtitle"] = true;
+        const current = audio
+            ? video.current?.muted
+                ? -1
+                : (viewing.current.audio ?? -1)
+            : (viewing.current.subtitle ?? -1);
+        if (!audio) {
+            const selection = ++subtitleSelection.current;
+            console.info(
+                `PictureshowPlayback subtitle-select item=${item.Id} session=${d.playSessionId ?? "none"} stream=${index < 0 ? "off" : index} paused=${pauseIntent.current} positionMs=${Math.floor(viewing.current.position * 1000)} selection=${selection}`,
+            );
+        }
+        if (current === index) {
+            if (!replacing.current) report("progress");
+            return;
+        }
+        if (audio && index === -1) {
+            if (video.current) video.current.muted = true;
+            viewing.current.audio = -1;
+            desired.current.audio = -1;
+            desired.current.sourceId = d.source.Id;
+            report("progress");
+            setNotice("Audio off");
+        } else if (
+            !audio &&
+            (current < 0 ||
+                localText(
+                    currentStreams.find(
+                        (s) => s.Type === "Subtitle" && s.Index === current,
+                    ),
+                )) &&
+            (index < 0 ||
+                localText(
+                    currentStreams.find(
+                        (s) => s.Type === "Subtitle" && s.Index === index,
+                    ),
+                ))
+        ) {
+            viewing.current.subtitle = index;
+            desired.current.subtitle = index;
+            desired.current.sourceId = d.source.Id;
+            setSelectionRevision((v) => v + 1);
+            if (!replacing.current) report("progress");
+        } else {
+            if (audio && video.current) video.current.muted = false;
+            change(
+                audio ? index : desired.current.audio,
+                audio ? desired.current.subtitle : index,
+            );
+            return new Promise<void>((resolve) =>
+                trackReady.current.add(resolve),
+            );
         }
     }
     function toggle() {
@@ -653,6 +787,8 @@ export function Player({
     useEffect(() => {
         const hidden = () => {
             if (document.hidden) {
+                pendingPanel.current = undefined;
+                setPanel(undefined);
                 pauseIntent.current = true;
                 setPaused(true);
                 setControls(true);
@@ -687,8 +823,8 @@ export function Player({
             stop: () => {
                 void leave();
             },
-            seekbackward: () => seek(viewing.current.position - 10),
-            seekforward: () => seek(viewing.current.position + 10),
+            seekbackward: () => seekStep(-10),
+            seekforward: () => seekStep(10),
             seekto: (d) => {
                 if (d.seekTime !== undefined) seek(d.seekTime);
             },
@@ -793,7 +929,7 @@ export function Player({
             if (retry) await retryFinalReport();
             await stop();
             if (stopError.current) throw new Error(stopError.current);
-            const fresh = await client.detail(item.Id);
+            const fresh = await readCompletionDetail(client, item.Id);
             if (!fresh.UserData?.Played)
                 await client.request(
                     `UserPlayedItems/${encode(item.Id)}?userId=${encode(client.account!.user.Id)}`,
@@ -804,7 +940,7 @@ export function Player({
         if (!nextItem && onLeaving) {
             onLeaving(barrier, async () => {
                 await retryFinalReport();
-                const fresh = await client.detail(item.Id);
+                const fresh = await readCompletionDetail(client, item.Id);
                 if (!fresh.UserData?.Played)
                     await client.request(
                         `UserPlayedItems/${encode(item.Id)}?userId=${encode(client.account!.user.Id)}`,
@@ -889,6 +1025,7 @@ export function Player({
         let slow: ReturnType<typeof setTimeout> | undefined,
             deadline: ReturnType<typeof setTimeout> | undefined,
             directTimer: ReturnType<typeof setTimeout> | undefined;
+        playbackFailed.current = false;
         setError("");
         setNotice("Preparing playback…");
         setBuffering(true);
@@ -930,12 +1067,19 @@ export function Player({
                 setRequest({ ...desired.current });
                 return;
             }
+            releaseTrackCommands();
             hasPlayed = true;
             clearTimeout(directTimer);
             clearWaiting();
             setBuffering(false);
             setNotice("");
             replacing.current = false;
+            if (
+                pendingSeek.current === request.position &&
+                (current.method !== "DirectPlay" ||
+                    Math.abs(el.currentTime - request.position) < 0.5)
+            )
+                pendingSeek.current = undefined;
             if (pauseIntent.current) {
                 el.pause();
                 setPaused(true);
@@ -957,6 +1101,8 @@ export function Player({
         }
         function fail(terminal = false) {
             if (disposed || leaving.current) return;
+            pendingPanel.current = undefined;
+            setPanel(undefined);
             sample();
             clearWaiting();
             if (
@@ -975,6 +1121,10 @@ export function Player({
                 );
                 return;
             }
+            playbackFailed.current = true;
+            releaseTrackCommands();
+            pendingPanel.current = undefined;
+            setPanel(undefined);
             setBuffering(false);
             replacing.current = false;
             setControls(true);
@@ -994,12 +1144,20 @@ export function Player({
                 try {
                     el.currentTime = request.position;
                 } catch {}
+            applyCaptions();
             const measured =
                 (current.method === "Transcode" ? request.position : 0) +
                 el.duration;
             if (plausibleDuration(measured)) setDuration(measured);
             if (pauseIntent.current) {
                 replacing.current = false;
+                releaseTrackCommands();
+                if (
+                    pendingSeek.current === request.position &&
+                    (current.method !== "DirectPlay" ||
+                        Math.abs(el.currentTime - request.position) < 0.5)
+                )
+                    pendingSeek.current = undefined;
                 setPaused(true);
                 setBuffering(false);
                 setNotice("");
@@ -1009,6 +1167,7 @@ export function Player({
                 if (viewing.current.started) report("progress", true);
             } else
                 void el.play().catch(() => {
+                    releaseTrackCommands();
                     needsGesture = true;
                     pauseIntent.current = true;
                     replacing.current = false;
@@ -1027,6 +1186,20 @@ export function Player({
             sample();
             void stop(false, true);
         };
+        const seeked = () => {
+            if (
+                !disposed &&
+                !replacing.current &&
+                current?.method === "DirectPlay" &&
+                Math.abs(
+                    el.currentTime - (pendingSeek.current ?? el.currentTime),
+                ) < 0.5
+            ) {
+                pendingSeek.current = undefined;
+                sample();
+            }
+        };
+        el.addEventListener("seeked", seeked);
         el.addEventListener("loadedmetadata", metadata);
         el.addEventListener("timeupdate", update);
         el.addEventListener("playing", playing);
@@ -1040,16 +1213,48 @@ export function Player({
         waiting();
         void (async () => {
             await cleanup.current;
+            const detail = await client.detail(item.Id);
+            if (disposed || leaving.current) return;
+            const source =
+                detail.MediaSources?.find((s) => s.Id === request.sourceId) ??
+                detail.MediaSources?.[0];
+            const sameSource =
+                !request.sourceId || source?.Id === request.sourceId;
+            let preparedAudio = sameSource ? request.audio : undefined;
+            let preparedSubtitle = sameSource
+                ? desired.current.subtitle
+                : undefined;
+            if (!sameSource) {
+                trackOrigins.current = { audio: false, subtitle: false };
+                desired.current.audio = undefined;
+                desired.current.subtitle = undefined;
+            }
+            if (
+                preparedSubtitle === undefined &&
+                source?.DefaultSubtitleStreamIndex !== undefined &&
+                source.DefaultSubtitleStreamIndex >= 0
+            ) {
+                const defaultTrack = source.MediaStreams?.find(
+                    (s) =>
+                        s.Type === "Subtitle" &&
+                        s.Index === source.DefaultSubtitleStreamIndex,
+                );
+                if (defaultTrack?.Language)
+                    preparedSubtitle =
+                        captionIndex(source, defaultTrack.Language) ??
+                        undefined;
+            }
             const d = await client.prepare(
-                item,
+                detail,
                 probe,
                 request.position,
-                request.audio,
-                request.subtitle,
+                preparedAudio,
+                preparedSubtitle,
                 request.hls ||
                     (location.protocol === "https:" &&
                         !!localAddressSpace(client.server.url)),
                 preferences.bitrateMbps ?? null,
+                source?.Id,
             );
             if (disposed || leaving.current) {
                 await client.stopEncoding(d);
@@ -1064,11 +1269,26 @@ export function Player({
             viewing.current.decision = d;
             viewing.current.position = request.position;
             viewing.current.offset = request.position;
-            pendingSeek.current = undefined;
             viewing.current.audio =
-                request.audio ?? d.source.DefaultAudioStreamIndex;
+                (trackOrigins.current.audio
+                    ? desired.current.audio
+                    : preparedAudio) ??
+                d.source.DefaultAudioStreamIndex ??
+                d.source.MediaStreams?.find((s) => s.Type === "Audio")?.Index ??
+                -1;
             viewing.current.subtitle =
-                request.subtitle ?? d.source.DefaultSubtitleStreamIndex ?? -1;
+                (trackOrigins.current.subtitle
+                    ? desired.current.subtitle
+                    : preparedSubtitle) ??
+                d.source.DefaultSubtitleStreamIndex ??
+                -1;
+            // Playback intent survives decoder changes independently of report provenance.
+            desired.current.audio ??= viewing.current.audio;
+            desired.current.subtitle ??= viewing.current.subtitle;
+            desired.current.sourceId = d.source.Id;
+            console.info(
+                `PictureshowPlayback subtitle-select item=${item.Id} session=${d.playSessionId ?? "none"} stream=${viewing.current.subtitle < 0 ? "off" : viewing.current.subtitle} paused=${pauseIntent.current} positionMs=${Math.floor(viewing.current.position * 1000)} selection=${++subtitleSelection.current}`,
+            );
             setDecision(d);
             if (
                 d.method === "DirectPlay" ||
@@ -1116,6 +1336,10 @@ export function Player({
             }
         })().catch((e) => {
             if (!disposed) {
+                playbackFailed.current = true;
+                releaseTrackCommands();
+                pendingPanel.current = undefined;
+                setPanel(undefined);
                 clearWaiting();
                 replacing.current = false;
                 setBuffering(false);
@@ -1130,6 +1354,7 @@ export function Player({
             clearInterval(timer);
             clearWaiting();
             clearTimeout(directTimer);
+            el.removeEventListener("seeked", seeked);
             el.removeEventListener("loadedmetadata", metadata);
             el.removeEventListener("timeupdate", update);
             el.removeEventListener("playing", playing);
@@ -1150,37 +1375,127 @@ export function Player({
                     .catch(() => {});
         };
     }, [request]);
+    const subtitleSource = activeSource?.Id;
+    // The sideload always requests full authored time. Conversion is independent of A/V and its stall budget.
     const subtitleUrl =
-        decision && textSubtitle
-            ? `Videos/${encode(item.Id)}/${encode(decision.source.Id)}/Subtitles/${subtitleIndex}/${decision.method === "Transcode" ? ticks(request.position) : 0}/Stream.vtt?copyTimestamps=false&addVttTimeMap=false`
+        subtitleSource && textSubtitle
+            ? `Videos/${encode(item.Id)}/${encode(subtitleSource)}/Subtitles/${subtitleIndex}/0/Stream.vtt?copyTimestamps=false&addVttTimeMap=false`
             : undefined;
     const [subtitleBlob, setSubtitleBlob] = useState<string>();
+    const subtitleCache = useRef(new Map<string, string>());
+    const loadedCaption = useRef<
+        { index: number; selection: number; source: string } | undefined
+    >(undefined);
+    const cueReceipts = useRef(new Set<string>());
+    const retrySubtitle = useRef<(() => void) | undefined>(undefined);
     useEffect(() => {
         let live = true,
-            object = "";
+            timer: ReturnType<typeof setTimeout> | undefined,
+            controller: AbortController | undefined;
         setSubtitleBlob(undefined);
-        if (subtitleUrl)
-            void fetchMedia(client.account!, subtitleUrl)
-                .then((r) => r.blob())
-                .then((blob) => {
-                    if (live) {
-                        object = URL.createObjectURL(
-                            new Blob([blob], { type: "text/vtt" }),
-                        );
-                        setSubtitleBlob(object);
+        setNotice((value) =>
+            value.startsWith("Subtitles are still loading") ? "" : value,
+        );
+        retrySubtitle.current = undefined;
+        if (!subtitleUrl) return;
+        const origin = {
+            index: subtitleIndex,
+            selection: subtitleSelection.current,
+            source: subtitleSource!,
+        };
+        let attempts = 0;
+        const publish = (object: string) => {
+            if (live) {
+                loadedCaption.current = origin;
+                setSubtitleBlob(object);
+            }
+        };
+        const failed = () => {
+            if (!live) return;
+            setNotice(
+                "Subtitles are still loading. Playback can continue while we retry.",
+            );
+            clearTimeout(timer);
+            timer = setTimeout(
+                load,
+                externalSubtitleRetryDelay(Math.max(1, attempts)),
+            );
+        };
+        const load = async () => {
+            attempts++;
+            controller = new AbortController();
+            const timeout = setTimeout(() => controller?.abort(), 30000);
+            try {
+                const response = await fetchMedia(
+                    client.account!,
+                    subtitleUrl,
+                    { signal: controller.signal },
+                );
+                const reader = response.body?.getReader();
+                const chunks: Uint8Array[] = [];
+                let size = 0;
+                if (!reader) throw new Error("Empty captions");
+                for (;;) {
+                    const part = await reader.read();
+                    if (part.done) break;
+                    size += part.value.byteLength;
+                    if (size > 16 * 1024 * 1024) {
+                        await reader.cancel();
+                        throw new Error("Caption limit");
                     }
-                })
-                .catch(() => {
-                    if (live)
-                        setNotice(
-                            "Subtitles could not be loaded. Try another track.",
-                        );
-                });
+                    chunks.push(part.value);
+                }
+                const text = new TextDecoder().decode(
+                    new Uint8Array(
+                        await new Blob(chunks as BlobPart[]).arrayBuffer(),
+                    ),
+                );
+                if (!validSubtitleText(text))
+                    throw new Error("Malformed captions");
+                if (!live) return;
+                const object = URL.createObjectURL(
+                    new Blob([text], { type: "text/vtt" }),
+                );
+                subtitleCache.current.set(subtitleUrl, object);
+                console.info(
+                    `PictureshowPlayback subtitle-loaded item=${item.Id} session=${viewing.current.decision?.playSessionId ?? "none"} stream=${origin.index} attempts=${attempts}`,
+                );
+                publish(object);
+                setNotice((value) =>
+                    value.startsWith("Subtitles are still loading")
+                        ? ""
+                        : value,
+                );
+            } catch {
+                failed();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+        retrySubtitle.current = () => {
+            const cached = subtitleCache.current.get(subtitleUrl);
+            if (cached) URL.revokeObjectURL(cached);
+            subtitleCache.current.delete(subtitleUrl);
+            setSubtitleBlob(undefined);
+            failed();
+        };
+        const cached = subtitleCache.current.get(subtitleUrl);
+        if (cached) publish(cached);
+        else void load();
         return () => {
             live = false;
-            if (object) URL.revokeObjectURL(object);
+            clearTimeout(timer);
+            controller?.abort();
         };
     }, [subtitleUrl]);
+    useEffect(
+        () => () => {
+            for (const url of subtitleCache.current.values())
+                URL.revokeObjectURL(url);
+            subtitleCache.current.clear();
+        },
+        [],
+    );
     function applyCaptions() {
         const track = video.current?.textTracks[0];
         if (!track) return;
@@ -1197,10 +1512,18 @@ export function Player({
                 };
                 cues.current.set(cue, source);
             }
-            cue.startTime = Math.max(0, source.start + delayRef.current / 1000);
+            const offset =
+                viewing.current.decision?.method === "Transcode"
+                    ? (viewing.current.offset ?? 0)
+                    : 0;
+            cue.startTime = source.start - offset + delayRef.current / 1000;
             cue.endTime = Math.max(
                 cue.startTime + 0.001,
-                source.end + delayRef.current / 1000,
+                source.end -
+                    (viewing.current.decision?.method === "Transcode"
+                        ? (viewing.current.offset ?? 0)
+                        : 0) +
+                    delayRef.current / 1000,
             );
             if (cue instanceof VTTCue) {
                 cue.snapToLines =
@@ -1213,11 +1536,33 @@ export function Player({
                         : safeCaptionLine.current;
             }
         }
+        const origin = loadedCaption.current;
+        if (origin && track.cues?.length) {
+            const key = `${origin.source}:${origin.index}:${subtitleSelection.current}`;
+            if (!cueReceipts.current.has(key)) {
+                cueReceipts.current.add(key);
+                const first =
+                    cues.current.get(track.cues[0])?.start ??
+                    track.cues[0].startTime;
+                console.info(
+                    `PictureshowPlayback subtitle-cues item=${item.Id} session=${viewing.current.decision?.playSessionId ?? "none"} stream=${origin.index} firstCueAtMs=${Math.floor(first * 1000)} selection=${subtitleSelection.current}`,
+                );
+            }
+        }
     }
     useEffect(() => {
         delayRef.current = subtitleDelay;
         applyCaptions();
-    }, [subtitleDelay, controls, panel, seekPreview, subtitleBlob]);
+    }, [
+        subtitleDelay,
+        controls,
+        panel,
+        seekPreview,
+        subtitleBlob,
+        selectionRevision,
+        request,
+        decision,
+    ]);
     useEffect(() => {
         if (panel && !panelElement.current?.open) {
             panelElement.current?.showModal();
@@ -1354,10 +1699,9 @@ export function Player({
             const count = Number(video.current?.dataset.repeat ?? 0) + 1;
             if (video.current)
                 video.current.dataset.repeat = String(e.repeat ? count : 1);
-            seek(
-                (pendingSeek.current ?? viewing.current.position) +
-                    (e.key === "ArrowRight" ? 1 : -1) *
-                        (e.repeat && count >= 5 ? 30 : 10),
+            seekStep(
+                (e.key === "ArrowRight" ? 1 : -1) *
+                    (e.repeat && count >= 5 ? 30 : 10),
             );
         } else if (e.key === " " || e.key === "MediaPlayPause") {
             e.preventDefault();
@@ -1369,9 +1713,73 @@ export function Player({
             if (!e.repeat) back();
         }
     }
-    const audio = streams.filter((s) => s.Type === "Audio"),
-        subtitles = streams.filter((s) => s.Type === "Subtitle"),
-        labels = playerTrackLabels(panel === "Audio" ? audio : subtitles);
+    const audio = menus?.audio.streams ?? [],
+        subtitles = menus?.subtitles.streams ?? [];
+    const labels =
+        panel === "Audio"
+            ? (menus?.audio.labels ?? [])
+            : (menus?.subtitles.labels ?? []);
+    const sourceSignature = activeSource
+        ? `${activeSource.Id}:${JSON.stringify(activeSource.MediaStreams ?? [])}`
+        : undefined;
+    useEffect(() => {
+        if (!sourceSignature || !activeSource) return;
+        const previous = menuSource.current;
+        const generation = ++menuGeneration.current;
+        menuSource.current = sourceSignature;
+        setMenus(undefined);
+        if (previous && previous !== sourceSignature) {
+            pendingPanel.current = undefined;
+            if (panel === "Audio" || panel === "Subtitles") closePanel();
+        }
+        const worker = new Worker(
+            new URL("./player-track-worker.ts", import.meta.url),
+            { type: "module" },
+        );
+        worker.onmessage = (event) => {
+            if (!alive.current || generation !== menuGeneration.current) return;
+            const prepared = event.data as TrackMenus;
+            setMenus(prepared);
+            const pending = pendingPanel.current;
+            if (
+                pending &&
+                (pending.source === null || pending.source === sourceSignature)
+            ) {
+                pendingPanel.current = undefined;
+                panelSource.current = sourceSignature;
+                setPanel(pending.value);
+                setNotice("");
+            }
+        };
+        worker.onerror = () => {
+            if (generation === menuGeneration.current) {
+                pendingPanel.current = undefined;
+                setNotice("Track choices could not be prepared. Try again.");
+            }
+        };
+        worker.postMessage({
+            source: sourceSignature,
+            streams: activeSource.MediaStreams ?? [],
+        });
+        return () => {
+            worker.terminate();
+        };
+    }, [sourceSignature]);
+    useEffect(() => {
+        const pending = pendingPanel.current;
+        if (
+            !pending ||
+            !decision ||
+            !menus ||
+            menus.source !== sourceSignature ||
+            (pending.source !== null && pending.source !== sourceSignature)
+        )
+            return;
+        pendingPanel.current = undefined;
+        panelSource.current = sourceSignature;
+        setPanel(pending.value);
+        setNotice("");
+    }, [decision, menus, sourceSignature]);
     const chapters = extras.Chapters ?? [];
     const currentChapter = chapters.reduce(
         (n, c, i) => ((c.StartPositionTicks ?? 0) / 1e7 <= position ? i : n),
@@ -1496,6 +1904,7 @@ export function Player({
                         srcLang={selectedSubtitle?.Language ?? "en"}
                         default
                         onLoad={applyCaptions}
+                        onError={() => retrySubtitle.current?.()}
                     />
                 )}
             </video>
@@ -1605,7 +2014,7 @@ export function Player({
                                 (!decision && !viewing.current.decision) ||
                                 !!error
                             }
-                            onClick={() => seek(viewing.current.position - 10)}
+                            onClick={() => seekStep(-10)}
                             aria-label="Back 10 seconds"
                         >
                             <span className="seek-long" aria-hidden="true">
@@ -1631,7 +2040,7 @@ export function Player({
                                 (!decision && !viewing.current.decision) ||
                                 !!error
                             }
-                            onClick={() => seek(viewing.current.position + 10)}
+                            onClick={() => seekStep(10)}
                             aria-label="Forward 10 seconds"
                         >
                             <span className="seek-long" aria-hidden="true">
@@ -1695,7 +2104,7 @@ export function Player({
                         <button
                             aria-label="Audio"
                             onClick={(e) => openPanel("Audio", e.currentTarget)}
-                            disabled={!decision && !viewing.current.decision}
+                            disabled={!!error}
                         >
                             Audio
                         </button>
@@ -1704,7 +2113,7 @@ export function Player({
                             onClick={(e) =>
                                 openPanel("Subtitles", e.currentTarget)
                             }
-                            disabled={!decision && !viewing.current.decision}
+                            disabled={!!error}
                         >
                             Subtitles
                         </button>
@@ -1838,17 +2247,11 @@ export function Player({
                         <div className="transport">
                             <button
                                 data-panel-first
-                                onClick={() =>
-                                    seek(viewing.current.position - 10)
-                                }
+                                onClick={() => seekStep(-10)}
                             >
                                 Back 10 seconds
                             </button>
-                            <button
-                                onClick={() =>
-                                    seek(viewing.current.position + 10)
-                                }
-                            >
+                            <button onClick={() => seekStep(10)}>
                                 Forward 10 seconds
                             </button>
                         </div>
@@ -1858,21 +2261,15 @@ export function Player({
                     <div role="radiogroup" aria-label={`${panel} tracks`}>
                         <button
                             role="radio"
+                            aria-label="Off"
                             aria-checked={
                                 panel === "Audio"
                                     ? video.current?.muted || audioIndex === -1
                                     : subtitleIndex === -1
                             }
-                            onClick={() => {
-                                if (panel === "Audio") {
-                                    if (video.current)
-                                        video.current.muted = true;
-                                    viewing.current.audio = -1;
-                                    report("progress");
-                                    setNotice("Audio off");
-                                } else change(desired.current.audio, -1);
-                                closePanel();
-                            }}
+                            onClick={() =>
+                                pickTrack(panel as "Audio" | "Subtitles", -1)
+                            }
                         >
                             Off
                         </button>
@@ -1880,24 +2277,19 @@ export function Player({
                             <button
                                 key={s.Index}
                                 role="radio"
+                                aria-label={labels[i]}
                                 aria-checked={
                                     panel === "Audio"
                                         ? audioIndex === s.Index &&
                                           !video.current?.muted
                                         : subtitleIndex === s.Index
                                 }
-                                onClick={() => {
-                                    if (panel === "Audio") {
-                                        if (video.current)
-                                            video.current.muted = false;
-                                        change(
-                                            s.Index,
-                                            desired.current.subtitle,
-                                        );
-                                    } else
-                                        change(desired.current.audio, s.Index);
-                                    closePanel();
-                                }}
+                                onClick={() =>
+                                    pickTrack(
+                                        panel as "Audio" | "Subtitles",
+                                        s.Index,
+                                    )
+                                }
                             >
                                 {labels[i]}
                             </button>

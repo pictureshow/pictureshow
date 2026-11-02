@@ -1,6 +1,57 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { test, expect, type Page } from "@playwright/test";
 import axe from "axe-core";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+async function captureRecovery(page: Page, state: string) {
+    const directory = process.env.WEB_F2_EVIDENCE;
+    if (!directory) return;
+    mkdirSync(directory, { recursive: true });
+    const previous = page.viewportSize();
+    for (const [size, width, height] of [
+        ["tv", 1920, 1080],
+        ["desktop", 1280, 800],
+        ["phone", 390, 844],
+    ] as const) {
+        await page.setViewportSize({ width, height });
+        const target = join(directory, `detail-${state}-${size}.jpg`);
+        await page.evaluate(async () => {
+            await Promise.all(
+                document
+                    .getAnimations()
+                    .map((animation) => animation.finished.catch(() => {})),
+            );
+            await new Promise<void>((resolve) =>
+                requestAnimationFrame(() =>
+                    requestAnimationFrame(() => resolve()),
+                ),
+            );
+        });
+        await page.screenshot({ path: target, type: "jpeg", quality: 50 });
+        execFileSync("sips", ["-Z", "800", target], { stdio: "ignore" });
+        writeFileSync(
+            target.replace(/\.jpg$/, ".json"),
+            JSON.stringify(
+                await page.evaluate(() => {
+                    const element = document.activeElement as HTMLElement,
+                        style = getComputedStyle(element);
+                    return {
+                        label: element.textContent?.trim(),
+                        focus: element.dataset.focus,
+                        color: style.color,
+                        background: style.backgroundColor,
+                        opacity: style.opacity,
+                        viewport: [innerWidth, innerHeight],
+                    };
+                }),
+                null,
+                2,
+            ),
+        );
+    }
+    if (previous) await page.setViewportSize(previous);
+}
 const server = {
     id: "catalog-server",
     name: "Catalog Cinema",
@@ -471,19 +522,200 @@ test("fresh unresolved detail accepts one pending Play and negotiates only after
         return {};
     });
     await page.locator('[data-focus="latest:library:movie"]').click();
-    const pending = page.getByRole("button", {
-        name: "Play / Resume when ready",
-        exact: true,
-    });
+    const pending = page.locator('[data-focus="play"]');
     await expect(pending).toBeFocused();
     await expect(pending).toHaveAttribute("aria-disabled", "true");
     await page.keyboard.press("Enter");
+    await expect(page.locator("[data-detail-feedback]")).toContainText(
+        "Play requested",
+    );
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
+    await expect(pending).toHaveAccessibleName("Play already requested");
+    await expect(page.locator("[data-detail-feedback]")).toHaveText("");
     await page.keyboard.press("Enter");
     await pending.dispatchEvent("keydown", { key: "MediaPlay", bubbles: true });
-    await expect(page.getByRole("status")).toContainText("Play requested");
+    await expect(page.locator("[data-detail-feedback]")).toHaveText("");
     expect(negotiations).toBe(0);
     release();
     await expect.poll(() => negotiations).toBe(1);
     await page.waitForTimeout(300);
     expect(negotiations).toBe(1);
+});
+
+test("rc26 cold detail holds plain disabled actions, accepts early navigation, and announces Ready only for the same held control", async ({
+    page,
+}) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await start(page, async (url) => {
+        if (url.pathname === "/Items/movie") {
+            await held;
+            return { body: movie() };
+        }
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        )
+            return { body: { Items: [movie()] } };
+        return {};
+    });
+    await page.locator('[data-focus="latest:library:movie"]').click();
+    const play = page.locator('[data-focus="play"]');
+    await expect(play).toBeFocused();
+    await expect(play).toHaveAccessibleName("Play");
+    await expect(play).toHaveAttribute("aria-disabled", "true");
+    await page.keyboard.press("ArrowRight");
+    const watched = page.locator('[data-focus="watched"]');
+    await expect(watched).toBeFocused();
+    await expect(watched).toHaveAccessibleName("Watched");
+    await expect(watched).not.toHaveAttribute("aria-pressed");
+    await captureRecovery(page, "held");
+    release();
+    await expect(watched).toBeFocused();
+    await expect(watched).toHaveAttribute("aria-disabled", "false");
+    await expect(page.locator("[data-detail-feedback]")).toHaveText("Ready");
+    await captureRecovery(page, "ready");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("[data-detail-feedback]")).toHaveText("");
+    await page.keyboard.press("ArrowLeft");
+    await expect(watched).toBeFocused();
+    await expect(page.locator("[data-detail-feedback]")).toHaveText("");
+});
+
+test("rc26 Retry qualifies the predecessor reason while publishing current loading and one new failure episode", async ({
+    page,
+}) => {
+    let reads = 0,
+        release!: () => void;
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await start(page, async (url) => {
+        if (url.pathname === "/Items/movie") {
+            reads++;
+            if (reads > 1) await held;
+            return { status: 503 };
+        }
+        return {};
+    });
+    await page.locator('[data-focus="latest:library:movie"]').click();
+    const retry = page.getByRole("button", { name: "Retry", exact: true });
+    await expect(retry).toBeFocused();
+    await expect(page.getByRole("alert")).toContainText("503");
+    await captureRecovery(page, "failed");
+    await retry.click();
+    await expect(
+        page.getByRole("button", { name: "Retrying…", exact: true }),
+    ).toBeFocused();
+    await expect(page.locator(".catalog-error")).toContainText(
+        "Loading item. Please wait.",
+    );
+    await expect(
+        page.locator(".catalog-error .catalog-previous-reason"),
+    ).toContainText("Previous attempt:");
+    await expect(
+        page.locator(".catalog-error .catalog-previous-reason"),
+    ).toContainText("503");
+    await captureRecovery(page, "retrying");
+    await page.keyboard.press("Enter");
+    expect(reads).toBe(2);
+    release();
+    await expect(retry).toBeFocused();
+    await expect(page.getByRole("alert")).toHaveCount(1);
+    await expect(page.getByRole("alert")).toContainText("503");
+    await expect(
+        page.getByRole("button", { name: "Watched", exact: true }),
+    ).not.toHaveAttribute("aria-pressed");
+    await scan(page);
+});
+
+test("rc26 Home return uses retained rows without repeating unchanged reads", async ({
+    page,
+}) => {
+    let homeReads = 0;
+    await start(page, (url) => {
+        if (
+            [
+                "/UserViews",
+                "/UserItems/Resume",
+                "/Shows/NextUp",
+                "/Items/Latest",
+            ].includes(url.pathname)
+        )
+            homeReads++;
+        if (url.pathname === "/Items/movie") return { body: movie() };
+        if (url.pathname === "/Items" && url.searchParams.has("ids"))
+            return { body: { Items: [movie()] } };
+        return {};
+    });
+    const initial = homeReads;
+    await openMovie(page);
+    await page.keyboard.press("Escape");
+    await expect(
+        page.locator('[data-focus="latest:library:movie"]'),
+    ).toBeFocused();
+    await page.waitForTimeout(150);
+    expect(homeReads).toBe(initial);
+});
+
+test("rc26 failed Series read keeps unknown season and toggle state neutral with one idle reason", async ({
+    page,
+}) => {
+    const show = {
+        Id: "show",
+        Name: "A series",
+        Type: "Series",
+        UserData: { Played: true, IsFavorite: true },
+    };
+    const season = {
+        Id: "s1",
+        Name: "Season 1",
+        Type: "Season",
+        IndexNumber: 1,
+    };
+    const episode = {
+        ...movie("e1", "First episode"),
+        Type: "Episode",
+        SeasonId: "s1",
+        ParentIndexNumber: 1,
+    };
+    let fail = false;
+    await start(page, (url) => {
+        if (url.pathname === "/Items/Latest") return { body: [show] };
+        if (url.pathname === "/Items/show")
+            return fail ? { status: 503 } : { body: show };
+        if (url.pathname === "/Items" && url.searchParams.get("ids") === "show")
+            return { body: { Items: [show] } };
+        if (url.pathname === "/Shows/show/Seasons")
+            return { body: { Items: [season] } };
+        if (url.pathname === "/Shows/show/Episodes")
+            return { body: { Items: [episode] } };
+        return {};
+    });
+    const opener = page.locator('[data-focus="latest:library:show"]');
+    await opener.click();
+    const selectedSeason = page.getByRole("button", {
+        name: "Show episodes from Season 1",
+        exact: true,
+    });
+    await expect(selectedSeason).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Escape");
+    fail = true;
+    await opener.click();
+    await expect(
+        page.getByRole("button", { name: "Retry", exact: true }),
+    ).toBeFocused();
+    await expect(selectedSeason).not.toHaveAttribute("aria-pressed");
+    await expect(selectedSeason).toHaveAttribute("aria-disabled", "true");
+    for (const label of ["Watched", "Favorite"]) {
+        const action = page.getByRole("button", { name: label, exact: true });
+        await expect(action).toHaveAttribute("aria-disabled", "true");
+        await expect(action).not.toHaveAttribute("aria-pressed");
+    }
+    await expect(page.getByRole("alert")).toHaveCount(1);
+    await expect(page.getByRole("alert")).toContainText("503");
+    await expect(page.locator("[data-detail-feedback]")).toHaveText("");
 });

@@ -1,6 +1,6 @@
 # Web Android-parity ledger
 
-Reference: the 92 Android-implemented IDs in [`spec/features`](../spec/features/README.md), integrated from the pinned Android TV and additive touch snapshots. This ledger records the web implementation and its evidence; it does not promote Android’s explicitly unimplemented inventory into web scope.
+Reference: the 94 Android-implemented IDs in [`spec/features`](../spec/features/README.md), integrated from the pinned Android TV and additive touch snapshots. This ledger records the web implementation and its evidence; it does not promote Android’s explicitly unimplemented inventory into web scope.
 
 Status categories are disjoint:
 
@@ -8,9 +8,9 @@ Status categories are disjoint:
 - **Platform-dependent**: the browser offers the stated native alternative or an honest unavailable state; an Android-only API/capability is not claimed.
 - **Gap**: a required portable feature is absent, with a reason.
 
-**Verification is independent of implementation.** Here **Verified** means that each of the **77 portable Implemented IDs has named automated policy/UI primary-behavior evidence**. It does not mean that every subcriterion, human screen-reader utterance, physical remote/phone interaction or media-format/output combination has been accepted. The feature rows retain those narrower limits explicitly. The 15 Platform-dependent IDs have the stated alternative/unavailable behavior and evidence; they are not counted as fully reproduced Android APIs. A shared-vector pass is policy evidence, not full UI/device acceptance.
+**Verification is independent of implementation.** Here **Verified** means that each of the **79 portable Implemented IDs has named automated policy/UI primary-behavior evidence**. It does not mean that every subcriterion, human screen-reader utterance, physical remote/phone interaction or media-format/output combination has been accepted. The feature rows retain those narrower limits explicitly. The 15 Platform-dependent IDs have the stated alternative/unavailable behavior and evidence; they are not counted as fully reproduced Android APIs. A shared-vector pass is policy evidence, not full UI/device acceptance.
 
-Totals: **77 Implemented · 77 primary-behavior Verified · 15 Platform-dependent · 0 portable feature Gap = 92 feature IDs**. Verified is an overlapping evidence count, not a fourth implementation-status category.
+Totals: **79 Implemented · 79 primary-behavior Verified · 15 Platform-dependent · 0 portable feature Gap = 94 feature IDs**. Verified is an overlapping evidence count, not a fourth implementation-status category.
 
 **Engine qualification:** the complete **38-case browser suite passed in Chromium macOS, WebKit macOS and Firefox Linux: 114/114 checks**, with no retries or skips. Every browser-test alias below belongs to that same final suite. **61 unit tests and 304 shared vectors passed**, with every vector operation evaluated and no exceptions. The isolated full Android profile/evaluator translation tests hypothetical capability inputs; runtime web playback continues to use actual browser probes. Runtime dependency audit reported zero vulnerabilities. A macOS Firefox audio-backend stall remains a host limitation; Linux Firefox is the qualified Firefox route, not proof of that host's physical audio output.
 
@@ -134,6 +134,8 @@ Every ID appears exactly once. “Pending” and “unproved” below are eviden
 | PLAY-19 | Paused direct/HLS seek-to-end waits for explicit Play | Implemented | P4, P11 | Both actual direct and finite HLS endpoints are exercised. HLS pins final frame just before exclusive MSE endpoint until Play; runtime metadata is not an artificial physical-end oracle. |
 | PLAY-20 | Coherent progress/final reports and visible retry | Implemented | B1, P1, P8–P10, S5, S6, L1; V reports/ticks | Report identity, exact timeline, frozen snapshot and fresh-detail guard are exercised. Pagehide delivery is best effort; browser/process termination cannot guarantee network completion. |
 | PLAY-21 | Serialized release, replacement and bounded cleanup | Platform-dependent | P8–P10; S5/S6 | Browser media is paused/unloaded, hls destroyed and encoding cleanup serialized before replacement. No vendor decoder-release-completion API exists; physical decoder ownership/resource-soak proof is not inferred from fixture tests. |
+| PLAY-22 | Independent selected external text, bounded retries and full-file clock | Implemented | F2 player regression cases; V external-subtitle-loading | Browser fetch/AbortController and parsed WebVTT operate independently from video readiness/stall timing. Unselected tracks are not fetched; Off/change/release cancel; parsed cues are reused in the current media period. Actual extraction lasting 242 s and physical caption pixels remain unproved. |
+| PLAY-23 | Same-track viewer pick preserves active stream and loaders | Implemented | F2 same-track player regression; V unchanged-track | The serialized pick compares the then-current source/index, marks viewer intent and reports the real index when ready without negotiation or loader restart. In-flight recovery and pending caption work remain owned by the same viewing. |
 | SET-01 | Bitrate Auto/120/80/40/20/10/4 Mbps | Implemented | S2; V settings/validate-bitrate/request | Persistence and supported choices are exercised. Browser uses native Enter/arrow selection rather than Android’s cycling pill; selected cap applies on the next viewing. Every choice’s live server bitrate is not measured. |
 | SET-02 | Passthrough preference with honest accepted formats | Platform-dependent | S2 UI; V settings; browser capability report | Preference is retained but cannot grant a browser encoded-output capability. No accepted HDMI passthrough format is advertised; decoded/server-converted paths remain available. |
 | SET-03 | Subtitle System/Small/Normal/Large/ExtraLarge | Platform-dependent | S2, P2; V settings | Explicit browser text-cue scales are applied. System uses the browser renderer; native OS caption scale is unavailable where no browser API exposes it. Burned bitmap appearance is not altered. |
@@ -177,3 +179,9 @@ Every ID appears exactly once. “Pending” and “unproved” below are eviden
 - Opus visual review and Luna static review provide independent evidence within their stated scope, not replacements for live media, reader or hardware acceptance.
 
 The Android manifest's absent settings/control inventory—casting, downloads, external player, arbitrary profile editing/home layouts, additional subtitle font/color controls, and other explicitly marked Android gaps—remains out of scope. Web does not invent a new server preference policy and call it Android parity.
+
+## rc26 follow-up 2 qualification
+
+Base: `rc26-pre` (`d3a5ae1`), containing rc25 and accepted track-menu/seek-step changes. The follow-up gates and precise test names are recorded below after the final runs. Earlier F1 engine/live/visual evidence above remains historical evidence for unchanged behavior, not a claim that the old suite ran on this base.
+
+Android-only mechanisms are not runtime web capabilities. The HEVC hardware preference in `62f2b3f`/`718ee12` is exercised only by the isolated hypothetical Android profile vectors; web negotiation remains based on browser decoding/MSE support and does not claim a hardware decoder, display tuple or Android AVC/HEVC preference. The `8df00d1` Android caption-settings Binder/listener lifecycle has no equivalent browser listener: local caption preferences are read through React state, and unavailable OS caption configuration is not invented. PLAY-10 and INFO-01 retain those platform-dependent boundaries.

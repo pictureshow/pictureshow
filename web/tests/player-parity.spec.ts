@@ -165,7 +165,7 @@ test("caption timing changes real cues, sheets trap D-pad focus, and explicit Of
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("Enter");
     await expect
-        .poll(() => f.negotiations.at(-1)?.SubtitleStreamIndex)
+        .poll(() => f.reports.at(-1)?.body.SubtitleStreamIndex)
         .toBe(-1);
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
@@ -937,4 +937,632 @@ test("visibility policy pauses and retains the same viewing across a hidden and 
     await expect
         .poll(() => f.reports.filter((r) => r.path.endsWith("/Stopped")).length)
         .toBe(1);
+});
+
+test("rc26 same active track preserves stream and reports only viewer choices", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await openMovie(page);
+    await pause(page);
+    const initial = f.reports.find((r) => r.path === "/Sessions/Playing")!.body;
+    expect(initial).not.toHaveProperty("AudioStreamIndex");
+    expect(initial).not.toHaveProperty("SubtitleStreamIndex");
+    const negotiations = f.negotiations.length;
+    const source = await page
+        .locator("video")
+        .evaluate((v: HTMLVideoElement) => v.currentSrc);
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.getByRole("radio", { name: /English stereo/ }).click();
+    await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(1);
+    expect(f.reports.at(-1)?.body).not.toHaveProperty("SubtitleStreamIndex");
+    expect(f.negotiations).toHaveLength(negotiations);
+    expect(
+        await page
+            .locator("video")
+            .evaluate((v: HTMLVideoElement) => v.currentSrc),
+    ).toBe(source);
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await expect
+        .poll(() => f.reports.at(-1)?.body.SubtitleStreamIndex)
+        .toBe(-1);
+    expect(f.negotiations).toHaveLength(negotiations);
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+    await expect
+        .poll(() => f.reports.filter((r) => r.path.endsWith("/Stopped")).length)
+        .toBe(1);
+});
+
+test("rc26 selected external text retries independently, caches Off on, and keeps full-file seek offsets", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    let attempts = 0;
+    const paths: string[] = [];
+    await page.route(
+        "https://jellyfin.example/**/Subtitles/**",
+        async (route) => {
+            paths.push(new URL(route.request().url()).pathname);
+            attempts++;
+            if (attempts === 1)
+                return route.fulfill({
+                    status: 503,
+                    headers: jsonHeaders,
+                    body: "{}",
+                });
+            return route.fulfill({
+                headers: jsonHeaders,
+                contentType: "text/vtt",
+                body: "WEBVTT\n\n00:15.000 --> 00:35.000\nRetry caption.\n",
+            });
+        },
+    );
+    await openMovie(page);
+    expect(attempts).toBe(0);
+    const negotiations = f.negotiations.length;
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: /English captions/ }).click();
+    await expect(page.getByRole("status")).toContainText(
+        "Playback can continue",
+    );
+    const before = await page
+        .locator("video")
+        .evaluate((v: HTMLVideoElement) => v.currentTime);
+    if (process.env.WEB_F2_EVIDENCE)
+        await page.screenshot({
+            path: process.env.WEB_F2_EVIDENCE,
+            type: "jpeg",
+            quality: 50,
+        });
+    // A same selected pick must preserve the original retry rather than restart its loader.
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: /English captions/ }).click();
+    await expect.poll(() => attempts).toBe(2);
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate(
+                    (v: HTMLVideoElement) => v.textTracks[0]?.cues?.length ?? 0,
+                ),
+        )
+        .toBe(1);
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate((v: HTMLVideoElement) => v.currentTime),
+        )
+        .toBeGreaterThan(before);
+    expect(f.negotiations).toHaveLength(negotiations);
+    await pause(page);
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: /English captions/ }).click();
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate(
+                    (v: HTMLVideoElement) => v.textTracks[0]?.cues?.length ?? 0,
+                ),
+        )
+        .toBe(1);
+    expect(attempts).toBe(2);
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
+    await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
+        "",
+    );
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate(
+                    (v: HTMLVideoElement) => v.textTracks[0]?.cues?.length ?? 0,
+                ),
+        )
+        .toBe(1);
+    const offset = f.negotiations.at(-1)!.StartTimeTicks / 1e7;
+    expect(
+        await page
+            .locator("video")
+            .evaluate(
+                (v: HTMLVideoElement) => v.textTracks[0].cues![0].startTime,
+            ),
+    ).toBeCloseTo(15 - offset, 2);
+    expect(paths.every((p) => /\/Subtitles\/3\/0\/Stream.vtt$/.test(p))).toBe(
+        true,
+    );
+    expect(attempts).toBe(2);
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("rc26 malformed selected captions retry and Off cancels optional loading without holding video", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    let attempts = 0;
+    await page.route("https://jellyfin.example/**/Subtitles/**", (route) => {
+        attempts++;
+        return route.fulfill({
+            headers: jsonHeaders,
+            contentType: "text/vtt",
+            body: "WEBVTT\n\nbad timestamp --> wrong timestamp\nmalformed optional captions\n",
+        });
+    });
+    await openMovie(page);
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: /English captions/ }).click();
+    await expect(page.getByRole("status")).toContainText(
+        "Playback can continue",
+    );
+    await expect.poll(() => attempts).toBe(2);
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await page.clock.install();
+    await page.clock.runFor(12000);
+    expect(attempts).toBe(2);
+    expect(f.negotiations).toHaveLength(1);
+    expect(
+        await page
+            .locator("video")
+            .evaluate((v: HTMLVideoElement) => v.readyState),
+    ).toBeGreaterThanOrEqual(2);
+    expect(f.reports.filter((r) => r.path.endsWith("/Stopped"))).toHaveLength(
+        0,
+    );
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("rc26 report diagnostics bind actual status and independent origins without media secrets", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    const lines: string[] = [];
+    page.on("console", (event) => {
+        if (event.text().startsWith("PictureshowPlayback report"))
+            lines.push(event.text());
+    });
+    await openMovie(page);
+    await pause(page);
+    await expect
+        .poll(() =>
+            lines.some(
+                (l) =>
+                    l.includes("kind=start") &&
+                    l.includes(
+                        "audio=omitted subtitle=omitted audioOrigin=automatic subtitleOrigin=automatic status=204 failure=none",
+                    ),
+            ),
+        )
+        .toBe(true);
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.getByRole("radio", { name: /English stereo/ }).click();
+    await expect
+        .poll(() =>
+            lines.some(
+                (l) =>
+                    l.includes("kind=progress") &&
+                    l.includes(
+                        "audio=1 subtitle=omitted audioOrigin=viewer subtitleOrigin=automatic status=204",
+                    ),
+            ),
+        )
+        .toBe(true);
+    await page.route(
+        "https://jellyfin.example/Sessions/Playing/Progress",
+        (route) =>
+            route.fulfill({ status: 503, headers: jsonHeaders, body: "{}" }),
+    );
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await expect
+        .poll(() => lines.some((l) => l.includes("status=503 failure=http")))
+        .toBe(true);
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+    await expect
+        .poll(() =>
+            lines.some(
+                (l) =>
+                    l.includes("kind=stop") &&
+                    l.includes(
+                        "audio=omitted subtitle=omitted audioOrigin=viewer subtitleOrigin=viewer status=204",
+                    ),
+            ),
+        )
+        .toBe(true);
+    for (const line of lines)
+        expect(line).not.toMatch(
+            /https?:|token|ApiKey|The Test Picture|caption for/,
+        );
+    const sequences = lines.map((l) => Number(/ seq=(\d+)/.exec(l)![1]));
+    expect(sequences).toEqual([...sequences].sort((a, b) => a - b));
+    expect(new Set(sequences).size).toBe(sequences.length);
+    expect(f.negotiations).toHaveLength(1);
+});
+
+test("rc26 pending menu is cancelled by Back and selected entry never pulls later focus back", async ({
+    page,
+}) => {
+    await fixture(page);
+    await page.addInitScript(() => {
+        const Original = window.Worker;
+        window.Worker = class extends Original {
+            constructor(...args: ConstructorParameters<typeof Worker>) {
+                super(...args);
+                const dispatch = this.dispatchEvent.bind(this);
+                this.addEventListener("message", (event) => {
+                    if ((event as MessageEvent & { delayed?: boolean }).delayed)
+                        return;
+                    event.stopImmediatePropagation();
+                    setTimeout(() => {
+                        const delayed = new MessageEvent("message", {
+                            data: event.data,
+                        }) as MessageEvent & { delayed?: boolean };
+                        delayed.delayed = true;
+                        (window as any).__trackMenuMessages =
+                            ((window as any).__trackMenuMessages ?? 0) + 1;
+                        dispatch(delayed);
+                    }, 700);
+                });
+            }
+        };
+    });
+    await signIn(page);
+    await page.locator('[data-focus="resume:movie"]').click();
+    await page
+        .getByRole("button", { name: "Resume from 0:10", exact: true })
+        .click();
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(
+        page.getByRole("dialog", { name: "Audio", exact: true }),
+    ).toBeHidden();
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate((v: HTMLVideoElement) => v.readyState),
+        )
+        .toBeGreaterThanOrEqual(2);
+    await expect
+        .poll(() =>
+            page.evaluate(() => (window as any).__trackMenuMessages ?? 0),
+        )
+        .toBe(1);
+    await expect(
+        page.getByRole("dialog", { name: "Audio", exact: true }),
+    ).toBeHidden();
+    // A complete current menu opens only after this new explicit request.
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await expect(
+        page.getByRole("radio", { name: /English stereo/ }),
+    ).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("radio", { name: /Spanish/ })).toBeFocused();
+    await page.clock.install();
+    await page.clock.runFor(8000);
+    await expect(page.getByRole("radio", { name: /Spanish/ })).toBeFocused();
+    expect(await page.evaluate(() => (window as any).__trackMenuMessages)).toBe(
+        1,
+    );
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("rc26 relative steps retain target after negotiation until replacement READY", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    await openMovie(page);
+    await pause(page);
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.getByRole("radio", { name: /Spanish/ }).click();
+    await expect.poll(() => f.negotiations.at(-1)?.AudioStreamIndex).toBe(2);
+    await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
+        "",
+    );
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate((v: HTMLVideoElement) => v.readyState),
+        )
+        .toBeGreaterThanOrEqual(2);
+    const base = f.negotiations.at(-1)!.StartTimeTicks;
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((r) => (release = r)),
+        manifest = new Promise<void>((r) => (entered = r));
+    await page.route(
+        "https://jellyfin.example/Videos/movie/master.m3u8?**",
+        async (route) => {
+            entered();
+            await gate;
+            await route.fallback();
+        },
+    );
+    try {
+        await page.locator("video").focus();
+        await page.keyboard.press("ArrowRight");
+        await manifest;
+        // The decoder has the first server response but no metadata/READY acknowledgement.
+        await expect
+            .poll(() => f.negotiations.at(-1)?.StartTimeTicks)
+            .toBe(base + 10e7);
+        await page.waitForTimeout(800);
+        await page.keyboard.press("ArrowRight");
+        await page.waitForTimeout(800);
+        await page.keyboard.press("ArrowRight");
+        await page.waitForTimeout(900); // preview timeout cannot erase the pending target
+        release();
+        await expect
+            .poll(() => f.negotiations.at(-1)?.StartTimeTicks)
+            .toBe(base + 30e7);
+        await expect(
+            page.getByRole("status", { includeHidden: true }),
+        ).toHaveText("");
+        await expect(
+            page.getByRole("button", { name: "Play", exact: true }),
+        ).toBeVisible();
+        expect(
+            f.reports.filter((r) => r.path === "/Sessions/Playing"),
+        ).toHaveLength(1);
+        expect(
+            f.reports.filter((r) => r.path.endsWith("/Stopped")),
+        ).toHaveLength(0);
+        await page.getByRole("button", { name: "Stop and go back" }).click();
+    } finally {
+        release();
+    }
+});
+
+test("rc26 automatic same-language captions prefer text with source binding and omit automatic reports", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    const source = {
+        ...movie.MediaSources[0],
+        DefaultSubtitleStreamIndex: 4,
+        MediaStreams: [
+            ...movie.MediaSources[0].MediaStreams.map((s) =>
+                s.Index === 3 ? { ...s, Language: "eng" } : s,
+            ),
+            {
+                Type: "Subtitle",
+                Index: 4,
+                Codec: "pgssub",
+                Language: "eng",
+                DisplayTitle: "English image",
+            },
+        ],
+    };
+    await page.route("https://jellyfin.example/Items/movie?**", (route) =>
+        route.fulfill({
+            headers: jsonHeaders,
+            body: JSON.stringify({ ...movie, MediaSources: [source] }),
+        }),
+    );
+    await page.route(
+        "https://jellyfin.example/Items/movie/PlaybackInfo",
+        (route) => {
+            const body = route.request().postDataJSON();
+            f.negotiations.push(body);
+            return route.fulfill({
+                headers: jsonHeaders,
+                body: JSON.stringify({
+                    PlaySessionId: "auto-text",
+                    MediaSources: [
+                        {
+                            ...source,
+                            SupportsDirectPlay: body.EnableDirectPlay,
+                            TranscodingUrl: "/Videos/movie/master.m3u8",
+                        },
+                    ],
+                }),
+            });
+        },
+    );
+    await openMovie(page);
+    await pause(page);
+    expect(f.negotiations[0].SubtitleStreamIndex).toBe(3);
+    expect(f.negotiations[0].MediaSourceId).toBe("source");
+    const start = f.reports.find((r) => r.path === "/Sessions/Playing")!.body;
+    expect(start).not.toHaveProperty("AudioStreamIndex");
+    expect(start).not.toHaveProperty("SubtitleStreamIndex");
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await expect(
+        page.getByRole("radio", { name: /English · SUBRIP/ }),
+    ).toHaveAttribute("aria-checked", "true");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("rc26 text-codec Encode transitions renegotiate and Audio Off remains explicit across replacement", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    const source = {
+        ...movie.MediaSources[0],
+        MediaStreams: movie.MediaSources[0].MediaStreams.map((s) =>
+            s.Index === 3 ? { ...s, DeliveryMethod: "Encode" } : s,
+        ),
+    };
+    await page.route("https://jellyfin.example/Items/movie?**", (route) =>
+        route.fulfill({
+            headers: jsonHeaders,
+            body: JSON.stringify({ ...movie, MediaSources: [source] }),
+        }),
+    );
+    await page.route(
+        "https://jellyfin.example/Items/movie/PlaybackInfo",
+        (route) => {
+            const body = route.request().postDataJSON();
+            f.negotiations.push(body);
+            return route.fulfill({
+                headers: jsonHeaders,
+                body: JSON.stringify({
+                    PlaySessionId: "encode-" + f.negotiations.length,
+                    MediaSources: [
+                        {
+                            ...source,
+                            SupportsDirectPlay: body.EnableDirectPlay,
+                            TranscodingUrl: "/Videos/movie/master.m3u8",
+                        },
+                    ],
+                }),
+            });
+        },
+    );
+    await openMovie(page);
+    await pause(page);
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(-1);
+    const before = f.negotiations.length;
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: /English captions/ }).click();
+    await expect.poll(() => f.negotiations.length).toBe(before + 1);
+    expect(f.negotiations.at(-1).EnableDirectPlay).toBe(false);
+    await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
+        "",
+    );
+    await expect.poll(() => f.reports.at(-1)?.body.AudioStreamIndex).toBe(-1);
+    expect(
+        await page.locator("video").evaluate((v: HTMLVideoElement) => v.muted),
+    ).toBe(true);
+    expect(f.mediaRequests.filter((p) => p === "subtitle")).toHaveLength(0);
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await expect.poll(() => f.negotiations.length).toBe(before + 2);
+    await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
+        "",
+    );
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("rc26 delayed optional subtitle HTTP outlives the A/V deadline without blocking playback", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve)),
+        requested = new Promise<void>((resolve) => (entered = resolve));
+    await page.route(
+        "https://jellyfin.example/**/Subtitles/**",
+        async (route) => {
+            entered();
+            await gate;
+            await route.abort().catch(() => {});
+        },
+    );
+    try {
+        await openMovie(page);
+        await page
+            .getByRole("button", { name: "Subtitles", exact: true })
+            .click();
+        await page.getByRole("radio", { name: /English captions/ }).click();
+        await requested;
+        const before = await page
+            .locator("video")
+            .evaluate((v: HTMLVideoElement) => v.currentTime);
+        await expect
+            .poll(() =>
+                page
+                    .locator("video")
+                    .evaluate((v: HTMLVideoElement) => v.currentTime),
+            )
+            .toBeGreaterThan(before + 0.2);
+        await page.clock.install();
+        await page.clock.runFor(46000);
+        await expect(
+            page.getByRole("button", { name: "Retry playback", exact: true }),
+        ).toBeHidden();
+        expect(
+            await page
+                .locator("video")
+                .evaluate((v: HTMLVideoElement) => v.readyState),
+        ).toBeGreaterThanOrEqual(2);
+        expect(f.negotiations).toHaveLength(1);
+        expect(
+            f.reports.filter((r) => r.path.endsWith("/Stopped")),
+        ).toHaveLength(0);
+        await page.locator("video").focus();
+        await page.keyboard.press("Enter");
+        await page
+            .getByRole("button", { name: "Subtitles", exact: true })
+            .click();
+        await page.getByRole("radio", { name: "Off", exact: true }).click();
+        await page.getByRole("button", { name: "Stop and go back" }).click();
+    } finally {
+        release();
+    }
+});
+
+test("rc26 server-declared text with unknown codec loads converted cues and switches locally", async ({
+    page,
+}) => {
+    const f = await fixture(page);
+    const source = {
+        ...movie.MediaSources[0],
+        MediaStreams: movie.MediaSources[0].MediaStreams.map((s) =>
+            s.Index === 3
+                ? { ...s, Codec: "future_text", IsTextSubtitleStream: true }
+                : s,
+        ),
+    };
+    await page.route("https://jellyfin.example/Items/movie?**", (route) =>
+        route.fulfill({
+            headers: jsonHeaders,
+            body: JSON.stringify({ ...movie, MediaSources: [source] }),
+        }),
+    );
+    await page.route(
+        "https://jellyfin.example/Items/movie/PlaybackInfo",
+        (route) => {
+            const body = route.request().postDataJSON();
+            f.negotiations.push(body);
+            return route.fulfill({
+                headers: jsonHeaders,
+                body: JSON.stringify({
+                    PlaySessionId: "flagged-text",
+                    MediaSources: [
+                        {
+                            ...source,
+                            SupportsDirectPlay: body.EnableDirectPlay,
+                            TranscodingUrl: "/Videos/movie/master.m3u8",
+                        },
+                    ],
+                }),
+            });
+        },
+    );
+    await openMovie(page);
+    await pause(page);
+    const before = f.negotiations.length;
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: /English.*FUTURE_TEXT/ }).click();
+    await expect
+        .poll(() =>
+            page
+                .locator("video")
+                .evaluate((v: HTMLVideoElement) =>
+                    [...v.textTracks].some(
+                        (t) =>
+                            t.mode === "showing" && (t.cues?.length ?? 0) > 0,
+                    ),
+                ),
+        )
+        .toBe(true);
+    expect(f.negotiations).toHaveLength(before);
+    await page.getByRole("button", { name: "Subtitles", exact: true }).click();
+    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await expect
+        .poll(() => f.reports.at(-1)?.body.SubtitleStreamIndex)
+        .toBe(-1);
+    expect(f.negotiations).toHaveLength(before);
+    await page.getByRole("button", { name: "Stop and go back" }).click();
 });

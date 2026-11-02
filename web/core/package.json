@@ -4,6 +4,7 @@
     "type": "module",
     "exports": {
         ".": "./src/index.ts",
-        "./parity": "./src/parity.ts"
+        "./parity": "./src/parity.ts",
+        "./rc26": "./src/rc26.ts"
     }
 }

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
+import type { PlaybackHttpOutcome } from "./rc26";
 export type Server = { id: string; name: string; url: string; version: string };
 export type Account = {
     server: Server;
@@ -22,6 +23,7 @@ export type Stream = {
     BitRate?: number;
     RealFrameRate?: number;
     DeliveryUrl?: string;
+    DeliveryMethod?: string;
     Channels?: number;
 };
 export type Source = {
@@ -249,20 +251,22 @@ export function networkOptions(url: string): RequestInit {
         ...(targetAddressSpace ? { targetAddressSpace } : {}),
     } as RequestInit;
 }
-export async function fetchMedia(account: Account, path: string) {
-    const url = mediaUrl(account, path);
+export async function fetchMedia(
+    account: Account,
+    path: string,
+    init: RequestInit = {},
+) {
     let r: Response;
     try {
-        r = await fetch(url, {
-            ...networkOptions(url),
-            headers: {
-                Authorization: authorization(
-                    account.deviceId,
-                    account.accessToken,
-                ),
-            },
-            signal: AbortSignal.timeout(30000),
-        });
+        const timeout = AbortSignal.timeout(30000);
+        r = await fetch(
+            authenticatedMediaRequest(account, path, {
+                ...init,
+                signal: init.signal
+                    ? AbortSignal.any([init.signal, timeout])
+                    : timeout,
+            }),
+        );
     } catch {
         throw new ClientError(
             "NETWORK",
@@ -465,57 +469,95 @@ export class Jellyfin {
         body?: unknown,
         method = body === undefined ? "GET" : "POST",
         keepalive = false,
+        observe?: (outcome: PlaybackHttpOutcome) => void,
     ): Promise<T> {
-        const url = resolve(this.server.url, path);
-        if (!sameOrigin(this.server.url, url))
-            throw new ClientError("UNSAFE_STREAM_URL", "Invalid API origin.");
-        let r: Response;
+        const began = performance.now();
+        let status: number | null = null;
+        let failure: PlaybackHttpOutcome["failure"] = null;
         try {
-            r = await this.fetcher.call(globalThis, url, {
-                ...networkOptions(url),
-                method,
-                headers: {
-                    Authorization: authorization(
-                        this.account?.deviceId ?? this.deviceId,
-                        this.account?.accessToken,
-                    ),
-                    ...(body === undefined
-                        ? {}
-                        : { "Content-Type": "application/json" }),
-                },
-                body: body === undefined ? undefined : JSON.stringify(body),
-                credentials: "omit",
-                referrerPolicy: "no-referrer",
-                redirect: "error",
-                signal: AbortSignal.timeout(30000),
-                keepalive,
+            const url = resolve(this.server.url, path);
+            if (!sameOrigin(this.server.url, url))
+                throw new ClientError(
+                    "UNSAFE_STREAM_URL",
+                    "Invalid API origin.",
+                );
+            let r: Response;
+            try {
+                r = await this.fetcher.call(globalThis, url, {
+                    ...networkOptions(url),
+                    method,
+                    headers: {
+                        Authorization: authorization(
+                            this.account?.deviceId ?? this.deviceId,
+                            this.account?.accessToken,
+                        ),
+                        ...(body === undefined
+                            ? {}
+                            : { "Content-Type": "application/json" }),
+                    },
+                    body: body === undefined ? undefined : JSON.stringify(body),
+                    credentials: "omit",
+                    referrerPolicy: "no-referrer",
+                    redirect: "error",
+                    signal: AbortSignal.timeout(30000),
+                    keepalive,
+                });
+            } catch (e) {
+                failure =
+                    e instanceof DOMException && e.name === "TimeoutError"
+                        ? "Timeout"
+                        : e instanceof DOMException && e.name === "AbortError"
+                          ? "Cancelled"
+                          : "Network";
+                throw new ClientError(
+                    "NETWORK",
+                    "Could not reach the server. Check the address, certificate, CORS settings and local network permission.",
+                );
+            }
+            status = r.status;
+            if (!r.ok) failure = "Http";
+            if (!r.ok)
+                throw new ClientError(
+                    r.status === 401
+                        ? "EXPIRED"
+                        : r.status === 404
+                          ? "NOT_FOUND"
+                          : "SERVER",
+                    r.status === 401
+                        ? "Sign-in was refused or expired. Sign in again."
+                        : `The server could not complete the request (${r.status}).`,
+                );
+            if (r.status === 204) return undefined as T;
+            const text = await r.text();
+            try {
+                return (text ? JSON.parse(text) : undefined) as T;
+            } catch {
+                failure = "InvalidResponse";
+                throw new ClientError(
+                    "INVALID_RESPONSE",
+                    "The server returned an unreadable response.",
+                );
+            }
+        } catch (error) {
+            if (failure === null)
+                failure =
+                    error instanceof DOMException &&
+                    error.name === "TimeoutError"
+                        ? "Timeout"
+                        : error instanceof DOMException &&
+                            error.name === "AbortError"
+                          ? "Cancelled"
+                          : error instanceof ClientError &&
+                              error.kind === "UNSAFE_STREAM_URL"
+                            ? "InvalidResponse"
+                            : "Network";
+            throw error;
+        } finally {
+            observe?.({
+                status,
+                failure,
+                elapsedMs: Math.max(0, Math.round(performance.now() - began)),
             });
-        } catch {
-            throw new ClientError(
-                "NETWORK",
-                "Could not reach the server. Check the address, certificate, CORS settings and local network permission.",
-            );
-        }
-        if (!r.ok)
-            throw new ClientError(
-                r.status === 401
-                    ? "EXPIRED"
-                    : r.status === 404
-                      ? "NOT_FOUND"
-                      : "SERVER",
-                r.status === 401
-                    ? "Sign-in was refused or expired. Sign in again."
-                    : `The server could not complete the request (${r.status}).`,
-            );
-        if (r.status === 204) return undefined as T;
-        const text = await r.text();
-        try {
-            return (text ? JSON.parse(text) : undefined) as T;
-        } catch {
-            throw new ClientError(
-                "INVALID_RESPONSE",
-                "The server returned an unreadable response.",
-            );
         }
     }
     static async probe(input: string, deviceId: string) {
@@ -597,8 +639,8 @@ export class Jellyfin {
         const i = b.Items?.find((i) => i.Id === id);
         if (!i)
             throw new ClientError(
-                "NOT_FOUND",
-                "This item is no longer available. Go Back or Retry.",
+                "INVALID_RESPONSE",
+                "The server returned incomplete item state. Retry.",
             );
         d.UserData = i.UserData;
         if (i.ChildCount !== undefined) d.ChildCount = i.ChildCount;
@@ -634,20 +676,30 @@ export class Jellyfin {
         subtitle?: number,
         forceHls = false,
         bitrateMbps: number | null = null,
+        mediaSourceId?: string,
     ): Promise<Decision> {
         const bitrate = [4, 10, 20, 40, 80, 120].includes(bitrateMbps ?? 0)
             ? bitrateMbps! * 1_000_000
             : 200_000_000;
-        const metadata = item.MediaSources?.[0];
+        const metadata =
+            mediaSourceId != null
+                ? item.MediaSources?.find((s) => s.Id === mediaSourceId)
+                : item.MediaSources?.[0];
+        if (mediaSourceId != null && !metadata)
+            throw new ClientError(
+                "NO_COMPATIBLE_SOURCE",
+                "This media source is no longer available. Retry.",
+            );
         const chosenSubtitle = subtitle ?? metadata?.DefaultSubtitleStreamIndex;
         const subtitleStream = metadata?.MediaStreams?.find(
             (s) => s.Type === "Subtitle" && s.Index === chosenSubtitle,
         );
         const encodedSubtitle =
             !!subtitleStream &&
-            !["srt", "subrip", "vtt", "webvtt"].includes(
-                subtitleStream.Codec?.toLowerCase() ?? "",
-            );
+            (subtitleStream.DeliveryMethod?.toLowerCase() === "encode" ||
+                !["srt", "subrip", "vtt", "webvtt"].includes(
+                    subtitleStream.Codec?.toLowerCase() ?? "",
+                ));
         const direct =
             !forceHls &&
             !encodedSubtitle &&
@@ -655,6 +707,9 @@ export class Jellyfin {
             canDirect(metadata, probe, audio);
         const body = {
             UserId: this.account!.user.Id,
+            MediaSourceId:
+                mediaSourceId ??
+                (audio != null || subtitle != null ? metadata?.Id : undefined),
             StartTimeTicks: ticks(position),
             AudioStreamIndex: audio,
             SubtitleStreamIndex: subtitle,
@@ -683,7 +738,7 @@ export class Jellyfin {
                     : [],
             },
         };
-        const info = await this.request<{
+        let info = await this.request<{
             MediaSources: Source[];
             PlaySessionId?: string;
             ErrorCode?: string;
@@ -693,12 +748,36 @@ export class Jellyfin {
                 "SERVER_REFUSED",
                 "The server refused playback.",
             );
+        let boundSourceId = body.MediaSourceId;
+        if (boundSourceId == null && (audio != null || subtitle != null)) {
+            const preferred =
+                info.MediaSources?.find(
+                    (s) =>
+                        (direct &&
+                            s.SupportsDirectPlay &&
+                            canDirect(s, probe, audio)) ||
+                        s.TranscodingUrl,
+                ) ?? info.MediaSources?.[0];
+            if (preferred?.Id?.trim()) {
+                boundSourceId = preferred.Id;
+                info = await this.request<typeof info>(
+                    "Items/" + encode(item.Id) + "/PlaybackInfo",
+                    { ...body, MediaSourceId: boundSourceId },
+                );
+                if (info.ErrorCode)
+                    throw new ClientError(
+                        "SERVER_REFUSED",
+                        "The server refused playback.",
+                    );
+            }
+        }
         const source = info.MediaSources?.find(
             (s) =>
-                (direct &&
+                (boundSourceId == null || s.Id === boundSourceId) &&
+                ((direct &&
                     s.SupportsDirectPlay &&
                     canDirect(s, probe, audio)) ||
-                s.TranscodingUrl,
+                    s.TranscodingUrl),
         );
         if (!source)
             throw new ClientError(
@@ -740,11 +819,12 @@ export class Jellyfin {
         event: "start" | "progress" | "stop",
         position: number,
         paused: boolean,
-        audio?: number,
-        subtitle = -1,
+        audio?: number | null,
+        subtitle?: number | null,
         failed = false,
         keepalive = false,
         muted = false,
+        observe?: (outcome: PlaybackHttpOutcome) => void,
     ) {
         return this.request<void>(
             "Sessions/Playing" +
@@ -759,13 +839,14 @@ export class Jellyfin {
                       decision,
                       position,
                       paused,
-                      audio ?? decision.source.DefaultAudioStreamIndex,
+                      audio,
                       subtitle,
                       true,
                       muted,
                   ),
             "POST",
             keepalive,
+            observe,
         );
     }
     stopEncoding(d: Decision) {

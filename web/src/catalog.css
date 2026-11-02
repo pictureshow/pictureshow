@@ -507,3 +507,26 @@
         object-fit: cover;
     }
 }
+/* Quiet, interruptible reader cues stay out of stable action geometry. */
+.catalog-reader-feedback {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.catalog-previous-reason {
+    display: block;
+    margin-top: 0.5rem;
+}
+/* Change foreground and background together when focus arrives. A background
+   transition with an immediate dark foreground briefly hides the focused label. */
+.catalog-detail-actions button:focus,
+.catalog-detail-page .catalog-error button:focus,
+.catalog-loading-detail .catalog-error button:focus {
+    transition: none;
+}

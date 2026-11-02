@@ -12,6 +12,7 @@ import {
     ticksFromNanoseconds,
     progressReport,
     stopReport,
+    assembleHome,
 } from "./index";
 import {
     decodeSettings,
@@ -40,6 +41,7 @@ import {
     playbackRequest,
 } from "./parity";
 import { referenceProfile, referenceCompatibility } from "./reference-profile";
+import * as rc26 from "./rc26";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
@@ -70,6 +72,267 @@ for (const file of files) {
                     ctx = suite.context;
                 let value: unknown;
                 switch (c.operation) {
+                    case "external-subtitle-loading":
+                        value = {
+                            retryDelayMs: rc26.externalSubtitleRetryDelay(
+                                i.errorCount,
+                            ),
+                            sourceOffsetMs: rc26.externalSubtitleOffset(
+                                i.fullTimeline,
+                                i.serverStartMs,
+                            ),
+                        };
+                        break;
+                    case "subtitle-selection-local":
+                        value = rc26.canSelectSubtitleLocally(
+                            i.transcoding,
+                            i.subtitle,
+                            i.currentLocal,
+                            i.nextLocal,
+                        );
+                        break;
+                    case "report-track-index":
+                        value = rc26.reportTrackIndex(
+                            i.selectedIndex,
+                            i.chosenByViewer,
+                        );
+                        break;
+                    case "track-selection-unchanged":
+                        value = rc26.unchangedTrack(
+                            i.currentIndex,
+                            i.pickedIndex,
+                        );
+                        break;
+                    case "playback-report-fields":
+                        value = rc26.playbackReportFields(
+                            i.kind,
+                            i.positionTicks,
+                            i.audio,
+                            i.subtitle,
+                            i.audioViewer,
+                            i.subtitleViewer,
+                        );
+                        break;
+                    case "seek-step":
+                        value = rc26.seekStepTarget(
+                            i.positionMs,
+                            i.pendingMs,
+                            i.deltaMs,
+                            i.durationMs,
+                        );
+                        break;
+                    case "detail-empty":
+                        value = rc26.showDetailEmptyState(
+                            i.itemType,
+                            i.loading,
+                            i.readSucceeded,
+                            i.readFailed,
+                            i.episodeCount,
+                            i.seasonCount,
+                        );
+                        break;
+                    case "detail-action-state":
+                        value = rc26.detailActionDescription(
+                            i.currentState ?? null,
+                            i.available,
+                        );
+                        break;
+                    case "detail-held-label":
+                        value = rc26.detailHeldActionLabel(i.target);
+                        break;
+                    case "detail-unavailable-label":
+                        value = rc26.detailUnavailableActionLabel(i.target);
+                        break;
+                    case "detail-failure-key":
+                        value = rc26.detailFailureKey(
+                            i.readRecovery,
+                            i.retrying,
+                            i.writeAttempt ?? null,
+                        );
+                        break;
+                    case "detail-failure-presentation": {
+                        let previous: rc26.DetailFailurePresentation | null =
+                            null;
+                        value = i.steps.map((step: any) => {
+                            previous = rc26.presentDetailFailure(
+                                previous,
+                                step.key ?? null,
+                                step.message ?? null,
+                            );
+                            return previous?.message ?? null;
+                        });
+                        break;
+                    }
+                    case "detail-ready-feedback": {
+                        const f = new rc26.DetailReadyFeedback();
+                        value = i.steps.map((s: any) =>
+                            f.update(
+                                s.held,
+                                s.focused ?? null,
+                                s.resumed,
+                                s.usable ?? true,
+                            ),
+                        );
+                        break;
+                    }
+                    case "detail-read-lifecycle": {
+                        const lifecycle = new rc26.DetailReadLifecycle();
+                        value = i.resumes.map(() => lifecycle.resumed());
+                        break;
+                    }
+                    case "detail-arrival-pending": {
+                        let pending = true;
+                        value = i.restored.map(
+                            (restored: boolean) =>
+                                (pending = rc26.detailArrivalStillPending(
+                                    pending,
+                                    restored,
+                                )),
+                        );
+                        break;
+                    }
+                    case "detail-request-priority":
+                        value = rc26.detailRequestFeedbackIsUrgent(
+                            i.newlyAccepted,
+                            i.requested,
+                            i.available,
+                        );
+                        break;
+                    case "catalog-arrival-animation":
+                        value = rc26.catalogArrivalUsesAnimation(
+                            i.accessibilityEnabled,
+                            i.sourceIsPlayback,
+                            i.destinationIsCatalog,
+                        );
+                        break;
+                    case "detail-arrival-publication":
+                        value = rc26.detailArrivalAwaitsAction(
+                            i.loading,
+                            i.contentRevealed,
+                            i.returningFromPlayback,
+                        );
+                        break;
+                    case "detail-metadata-handoff":
+                        value = rc26.detailMetadataAwaitsHandoff(
+                            i.hasActions,
+                            i.handoffFinished,
+                            i.returningFromPlayback,
+                            i.failed,
+                        );
+                        break;
+                    case "detail-host-focus-handoff":
+                        value = rc26.detailSuppressesEmptyHostFocus(
+                            i.ordinaryArrivalWithActions,
+                            i.handoffFinished,
+                            i.returningFromPlayback,
+                            i.recoveryHandoff,
+                            i.failed,
+                        );
+                        break;
+                    case "detail-completion-read":
+                        value = rc26.detailReadCanReplaceCompletion(
+                            i.completionItem,
+                            i.completionRead,
+                            i.item,
+                            i.read,
+                            i.succeeded,
+                        );
+                        break;
+                    case "detail-cold-pending":
+                        value = rc26.detailNeedsPendingControls(
+                            i.loading,
+                            i.firstArrival,
+                            i.canQueue,
+                            i.returningFromPlayback ?? false,
+                        );
+                        break;
+                    case "detail-requested-label":
+                        value = rc26.detailRequestedActionLabel(
+                            i.target,
+                            i.newlyAccepted,
+                        );
+                        break;
+                    case "catalog-refresh-revision":
+                        value = rc26.catalogRevisionNeedsRefresh(
+                            i.previous ?? null,
+                            i.current,
+                        );
+                        break;
+                    case "detail-read-band":
+                        value = rc26.detailReadBandText(i.retrying, i.reason);
+                        break;
+                    case "detail-session-read":
+                        value = rc26.detailSessionNeedsRead(
+                            i.newRevision,
+                            i.refreshed,
+                            i.container,
+                            i.alreadyConfirmed,
+                        );
+                        break;
+                    case "detail-read-failure":
+                        value = rc26.detailReadHasFailure(
+                            i.readFailed,
+                            i.reason ?? null,
+                            i.mutationReady,
+                        );
+                        break;
+                    case "detail-request-cue-active":
+                        value = rc26.detailRequestCueRemainsActive(
+                            i.active,
+                            i.readerLeftAction,
+                            i.requested ?? true,
+                        );
+                        break;
+                    case "detail-confirmed-leaf":
+                        value = rc26.detailHasConfirmedLeafRead(
+                            i.readSucceeded,
+                            i.sameUserData,
+                            i.container,
+                        );
+                        break;
+                    case "detail-read-dependencies":
+                        value = rc26.detailReadRequiresDependents(i.type);
+                        break;
+                    case "homeRows":
+                        value = assembleHome(
+                            i.views,
+                            i.resume,
+                            i.nextUp,
+                            i.latest,
+                        ).map((r) => ({
+                            key: r.key,
+                            title: r.title,
+                            items: r.items.map((x) => x.Id),
+                            library: r.key === "libraries",
+                            wide: ["resume", "nextup"].includes(r.key),
+                        }));
+                        break;
+                    case "timelineThroughTrackSwitch": {
+                        const decisions = i.responses.map((r: any) =>
+                            protocolDecision(ctx, i.itemId, r),
+                        );
+                        value = {
+                            initialSeekMs: [i.startMs, i.positionsMs[1]],
+                            positionTicks: i.positionsMs.map(
+                                (p: number, n: number) => {
+                                    const d = decisions[n < 2 ? 0 : 1];
+                                    if ("unplayable" in d)
+                                        throw new Error(
+                                            "Unplayable timeline fixture",
+                                        );
+                                    return progressReport(
+                                        d as any,
+                                        p / 1000,
+                                        false,
+                                    ).PositionTicks;
+                                },
+                            ),
+                            sessions: decisions.map(
+                                (d: any) => d.playSessionId,
+                            ),
+                        };
+                        break;
+                    }
                     case "profile":
                         value = referenceProfile(i.capabilities);
                         break;
@@ -397,6 +660,13 @@ for (const file of files) {
                                         i.startIndex,
                                         i.limit,
                                     );
+                                    break;
+                                case "configuration":
+                                    result.configuration =
+                                        await client.configuration();
+                                    break;
+                                case "saveConfiguration":
+                                    await client.saveConfiguration(i.fields);
                                     break;
                                 case "stopEncoding":
                                     await client.stopEncoding(i.playSessionId);

@@ -186,6 +186,20 @@ export function captionLanguage(
         ? configuration.SubtitleLanguagePreference
         : tvLanguage;
 }
+const TEXT_CAPTION_CODECS = new Set([
+    "subrip",
+    "srt",
+    "ass",
+    "ssa",
+    "webvtt",
+    "vtt",
+    "ttml",
+    "mov_text",
+    "tx3g",
+    "text",
+    "smi",
+    "sami",
+]);
 export function captionIndex(
     source: any,
     preferredLanguage: string,
@@ -203,6 +217,14 @@ export function captionIndex(
                     Number(!!a.IsForced) - Number(!!b.IsForced) ||
                     Number(!!b.IsHearingImpaired) -
                         Number(!!a.IsHearingImpaired) ||
+                    Number(
+                        !!b.IsTextSubtitleStream ||
+                            TEXT_CAPTION_CODECS.has(b.Codec?.toLowerCase()),
+                    ) -
+                        Number(
+                            !!a.IsTextSubtitleStream ||
+                                TEXT_CAPTION_CODECS.has(a.Codec?.toLowerCase()),
+                        ) ||
                     Number(b.Index === source.DefaultSubtitleStreamIndex) -
                         Number(a.Index === source.DefaultSubtitleStreamIndex) ||
                     Number(!!b.IsDefault) - Number(!!a.IsDefault) ||
@@ -823,22 +845,38 @@ export class ParityCatalogClient {
             ].includes(detail.Type)
         )
             return detail;
-        try {
-            const batch = await this.request("Items", { ids: id });
-            const projection = batch.Items?.find((x: any) => x.Id === id);
-            return projection
-                ? { ...detail, UserData: projection.UserData }
-                : detail;
-        } catch (e) {
-            if (
-                e instanceof ClientError &&
-                (e.kind === "EXPIRED" ||
-                    !["Movie", "Episode", "Video"].includes(detail.Type))
-            )
-                throw e;
-            return detail;
-        }
+        const batch = await this.request("Items", { ids: id });
+        const projection = batch.Items?.find((x: any) => x.Id === id);
+        if (!projection)
+            throw new ClientError(
+                "INVALID_RESPONSE",
+                "The server returned an incomplete response.",
+            );
+        return {
+            ...detail,
+            UserData: projection.UserData,
+            ...(projection.ChildCount !== undefined
+                ? { ChildCount: projection.ChildCount }
+                : {}),
+            ...(projection.RecursiveItemCount !== undefined
+                ? { RecursiveItemCount: projection.RecursiveItemCount }
+                : {}),
+        };
     }
+    async configuration() {
+        const result = await this.request(
+            `Users/${encode(this.context.account.userId)}`,
+            {},
+            "GET",
+            undefined,
+            false,
+        );
+        return result.Configuration ?? {};
+    }
+    saveConfiguration(configuration: any) {
+        return this.request("Users/Configuration", {}, "POST", configuration);
+    }
+
     seasons(seriesId: string) {
         return this.request(`Shows/${encode(seriesId)}/Seasons`, {
             fields: CARD_FIELDS,
@@ -940,23 +978,49 @@ export class ParityCatalogClient {
         options: any = {},
         maxStreamingBitrate = 200000000,
     ) {
-        const response = await this.request(
+        const body = playbackRequest(
+            this.context.account.userId,
+            profile,
+            options,
+            maxStreamingBitrate,
+        );
+        let response = await this.request(
             `Items/${encode(itemId)}/PlaybackInfo`,
             {},
             "POST",
-            playbackRequest(
-                this.context.account.userId,
-                profile,
-                options,
-                maxStreamingBitrate,
-            ),
+            body,
             false,
         );
+        let sourceId = options.mediaSourceId;
+        if (
+            !response.ErrorCode &&
+            sourceId == null &&
+            (options.audioStreamIndex != null ||
+                options.subtitleStreamIndex != null)
+        ) {
+            const preferred =
+                response.MediaSources?.find(
+                    (s: any) =>
+                        s.SupportsDirectPlay ||
+                        s.SupportsDirectStream ||
+                        s.TranscodingUrl?.trim(),
+                ) ?? response.MediaSources?.[0];
+            if (preferred?.Id?.trim()) {
+                sourceId = preferred.Id;
+                response = await this.request(
+                    `Items/${encode(itemId)}/PlaybackInfo`,
+                    {},
+                    "POST",
+                    { ...body, MediaSourceId: sourceId },
+                    false,
+                );
+            }
+        }
         const decision = protocolDecision(
             this.context,
             itemId,
             response,
-            options.mediaSourceId,
+            sourceId,
         );
         return options.requireVideoStreamCopy && !("unplayable" in decision)
             ? preserveVideo(decision, options.subtitleStreamIndex)

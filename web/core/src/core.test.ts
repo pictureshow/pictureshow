@@ -238,7 +238,13 @@ it("playback negotiation advertises no unsupported direct stream and binds repor
         undefined,
         undefined,
     ]);
-    const d = await client.prepare(movie, () => false, 30, 2, -1);
+    const d = await client.prepare(
+        { ...movie, MediaSources: [source] },
+        () => false,
+        30,
+        2,
+        -1,
+    );
     expect(d.method).toBe("Transcode");
     expect(d.url).toContain("ApiKey=viewer-token");
     const request = JSON.parse(String(calls[0].init.body));

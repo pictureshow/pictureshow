@@ -570,7 +570,11 @@ export function referenceProfile(capabilities: any): any {
             "DTS",
             "TRUEHD",
         ].filter((c) => c in audio),
-        videoOrder = ["H264", "HEVC", "AV1", "VP9"].filter((c) => c in video),
+        videoOrder = (
+            referencePrefersHevc(capabilities)
+                ? ["HEVC", "H264", "AV1", "VP9"]
+                : ["H264", "HEVC", "AV1", "VP9"]
+        ).filter((c) => c in video),
         tsV = videoOrder.filter((c) => ["H264", "HEVC"].includes(c)),
         tsA = audioOrder.filter((c) =>
             ["AAC", "AC3", "EAC3", "MP3"].includes(c),
@@ -776,4 +780,66 @@ export function referenceCompatibility(profile: any, combo: any): string[] {
         )
             reasons.add("SubtitleCodecNotSupported");
     return [...reasons].sort();
+}
+
+/** Android hardware profile policy, evaluated only for explicit reference capabilities. */
+function referencePrefersHevc(capabilities: any): boolean {
+    const display = capabilities.display;
+    const limits = [
+        [30, 36864, 552960],
+        [60, 122880, 3686400],
+        [63, 245760, 7372800],
+        [90, 552960, 16588800],
+        [93, 983040, 33177600],
+        [120, 2228224, 66846720],
+        [123, 2228224, 133693440],
+        [150, 8912896, 267386880],
+        [153, 8912896, 534773760],
+        [156, 8912896, 1069547520],
+        [180, 35651584, 1069547520],
+        [183, 35651584, 2139095040],
+        [186, 35651584, 4278190080],
+    ];
+    return capabilities.videoDecoders.some((d: any) => {
+        const tuples = (d.profileCapabilities ?? []).filter(
+            (t: any) =>
+                t.profile.toLowerCase() === "main" && (t.maxBitDepth ?? 8) >= 8,
+        );
+        const hasTuples = !!d.profileCapabilities?.length;
+        const main = hasTuples
+            ? tuples.length > 0
+            : d.profiles.some((p: string) => p.toLowerCase() === "main");
+        const level = hasTuples
+            ? tuples
+                  .map((t: any) => t.maxLevel)
+                  .filter(Boolean)
+                  .sort(
+                      (a: any, b: any) =>
+                          a.major - b.major || (a.minor ?? 0) - (b.minor ?? 0),
+                  )[0]
+            : d.maxLevel;
+        const rate =
+            display.maxWidth > 1920 || display.maxHeight > 1080
+                ? Math.min(
+                      d.maxFrameRate,
+                      d.maxFrameRateAtMaxSize ?? d.maxFrameRate,
+                  )
+                : d.maxFrameRate;
+        const reported = level ? level.major * 30 + (level.minor ?? 0) * 3 : 0;
+        const limit = limits.filter(([v]) => v <= reported).at(-1);
+        const pixels = display.maxWidth * display.maxHeight;
+        return (
+            d.codec === "HEVC" &&
+            d.hardware !== false &&
+            main &&
+            d.maxWidth >= display.maxWidth &&
+            d.maxHeight >= display.maxHeight &&
+            rate >= Math.min(30, display.maxRefreshRate) &&
+            !!limit &&
+            pixels <= limit[1] &&
+            pixels * Math.min(rate, display.maxRefreshRate) <= limit[2] &&
+            display.maxWidth ** 2 <= 8 * limit[1] &&
+            display.maxHeight ** 2 <= 8 * limit[1]
+        );
+    });
 }
