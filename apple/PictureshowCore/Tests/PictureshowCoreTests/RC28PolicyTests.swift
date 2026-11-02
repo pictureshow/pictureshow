@@ -6,7 +6,7 @@ import XCTest
 final class RC28PolicyTests: XCTestCase {
     func testReadyRequiresHeldLabelPresentationAndSameSelection() {
         var unpresented = DetailReadyFeedback()
-        XCTAssertNil(unpresented.update(held: true, focused: "play", resumed: true, presented: false))
+        XCTAssertNil(unpresented.update(held: true, focused: "play", resumed: true))
         XCTAssertNil(unpresented.update(held: false, focused: "play", resumed: true, presented: false))
         var presented = DetailReadyFeedback()
         XCTAssertNil(presented.update(held: true, focused: "play", resumed: true, presented: true))

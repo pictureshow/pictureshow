@@ -30,6 +30,7 @@ struct AccessibilityCue: Equatable {
     private var consumed = Set<UUID>()
     private var pending: (cue: AccessibilityCue, until: TimeInterval)?
     private var active = true
+    private var pendingExpiry: Task<Void, Never>?
     private let enabled: () -> Bool
     private let now: () -> TimeInterval
     private let post: (AccessibilityCue, NSAttributedString) -> Void
@@ -40,20 +41,28 @@ struct AccessibilityCue: Equatable {
              detailDiagnostic("event=cuePosted cue=\(cue.id) kind=\(cue.message == "Ready" ? "Ready" : "other") queued=true")
          }) { self.enabled = enabled; self.now = now; self.post = post }
     func resume() { active = true }
-    func cancel() { active = false; pending = nil; inFlight = nil; inFlightMessage = nil }
+    func cancel() { active = false; pending = nil; pendingExpiry?.cancel(); pendingExpiry = nil; inFlight = nil; inFlightMessage = nil }
     func submit(_ cue: AccessibilityCue?) {
-        guard let cue else { pending = nil; return }
+        guard let cue else { pending = nil; pendingExpiry?.cancel(); pendingExpiry = nil; return }
         guard !consumed.contains(cue.id) else { return }
         consumed.insert(cue.id)
         guard active, enabled(), !cue.message.isEmpty else { return }
-        if inFlight != nil { pending = (cue, now() + 30); return }
+        if inFlight != nil {
+            pending = (cue, now() + 30); pendingExpiry?.cancel()
+            pendingExpiry = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                guard let self, self.pending?.cue.id == cue.id else { return }
+                self.pending = nil
+            }
+            return
+        }
         deliver(cue)
     }
     func finished(message: String? = nil) {
         if let message, message != inFlightMessage { return }
         inFlight = nil; inFlightMessage = nil
         guard let next = pending else { return }
-        pending = nil
+        pending = nil; pendingExpiry?.cancel(); pendingExpiry = nil
         guard active, enabled(), now() < next.until else { return }
         deliver(next.cue)
     }
