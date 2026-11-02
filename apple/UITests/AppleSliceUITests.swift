@@ -1380,6 +1380,58 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertEqual(after.subtitleRequestCount, before.subtitleRequestCount)
         #endif
     }
+    /// The real demo HLS decoder follows three remote activations of the
+    /// Pictureshow Info panel's ten-second action. This is a separate control
+    /// from AVKit clickpad navigation, which XCUIRemote cannot swipe.
+    @MainActor func testF4TVRealDemoInfoSeekStepsKeepAbsoluteHLSClock() throws {
+        #if os(tvOS)
+        let seekID = try XCTUnwrap(config["seekID"])
+        ensureSignedIn()
+        let settings = app.buttons["openSettings"]
+        reveal(settings); activate(settings)
+        let bitrate = app.descendants(matching: .any).matching(identifier: "maxBitrate").firstMatch
+        reveal(bitrate); activate(bitrate)
+        let fourMbps = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "4 Mbps")).firstMatch
+        XCTAssertTrue(fourMbps.waitForExistence(timeout: 10))
+        activate(fourMbps)
+        returnHome()
+        app.terminate()
+        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = seekID
+        app.launch()
+        let play = app.buttons["play"]
+        XCTAssertTrue(play.waitForExistence(timeout: 20))
+        XCTAssertEqual(parsedClockSeconds(play.label.replacingOccurrences(of: "Resume from ", with: "")), 30)
+        activate(play)
+        let first = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 30, maximum: 75,
+                                                       timeout: 90, metric: "f4_info_hls_seeded_resume"))
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: first.seconds + 2,
+                                               maximum: first.seconds + 12, timeout: 30,
+                                               metric: "f4_info_hls_initial_decoder_advance"))
+        XCUIRemote.shared.press(.playPause)
+        let info = try XCTUnwrap(openNativeTVInfoTab())
+        XCTAssertEqual(info.method, "Server HLS")
+        let baseline = try XCTUnwrap(parsedClockSeconds(info.clock))
+        let forward = app.buttons["seekForward"]
+        XCTAssertTrue(forward.waitForExistence(timeout: 10))
+        for index in 0..<3 {
+            forward.tap()
+            if index < 2 { Thread.sleep(forTimeInterval: 0.8) }
+        }
+        let wanted = baseline + 30
+        print("F4_TV_INFO_HLS_SEEK pendingExpectedSeconds=\(wanted)")
+        XCUIRemote.shared.press(.menu)
+        let settled = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: wanted - 1,
+                                                         maximum: wanted + 1, timeout: 45,
+                                                         metric: "f4_info_hls_three_steps"))
+        print("F4_TV_INFO_HLS_SEEK baselineSeconds=\(baseline) expectedSeconds=\(wanted) actualSeconds=\(settled.seconds)")
+        XCUIRemote.shared.press(.playPause)
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: wanted + 2,
+                                               maximum: wanted + 10, timeout: 30,
+                                               metric: "f4_info_hls_after_seek_decode"))
+        XCUIRemote.shared.press(.playPause)
+        leaveNativeTVPlayer(returningTo: play)
+        #endif
+    }
     /// Actual demo HLS, actual native timeline and remote key events. No seek
     /// helper buttons or pending-intent labels stand in for a committed A/V clock.
     @MainActor func testF4TVRealDemoRemoteSeekPacingCommitsEveryTenSecondStep() throws {
