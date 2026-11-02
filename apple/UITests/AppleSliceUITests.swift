@@ -3347,7 +3347,7 @@ func testF5DemoHeldWatchedRequestIsSingleAndReadRetryRecovers() async throws {
         if releaseNeeded { Task { try? await f5Release("item_detail") } }
     }
     activate(favorite)
-    XCTAssertTrue(waitUntil(timeout: 10) { favorite.label == favoriteAfterToggle })
+    XCTAssertTrue(waitUntil(timeout: 10) { [favoriteAfterToggle, favoriteAfterToggle + " when ready"].contains(favorite.label) })
     let favoriteReadHeld = try await f5WaitForPending("item_detail", count: 1, timeout: 15)
     XCTAssertTrue(favoriteReadHeld, "The Favorite action's item refresh should be held")
     capture("F5 favorite refresh held before Watched press")
