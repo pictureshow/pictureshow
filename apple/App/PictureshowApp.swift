@@ -59,6 +59,24 @@ struct AccountSnapshot: Codable {
     @Published var playbackSaving = false
     @Published var playbackSaveError: String?
     @Published var refreshID = UUID()
+    @Published private(set) var catalogRevision: Int64 = 0
+    private var loadedHomeRevision: Int64?
+    private var loadedHomeAccount: String?
+    private var loadingHomeRevision: Int64?
+    private var loadingHomeAccount: String?
+    private var detailReadRevision: Int64 = 0
+    private struct ReadOwner { let account: String; let generation: Int; let item: String }
+    private var detailReadOwners: [Int64: ReadOwner] = [:]
+    private struct CompletionRead {
+        let id: UUID
+        let account: String
+        let generation: Int
+        let item: String
+        let read: Int64
+        let continuation: CheckedContinuation<Void, Never>
+        var transport: Task<Void, Never>?
+    }
+    private var completionRead: CompletionRead?
     @Published var externalDetailID: String?
     let preferences = AppPreferences()
     let signInFlow = SignInFlow()
@@ -75,6 +93,13 @@ struct AccountSnapshot: Codable {
         authenticatedClient = JellyfinClient(deviceID: deviceID, supportsHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC), hevcTranscodeCapabilities: { await AppleHEVCQualification.shared.capabilities() })
         restore()
         Task { await AppleHEVCQualification.shared.warmUp() }
+    }
+    /// An injected client exercises the same account/read ownership without storage,
+    /// renderer preparation or hardware qualification in hosted tests.
+    init(client: JellyfinClient, account: Account) {
+        installationID = UUID().uuidString
+        authenticatedClient = client
+        self.account = account
     }
     func restore() {
         do {
@@ -97,7 +122,7 @@ struct AccountSnapshot: Codable {
         changed.servers.removeAll { $0.url == incoming.server.url }; changed.servers.append(incoming.server)
         changed.selected = incoming.localKey
         try AccountVault.saveSnapshot(changed)
-        snapshot = changed; accountGeneration += 1; pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = incoming
+        snapshot = changed; accountGeneration += 1; resetCatalogOwnership(); pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = incoming
         authenticatedClient = makeClient(incoming.deviceID)
         signInFlow.clear(); rows = []; homeError = nil; showSignIn = false; signInServer = nil; signInUsername = ""; sessionEnded = false
     }
@@ -105,7 +130,7 @@ struct AccountSnapshot: Codable {
         if saved.accessToken.isEmpty { beginSignIn(server: saved.server, username: saved.username); return }
         do { var changed = snapshot; changed.selected = saved.localKey; try AccountVault.saveSnapshot(changed); snapshot = changed }
         catch { storageError = error.localizedDescription; return }
-        accountGeneration += 1; homeGeneration += 1; pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = saved; authenticatedClient = makeClient(saved.deviceID)
+        accountGeneration += 1; resetCatalogOwnership(); homeGeneration += 1; pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil; account = saved; authenticatedClient = makeClient(saved.deviceID)
         rows = []; homeError = nil; showSignIn = false; refreshID = UUID(); await loadHome()
     }
     func signOut() async {
@@ -115,7 +140,7 @@ struct AccountSnapshot: Codable {
             try AccountVault.saveSnapshot(changed); snapshot = changed
         } catch { storageError = error.localizedDescription; return }
         let oldClient = client
-        accountGeneration += 1; homeGeneration += 1
+        accountGeneration += 1; resetCatalogOwnership(); homeGeneration += 1
         pendingPlaybackSave = nil; playbackSaving = false; playbackSaveError = nil
         account = nil; rows = []; homeError = nil; loading = false; sessionEnded = false; showSignIn = false
         try? await oldClient.logout(account: oldAccount)
@@ -127,7 +152,7 @@ struct AccountSnapshot: Codable {
         if let server { changed.servers.removeAll { $0.url == server.url } }
         if forgotten.contains(where: { $0.localKey == changed.selected }) { changed.selected = nil }
         try AccountVault.saveSnapshot(changed); snapshot = changed
-        if forgotten.contains(where: { $0.localKey == account?.localKey }) { accountGeneration += 1; account = nil; rows = [] }
+        if forgotten.contains(where: { $0.localKey == account?.localKey }) { accountGeneration += 1; resetCatalogOwnership(); account = nil; rows = [] }
         for old in forgotten {
             SearchHistory.remove(account: old)
             Task { try? await makeClient(old.deviceID).logout(account: old) }
@@ -141,7 +166,7 @@ struct AccountSnapshot: Codable {
         changed.selected = failed.localKey
         do { try AccountVault.saveSnapshot(changed); snapshot = changed }
         catch { storageError = error.localizedDescription; return }
-        accountGeneration += 1; homeGeneration += 1; account = nil; rows = []
+        accountGeneration += 1; resetCatalogOwnership(); homeGeneration += 1; account = nil; rows = []
         beginSignIn(server: failed.server, username: failed.username); sessionEnded = true
     }
     /// Older builds used an installation-wide identity. Move only that viewer to a new
@@ -182,17 +207,35 @@ struct AccountSnapshot: Codable {
             } catch { /* Keep the accepted credential; the persisted deadline permits a later retry. */ }
         }
     }
+    private func resetCatalogOwnership() {
+        cancelCompletionRead(); detailReadOwners = [:]
+        loadedHomeRevision = nil; loadedHomeAccount = nil
+        loadingHomeRevision = nil; loadingHomeAccount = nil
+    }
+    func catalogChanged() { catalogRevision += 1 }
+    func loadHomeIfNeeded() async {
+        guard let account, loadedHomeAccount != account.localKey || DetailFeedback.catalogRevisionNeedsRefresh(previous: loadedHomeRevision, current: catalogRevision) else { return }
+        await loadHome()
+    }
     func loadHome() async {
         guard let account else { return }
+        let revision = catalogRevision
+        if loadingHomeAccount == account.localKey && loadingHomeRevision == revision { return }
+        loadingHomeAccount = account.localKey; loadingHomeRevision = revision
         migrateLegacyIdentityIfNeeded(account)
         let accountVersion = accountGeneration; homeGeneration += 1; let requestVersion = homeGeneration
         loading = rows.isEmpty; homeError = nil
-        defer { if accountGeneration == accountVersion && homeGeneration == requestVersion { loading = false } }
+        defer {
+            if accountGeneration == accountVersion && homeGeneration == requestVersion {
+                loading = false; loadingHomeAccount = nil; loadingHomeRevision = nil
+            }
+        }
         do {
             try await client.validate(account: account)
             let content = try await client.homeContent(account: account)
             guard accountGeneration == accountVersion, homeGeneration == requestVersion else { return }
-            rows = content.rows; homeError = content.warnings.isEmpty ? nil : content.warnings.joined(separator: "\n")
+            rows = content.rows; loadedHomeAccount = account.localKey; loadedHomeRevision = revision
+            homeError = content.warnings.isEmpty ? nil : content.warnings.joined(separator: "\n")
         } catch {
             guard accountGeneration == accountVersion, homeGeneration == requestVersion else { return }
             handle(error, account: account); homeError = error.localizedDescription
@@ -209,6 +252,77 @@ struct AccountSnapshot: Codable {
             activePlayback = session; player = session
         } catch is CancellationError { } catch { if accountGeneration == accountVersion { handle(error, account: account); playbackError = error.localizedDescription } }
     }
+    func detailReadStarted(itemID: String) -> Int64 {
+        detailReadRevision += 1
+        // Canceled destinations need no observer forever; active reads are bounded.
+        detailReadOwners = detailReadOwners.filter { $0.key > detailReadRevision - 128 }
+        if let account { detailReadOwners[detailReadRevision] = ReadOwner(account: account.localKey, generation: accountGeneration, item: itemID) }
+        return detailReadRevision
+    }
+    func detailReadIsCurrent(_ read: Int64) -> Bool {
+        guard let owner = detailReadOwners[read] else { return false }
+        return owner.generation == accountGeneration && owner.account == account?.localKey
+    }
+    func detailReadApplied(_ item: MediaItem, read: Int64) {
+        guard let owner = detailReadOwners.removeValue(forKey: read), owner.generation == accountGeneration,
+              owner.account == account?.localKey, owner.item == item.id, let waiting = completionRead,
+              waiting.generation == owner.generation, waiting.account == owner.account,
+              DetailFeedback.readCanReplaceCompletion(completionItem: waiting.item, completionRead: waiting.read, item: item.id, read: read, succeeded: true) else { return }
+        finishCompletionRead(id: waiting.id, item: item)
+    }
+    private func cancelCompletionRead() {
+        guard let waiting = completionRead else { return }
+        completionRead = nil; waiting.transport?.cancel(); waiting.continuation.resume()
+    }
+    private func finishCompletionRead(id: UUID, item: MediaItem?, error: Error? = nil) {
+        guard let waiting = completionRead, waiting.id == id else { return }
+        completionRead = nil
+        // Do not join canceled transport cleanup: it is obsolete, finite work.
+        waiting.transport?.cancel()
+        defer { waiting.continuation.resume() }
+        guard waiting.generation == accountGeneration, waiting.account == account?.localKey else { return }
+        if let item {
+            rows = rows.map { row in
+                let items = row.items.map { value in
+                    var updated = value
+                    if updated.id == item.id { updated.userData = item.userData }
+                    return updated
+                }
+                return HomeRow(id: row.id, title: row.title, items: items, library: row.library, wide: row.wide)
+            }
+            pendingPlaybackSave = nil; playbackSaveError = nil
+            catalogChanged()
+        } else {
+            playbackSaveError = "Progress was saved, but the current item could not be loaded. Retry saving progress to refresh it."
+            if let error, let account { handle(error, account: account) }
+        }
+        playbackSaving = false; refreshID = UUID()
+    }
+    /// Only reads begun after the acknowledged Stop can replace this check.
+    /// The continuation belongs to the account and item, not to its old transport.
+    func refreshAfterPlayback(account: Account, itemID: String) async {
+        guard self.account?.localKey == account.localKey else { return }
+        cancelCompletionRead()
+        playbackSaving = true
+        let version = accountGeneration, id = UUID()
+        detailReadRevision += 1; let revision = detailReadRevision
+        await withCheckedContinuation { continuation in
+            completionRead = CompletionRead(id: id, account: account.localKey, generation: version, item: itemID, read: revision, continuation: continuation)
+            let client = client
+            let transport = Task { [weak self] in
+                do {
+                    let item = try await client.item(account: account, id: itemID)
+                    try Task.checkCancellation()
+                    self?.finishCompletionRead(id: id, item: item)
+                } catch is CancellationError { }
+                catch {
+                    guard !Task.isCancelled else { return }
+                    self?.finishCompletionRead(id: id, item: nil, error: error)
+                }
+            }
+            completionRead?.transport = transport
+        }
+    }
     func playerClosed(_ session: PlaybackSession) async {
         guard activePlayback?.id == session.id else { return }
         session.beginClosing(); activePlayback = nil; playbackSaving = true; playbackSaveError = nil
@@ -216,19 +330,22 @@ struct AccountSnapshot: Codable {
         refreshID = UUID(); let accountVersion = accountGeneration
         Task {
             await session.stop()
-            guard accountGeneration == accountVersion else { return }
-            playbackSaveError = session.reportError; pendingPlaybackSave = session.reportError == nil ? nil : session; playbackSaving = false; refreshID = UUID()
-            await loadHome()
+            guard accountGeneration == accountVersion, let account else { return }
+            playbackSaveError = session.reportError
+            pendingPlaybackSave = session
+            if session.reportError == nil {
+                await refreshAfterPlayback(account: account, itemID: session.item.id)
+            } else { playbackSaving = false; refreshID = UUID() }
         }
     }
     func retryPlaybackSave() async {
-        guard let session = pendingPlaybackSave, !playbackSaving else { return }
+        guard let session = pendingPlaybackSave, !playbackSaving, let account else { return }
         let version = accountGeneration; playbackSaving = true
         await session.retrySaving()
         guard version == accountGeneration else { return }
         playbackSaveError = session.reportError
-        if session.reportError == nil { pendingPlaybackSave = nil }
-        playbackSaving = false; refreshID = UUID(); await loadHome()
+        if session.reportError == nil { await refreshAfterPlayback(account: account, itemID: session.item.id) }
+        else { playbackSaving = false; refreshID = UUID() }
     }
     func openPlaybackURL(_ url: URL) async {
         guard url.scheme == "pictureshow" else { return }
@@ -385,9 +502,9 @@ struct RootView: View {
                         .navigationDestination(for: AppRoute.self) { route in destination(route, open: open) }
                 }
                 .id(model.account?.localKey)
-                .task { if path.isEmpty, let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer) { path = saved.paths.first ?? [] }; await model.loadHome() }
+                .task { if path.isEmpty, let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer) { path = saved.paths.first ?? [] }; await model.loadHomeIfNeeded() }
                 .onChange(of: path) { _, value in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: 0, paths: [value]) } }
-                .onChange(of: path) { _, value in if value.isEmpty { Task { await model.loadHome() } } }
+                .onChange(of: path) { _, value in if value.isEmpty { Task { await model.loadHomeIfNeeded() } } }
                 #endif
             } else if model.showSignIn || model.snapshot.accounts.isEmpty { SignInView() }
             else { NavigationStack { AccountsView() } }
@@ -451,7 +568,7 @@ struct TouchShell: View {
         }
         .task {
             if let viewer = model.account?.localKey, let saved = NavigationMemory.read(viewer: viewer), saved.paths.count == 4 { paths = saved.paths; tab = min(3,max(0,saved.tab)) }
-            await model.loadHome()
+            await model.loadHomeIfNeeded()
         }
         .onChange(of: model.externalDetailID) { _, id in if let id { tab = 0; paths[0] = [.detail(id)] } }
         .onChange(of: paths) { _, paths in if let viewer = model.account?.localKey { NavigationMemory.save(viewer: viewer, tab: tab, paths: paths) } }

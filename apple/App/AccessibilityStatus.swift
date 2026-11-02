@@ -60,6 +60,7 @@ private struct DetailActionState: ViewModifier {
     let unavailable: Bool
     let held: Bool
     let label: String
+    let requestStatus: String?
     func body(content: Content) -> some View {
         // Disable only the hidden accessibility representation. The visible native
         // Button retains input focus and its existing deferred-command guards.
@@ -67,7 +68,7 @@ private struct DetailActionState: ViewModifier {
         // controls publish the platform's native disabled accessibility property.
         let disabled = held || unavailable
         content.opacity(disabled ? 0.55 : 1).accessibilityRepresentation {
-            content.accessibilityLabel(label).accessibilityValue(disabled ? "" : value).disabled(disabled)
+            content.accessibilityLabel(label).accessibilityValue(requestStatus ?? (disabled ? "" : value)).disabled(disabled)
         }
     }
 }
@@ -75,7 +76,7 @@ private struct DetailActionState: ViewModifier {
 extension View {
     func announceStatus(_ value: String?) -> some View { modifier(StatusAnnouncement(value: value)) }
     func announceCue(_ cue: AccessibilityCue?) -> some View { modifier(CueAnnouncement(cue: cue)) }
-    func detailActionState(value: String, unavailable: Bool, held: Bool, label: String) -> some View { modifier(DetailActionState(value: value, unavailable: unavailable, held: held, label: label)) }
+    func detailActionState(value: String, unavailable: Bool, held: Bool, label: String, requestStatus: String? = nil) -> some View { modifier(DetailActionState(value: value, unavailable: unavailable, held: held, label: label, requestStatus: requestStatus)) }
 }
 
 /// Apply only to catalog path mutations. Playback dismissal keeps its existing

@@ -10,7 +10,8 @@ final class AppleSliceUITests: XCTestCase {
     var sampleFolderOpen = false
     override func setUpWithError() throws {
         continueAfterFailure = false
-        if name.contains("testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback") {
+        if name.contains("testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback") || name.contains("testF4PhonePreparedMenuInitialSourceBackBackgroundAndReplacement")
+            || name.contains("testF4TVNativeEarlyMenuBackDoesNotReopenAfterWorkerCompletion") {
             app = XCUIApplication()
             return // This named case owns a finite local HTTP fixture, with no live account.
         }
@@ -1066,6 +1067,167 @@ final class AppleSliceUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["quickCode"].waitForNonExistence(timeout: 10), "Cancellation should remove the one-time code")
         }
     }
+    /// Real UI/lifecycle input around an explicitly held production metadata worker.
+    /// The fixture controls only HTTP metadata/worker release, never focus or outcomes.
+    @MainActor func testF4PhonePreparedMenuInitialSourceBackBackgroundAndReplacement() throws {
+        #if os(iOS)
+        let fixture = try NativeTrackHTTPFixture(durationSeconds: 120)
+        let address = try fixture.start()
+        defer { fixture.releaseAllMenuWorkers(); fixture.releasePlaybackInfo(); fixture.stop(); app.terminate() }
+        app.launchEnvironment["PICTURESHOW_TEST_TRACK_MENU_GATE"] = address
+        fixture.holdInitialPlaybackInfo()
+        try fixture.launchSignedInDetail(app, activate: { self.activate($0) })
+        let play = app.buttons["play"], tracks = app.buttons["playerTracks"]
+        let done = app.buttons["playerOptionsDone"]
+        func wait(_ message: String, _ condition: () -> Bool) {
+            let deadline = ProcessInfo.processInfo.systemUptime + 15
+            while !condition() && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.05) }
+            XCTAssertTrue(condition(), message)
+        }
+        func workerCount(_ revision: Int) -> Int {
+            fixture.snapshot.menuWorkerRequests.filter { $0.path == "/fixture-menu-worker/\(revision)/background" }.count
+        }
+        func assertNoPanel(_ message: String) {
+            XCTAssertFalse(done.exists, message)
+            XCTAssertFalse(app.buttons["audio-1"].exists, message)
+        }
+        activate(play)
+        wait("The initial PlaybackInfo must be held before opening", { fixture.snapshot.playbackInfoCount > 0 })
+        XCTAssertTrue(tracks.waitForExistence(timeout: 10))
+        activate(tracks)
+        XCTAssertEqual(tracks.value as? String, "Preparing audio and subtitles")
+        assertNoPanel("Before the initial source, no partial track sheet may mount")
+        fixture.releasePlaybackInfo()
+        wait("Source arrival must start background preparation without another open", { workerCount(1) == 1 })
+        assertNoPanel("The early request remains pending while real label work is blocked")
+        fixture.releaseMenuWorker(1)
+        XCTAssertTrue(done.waitForExistence(timeout: 10), "The initial request follows the first negotiated source and mounts on worker completion")
+        XCTAssertTrue(app.buttons["audio-1"].waitForExistence(timeout: 5))
+        activate(done)
+        activate(app.buttons["closePlayer"])
+        XCTAssertTrue(play.waitForExistence(timeout: 10))
+        print("F4_NATIVE_PHONE initialSourceFollow=true completeMenu=true workerThread=background")
+
+        // A second viewing holds a new worker. Back to details is usable while
+        // it is blocked; completion cannot mount a sheet after the viewing exits.
+        fixture.holdMenuWorker(1)
+        let secondBefore = workerCount(1)
+        activate(play)
+        wait("The second viewing must independently start its worker", { workerCount(1) > secondBefore })
+        activate(tracks)
+        XCTAssertEqual(tracks.value as? String, "Preparing audio and subtitles")
+        assertNoPanel("Early open cannot publish Off-only rows")
+        activate(app.buttons["closePlayer"])
+        XCTAssertTrue(play.waitForExistence(timeout: 10), "Back must remain responsive with the worker held")
+        fixture.releaseMenuWorker(1)
+        Thread.sleep(forTimeInterval: 0.3)
+        assertNoPanel("A stopped viewing's worker must not reopen a panel")
+        print("F4_NATIVE_PHONE pendingBack=true uiResponsiveWhileWorkerHeld=true unsolicitedOpen=false")
+
+        // Deliver actual app background/foreground, rather than directly calling
+        // the cache cancellation method used by the hosted state-machine tests.
+        fixture.holdMenuWorker(1)
+        let thirdBefore = workerCount(1)
+        activate(play)
+        wait("The third viewing must reach its held background worker", { workerCount(1) > thirdBefore })
+        activate(tracks)
+        XCTAssertEqual(tracks.value as? String, "Preparing audio and subtitles")
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10) || app.state == .runningBackgroundSuspended)
+        fixture.releaseMenuWorker(1)
+        app.activate()
+        XCTAssertTrue(tracks.waitForExistence(timeout: 10))
+        assertNoPanel("Foregrounding cannot revive the background-cancelled pending open")
+        XCTAssertNotEqual(tracks.value as? String, "Preparing audio and subtitles")
+        print("F4_NATIVE_PHONE backgroundCancellation=true unsolicitedOpen=false")
+
+        // Replace metadata through the real serialized selectTrack/reopen path.
+        // The existing sheet must close and retain no right to select the source
+        // that replaced it. New preparation is held to expose the handoff.
+        activate(tracks)
+        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        let retiredRow = app.buttons["audio-1"]
+        XCTAssertTrue(retiredRow.exists)
+        fixture.useReplacementSource()
+        activate(app.buttons["fixtureReplaceTrackSourceInPanel"])
+        wait("A replacement stream list must start generation 2", { workerCount(2) == 1 })
+        XCTAssertTrue(done.waitForNonExistence(timeout: 10), "Source replacement closes through the native sheet scope")
+        XCTAssertFalse(retiredRow.exists, "Captured old rows leave the active accessibility tree after handoff")
+        XCTAssertTrue(tracks.isHittable, "The exact Audio and subtitles opener must be usable after handoff")
+        let afterReplacement = fixture.snapshot.playbackInfoCount
+        activate(tracks)
+        XCTAssertEqual(tracks.value as? String, "Preparing audio and subtitles")
+        // A second replacement cancels this pending open. Release the newest
+        // worker first, then the obsolete one to expose stale publication bugs.
+        fixture.useReplacementSource()
+        activate(app.buttons["fixtureReplaceTrackSource"])
+        wait("A newer replacement must independently prepare generation 3", { workerCount(3) == 1 })
+        XCTAssertNotEqual(tracks.value as? String, "Preparing audio and subtitles")
+        fixture.releaseMenuWorker(3)
+        Thread.sleep(forTimeInterval: 0.3)
+        fixture.releaseMenuWorker(2)
+        Thread.sleep(forTimeInterval: 0.3)
+        assertNoPanel("Neither current nor obsolete completion may revive the cancelled open")
+        XCTAssertEqual(fixture.snapshot.playbackInfoCount, afterReplacement + 1,
+                       "Stale menu work/picks may not issue an extra source negotiation")
+        activate(tracks)
+        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["audio-1"].label.contains("replacement 2"), "The mounted rows must belong to the newest stream list")
+        activate(done)
+        XCTAssertFalse(fixture.snapshot.menuWorkerRequests.contains { $0.path.hasSuffix("/main") })
+        print("F4_NATIVE_PHONE replacementHandoff=true pendingReplacementCancel=true newestRows=true staleCompletionRefused=true")
+        fixture.useReplacementSource()
+        activate(app.buttons["fixtureReplaceTrackSource"])
+        wait("The next replacement starts a held generation before an error", { workerCount(4) == 1 })
+        activate(tracks)
+        XCTAssertEqual(tracks.value as? String, "Preparing audio and subtitles")
+        fixture.failNextPlaybackInfo()
+        activate(app.buttons["fixtureReplaceTrackSource"])
+        XCTAssertTrue(app.staticTexts["Could not apply the selected tracks. Go back and try again."].waitForExistence(timeout: 15))
+        fixture.releaseMenuWorker(4)
+        Thread.sleep(forTimeInterval: 0.3)
+        assertNoPanel("A real playback error cancels the pending request before worker completion")
+        print("F4_NATIVE_PHONE playbackErrorCancellation=true unsolicitedOpen=false")
+        #endif
+    }
+
+    @MainActor func testF4TVNativeEarlyMenuBackDoesNotReopenAfterWorkerCompletion() throws {
+        #if os(tvOS)
+        let fixture = try NativeTrackHTTPFixture(durationSeconds: 120)
+        app.launchEnvironment["PICTURESHOW_TEST_TRACK_MENU_GATE"] = try fixture.start()
+        defer { fixture.releaseAllMenuWorkers(); fixture.stop(); app.terminate() }
+        try fixture.launchSignedInDetail(app, activate: { self.activate($0) })
+        activate(app.buttons["play"])
+        let deadline = ProcessInfo.processInfo.systemUptime + 15
+        while fixture.snapshot.menuWorkerRequests.isEmpty && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.05) }
+        XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1, "Metadata arrival starts the worker before a menu opens")
+        XCTAssertTrue(fixture.snapshot.menuWorkerRequests[0].path.hasSuffix("/background"))
+        // Decoder readiness is independent of menu work. Pause actual playback so
+        // the finite media cannot end while the native chooser is exercised.
+        while fixture.snapshot.startCount == 0 && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.05) }
+        XCTAssertEqual(fixture.snapshot.startCount, 1)
+        XCUIRemote.shared.press(.playPause)
+        let trigger = nativeTVTransportMenu("Audio")
+        activateNativeTVMenuChoice(trigger)
+        let rowsBefore = try app.snapshot()
+        XCTAssertFalse(tvSnapshotNodes(rowsBefore).contains { $0.elementType == .cell && $0.label.contains("Stream 12 ·") },
+                       "A native early open must not mount partial or stale track rows")
+        XCUIRemote.shared.press(.menu)
+        fixture.releaseMenuWorker(1)
+        Thread.sleep(forTimeInterval: 0.5)
+        let after = try app.snapshot()
+        XCTAssertFalse(tvSnapshotNodes(after).contains { $0.elementType == .cell && $0.hasFocus && $0.label.contains("Stream 12 ·") },
+                       "Back-cancelled completion cannot summon a focused native menu")
+        // A deliberate fresh open succeeds with all current rows. Entry focus
+        // and the first-arrow/no-pullback behavior retain their independent F3 case.
+        let selected = nativeTVTrackChoice(menuTitle: "Audio", index: String(NativeTrackHTTPFixture.selectedAudioIndex))
+        XCTAssertTrue(selected.exists)
+        XCTAssertEqual(fixture.snapshot.menuWorkerRequests.count, 1, "Fresh open reuses the worker's completed menus")
+        XCTAssertEqual(fixture.snapshot.playbackInfoCount, 1)
+        print("F4_NATIVE_TV workerThread=background pendingBack=true unsolicitedOpen=false freshOpenReuses=true")
+        #endif
+    }
+
     @MainActor func testTVNativeSelectedTrackEntryThenArrowHasNoLatePullback() throws {
         #if os(tvOS)
         let fixture = try NativeTrackHTTPFixture(durationSeconds: 60)
@@ -1178,6 +1340,152 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertEqual(after.subtitleRequestCount, before.subtitleRequestCount)
         #endif
     }
+    /// Actual demo HLS, actual native timeline and remote key events. No seek
+    /// helper buttons or pending-intent labels stand in for a committed A/V clock.
+    @MainActor func testF4TVRealDemoRemoteSeekPacingCommitsEveryTenSecondStep() throws {
+        #if os(tvOS)
+        let seekID = try XCTUnwrap(config["seekID"], "Supply the own-pilot FPS Seek Clock 1440 demo item as private seekID")
+        app.launchEnvironment["PICTURESHOW_SEEK_DIAGNOSTICS"] = "1"
+        ensureSignedIn()
+        app.terminate()
+        app.launchEnvironment["PICTURESHOW_TEST_DETAIL_ID"] = seekID
+        app.launch()
+        let play = app.buttons["play"]
+        XCTAssertTrue(play.waitForExistence(timeout: 20))
+        let detailTitle = app.staticTexts["detailTitle"].label
+        XCTAssertTrue(play.label.hasPrefix("Resume from "), "Root must seed this own-pilot item's 30-second resume before the case")
+        XCTAssertEqual(parsedClockSeconds(play.label.replacingOccurrences(of: "Resume from ", with: "")), 30)
+        activate(play)
+        let first = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: 30, maximum: 75,
+                                                      timeout: 45, metric: "f4_seek_seeded_resume"))
+        _ = try XCTUnwrap(waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: first.seconds + 2,
+                                              maximum: first.seconds + 12, timeout: 30, metric: "f4_seek_initial_decoder_advance"),
+                          "The real demo must decode and advance before testing remote seeks")
+        let information = try XCTUnwrap(openNativeTVInfoTab())
+        XCTAssertEqual(information.method, "Server HLS", "The real high-frame-rate MKV demo should negotiate the server path")
+        XCUIRemote.shared.press(.menu)
+        XCUIRemote.shared.press(.playPause)
+
+        func clock(_ metric: String) throws -> Int {
+            XCUIRemote.shared.press(.up)
+            let deadline = ProcessInfo.processInfo.systemUptime + 10
+            while ProcessInfo.processInfo.systemUptime < deadline {
+                if let snapshot = tvPlayerSnapshot(), let elapsed = snapshot.first(identifier: "AXElapsedTime"),
+                   let value = parsedClockSeconds(elapsed.label), snapshot.first(identifier: "playbackWaiting") == nil { return value }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            XCTFail("The actual native A/V elapsed clock must be exposed for \(metric)")
+            throw NSError(domain: "NativeSeekClockMissing", code: 1)
+        }
+        func focusTimeline() throws {
+            XCUIRemote.shared.press(.up)
+            let timeline = app.sliders.firstMatch
+            XCTAssertTrue(timeline.waitForExistence(timeout: 10))
+            for _ in 0..<10 where !timeline.hasFocus { XCUIRemote.shared.press(.down) }
+            XCTAssertTrue(timeline.hasFocus, "Remote directions must enter the actual native AVKit timeline")
+        }
+        struct SeekResult {
+            let name: String
+            let expected: Int
+            let actual: Int
+            let stable: Bool
+            let decoderAdvanced: Bool
+            let onsets: [Double]
+            let dispatchDurations: [Double]
+            let scheduledGap: Double
+        }
+        var results: [SeekResult] = []
+        let initialPaused = try clock("initial pause")
+        Thread.sleep(forTimeInterval: 1.2)
+        XCTAssertLessThanOrEqual(abs(try clock("initial pause stability") - initialPaused), 1,
+                                 "Physical Play/Pause must establish paused playback before pacing")
+        let scenarios: [(String, [XCUIRemote.Button], Double)] = [
+            ("threeRightSpaced", [.right, .right, .right], 0.8),
+            ("threeRightBurst", [.right, .right, .right], 0.1),
+            ("mixedDirections", [.right, .left, .right, .right, .left], 0.1)
+        ]
+        for (name, directions, gap) in scenarios {
+            try focusTimeline()
+            // Read the native elapsed clock after focus, outside the paced input
+            // sequence. No AX query or frame ingestion occurs between directions.
+            let baselineSnapshot = try XCTUnwrap(tvPlayerSnapshot())
+            let baseline = try XCTUnwrap(baselineSnapshot.first(identifier: "AXElapsedTime").flatMap { parsedClockSeconds($0.label) })
+            let delta = directions.reduce(0) { $0 + ($1 == .right ? 10 : -10) }
+            let expected = baseline + delta
+            XCTAssertLessThan(expected, 165, "Every tested target must remain comfortably before the real 180-second end")
+            var onsets: [Double] = [], durations: [Double] = []
+            let scheduledStart = ProcessInfo.processInfo.systemUptime
+            for (index, direction) in directions.enumerated() {
+                let due = scheduledStart + Double(index) * gap
+                let remaining = due - ProcessInfo.processInfo.systemUptime
+                if remaining > 0 { Thread.sleep(forTimeInterval: remaining) }
+                let onset = ProcessInfo.processInfo.systemUptime
+                onsets.append(onset)
+                XCUIRemote.shared.press(direction)
+                durations.append(ProcessInfo.processInfo.systemUptime - onset)
+            }
+            // Native AVKit may keep directions in a preview until Select. Commit
+            // once, then inspect its actual elapsed clock and decoder continuity.
+            let commitAt = ProcessInfo.processInfo.systemUptime
+            XCUIRemote.shared.press(.select)
+            let settled = waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: expected - 1, maximum: expected + 1,
+                                                timeout: 20, metric: "f4_seek_" + name + "_committed")
+            let actual = try settled?.seconds ?? clock(name + " final mismatch")
+            Thread.sleep(forTimeInterval: 1.2)
+            let afterHold = try clock(name + " pause hold")
+            let stable = abs(afterHold - actual) <= 1
+            let decoderAdvanced: Bool
+            if stable {
+                XCUIRemote.shared.press(.playPause)
+                decoderAdvanced = waitForTVPlayerClock(identifier: "AXElapsedTime", minimum: actual + 2,
+                                                       maximum: actual + 10, timeout: 25,
+                                                       metric: "f4_seek_" + name + "_actual_decoder_advance") != nil
+                XCUIRemote.shared.press(.playPause)
+            } else {
+                // Select unexpectedly resumed playback. Preserve that finding,
+                // then establish pause before the next independent pacing case.
+                decoderAdvanced = afterHold >= actual + 2
+                XCUIRemote.shared.press(.playPause)
+            }
+            let receipt: [String: Any] = [
+                "case": name, "baselineSeconds": baseline, "directionCount": directions.count,
+                "directions": directions.map { $0 == .right ? "right" : "left" },
+                "requestedGapMs": Int(gap * 1_000), "expectedSeconds": expected,
+                "actualSeconds": actual, "afterPausedHoldSeconds": afterHold,
+                "pausedIntentPreserved": stable, "actualDecoderAdvanced": decoderAdvanced,
+                "dispatchOnsetUptimeMs": onsets.map { Int64($0 * 1_000) },
+                "dispatchDurationMs": durations.map { Int($0 * 1_000) },
+                "firstToLastDispatchOnsetMs": Int((onsets.last! - onsets.first!) * 1_000),
+                "selectCommitUptimeMs": Int64(commitAt * 1_000),
+                "clockProvider": "nativeAVKitElapsedAfterSelect", "appDeliveryTiming": "passiveNativeRemoteKeyDownLogs"
+            ]
+            let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
+            print("F4_TV_REAL_SEEK " + String(decoding: data, as: UTF8.self))
+            results.append(SeekResult(name: name, expected: expected, actual: actual, stable: stable,
+                                      decoderAdvanced: decoderAdvanced, onsets: onsets, dispatchDurations: durations, scheduledGap: gap))
+        }
+        // Keep the original viewing throughout all three input sequences. Root's
+        // scoped Start/Stop/negotiation receipts independently audit viewing identity.
+        leaveNativeTVPlayer(returningTo: play)
+        XCTAssertEqual(app.staticTexts["detailTitle"].label, detailTitle)
+        XCTAssertTrue(play.hasFocus, "The original detail opener receives native Back focus")
+        for result in results {
+            XCTAssertLessThanOrEqual(abs(result.actual - result.expected), 1,
+                                     "\(result.name): every delivered direction must commit exactly one ten-second step")
+            XCTAssertTrue(result.stable, "\(result.name): a paused viewing must remain paused after native seek commitment")
+            XCTAssertTrue(result.decoderAdvanced, "\(result.name): resumed decoder clock must advance from the committed target")
+            let gaps = zip(result.onsets.dropFirst(), result.onsets).map { $0.0 - $0.1 }
+            if result.name == "threeRightSpaced" {
+                XCTAssertTrue(gaps.allSatisfy { (0.70...0.95).contains($0) },
+                              "The requested 0.8-second spacing must actually be dispatched; measured onset gaps \(gaps)")
+            } else if result.name == "threeRightBurst" {
+                XCTAssertLessThanOrEqual(result.onsets.last! - result.onsets.first!, 0.3,
+                                         "The fast case needs three dispatches within 0.3 seconds; XCTest idle overhead cannot stand in for that delivery")
+            }
+        }
+        #endif
+    }
+
     func testNativeTVDirectPlaybackMenusInfoAndRemoteScrub() throws {
         #if os(tvOS)
         ensureSignedIn()

@@ -536,6 +536,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         defer { loader.release(); clock.finish() }
         let (session, _) = try await readySession(loader: loader, expectedCaptionPath: nil)
         session.backgrounded()
+        try await eventually("Both menus must prepare independently of opening a panel") { session.trackLabels.prepared != nil }
         XCTAssertEqual(session.trackLabels.audio.count + session.trackLabels.subtitles.count, 45)
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
@@ -592,6 +593,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         let index = try XCTUnwrap(streams.firstIndex { $0.type == "Audio" })
         streams[index].title = "Changed relevant track title"
         session.trackLabels.update(streams)
+        try await eventually("Changed metadata must prepare a new complete menu") { session.trackLabels.prepared != nil }
         XCTAssertEqual(session.trackLabels.cacheRevision, revision + 1)
         XCTAssertEqual(session.trackLabels.labelsBuilt - labels, 45)
         await session.stop()

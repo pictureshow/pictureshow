@@ -36,6 +36,31 @@ final class ClientTests: XCTestCase {
         }
         return try JSONSerialization.jsonObject(with: data) as! [String:Any]
     }
+    func testReportAttemptRecordsActualStatusAndFixedFailureCategories() async throws {
+        let body: [String:Any] = ["ItemId":"item", "PositionTicks": 123_450_000]
+        for code in [204, 503, 401] {
+            StubProtocol.handler = { request in
+                XCTAssertEqual(request.url?.path, "/base/Sessions/Playing/Progress")
+                XCTAssertEqual(try self.body(request)["PositionTicks"] as? Int, 123_450_000)
+                return (code, Data())
+            }
+            let result = await client.sendReportAttempt(account: account, kind: "progress", body: body)
+            XCTAssertEqual(result.status, code)
+            XCTAssertEqual(result.failure, code == 204 ? "none" : "http")
+            XCTAssertEqual(result.succeeded, code == 204)
+            XCTAssertGreaterThanOrEqual(result.elapsedMs, 0)
+        }
+        for (code, category) in [(URLError.timedOut,"timeout"), (.cancelled,"cancelled"), (.notConnectedToInternet,"network")] {
+            StubProtocol.handler = { _ in throw URLError(code) }
+            let result = await client.sendReportAttempt(account: account, kind: "stop", body: body)
+            XCTAssertNil(result.status); XCTAssertEqual(result.failure, category)
+        }
+        StubProtocol.responseURL = URL(string: "https://foreign.example.test/response")!
+        StubProtocol.handler = { _ in (204, Data()) }
+        let unsafe = await client.sendReportAttempt(account: account, kind: "start", body: body)
+        XCTAssertEqual(unsafe.status, 204); XCTAssertEqual(unsafe.failure, "invalidresponse")
+    }
+
     func testArtworkAuthenticatesOnlySameOriginAndRejectsForeignResponses() async throws {
         var calls = 0
         let bytes = Data([0xFF, 0xD8, 0xFF, 0xD9])

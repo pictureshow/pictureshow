@@ -113,6 +113,9 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertEqual(retry.label, "Retrying…")
         XCTAssertTrue(retry.isEnabled, "Retain the input-focusable Retry node while its handler rejects repeated activation")
         XCTAssertEqual(retry.value as? String, "Loading item. Please wait.")
+        XCTAssertTrue(app.staticTexts["Loading item. Please wait."].exists, "The selectable band must describe the current attempt")
+        XCTAssertFalse(app.staticTexts["Previous attempt: " + reason].exists)
+        XCTAssertFalse(app.staticTexts[reason].exists, "Retry must synchronously remove the old reason")
         #if os(tvOS)
         XCTAssertTrue(retry.hasFocus)
         XCUIRemote.shared.press(.select)
@@ -123,7 +126,7 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertEqual(fixture.totalDetailReads, priorReads + 1, "Repeated Select during an accepted Retry cannot start another read")
         capture("Detail recovery 04 held deliberate retry retains target", app: app)
         #if os(iOS)
-        assertRecoveryDoesNotCoverTitle(in: app, retry: retry, reason: "Previous attempt: " + reason, requireTitleInViewport: false)
+        assertRecoveryDoesNotCoverTitle(in: app, retry: retry, reason: "Loading item. Please wait.", requireTitleInViewport: false)
         #endif
 
         fixture.releaseDetailReads()
@@ -260,7 +263,47 @@ final class DetailRecoveryUITests: XCTestCase {
         print("F3_DETAIL_SERIES neutralUnknown=true singleIdleReason=true restoredSelection=true")
     }
 
-    private func launchFixtureDetail(_ fixture: DetailRecoveryHTTPFixture) throws -> XCUIApplication {
+    func testColdHeldDetailOffersEarlyPendingControlsAndRequestedRediscovery() throws {
+        continueAfterFailure = false
+        let fixture = try DetailRecoveryHTTPFixture()
+        defer { fixture.stop() }
+        fixture.setPlayed(true)
+        let app = try launchFixtureDetail(fixture, holdOnRelaunch: true)
+        defer { app.terminate() }
+        let watched = app.buttons["watched"], favorite = app.buttons["favorite"]
+        XCTAssertTrue(waitUntil(timeout: 10) { fixture.heldReadCount == 1 })
+        XCTAssertFalse(app.staticTexts["detailTitle"].exists, "The full metadata response is still held")
+        XCTAssertTrue(watched.exists && favorite.exists && app.buttons["startOver"].exists)
+        XCTAssertFalse(watched.isEnabled, "Cold guarded controls keep native disabled semantics")
+        XCTAssertEqual(watched.label, "Watched")
+        #if os(tvOS)
+        focus(watched, in: app)
+        XCUIRemote.shared.press(.select)
+        #else
+        // The AX representation is disabled while the visible destination button
+        // retains its guarded physical-input handler.
+        watched.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        #endif
+        XCTAssertTrue(waitUntil(timeout: 5) { watched.value as? String == "Watched change requested" })
+        #if os(tvOS)
+        focus(favorite, in: app)
+        focus(watched, in: app)
+        XCTAssertEqual(watched.value as? String, "Watched already requested")
+        XCUIRemote.shared.press(.select)
+        #else
+        watched.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        #endif
+        XCTAssertTrue(fixture.playedWriteMethods.isEmpty, "No cold key can write before authoritative UserData arrives")
+        capture("F4 cold pending request before metadata", app: app)
+        fixture.releaseDetailReads()
+        XCTAssertTrue(waitUntil(timeout: 15) { watched.exists && watched.isEnabled && watched.value as? String == "Unwatched" })
+        XCTAssertEqual(fixture.playedWriteMethods, ["DELETE"], "Resolve the unknown toggle against Played=true once, including duplicate Select")
+        XCTAssertFalse((watched.value as? String ?? "").contains("Ready"))
+        capture("F4 cold request resolved against authoritative state", app: app)
+        print("F4_DETAIL_COLD pendingBeforeMetadata=true duplicateSelectGuarded=true resolvedPlayedTrueToFalse=true")
+    }
+
+    private func launchFixtureDetail(_ fixture: DetailRecoveryHTTPFixture, holdOnRelaunch: Bool = false) throws -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["PICTURESHOW_TEST_SERVER"] = fixture.address
         app.launchEnvironment["PICTURESHOW_TEST_USERNAME"] = "Fixture viewer"
@@ -287,7 +330,9 @@ final class DetailRecoveryUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 15), "Synthetic sign-in must reach the authenticated adaptive shell")
         #endif
         // The persisted-account launch consumes the detail hook consistently on both platforms.
-        app.terminate(); app.launch()
+        app.terminate()
+        if holdOnRelaunch { fixture.holdDetailReads() }
+        app.launch()
         XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 20))
         return app
     }
@@ -337,7 +382,7 @@ final class DetailRecoveryUITests: XCTestCase {
     private func assertRecoveryDoesNotCoverTitle(in app: XCUIApplication, retry: XCUIElement, reason: String, requireTitleInViewport: Bool = true) {
         let titleFrame = app.staticTexts["detailTitle"].frame
         let reasonText = app.staticTexts[reason]
-        XCTAssertTrue(reasonText.exists, "A held Retry must label the retained failure as the previous attempt")
+        XCTAssertTrue(reasonText.exists, "A held Retry must describe current loading work")
         let surface = app.descendants(matching: .any).matching(identifier: "detailRecoverySurface").firstMatch
         XCTAssertTrue(surface.exists)
         let recoveryFrame = surface.frame
@@ -413,7 +458,10 @@ private final class DetailRecoveryHTTPFixture {
     private var connections: [NWConnection] = []
     private var reads = 0
     private var played = false
+    private var playedMethods: [String] = []
     var address: String { "http://127.0.0.1:\(listener.port!.rawValue)" }
+    var playedWriteMethods: [String] { lock.lock(); defer { lock.unlock() }; return playedMethods }
+    func setPlayed(_ value: Bool) { lock.lock(); played = value; lock.unlock() }
     var totalDetailReads: Int { lock.lock(); defer { lock.unlock() }; return reads }
     var heldReadCount: Int { lock.lock(); defer { lock.unlock() }; return held.count }
     init(kind: Kind = .movie) throws {
@@ -460,7 +508,7 @@ private final class DetailRecoveryHTTPFixture {
             else if path.hasSuffix("/QuickConnect/Enabled") { body = false }
             else if path.hasSuffix("/Users/Public") { body = [] as [String] }
             else if path.hasSuffix("/UserPlayedItems/fixture-title") {
-                self.lock.lock(); self.played = line[0] == "POST"; self.lock.unlock(); body = self.userData()
+                self.lock.lock(); self.played = line[0] == "POST"; self.playedMethods.append(String(line[0])); self.lock.unlock(); body = self.userData()
             } else if self.kind == .series && path.hasSuffix("/Shows/fixture-title/Seasons") {
                 body = ["Items": [["Id": "fixture-season", "Name": "Season 1", "Type": "Season", "SeriesId": "fixture-title", "IndexNumber": 1]]]
             } else if self.kind == .series && (path.hasSuffix("/Shows/fixture-title/Episodes") || path.hasSuffix("/Shows/NextUp")) {

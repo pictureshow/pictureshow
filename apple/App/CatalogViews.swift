@@ -5,6 +5,9 @@ import PictureshowCore
 
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var readLifecycle = DetailReadLifecycle()
+    @State private var visible = false
     var open: (MediaItem) -> Void
     var showSearch: (() -> Void)?
     var showSettings: (() -> Void)?
@@ -44,6 +47,18 @@ struct HomeView: View {
             }
         }
         .refreshable { await model.loadHome() }
+        .onAppear {
+            visible = true
+            let refresh = readLifecycle.resumed()
+            Task { if refresh { await model.loadHome() } else { await model.loadHomeIfNeeded() } }
+        }
+        .onDisappear { visible = false }
+        .onChange(of: scenePhase) { _, phase in
+            if visible && phase == .active { Task { await model.loadHome() } }
+        }
+        .onChange(of: model.catalogRevision) { _, _ in
+            if visible { Task { await model.loadHomeIfNeeded() } }
+        }
     }
 }
 

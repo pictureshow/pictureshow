@@ -25,6 +25,37 @@ final class DetailPolicyTests: XCTestCase {
         XCTAssertEqual(DetailFeedback.presentFailure(previous:initial,key:"write:2",message:"Try again.")?.message,"Try again.")
     }
 
+    func testNewerCompletionReadMustMatchAndSucceed() {
+        XCTAssertTrue(DetailFeedback.readCanReplaceCompletion(completionItem: "film", completionRead: 10, item: "film", read: 11, succeeded: true))
+        XCTAssertFalse(DetailFeedback.readCanReplaceCompletion(completionItem: "film", completionRead: 10, item: "film", read: 10, succeeded: true))
+        XCTAssertFalse(DetailFeedback.readCanReplaceCompletion(completionItem: "film", completionRead: 10, item: "episode", read: 11, succeeded: true))
+        XCTAssertFalse(DetailFeedback.readCanReplaceCompletion(completionItem: "film", completionRead: 10, item: "film", read: 11, succeeded: false))
+    }
+    func testColdPendingAndCurrentRetryReasonAreIndependentOfPlaybackReturn() {
+        XCTAssertTrue(DetailFeedback.needsPendingControls(loading: true, firstArrival: true, canQueue: true))
+        XCTAssertFalse(DetailFeedback.needsPendingControls(loading: true, firstArrival: true, canQueue: true, returningFromPlayback: true))
+        XCTAssertEqual(DetailFeedback.readBandText(retrying: true, reason: "Old timeout"), "Loading item. Please wait.")
+        XCTAssertFalse(DetailFeedback.readHasFailure(readFailed: true, reason: nil, mutationReady: false))
+        XCTAssertTrue(DetailFeedback.readHasFailure(readFailed: false, reason: "503", mutationReady: false))
+    }
+    func testRequestRediscoveryNeverRearmsAcceptance() {
+        XCTAssertEqual(DetailFeedback.requestedActionLabel(target: "primary", newlyAccepted: false), "Play already requested")
+        XCTAssertFalse(DetailFeedback.requestCueRemainsActive(active: true, readerLeftAction: true))
+        XCTAssertFalse(DetailFeedback.requestCueRemainsActive(active: false, readerLeftAction: false))
+        XCTAssertFalse(DetailFeedback.requestCueRemainsActive(active: true, readerLeftAction: false, requested: false))
+    }
+    func testOnlyConfirmedLeafSkipsARealDataRevision() {
+        XCTAssertFalse(DetailFeedback.catalogRevisionNeedsRefresh(previous: 4, current: 4))
+        XCTAssertTrue(DetailFeedback.catalogRevisionNeedsRefresh(previous: nil, current: 4))
+        XCTAssertFalse(DetailFeedback.sessionNeedsRead(newRevision: false, refreshed: false, container: true, alreadyConfirmed: false))
+        XCTAssertFalse(DetailFeedback.sessionNeedsRead(newRevision: true, refreshed: true, container: false, alreadyConfirmed: true))
+        XCTAssertTrue(DetailFeedback.sessionNeedsRead(newRevision: true, refreshed: true, container: true, alreadyConfirmed: false))
+        XCTAssertTrue(DetailFeedback.hasConfirmedLeafRead(readSucceeded: true, sameUserData: true, container: false))
+        XCTAssertFalse(DetailFeedback.hasConfirmedLeafRead(readSucceeded: true, sameUserData: true, container: true))
+        XCTAssertTrue(DetailFeedback.readRequiresDependents(type: "Season"))
+        XCTAssertFalse(DetailFeedback.readRequiresDependents(type: "BoxSet"))
+    }
+
     func testSharedRunnerRejectsUnknownOperationAndMissingRequiredInputs() async {
         let runner=SpecVectorTests()
         do { _ = try await runner.execute("future-operation",input:[:],context:[:]);XCTFail("Unknown operation was accepted") } catch {}

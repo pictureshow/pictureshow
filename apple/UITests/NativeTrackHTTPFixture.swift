@@ -32,6 +32,7 @@ final class NativeTrackHTTPFixture {
         var startCount: Int { requests.filter { $0.path == "/Sessions/Playing" }.count }
         var progressCount: Int { requests.filter { $0.path == "/Sessions/Playing/Progress" }.count }
         var stoppedCount: Int { requests.filter { $0.path == "/Sessions/Playing/Stopped" }.count }
+        var menuWorkerRequests: [RequestRecord] { requests.filter { $0.path.hasPrefix("/fixture-menu-worker/") } }
         var encodingStopCount: Int { requests.filter { $0.method == "DELETE" && $0.path == "/Videos/ActiveEncodings" }.count }
     }
     private let media: Data
@@ -43,6 +44,35 @@ final class NativeTrackHTTPFixture {
     private var records: [RequestRecord] = []
     private var started = false
     private var port: UInt16?
+    private var menuWorkers: [Int: [NWConnection]] = [:]
+    private var releasedMenuWorkers = Set<Int>()
+    private var allMenuWorkersReleased = false
+    private var playbackInfoHeld = false
+    private var heldPlaybackInfo: [(NWConnection, Data)] = []
+    private var sourceVersion = 0
+    private var nextPlaybackFails = false
+    func holdInitialPlaybackInfo() { lock.lock(); playbackInfoHeld = true; lock.unlock() }
+    func useReplacementSource() { lock.lock(); sourceVersion += 1; lock.unlock() }
+    func failNextPlaybackInfo() { lock.lock(); nextPlaybackFails = true; lock.unlock() }
+    private func consumePlaybackFailure() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let value = nextPlaybackFails; nextPlaybackFails = false; return value
+    }
+    func releasePlaybackInfo() {
+        lock.lock(); playbackInfoHeld = false; let held = heldPlaybackInfo; heldPlaybackInfo = []; lock.unlock()
+        for (connection, data) in held { respond(connection, contentType: "application/json", data: data) }
+    }
+    func holdMenuWorker(_ generation: Int) {
+        lock.lock(); releasedMenuWorkers.remove(generation); lock.unlock()
+    }
+    func releaseMenuWorker(_ generation: Int) {
+        lock.lock(); releasedMenuWorkers.insert(generation); let held = menuWorkers.removeValue(forKey: generation) ?? []; lock.unlock()
+        for connection in held { respond(connection, data: Data()) }
+    }
+    func releaseAllMenuWorkers() {
+        lock.lock(); allMenuWorkersReleased = true; let held = menuWorkers.values.flatMap { $0 }; menuWorkers = [:]; lock.unlock()
+        for connection in held { respond(connection, data: Data()) }
+    }
     var address: String? {
         lock.lock(); defer { lock.unlock() }
         return port.map { "http://127.0.0.1:\($0)" }
@@ -166,6 +196,15 @@ final class NativeTrackHTTPFixture {
                                    positionTicks: (body["PositionTicks"] as? NSNumber)?.int64Value,
                                    paused: body["IsPaused"] as? Bool)
         lock.lock(); records.append(record); lock.unlock()
+        if path.hasPrefix("/fixture-menu-worker/") {
+            let generation = path.split(separator: "/").dropFirst().first.flatMap { Int($0) } ?? -1
+            lock.lock()
+            let released = allMenuWorkersReleased || releasedMenuWorkers.contains(generation)
+            if !released { menuWorkers[generation, default: []].append(connection) }
+            lock.unlock()
+            if released { respond(connection, data: Data()) }
+            return
+        }
         if path == "/Videos/" + Self.itemID + "/stream" {
             serveMedia(connection, method: method, range: headers["range"]); return
         }
@@ -183,7 +222,9 @@ final class NativeTrackHTTPFixture {
         case "/Users/Public": response = [] as [String]
         case "/Users/Me", "/Users/native-fixture-viewer": response = ["Id": "native-fixture-viewer", "Name": "Native fixture viewer", "Configuration": ["SubtitleMode": "Default", "SubtitleLanguagePreference": "eng"]]
         case "/Items/" + Self.itemID: response = movie()
-        case "/Items/" + Self.itemID + "/PlaybackInfo": response = ["MediaSources": [source()], "PlaySessionId": "native-fixture-play-session"]
+        case "/Items/" + Self.itemID + "/PlaybackInfo":
+            response = consumePlaybackFailure() ? ["ErrorCode": "NoCompatibleStream"] as [String: Any]
+                : ["MediaSources": [source()], "PlaySessionId": "native-fixture-play-session"]
         case "/Items": response = ["Items": [movie()], "TotalRecordCount": 1]
         case "/Items/Latest": response = [movie()]
         case "/Sessions/Playing", "/Sessions/Playing/Progress", "/Sessions/Playing/Stopped", "/Sessions/Logout", "/Videos/ActiveEncodings", "/Users/Configuration": response = [:] as [String: String]
@@ -191,6 +232,12 @@ final class NativeTrackHTTPFixture {
         default: response = ["Items": [], "TotalRecordCount": 0] as [String: Any]
         }
         guard let data = try? JSONSerialization.data(withJSONObject: response, options: [.fragmentsAllowed]) else { respond(connection, status: "500 Internal Server Error"); return }
+        if path.hasSuffix("/PlaybackInfo") {
+            lock.lock(); let held = playbackInfoHeld
+            if held { heldPlaybackInfo.append((connection, data)) }
+            lock.unlock()
+            if held { return }
+        }
         respond(connection, contentType: "application/json", data: data, head: method == "HEAD")
     }
     private func userData() -> [String: Any] { ["Played": false, "IsFavorite": false, "PlaybackPositionTicks": 0] }
@@ -200,16 +247,18 @@ final class NativeTrackHTTPFixture {
          "UserData": userData(), "MediaSources": [source()], "Chapters": []]
     }
     private func source() -> [String: Any] {
+        lock.lock(); let version = sourceVersion; lock.unlock()
+        let suffix = version == 0 ? "" : " replacement \(version)"
         var streams: [[String: Any]] = [["Index": 0, "Type": "Video", "Codec": "h264", "Width": 320, "Height": 180]]
         streams += (1...22).map { index in
             ["Index": index, "Type": "Audio", "Codec": "aac", "Language": "eng", "Channels": 2,
-             "Title": "Synthetic audio option \(index)", "DisplayTitle": "Synthetic audio option \(index)",
+             "Title": "Synthetic audio option \(index)\(suffix)", "DisplayTitle": "Synthetic audio option \(index)\(suffix)",
              "IsDefault": index == Self.selectedAudioIndex] as [String: Any]
         }
         streams += (23...45).map { index in
             ["Index": index, "Type": "Subtitle", "Codec": "vtt", "Language": "eng", "IsExternal": true,
              "IsTextSubtitleStream": true, "DeliveryMethod": "External", "DeliveryUrl": "/fixture-subtitles/\(index).vtt",
-             "Title": "Synthetic caption option \(index)", "DisplayTitle": "Synthetic caption option \(index)",
+             "Title": "Synthetic caption option \(index)\(suffix)", "DisplayTitle": "Synthetic caption option \(index)\(suffix)",
              "IsDefault": index == Self.selectedSubtitleIndex] as [String: Any]
         }
         return ["Id": Self.sourceID, "Container": "mp4", "SupportsDirectPlay": true, "SupportsDirectStream": false,

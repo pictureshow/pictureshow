@@ -42,12 +42,17 @@ private final class SeekRaceProtocol: URLProtocol {
     static var playbackInfoCount = 0
     static var playbackInfoBodies: [[String: Any]] = []
     static var startReportBodies: [[String: Any]] = []
+    static var streamTitle = "Original"
+    static var reportStatuses: [Int] = []
+    static var reportBodies: [(String, [String:Any])] = []
     static var includeNextEpisode = false
+    static var holdNegotiation = false
+    static var heldNegotiations: [SeekRaceProtocol] = []
 
     static func reset(includeNext: Bool = false) {
-        playbackInfoCount = 0
+        playbackInfoCount = 0; streamTitle = "Original"; holdNegotiation = false; heldNegotiations = []
         playbackInfoBodies = []
-        startReportBodies = []
+        startReportBodies = []; reportBodies = []; reportStatuses = []
         includeNextEpisode = includeNext
     }
 
@@ -72,6 +77,11 @@ private final class SeekRaceProtocol: URLProtocol {
 
     override func startLoading() {
         let path = request.url!.path
+        if path.hasSuffix("PlaybackInfo"), Self.holdNegotiation { Self.heldNegotiations.append(self); return }
+        if path.contains("/Sessions/Playing"), let report = Self.requestBody(request) {
+            let kind = path.hasSuffix("Stopped") ? "stop" : path.hasSuffix("Progress") ? "progress" : "start"
+            Self.reportBodies.append((kind, report))
+        }
         var body: Any = [:]
         if path.hasSuffix("PlaybackInfo") {
             Self.playbackInfoCount += 1
@@ -85,7 +95,7 @@ private final class SeekRaceProtocol: URLProtocol {
                 "DefaultAudioStreamIndex": 1,
                 "MediaStreams": [
                     ["Index": 0, "Type": "Video", "Codec": "h264"],
-                    ["Index": 1, "Type": "Audio", "Codec": "aac"],
+                    ["Index": 1, "Type": "Audio", "Codec": "aac", "Title": Self.streamTitle],
                     ["Index": 2, "Type": "Audio", "Codec": "aac"]
                 ]
             ]
@@ -114,7 +124,7 @@ private final class SeekRaceProtocol: URLProtocol {
 
         do {
             let data = try JSONSerialization.data(withJSONObject: body)
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+            let response = HTTPURLResponse(url: request.url!, statusCode: path.contains("/Sessions/Playing") && !Self.reportStatuses.isEmpty ? Self.reportStatuses.removeFirst() : 200, httpVersion: "HTTP/1.1",
                                            headerFields: ["Content-Type": "application/json"])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
@@ -186,6 +196,151 @@ private final class SeekRaceProtocol: URLProtocol {
         try await Task.sleep(for: .milliseconds(30))
     }
 
+    func testFailedStartIsNotReplayedAndStopRetryHasAnotherReceipt() async throws {
+        try await makePreparedSession(startTicks: 0)
+        SeekRaceProtocol.reportStatuses = [503]
+        session.ready(version: 0)
+        for _ in 0..<100 {
+            if session.diagnostics.reportLines.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(session.diagnostics.reportLines.first?.contains("kind=start") == true)
+        XCTAssertTrue(session.diagnostics.reportLines.first?.contains("status=503 failure=http") == true)
+        await session.selectTrack(type: "Audio", index: 1)
+        for _ in 0..<100 {
+            if session.diagnostics.reportLines.contains(where: { $0.contains("kind=progress") }) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(SeekRaceProtocol.reportBodies.filter { $0.0 == "start" }.count, 1)
+        XCTAssertNil(session.reportError)
+        SeekRaceProtocol.reportStatuses = [503, 204]
+        await session.stop()
+        let lines = session.diagnostics.reportLines.filter { $0.contains("kind=stop") }
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertTrue(lines.first?.contains("status=503 failure=http") == true)
+        XCTAssertTrue(lines.last?.contains("status=204 failure=none") == true)
+        XCTAssertNil(session.reportError)
+        XCTAssertEqual(SeekRaceProtocol.reportBodies.filter { $0.0 == "stop" }.count, 2)
+    }
+
+    func testQueuedMenuPickCannotSelectAgainstReplacedMetadata() async throws {
+        try await makeReadySession()
+        await session.trackLabels.worker?.value
+        let oldGeneration = try XCTUnwrap(session.trackLabels.prepared?.generation)
+        SeekRaceProtocol.holdNegotiation = true
+        let replacement = Task { await session.changeTracks(audio: 2, subtitle: -1) }
+        for _ in 0..<100 {
+            if !SeekRaceProtocol.heldNegotiations.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(SeekRaceProtocol.heldNegotiations.count, 1)
+        let stale = Task { await session.selectTrack(type: "Audio", index: 1, menuGeneration: oldGeneration) }
+        await Task.yield()
+        SeekRaceProtocol.streamTitle = "Replacement"
+        SeekRaceProtocol.holdNegotiation = false
+        let held = SeekRaceProtocol.heldNegotiations; SeekRaceProtocol.heldNegotiations = []
+        held.forEach { $0.startLoading() }
+        await replacement.value; await stale.value
+        XCTAssertEqual(session.decision?.audioIndex, 2)
+        XCTAssertFalse(session.audioChosenByViewer)
+        XCTAssertEqual(SeekRaceProtocol.playbackInfoCount, 2)
+        XCTAssertNotEqual(session.trackLabels.cacheRevision, oldGeneration)
+        await session.stop()
+    }
+
+    func testEveryReportReceiptMatchesWireBodyAndIndependentChoiceOrigins() async throws {
+        try await makeReadySession()
+        _ = await waitForStartReport()
+        await session.selectTrack(type: "Audio", index: 1)
+        await session.stop()
+        let lines = session.diagnostics.reportLines
+        let wire = SeekRaceProtocol.reportBodies
+        XCTAssertEqual(lines.count, wire.count)
+        XCTAssertGreaterThanOrEqual(wire.count, 3)
+        for (offset, record) in wire.enumerated() {
+            let line = lines[offset], kind = record.0, body = record.1
+            XCTAssertTrue(line.contains("seq=\(offset + 1) kind=\(kind) "), line)
+            let fields = PlaybackReportFields.describe(kind: kind,
+                positionTicks: (body["PositionTicks"] as? NSNumber)?.int64Value ?? -1,
+                audio: body["AudioStreamIndex"] as? Int, subtitle: body["SubtitleStreamIndex"] as? Int,
+                audioViewer: kind != "start", subtitleViewer: false)
+            XCTAssertTrue(line.contains(fields), line)
+            XCTAssertTrue(line.contains("status=200 failure=none elapsedMs="), line)
+            XCTAssertFalse(line.contains("fixture-token")); XCTAssertFalse(line.contains("https:"))
+        }
+        XCTAssertEqual(wire.first?.0, "start"); XCTAssertEqual(wire.last?.0, "stop")
+        XCTAssertNil(wire.first?.1["AudioStreamIndex"])
+        XCTAssertNil(wire.last?.1["AudioStreamIndex"])
+        XCTAssertTrue(wire.contains { $0.0 == "progress" && $0.1["AudioStreamIndex"] as? Int == 1 })
+    }
+
+    func testRelativeStepsDuringReplacementNegotiationSurviveUntilMatchingReady() async throws {
+        try await makeReadySession()
+        session.togglePlayback() // Paused intent survives every handoff.
+        session.seek(toTicks: Ticks.from(seconds: 80))
+        SeekRaceProtocol.holdNegotiation = true
+        let change = Task { await session.changeTracks(audio: 2, subtitle: -1) }
+        for _ in 0..<100 {
+            if !SeekRaceProtocol.heldNegotiations.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(SeekRaceProtocol.heldNegotiations.count, 1)
+        for expected in [90.0, 100.0, 110.0] {
+            XCTAssertEqual(Ticks.seconds(session.seek(by: 10)), expected, accuracy: 0.001)
+            XCTAssertEqual(Ticks.seconds(session.positionTicks), expected, accuracy: 0.001)
+        }
+        XCTAssertEqual(Ticks.seconds(session.seek(by: -10)), 100, accuracy: 0.001)
+        XCTAssertEqual(Ticks.seconds(session.seek(by: 10)), 110, accuracy: 0.001)
+        SeekRaceProtocol.holdNegotiation = false
+        let held = SeekRaceProtocol.heldNegotiations; SeekRaceProtocol.heldNegotiations = []
+        held.forEach { $0.startLoading() }
+        await change.value
+        XCTAssertEqual(Ticks.seconds(session.positionTicks), 110, accuracy: 0.001,
+                       "A late PlaybackInfo response must not rewind the accumulated target")
+        session.ready(version: 1)
+        try await waitForSeekCount(2)
+        XCTAssertEqual(player.seekTargets.last?.seconds ?? -1, 110, accuracy: 0.001)
+        player.completeSeek(at: 0, success: true)
+        try await drainMainActor()
+        XCTAssertTrue(session.waitingForVideo)
+        player.completeSeek(at: 1, success: true)
+        try await drainMainActor()
+        XCTAssertFalse(session.waitingForVideo)
+        XCTAssertTrue(session.isPaused)
+        XCTAssertEqual(Ticks.seconds(session.positionTicks), 110, accuracy: 0.001)
+        await session.stop()
+    }
+
+    func testNativeSeekCompletionRequiresNewestRevisionAndDecoder() async throws {
+        try await makeReadySession()
+        XCTAssertEqual(session.nativeSeekTarget(from: 80, to: 90), 90)
+        XCTAssertEqual(session.nativeSeekTarget(from: 80, to: 90), 100)
+        session.nativeSeekCompleted(.init(generation: 0, revision: 1, target: Ticks.from(seconds: 90)), success: true)
+        session.nativeSeekCompleted(.init(generation: -1, revision: 2, target: Ticks.from(seconds: 100)), success: true)
+        session.nativeSeekCompleted(.init(generation: 0, revision: 2, target: Ticks.from(seconds: 100)), success: false)
+        XCTAssertEqual(session.diagnostics.counts["seek.nativeCompleted", default: 0], 0)
+        XCTAssertEqual(Ticks.seconds(session.seek(by: 10)), 110)
+        // Ordinary seek invalidates every outstanding native receipt as well.
+        session.nativeSeekCompleted(.init(generation: 0, revision: 2, target: Ticks.from(seconds: 100)), success: true)
+        XCTAssertEqual(Ticks.seconds(session.positionTicks), 110)
+        XCTAssertEqual(session.diagnostics.counts["seek.nativeCompleted", default: 0], 0)
+        player.completeSeek(at: 0, success: true)
+        try await drainMainActor()
+        await session.stop()
+    }
+
+    func testNativeTransportStepsAccumulateBeforeClockAcknowledges() async throws {
+        try await makeReadySession()
+        for expected in [90.0, 100.0, 110.0] {
+            XCTAssertEqual(session.nativeSeekTarget(from: 80, to: 90), expected, accuracy: 0.001)
+            XCTAssertEqual(Ticks.seconds(session.positionTicks), expected, accuracy: 0.001)
+        }
+        XCTAssertEqual(session.nativeSeekTarget(from: 80, to: 70), 100, accuracy: 0.001)
+        XCTAssertEqual(session.nativeSeekTarget(from: 80, to: 90), 110, accuracy: 0.001)
+        XCTAssertEqual(player.seekTargets.count, 0, "AVKit performs the seek using the returned target")
+        await session.stop()
+    }
+
     /// A successful completion from the first of two queued seeks must not clear the newer
     /// pending target. A follow-up relative seek proves which target remained authoritative.
     func testEarlierSuccessfulSeekCannotCommitOverNewerPendingSeek() async throws {
@@ -198,7 +353,7 @@ private final class SeekRaceProtocol: URLProtocol {
 
         player.completeSeek(at: 0, success: true)
         try await drainMainActor()
-        XCTAssertEqual(session.positionTicks, 0, "The earlier callback must not publish its stale position")
+        XCTAssertEqual(session.positionTicks, second, "The earlier callback must not replace the pending UI target")
 
         let latest = session.seek(by: 5)
         XCTAssertEqual(latest, second + Ticks.from(seconds: 5), "Relative seek must build on the newest pending target")
@@ -207,7 +362,7 @@ private final class SeekRaceProtocol: URLProtocol {
 
         player.completeSeek(at: 1, success: true)
         try await drainMainActor()
-        XCTAssertEqual(session.positionTicks, 0, "A second stale callback must not replace the newest pending seek")
+        XCTAssertEqual(session.positionTicks, latest, "A second stale callback must not replace the newest pending seek")
         player.completeSeek(at: 2, success: true)
         try await drainMainActor()
         XCTAssertEqual(session.positionTicks, latest)
@@ -343,7 +498,7 @@ private final class SeekRaceProtocol: URLProtocol {
 
         player.completeSeek(at: 0, success: true)
         try await drainMainActor()
-        XCTAssertEqual(session.positionTicks, oldTarget, "A stale callback must not replace the negotiated start position")
+        XCTAssertEqual(session.positionTicks, replacementTarget, "A stale callback must not replace the new pending position")
         let latest = session.seek(by: 5)
         XCTAssertEqual(latest, replacementTarget + Ticks.from(seconds: 5), "The old callback must not erase the replacement stream's pending seek")
         XCTAssertEqual(player.seekTargets.count, 5)
@@ -396,7 +551,7 @@ private final class SeekRaceProtocol: URLProtocol {
         XCTAssertEqual(player.seekTargets.count, 2)
         player.completeSeek(at: 0, success: true)
         try await drainMainActor()
-        XCTAssertEqual(session.positionTicks, 0, "The old viewing callback must not publish into the next episode")
+        XCTAssertEqual(session.positionTicks, newTarget, "The old viewing callback must not publish into the next episode")
         let latest = session.seek(by: 5)
         XCTAssertEqual(latest, newTarget + Ticks.from(seconds: 5), "The old viewing callback must not clear the next episode's pending seek")
         player.completeSeek(at: player.seekTargets.count - 1, success: true)

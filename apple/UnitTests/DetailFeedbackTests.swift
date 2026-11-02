@@ -14,11 +14,14 @@ private final class DetailFixtureProtocol: URLProtocol {
     static var failEpisodes = false
     static var itemReads = 0
     static var episodeReads = 0
+    static var homeReads = 0
+    static var itemFailureStatus = 503
     static var held: [DetailFixtureProtocol] = []
     static var holdItems = false
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        if request.url!.path.hasSuffix("/Users/Me") { Self.homeReads += 1 }
         if request.url!.path.hasSuffix("/Items/title") {
             Self.itemReads += 1
             if Self.holdItems { Self.held.append(self); return }
@@ -30,7 +33,7 @@ private final class DetailFixtureProtocol: URLProtocol {
         var status = 200
         var body: [String: Any] = ["Items": []]
         if path.hasSuffix("/Items/title") {
-            if Self.failItems { status = 503 }
+            if Self.failItems { status = Self.itemFailureStatus }
             body = ["Id": "title", "Name": "Fixture title", "Type": Self.itemType, "SeriesId": "series", "UserData": ["Played": false, "IsFavorite": false]]
         } else if path.hasSuffix("/Items") {
             body = ["Items": [["Id": "title", "Name": "Fixture title", "Type": Self.itemType, "UserData": ["Played": false, "IsFavorite": false]]]]
@@ -49,7 +52,7 @@ private final class DetailFixtureProtocol: URLProtocol {
 @MainActor final class DetailFeedbackTests: XCTestCase {
     override func tearDown() {
         DetailFixtureProtocol.itemType = "Movie"; DetailFixtureProtocol.failItems = false; DetailFixtureProtocol.failEpisodes = false
-        DetailFixtureProtocol.holdItems = false; DetailFixtureProtocol.itemReads = 0; DetailFixtureProtocol.episodeReads = 0; DetailFixtureProtocol.held = []
+        DetailFixtureProtocol.holdItems = false; DetailFixtureProtocol.itemReads = 0; DetailFixtureProtocol.episodeReads = 0; DetailFixtureProtocol.held = []; DetailFixtureProtocol.homeReads = 0; DetailFixtureProtocol.itemFailureStatus = 503
     }
     private let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "fixture-device")
     private func client() -> JellyfinClient {
@@ -134,6 +137,142 @@ private final class DetailFixtureProtocol: URLProtocol {
         XCTAssertTrue(state.enqueue(.watched(false), now: accepted.addingTimeInterval(31)))
         XCTAssertFalse(state.expirePending(now: accepted.addingTimeInterval(32)))
         XCTAssertEqual(state.pending, [.watched(false)])
+    }
+    func testRetryClearsPriorReasonSynchronouslyAndPublishesOnlyCurrentWork() {
+        let state = DetailState()
+        state.publishReadFailure("Original timeout")
+        state.beginRead(deliberate: true)
+        XCTAssertTrue(state.reading && state.retrying && state.recoveryVisible)
+        XCTAssertFalse(state.fresh)
+        XCTAssertNil(state.readFailure)
+        XCTAssertNil(state.readError, "Retry cannot retain the predecessor reason in the selectable band")
+        XCTAssertEqual(state.cue?.message, "Loading item. Please wait.")
+        state.publishReadFailure("Server unavailable (503).")
+        XCTAssertEqual(state.readFailure?.message, "Server unavailable (503).")
+        XCTAssertEqual(state.readError, "Server unavailable (503).")
+        state.beginRead(deliberate: false)
+        XCTAssertNil(state.readError, "A superseding pending read owns no stale failure flag")
+    }
+    func testColdRequestKeepsUnknownToggleIntentAndAcceptanceEndsOnReaderDeparture() {
+        let state = DetailState()
+        state.beginRead(deliberate: false)
+        XCTAssertEqual(state.focusRequest, "play", "Cold arrival publishes a guarded action before the held item read")
+        XCTAssertNil(state.item)
+        XCTAssertTrue(state.enqueue(.toggleWatched))
+        state.acceptRequestCue(.toggleWatched)
+        XCTAssertEqual(state.requestedLabel(.toggleWatched), "Watched change requested")
+        let cue = state.cue?.id
+        state.requestFocusChanged(nil) // Reader selects text; input focus need not change.
+        XCTAssertEqual(state.requestedLabel(.toggleWatched), "Watched already requested")
+        state.requestFocusChanged("watched")
+        XCTAssertEqual(state.requestedLabel(.toggleWatched), "Watched already requested", "Returning cannot rearm acceptance")
+        XCTAssertEqual(state.cue?.id, cue, "Rediscovery must not announce a second acceptance")
+        XCTAssertFalse(state.enqueue(.watched(false)), "An unknown and a resolved intent share one action destination")
+        state.pending = []
+        state.reconcileRequestCue()
+        XCTAssertNil(state.requestCueKey)
+        XCTAssertTrue(state.enqueue(.toggleWatched))
+        state.acceptRequestCue(.toggleWatched)
+        XCTAssertNotEqual(state.cue?.id, cue, "A later accepted request must have its own delivery identity")
+    }
+    func testAppliedFullReadOwnsFreshStateBeforeCompletionCallback() async throws {
+        let state = DetailState(); let client = client()
+        var applied = 0
+        state.refresh(id: "title", account: account, client: client, publication: UUID(), onAppliedRead: { item in
+            applied += 1
+            XCTAssertTrue(state.fresh)
+            XCTAssertFalse(state.reading)
+            XCTAssertEqual(state.item, item, "Completion must not publish before the destination owns the complete result")
+        })
+        try await settled(state)
+        XCTAssertEqual(applied, 1)
+        DetailFixtureProtocol.failItems = true
+        state.refresh(id: "title", account: account, client: client, publication: UUID())
+        try await settled(state)
+        XCTAssertEqual(applied, 1, "Failed reads cannot supply completion confirmation")
+    }
+    func testContainerDependentFailureCannotPublishCompletionSnapshot() async throws {
+        let state = DetailState(); let client = client()
+        DetailFixtureProtocol.itemType = "Season"; DetailFixtureProtocol.failEpisodes = true
+        var applied = false
+        state.refresh(id: "title", account: account, client: client, publication: UUID(), onAppliedRead: { _ in applied = true })
+        try await settled(state)
+        XCTAssertFalse(applied, "A successful parent item alone is not a full Series/Season read")
+        XCTAssertEqual(DetailFixtureProtocol.episodeReads, 1)
+    }
+    func testNewerFullDetailReadReleasesSavingWithoutJoiningOlderReadOrReloadingHome() async throws {
+        let model = AppModel(client: client(), account: account)
+        // Use one injected client for every production request path.
+        let state = DetailState()
+        await model.loadHomeIfNeeded()
+        let homeReads = DetailFixtureProtocol.homeReads
+        XCTAssertEqual(homeReads, 1)
+        let tooEarly = model.detailReadStarted(itemID: "title")
+        DetailFixtureProtocol.holdItems = true
+        let completion = Task { await model.refreshAfterPlayback(account: account, itemID: "title") }
+        for _ in 0..<100 { if !DetailFixtureProtocol.held.isEmpty { break }; try await Task.sleep(for: .milliseconds(10)) }
+        let original = try XCTUnwrap(DetailFixtureProtocol.held.first)
+        XCTAssertTrue(model.playbackSaving)
+        let movie = MediaItem(id: "title", name: "Fixture", type: "Movie")
+        model.detailReadApplied(movie, read: tooEarly)
+        XCTAssertTrue(model.playbackSaving, "A read begun before the completion check cannot release it")
+        let unrelated = model.detailReadStarted(itemID: "other")
+        model.detailReadApplied(MediaItem(id: "other", name: "Other", type: "Movie"), read: unrelated)
+        XCTAssertTrue(model.playbackSaving)
+        DetailFixtureProtocol.holdItems = false; DetailFixtureProtocol.failItems = true
+        state.refresh(id: "title", model: model)
+        try await settled(state)
+        XCTAssertTrue(model.playbackSaving, "A failed newer GET cannot acknowledge completion")
+        DetailFixtureProtocol.failItems = false
+        state.refresh(id: "title", model: model, deliberate: true)
+        try await settled(state)
+        XCTAssertTrue(state.fresh)
+        XCTAssertFalse(model.playbackSaving, "The successful full same-item read must release the obsolete check")
+        await completion.value
+        let reads = DetailFixtureProtocol.itemReads
+        state.refreshIfNeeded(id: "title", model: model)
+        await model.loadHomeIfNeeded()
+        await model.loadHomeIfNeeded()
+        XCTAssertEqual(DetailFixtureProtocol.itemReads, reads, "The applied result must consume completion publication without a third detail GET")
+        XCTAssertEqual(DetailFixtureProtocol.homeReads, homeReads + 1, "One real data revision refreshes Home once; pending/saving bookkeeping does not")
+        // A canceled older transport has no authority to expire this viewer.
+        DetailFixtureProtocol.failItems = true; DetailFixtureProtocol.itemFailureStatus = 401
+        original.respond()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(model.account?.localKey, account.localKey)
+        XCTAssertNil(model.playbackSaveError)
+    }
+    func testFullReadFromAnOldAccountCannotReleaseCurrentCompletion() async throws {
+        let model = AppModel(client: client(), account: account)
+        let oldRead = model.detailReadStarted(itemID: "title")
+        let other = Account(server: account.server, userId: "other", username: "Other", accessToken: "other-token", deviceID: "other-device")
+        model.account = other
+        DetailFixtureProtocol.holdItems = true
+        let completion = Task { await model.refreshAfterPlayback(account: other, itemID: "title") }
+        for _ in 0..<100 { if !DetailFixtureProtocol.held.isEmpty { break }; try await Task.sleep(for: .milliseconds(10)) }
+        model.detailReadApplied(MediaItem(id: "title", name: "Fixture", type: "Movie"), read: oldRead)
+        XCTAssertTrue(model.playbackSaving)
+        DetailFixtureProtocol.holdItems = false
+        for request in DetailFixtureProtocol.held { request.respond() }
+        await completion.value
+        XCTAssertFalse(model.playbackSaving)
+        XCTAssertEqual(model.account?.localKey, other.localKey)
+    }
+    func testHomeInitialReadIsSharedAndBookkeepingDoesNotInvalidateData() async {
+        let model = AppModel(client: client(), account: account)
+        async let first: Void = model.loadHomeIfNeeded()
+        async let second: Void = model.loadHomeIfNeeded()
+        _ = await (first, second)
+        XCTAssertEqual(DetailFixtureProtocol.homeReads, 1, "Initial owner and first appearance share a request")
+        model.playbackSaving = true; model.refreshID = UUID()
+        await model.loadHomeIfNeeded()
+        model.playbackSaving = false; model.refreshID = UUID()
+        await model.loadHomeIfNeeded()
+        XCTAssertEqual(DetailFixtureProtocol.homeReads, 1)
+        model.catalogChanged()
+        await model.loadHomeIfNeeded()
+        await model.loadHomeIfNeeded()
+        XCTAssertEqual(DetailFixtureProtocol.homeReads, 2, "A real revision still reloads exactly once")
     }
     func testWriteFailureStaysDistinctFromSuccessfulReadAndFreezesUntilNextAttempt() {
         let state = DetailState()

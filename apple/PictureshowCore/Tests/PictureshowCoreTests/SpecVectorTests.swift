@@ -33,11 +33,33 @@ final class SpecVectorTests:XCTestCase {
         guard let value=d[key] else { throw NSError(domain:"Missing vector input \(key)",code:1) }
         return try decode(type,value)
     }
+    func defaulted<T:Decodable>(_ type:T.Type,_ d:[String:Any],_ key:String,_ fallback:T)throws->T {
+        guard let value=d[key] else { return fallback }
+        return try decode(type,value)
+    }
     func json(_ value:Any)throws->String{String(data:try JSONSerialization.data(withJSONObject:value,options:[.sortedKeys,.fragmentsAllowed]),encoding:.utf8)!}
     func errorName(_ error:Error)->String{switch error as? ClientError{case .serverRefused:return "SERVER_REFUSED";case .sourceNotFound:return "SOURCE_NOT_FOUND";case .noCompatibleSource:return "NO_COMPATIBLE_SOURCE";case .unsafeStreamURL:return "UNSAFE_STREAM_URL";default:return "UNEXPECTED_\(error)"}}
     func decisionJSON(_ d:PlayDecision,urlParts:Bool=false)->[String:Any]{["method":d.method.rawValue,"mediaSourceId":d.source.id as Any? ?? NSNull(),"url":urlParts ? parts(d.url):d.url.absoluteString as Any,"headers":d.headers,"playSessionId":d.playSessionId as Any? ?? NSNull(),"transcodeReasons":d.transcodeReasons]}
     func parts(_ url:URL)->[String:Any]{let c=URLComponents(url:url,resolvingAgainstBaseURL:false)!;var q:[String:[String]]=[:];for x in c.queryItems ?? []{q[x.name,default:[]].append(x.value ?? "")};return ["scheme":c.scheme!,"host":c.host!,"port":c.port ?? (c.scheme == "https" ? 443:80),"path":c.percentEncodedPath,"query":q]}
     func testAllSharedVectors() async throws { try await runVectors() }
+    func testF4PolicyVectors() async throws {
+        try await runVectors(operations: ["detail-completion-read", "detail-cold-pending", "detail-requested-label", "catalog-refresh-revision", "detail-read-band", "detail-session-read", "detail-read-failure", "detail-request-cue-active", "detail-confirmed-leaf", "detail-read-dependencies", "seek-step", "playback-report-fields"])
+    }
+    func testF4AdaptersRejectUnknownOperationsAndMalformedInputs() async throws {
+        let invalid: [(String, [String: Any])] = [
+            ("unknown-f4-policy", [:]),
+            ("seek-step", ["positionMs": 10, "deltaMs": 1, "durationMs": 100]),
+            ("playback-report-fields", ["kind": "start", "positionTicks": 0, "subtitle": NSNull(), "audioViewer": false, "subtitleViewer": false]),
+            ("detail-cold-pending", ["loading": true, "firstArrival": true, "canQueue": true, "returningFromPlayback": NSNull()]),
+            ("detail-request-cue-active", ["active": true, "readerLeftAction": false, "requested": "true"])
+        ]
+        for (operation, input) in invalid {
+            do {
+                _ = try await execute(operation, input: input, context: [:])
+                XCTFail("Accepted unknown operation or malformed input: \(operation)")
+            } catch { }
+        }
+    }
     func testRC24PolicyVectors() async throws {
         try await runVectors(operations: ["caption-index", "detail-action-state", "detail-held-label", "detail-unavailable-label", "detail-ready-feedback", "detail-read-lifecycle", "detail-metadata-handoff", "detail-host-focus-handoff", "detail-arrival-pending", "report-track-index", "track-selection-unchanged", "subtitle-selection-local"])
     }
@@ -75,6 +97,18 @@ final class SpecVectorTests:XCTestCase {
         let server=Server(url:URL(string:text(serverJSON,"url","https://media.example.test/jellyfin"))!);let account=Account(server:server,userId:text(credentials,"userId","viewer"),username:"Viewer",accessToken:text(credentials,"token","fixture-token"),deviceID:text(credentials,"deviceId",text(identity,"deviceId","install")))
         let client=JellyfinClient(deviceID:text(identity,"deviceId","install"),deviceName:text(identity,"deviceName","Fixture TV"),version:text(identity,"version","0.1.0"))
         switch operation{
+        case "detail-completion-read":return DetailFeedback.readCanReplaceCompletion(completionItem:try required(String.self,i,"completionItem"),completionRead:try required(Int64.self,i,"completionRead"),item:try required(String.self,i,"item"),read:try required(Int64.self,i,"read"),succeeded:try required(Bool.self,i,"succeeded"))
+        case "detail-cold-pending":return DetailFeedback.needsPendingControls(loading:try required(Bool.self,i,"loading"),firstArrival:try required(Bool.self,i,"firstArrival"),canQueue:try required(Bool.self,i,"canQueue"),returningFromPlayback:try defaulted(Bool.self,i,"returningFromPlayback",false))
+        case "detail-requested-label":return DetailFeedback.requestedActionLabel(target:try required(String.self,i,"target"),newlyAccepted:try required(Bool.self,i,"newlyAccepted"))
+        case "catalog-refresh-revision":return DetailFeedback.catalogRevisionNeedsRefresh(previous:try required(Int64?.self,i,"previous"),current:try required(Int64.self,i,"current"))
+        case "detail-read-band":return DetailFeedback.readBandText(retrying:try required(Bool.self,i,"retrying"),reason:try required(String.self,i,"reason"))
+        case "detail-session-read":return DetailFeedback.sessionNeedsRead(newRevision:try required(Bool.self,i,"newRevision"),refreshed:try required(Bool.self,i,"refreshed"),container:try required(Bool.self,i,"container"),alreadyConfirmed:try required(Bool.self,i,"alreadyConfirmed"))
+        case "detail-read-failure":return DetailFeedback.readHasFailure(readFailed:try required(Bool.self,i,"readFailed"),reason:try required(String?.self,i,"reason"),mutationReady:try required(Bool.self,i,"mutationReady"))
+        case "detail-request-cue-active":return DetailFeedback.requestCueRemainsActive(active:try required(Bool.self,i,"active"),readerLeftAction:try required(Bool.self,i,"readerLeftAction"),requested:try defaulted(Bool.self,i,"requested",true))
+        case "detail-confirmed-leaf":return DetailFeedback.hasConfirmedLeafRead(readSucceeded:try required(Bool.self,i,"readSucceeded"),sameUserData:try required(Bool.self,i,"sameUserData"),container:try required(Bool.self,i,"container"))
+        case "detail-read-dependencies":return DetailFeedback.readRequiresDependents(type:try required(String.self,i,"type"))
+        case "seek-step":return SeekSteps.target(positionMs:try required(Int64.self,i,"positionMs"),pendingMs:try required(Int64?.self,i,"pendingMs"),deltaMs:try required(Int64.self,i,"deltaMs"),durationMs:try required(Int64.self,i,"durationMs"))
+        case "playback-report-fields":return PlaybackReportFields.describe(kind:try required(String.self,i,"kind"),positionTicks:try required(Int64.self,i,"positionTicks"),audio:try required(Int?.self,i,"audio"),subtitle:try required(Int?.self,i,"subtitle"),audioViewer:try required(Bool.self,i,"audioViewer"),subtitleViewer:try required(Bool.self,i,"subtitleViewer"))
         case "external-subtitle-loading":return ["retryDelayMs":ExternalSubtitleLoading.retryDelayMs(errorCount:try required(Int.self,i,"errorCount")),"sourceOffsetMs":ExternalSubtitleLoading.sourceOffsetMs(fullTimeline:try required(Bool.self,i,"fullTimeline"),serverStartMs:try required(Int64.self,i,"serverStartMs"))]
         case "detail-empty":return DetailAvailability.showEmptyState(itemType:try required(String?.self,i,"itemType"),loading:try required(Bool.self,i,"loading"),readSucceeded:try required(Bool.self,i,"readSucceeded"),readFailed:try required(Bool.self,i,"readFailed"),episodeCount:try required(Int.self,i,"episodeCount"),seasonCount:try required(Int.self,i,"seasonCount"))
         case "detail-action-state":return DetailFeedback.actionDescription(currentState:try required(String?.self,i,"currentState"),available:try required(Bool.self,i,"available")) as Any? ?? NSNull()

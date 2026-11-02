@@ -25,6 +25,7 @@
 		4F18E5FF869E22FC934B7269 /* PictureshowCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8CA8FE97305ABE653712A622 /* PictureshowCore */; };
 		52394F3A0C4E4E0873BCAF8A /* AppleSliceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98193AB8CC2DAA971427E2A9 /* AppleSliceUITests.swift */; };
 		552DE76342EA5C4A738264BD /* hevc-main8-1080p30.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = AA990F22DCBD5FE7258A5F28 /* hevc-main8-1080p30.mp4 */; };
+		60BA978D301B8F4749E8EF85 /* PreparedTrackMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADE3BAC3A89639369CA2099B /* PreparedTrackMenuTests.swift */; };
 		622F855DDADAC3B253F362E4 /* ExternalSubtitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56FE63259AE08297E52AFE5 /* ExternalSubtitleTests.swift */; };
 		669059F7570857EFA5274AD3 /* AccountStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C91A71C6A0E4957660B0A18 /* AccountStorageTests.swift */; };
 		6882A07567BE1173DDBBA97B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D979FD5F6655B17B01A6E075 /* SettingsView.swift */; };
@@ -45,6 +46,7 @@
 		AA4BA9DB243741B7F7ECDCBF /* AppleSliceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98193AB8CC2DAA971427E2A9 /* AppleSliceUITests.swift */; };
 		B2048C739BE03E29989CCDD9 /* MPL-2.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7AFB7FB1BED8180AEBEFD99D /* MPL-2.0.txt */; };
 		B2616443BCD3E4A216E92641 /* CatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FA85AA82A654E61D1D5117 /* CatalogViews.swift */; };
+		B3E0E8EC4227B0B6C4DA0327 /* PreparedTrackMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADE3BAC3A89639369CA2099B /* PreparedTrackMenuTests.swift */; };
 		B54C92FC2DFAE4BE908B45D4 /* PictureshowCore in Frameworks */ = {isa = PBXBuildFile; productRef = 49D0410601D8FCD3A1D975E7 /* PictureshowCore */; };
 		B6921203A1231A93B4B310E0 /* SeekCompletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */; };
 		BEE6076559D0F62DA1AB95CA /* AppleHEVCQualification.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC50B346E9AE355D6918A23 /* AppleHEVCQualification.swift */; };
@@ -120,6 +122,7 @@
 		98193AB8CC2DAA971427E2A9 /* AppleSliceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSliceUITests.swift; sourceTree = "<group>"; };
 		A23DE8E3C9A071C533008D69 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		AA990F22DCBD5FE7258A5F28 /* hevc-main8-1080p30.mp4 */ = {isa = PBXFileReference; path = "hevc-main8-1080p30.mp4"; sourceTree = "<group>"; };
+		ADE3BAC3A89639369CA2099B /* PreparedTrackMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparedTrackMenuTests.swift; sourceTree = "<group>"; };
 		B92A34BA8BB93A38445D9B43 /* Pictureshow-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Pictureshow-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeekCompletionTests.swift; sourceTree = "<group>"; };
 		CEDD6E0937BBEEAE9622CF83 /* PlaybackSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSession.swift; sourceTree = "<group>"; };
@@ -255,6 +258,7 @@
 				4E3B0B9F008A6A5D99265A17 /* AppleHEVCQualificationTests.swift */,
 				568A0082C54DC943B674078C /* DetailFeedbackTests.swift */,
 				D56FE63259AE08297E52AFE5 /* ExternalSubtitleTests.swift */,
+				ADE3BAC3A89639369CA2099B /* PreparedTrackMenuTests.swift */,
 				C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */,
 				E7F3A78BB15FA4AEFB04E9A4 /* ViewingTransitionTests.swift */,
 			);
@@ -457,6 +461,7 @@
 				1947ED6B1E7FC0EEFB4C6C48 /* AppleHEVCQualificationTests.swift in Sources */,
 				C78525B8A9EB0825A8397A21 /* DetailFeedbackTests.swift in Sources */,
 				622F855DDADAC3B253F362E4 /* ExternalSubtitleTests.swift in Sources */,
+				B3E0E8EC4227B0B6C4DA0327 /* PreparedTrackMenuTests.swift in Sources */,
 				B6921203A1231A93B4B310E0 /* SeekCompletionTests.swift in Sources */,
 				C6BB2D3BEA9518BA11806195 /* ViewingTransitionTests.swift in Sources */,
 			);
@@ -524,6 +529,7 @@
 				14686C297522480289D64071 /* AppleHEVCQualificationTests.swift in Sources */,
 				E7570F47225EDA115100FCDC /* DetailFeedbackTests.swift in Sources */,
 				D8DD23F7089B6EDF58AF7B0C /* ExternalSubtitleTests.swift in Sources */,
+				60BA978D301B8F4749E8EF85 /* PreparedTrackMenuTests.swift in Sources */,
 				11BAEB09CF2F5909D00F4003 /* SeekCompletionTests.swift in Sources */,
 				A7B2E286D12AD6B0374D4608 /* ViewingTransitionTests.swift in Sources */,
 			);

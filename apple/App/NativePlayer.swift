@@ -5,6 +5,7 @@ import AVKit
 import PictureshowCore
 import OSLog
 import MediaAccessibility
+import Combine
 
 struct PlayerScreen: View {
     @ObservedObject var session: PlaybackSession
@@ -14,6 +15,11 @@ struct PlayerScreen: View {
     @State private var panel: String?
     @State private var closing = false
     @State private var orientationError: String?
+    @ObservedObject private var trackMenus: TrackLabelCache
+    init(session: PlaybackSession, close: @escaping () async -> Void) {
+        self.session = session; self.close = close
+        self.trackMenus = session.trackLabels
+    }
     var body: some View {
         ZStack(alignment: .top) {
             #if os(iOS)
@@ -38,10 +44,20 @@ struct PlayerScreen: View {
                     .background(Theme.surface).accessibilityAddTraits(.isHeader).accessibilityIdentifier("playerTitle")
                 HStack(spacing: 0) {
                     Button("Back to details", systemImage: "chevron.left", action: finish).accessibilityIdentifier("closePlayer")
-                    Button("Audio and subtitles", systemImage: "captions.bubble") { panel = "tracks" }.accessibilityIdentifier("playerTracks")
-                    Button("Seek", systemImage: "slider.horizontal.3") { panel = "seek" }.accessibilityIdentifier("playerSeek")
-                    Button("Chapters", systemImage: "list.bullet") { panel = "chapters" }.accessibilityIdentifier("playerChapters")
+                    Button("Audio and subtitles", systemImage: "captions.bubble") {
+                        guard session.error == nil, !session.terminal else { return }
+                        trackMenus.requestOpen()
+                    }.accessibilityIdentifier("playerTracks")
+                        .accessibilityValue(trackMenus.waitingToOpen ? "Preparing audio and subtitles" : "")
+                    Button("Seek", systemImage: "slider.horizontal.3") { trackMenus.cancelOpen(); panel = "seek" }.accessibilityIdentifier("playerSeek")
+                    Button("Chapters", systemImage: "list.bullet") { trackMenus.cancelOpen(); panel = "chapters" }.accessibilityIdentifier("playerChapters")
                     Button("Rotate portrait or landscape", systemImage: "rotate.right") { rotate() }.accessibilityIdentifier("rotatePlayer")
+                    #if DEBUG
+                    if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"] != nil {
+                        Button("Replace fixture source", systemImage: "arrow.triangle.2.circlepath") { Task { await session.selectTrack(type: "Audio", index: session.decision?.audioIndex == 13 ? 14 : 13) } }
+                            .accessibilityIdentifier("fixtureReplaceTrackSource")
+                    }
+                    #endif
                     Spacer(minLength: 4)
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(session.status).accessibilityIdentifier("playbackMethod")
@@ -70,7 +86,16 @@ struct PlayerScreen: View {
         .onDisappear { session.beginClosing() }
         .onChange(of: session.terminal) { _, value in if value, session.error == nil { finish() } }
         .onChange(of: scenePhase) { _, value in if value != .active { session.backgrounded() } }
-        .onChange(of: panel) { _, value in session.panelOpen = value != nil }
+        .onChange(of: trackMenus.openMenu) { _, value in
+            #if os(iOS)
+            if value != nil { panel = "tracks" }
+            else if panel == "tracks" { panel = nil }
+            #endif
+        }
+        .onChange(of: panel) { old, value in
+            session.panelOpen = value != nil
+            if old == "tracks", value == nil { trackMenus.cancelOpen() }
+        }
         .sheet(isPresented: Binding(get: { panel != nil }, set: { if !$0 { panel = nil } })) {
             PlayerOptions(session: session, kind: panel ?? "tracks") { panel = nil }
         }
@@ -99,49 +124,138 @@ private struct PlayerActionStyle: ButtonStyle {
 }
 #endif
 
-private func trackDescriptionParts(_ stream: MediaStream) -> [String] {
+nonisolated private func trackDescriptionParts(_ stream: MediaStream) -> [String] {
     var parts = [stream.label]
     let lower = stream.label.lowercased()
     let labelTokens = lower.split { !$0.isLetter && !$0.isNumber && $0 != "-" }
     // Short language codes must be whole tokens: "en" inside "Commentary"
     // does not tell a viewer that the track is English.
     if let language = stream.language, let name = Locale.current.localizedString(forLanguageCode: language), !lower.contains(name.lowercased()), !labelTokens.contains(Substring(language.lowercased())) { parts.append(name) }
+    if let title = stream.title, !title.isEmpty, !lower.contains(title.lowercased()) { parts.append(title) }
     if let codec = stream.codec, !lower.contains(codec.lowercased()) { parts.append(codec.uppercased()) }
     if let channels = stream.channels, !lower.contains("\(channels) channel") { parts.append("\(channels) channels") }
     if stream.isForced && (!lower.contains("forced") || lower.contains("non-forced") || lower.contains("non forced")) { parts.append("Forced") }
     if stream.isHearingImpaired && !lower.contains("hearing impaired") && !lower.contains("sdh") { parts.append("Hearing impaired") }
+    if stream.isDefault && !lower.contains("default") { parts.append("Default") }
     return parts
 }
 
 private func clock(_ ticks: Int64) -> String { Catalog.resumeLabel(ticks).replacingOccurrences(of: "Resume from ", with: "") }
 
-struct TrackLabel: Identifiable {
+struct TrackLabel: Identifiable, Sendable, Equatable {
     let id: Int
     let title: String
     let menuTitle: String
 }
-@MainActor final class TrackLabelCache {
+struct PreparedTrackMenu: Sendable, Equatable {
+    let generation: Int
+    let audio: [TrackLabel]
+    let subtitles: [TrackLabel]
+    func values(_ type: String) -> [TrackLabel] { type == "Audio" ? audio : subtitles }
+}
+struct TrackMenuPresentation: Identifiable, Equatable {
+    let id: Int
+    let menu: PreparedTrackMenu
+}
+
+/// Metadata work starts at source arrival, independently of clock, selection and opens.
+/// Only a complete pair of menus is published; obsolete workers have no publication rights.
+@MainActor final class TrackLabelCache: ObservableObject {
+    typealias Builder = @Sendable ([MediaStream], Int) -> PreparedTrackMenu
+    @Published private(set) var prepared: PreparedTrackMenu?
+    @Published private(set) var openMenu: TrackMenuPresentation?
+    @Published private(set) var waitingToOpen = false
+    @Published private(set) var dismissalRevision = 0
     private var streams: [MediaStream] = []
-    private(set) var audio: [TrackLabel] = []
-    private(set) var subtitles: [TrackLabel] = []
+    private var sourceID: String?
+    private(set) var worker: Task<Void, Never>?
+    private let builder: Builder
+    private var requestID = 0
+    private var pending: (id: Int, followsFirstSource: Bool, completion: (TrackMenuPresentation?) -> Void)?
+    private var hasMetadata = false
     private(set) var labelsBuilt = 0
     private(set) var cacheRevision = 0
-    func update(_ values: [MediaStream]) {
-        let values = values.filter { $0.type == "Audio" || $0.type == "Subtitle" }
-        guard values != streams else { return }
-        streams = values; cacheRevision += 1
+    var audio: [TrackLabel] { prepared?.audio ?? [] }
+    var subtitles: [TrackLabel] { prepared?.subtitles ?? [] }
+
+    init(builder: @escaping Builder = { TrackLabelCache.buildForPlayback($0, generation: $1) }) { self.builder = builder }
+
+    nonisolated private static func buildForPlayback(_ streams: [MediaStream], generation: Int) -> PreparedTrackMenu {
+        #if DEBUG
+        // Opt-in loopback fixture holds the actual detached worker. It supplies no
+        // menu data or verdict; releasing it resumes the production label builder.
+        if let address = ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"],
+           let base = URL(string: address), base.host == "127.0.0.1", base.scheme == "http" {
+            let thread = Thread.isMainThread ? "main" : "background"
+            let url = base.appendingPathComponent("fixture-menu-worker/\(generation)/\(thread)")
+            let ready = DispatchSemaphore(value: 0)
+            let task = URLSession.shared.dataTask(with: url) { _, _, _ in ready.signal() }
+            task.resume()
+            if ready.wait(timeout: .now() + 40) != .success { task.cancel() }
+        }
+        #endif
+        return build(streams, generation: generation)
+    }
+
+    nonisolated static func build(_ streams: [MediaStream], generation: Int) -> PreparedTrackMenu {
         func labels(_ type: String) -> [TrackLabel] {
-            values.filter { $0.type == type }.map {
-                labelsBuilt += 1
+            streams.filter { $0.type == type }.map {
                 let parts = trackDescriptionParts($0), index = "Stream \($0.index)"
-                // Reuse the description work for phone and TV ordering.
                 return TrackLabel(id: $0.index, title: (parts + [index]).joined(separator: " · "),
                                   menuTitle: ([index] + parts).joined(separator: " · "))
             }
         }
-        audio = labels("Audio"); subtitles = labels("Subtitle")
+        return PreparedTrackMenu(generation: generation, audio: labels("Audio"), subtitles: labels("Subtitle"))
     }
-    func values(_ type: String) -> [TrackLabel] { type == "Audio" ? audio : subtitles }
+
+    // The one-argument form preserves the current source for explicit metadata edits.
+    func update(_ values: [MediaStream]) { update(values, sourceID: sourceID ?? "metadata") }
+    func update(_ values: [MediaStream], sourceID: String?) {
+        guard !hasMetadata || values != streams || self.sourceID != sourceID else { return }
+        let followsFirstSource = self.sourceID == nil && sourceID != nil && pending?.followsFirstSource == true
+        if !followsFirstSource { cancelOpen() }
+        worker?.cancel()
+        streams = values; self.sourceID = sourceID; hasMetadata = true
+        cacheRevision += 1; prepared = nil
+        guard sourceID != nil else { return }
+        let generation = cacheRevision, builder = builder
+        worker = Task { [weak self] in
+            let menu = await Task.detached(priority: .userInitiated) { builder(values, generation) }.value
+            guard let self, !Task.isCancelled, self.cacheRevision == generation else { return }
+            self.labelsBuilt += menu.audio.count + menu.subtitles.count
+            self.prepared = menu
+            if let request = self.pending {
+                self.pending = nil; self.waitingToOpen = false
+                let presentation = TrackMenuPresentation(id: request.id, menu: menu)
+                self.openMenu = presentation
+                request.completion(presentation)
+            }
+        }
+    }
+    func values(_ type: String) -> [TrackLabel] { prepared?.values(type) ?? [] }
+
+    /// No chooser rows exist while pending. The first negotiated source inherits an
+    /// initial-loading request; any subsequent metadata/source replacement cancels it.
+    func requestOpen(completion: @escaping (TrackMenuPresentation?) -> Void = { _ in }) {
+        cancelOpen(handoff: false); requestID += 1
+        if let prepared {
+            let presentation = TrackMenuPresentation(id: requestID, menu: prepared)
+            openMenu = presentation; completion(presentation)
+        } else {
+            waitingToOpen = true
+            pending = (requestID, sourceID == nil, completion)
+        }
+    }
+    func cancelOpen(handoff: Bool = true) {
+        let completion = pending?.completion
+        let hadRows = openMenu != nil
+        pending = nil; waitingToOpen = false; openMenu = nil
+        if handoff && hadRows { dismissalRevision += 1 }
+        completion?(nil)
+    }
+    func accepts(_ presentation: TrackMenuPresentation) -> Bool {
+        openMenu?.id == presentation.id && prepared?.generation == presentation.menu.generation
+    }
 }
 
 struct PlayerOptions: View {
@@ -149,8 +263,17 @@ struct PlayerOptions: View {
     @Environment(\.dismiss) private var dismiss
     let kind: String
     let done: () -> Void
-    private var audio: Int? { session.decision?.audioIndex }
-    private var subtitle: Int? { session.decision?.subtitleIndex }
+    @State private var menu: PreparedTrackMenu?
+    @State private var presentation: TrackMenuPresentation?
+    @State private var audio: Int?
+    @State private var subtitle: Int?
+    init(session: PlaybackSession, kind: String, done: @escaping () -> Void) {
+        self.session = session; self.kind = kind; self.done = done
+        _presentation = State(initialValue: session.trackLabels.openMenu)
+        _menu = State(initialValue: session.trackLabels.openMenu?.menu ?? session.trackLabels.prepared)
+        _audio = State(initialValue: session.decision?.audioIndex)
+        _subtitle = State(initialValue: session.decision?.subtitleIndex)
+    }
     var body: some View {
         let _ = session.diagnostics.record("phonePlayerOptions.body")
         NavigationStack {
@@ -167,13 +290,19 @@ struct PlayerOptions: View {
                     }
                 } else {
                     if session.changingTracks { ProgressView("Applying tracks…").accessibilityIdentifier("applyingTracks") }
+                    #if DEBUG
+                    if ProcessInfo.processInfo.environment["PICTURESHOW_TEST_TRACK_MENU_GATE"] != nil {
+                        Button("Replace fixture source") { Task { await session.selectTrack(type: "Audio", index: session.decision?.audioIndex == 13 ? 14 : 13) } }
+                            .accessibilityIdentifier("fixtureReplaceTrackSourceInPanel")
+                    }
+                    #endif
                     Section("Audio") {
                         track("Off", index: -1, type: "Audio", selected: audio == -1)
-                        ForEach(session.trackLabels.audio) { track($0.title, index: $0.id, type: "Audio", selected: audio == $0.id) }
+                        ForEach(menu?.audio ?? []) { track($0.title, index: $0.id, type: "Audio", selected: audio == $0.id) }
                     }
                     Section("Subtitles") {
                         track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
-                        ForEach(session.trackLabels.subtitles) { track($0.title, index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
+                        ForEach(menu?.subtitles ?? []) { track($0.title, index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
                         Text(session.subtitleTimingExplanation).font(.caption)
                         if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
                     }
@@ -183,6 +312,12 @@ struct PlayerOptions: View {
             .pictureshowNavigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : "Audio and subtitles")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone") } }
         }
+        .onChange(of: session.decision?.audioIndex) { _, value in
+            if menu?.generation == session.trackLabels.cacheRevision { audio = value }
+        }
+        .onChange(of: session.decision?.subtitleIndex) { _, value in
+            if menu?.generation == session.trackLabels.cacheRevision { subtitle = value }
+        }
     }
     private func closePanel() { done(); dismiss() }
     private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
@@ -190,8 +325,14 @@ struct PlayerOptions: View {
             #if DEBUG
             Logger(subsystem: "app.pictureshow", category: "Playback").notice("Track action type=\(type, privacy: .public) index=\(index)")
             #endif
-            closePanel()
-            Task { await session.selectTrack(type: type, index: index) }
+            // A native callback can outlive the rows that supplied it. Check before
+            // handing selection to the viewing, then close through the sheet scope.
+            guard let presentation, session.trackLabels.accepts(presentation) else { closePanel(); return }
+            Task {
+                guard session.trackLabels.accepts(presentation) else { return }
+                closePanel()
+                await session.selectTrack(type: type, index: index, menuGeneration: presentation.menu.generation)
+            }
         } label: {
             HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark").accessibilityHidden(true) } }.minimumTouchTarget()
         }
@@ -205,6 +346,10 @@ struct PlayerOptions: View {
 struct NativePlayer: UIViewControllerRepresentable {
     @ObservedObject var session: PlaybackSession
     var close: () -> Void
+    @ObservedObject private var trackMenus: TrackLabelCache
+    init(session: PlaybackSession, close: @escaping () -> Void) {
+        self.session = session; self.close = close; trackMenus = session.trackLabels
+    }
     func makeUIViewController(context: Context) -> PictureshowPlayerViewController {
         let controller = PictureshowPlayerViewController()
         controller.player = session.player; controller.delegate = context.coordinator
@@ -216,6 +361,7 @@ struct NativePlayer: UIViewControllerRepresentable {
         #if os(tvOS)
         controller.playbackControlsIncludeInfoViews = true; controller.transportBarIncludesTitleView = true
         controller.installInformation(session: session)
+        controller.installTrackMenuCancellation(session.trackLabels)
         #endif
         updateUIViewController(controller, context: context)
         return controller
@@ -234,17 +380,28 @@ struct NativePlayer: UIViewControllerRepresentable {
             context.coordinator.menuSignature = signature
             session.diagnostics.record("nativePlayer.menuBuilt")
             func tracks(_ type: String) -> UIMenu {
-                let values = session.trackLabels.values(type)
-                let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
-                let off = UIAction(title: "Off", identifier: UIAction.Identifier("\(type.lowercased())--1"), state: selected == -1 ? .on : .off) { _ in
-                    Task { await session.selectTrack(type: type, index: -1) }
-                }
-                let actions = values.map { stream in
-                    UIAction(title: stream.menuTitle, subtitle: nil, identifier: UIAction.Identifier("\(type.lowercased())-\(stream.id)"), state: selected == stream.id ? .on : .off) { _ in
-                        Task { await session.selectTrack(type: type, index: stream.id) }
+                // AVKit owns its native menu window. Deferred children let an early
+                // open wait with native loading feedback and receive all rows at once.
+                let children = UIDeferredMenuElement.uncached { completion in
+                    Task { @MainActor in
+                        guard session.error == nil, !session.terminal else { completion([]); return }
+                        session.trackLabels.requestOpen { presentation in
+                            guard let presentation else { completion([]); return }
+                            let selected = type == "Audio" ? session.decision?.audioIndex : session.decision?.subtitleIndex
+                            func action(_ title: String, index: Int) -> UIAction {
+                                UIAction(title: title, identifier: .init("\(type.lowercased())-\(index)"), state: selected == index ? .on : .off) { _ in
+                                    Task { @MainActor in
+                                        guard session.trackLabels.accepts(presentation), session.error == nil, !session.terminal else { return }
+                                        session.trackLabels.cancelOpen()
+                                        await session.selectTrack(type: type, index: index, menuGeneration: presentation.menu.generation)
+                                    }
+                                }
+                            }
+                            completion([action("Off", index: -1)] + presentation.menu.values(type).map { action($0.menuTitle, index: $0.id) })
+                        }
                     }
                 }
-                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), options: .singleSelection, children: [off] + actions)
+                return UIMenu(title: type == "Audio" ? "Audio" : "Subtitles", image: UIImage(systemName: type == "Audio" ? "speaker.wave.2" : "captions.bubble"), options: .singleSelection, children: [children])
             }
             let chapters = UIMenu(title: "Chapters", image: UIImage(systemName: "list.bullet"), children: session.chapters.enumerated().map { index, chapter in
                 UIAction(title: chapter.name.isEmpty ? "Chapter \(index + 1)" : chapter.name, subtitle: clock(chapter.startTicks)) { _ in session.seek(toTicks: chapter.startTicks) }
@@ -319,9 +476,14 @@ struct NativePlayer: UIViewControllerRepresentable {
             #if DEBUG
             Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native transport visibility=\(visible)")
             #endif
-            Task { @MainActor in session.controlsVisible = visible }
+            Task { @MainActor in
+                session.controlsVisible = visible
+                if !visible { session.trackLabels.cancelOpen() }
+            }
         }
-        func playerViewController(_ controller: AVPlayerViewController, timeToSeekAfterUserNavigatedFrom oldTime: CMTime, to targetTime: CMTime) -> CMTime { Task { @MainActor in session.nativeSeekBegan(targetTime.seconds) }; return targetTime }
+        func playerViewController(_ controller: AVPlayerViewController, timeToSeekAfterUserNavigatedFrom oldTime: CMTime, to targetTime: CMTime) -> CMTime {
+            CMTime(seconds: session.nativeSeekTarget(from: oldTime.seconds, to: targetTime.seconds), preferredTimescale: 600)
+        }
         #endif
     }
 }
@@ -354,6 +516,39 @@ final class PictureshowPlayerViewController: AVPlayerViewController {
         }
     }
     #if os(tvOS)
+    private weak var trackMenus: TrackLabelCache?
+    private var trackMenuObservation: AnyCancellable?
+    func installTrackMenuCancellation(_ menus: TrackLabelCache) {
+        trackMenus = menus
+        trackMenuObservation = menus.$dismissalRevision.dropFirst().sink { [weak self] _ in
+            guard let self else { return }
+            // AVKit owns the native dismissal/focus handoff. Retained action
+            // callbacks are fenced even if that transition is still in flight.
+            self.presentedViewController?.dismiss(animated: true)
+            UIMenuSystem.main.setNeedsRebuild()
+        }
+    }
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["PICTURESHOW_SEEK_DIAGNOSTICS"] == "1" {
+            for press in presses {
+                let direction: String
+                switch press.type {
+                case .leftArrow: direction = "left"
+                case .rightArrow: direction = "right"
+                case .select: direction = "select"
+                case .playPause: direction = "playPause"
+                default: continue
+                }
+                let eventMs = Int64(press.timestamp * 1_000)
+                let receivedMs = Int64(ProcessInfo.processInfo.systemUptime * 1_000)
+                Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native remote keyDown type=\(direction, privacy: .public) eventMs=\(eventMs) receivedMs=\(receivedMs)")
+            }
+        }
+        #endif
+        if presses.contains(where: { $0.type == .menu }) { trackMenus?.cancelOpen() }
+        super.pressesBegan(presses, with: event)
+    }
     private(set) var informationVisible = false
     func setInformationVisible(_ visible: Bool) {
         guard informationVisible != visible else { return }

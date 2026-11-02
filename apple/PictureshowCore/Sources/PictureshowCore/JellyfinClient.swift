@@ -293,6 +293,19 @@ public final class JellyfinClient: @unchecked Sendable {
         guard let path = paths[kind] else { throw ClientError.invalidResponse }
         _ = try await request(account: account, path: path, method: "POST", body: body, includeUserID: false)
     }
+    /// One attempt, including failures, returns fixed transport metadata without logging private request data.
+    public func sendReportAttempt(account: Account, kind: String, body: [String:Any]) async -> PlaybackHTTPOutcome {
+        let begin = DispatchTime.now().uptimeNanoseconds
+        let paths = ["start":"Sessions/Playing", "progress":"Sessions/Playing/Progress", "stop":"Sessions/Playing/Stopped"]
+        guard let path = paths[kind] else { return .init(status: nil, failure: "invalidresponse", elapsedMs: 0) }
+        var outcome: PlaybackHTTPOutcome?
+        do {
+            _ = try await request(account: account, path: path, method: "POST", body: body, includeUserID: false,
+                                  receipt: { outcome = $0 })
+        } catch { }
+        return outcome ?? .init(status: nil, failure: Task.isCancelled ? "cancelled" : "invalidresponse",
+                                 elapsedMs: Int64((DispatchTime.now().uptimeNanoseconds - begin) / 1_000_000))
+    }
     public func reportStart(account: Account, decision: PlayDecision, positionTicks: Int64, paused: Bool = false, isMuted: Bool? = nil) async throws { try await sendReport(account: account, kind: "start", body: PlaybackReports.progress(decision: decision, positionTicks: max(0,positionTicks), paused: paused, audioIndex: decision.audioIndex, subtitleIndex: decision.subtitleIndex, isMuted: isMuted ?? (decision.audioIndex == -1))) }
     public func reportProgress(account: Account, decision: PlayDecision, positionTicks: Int64, paused: Bool = false, isMuted: Bool? = nil) async throws { try await sendReport(account: account, kind: "progress", body: PlaybackReports.progress(decision: decision, positionTicks: max(0,positionTicks), paused: paused, audioIndex: decision.audioIndex, subtitleIndex: decision.subtitleIndex, isMuted: isMuted ?? (decision.audioIndex == -1))) }
     public func reportStopped(account: Account, decision: PlayDecision, positionTicks: Int64, failed: Bool = false) async throws { try await sendReport(account: account, kind: "stopped", body: PlaybackReports.stopped(decision: decision, positionTicks: max(0,positionTicks), failed: failed)) }
@@ -300,26 +313,35 @@ public final class JellyfinClient: @unchecked Sendable {
     public func stopEncoding(account: Account, playSessionID: String) async throws {
         _ = try await request(account: account, path: "Videos/ActiveEncodings", method: "DELETE", query: [URLQueryItem(name: "deviceId", value: account.deviceID), URLQueryItem(name: "playSessionId", value: playSessionID)], includeUserID: false)
     }
-    private func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, includeUserID: Bool = true) async throws -> Data {
-        try await request(server: account.server, path: path, method: method, query: query + (includeUserID ? [URLQueryItem(name: "userId", value: account.userId)] : []), body: body, token: account.accessToken, identity: account.deviceID)
+    private func request(account: Account, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, includeUserID: Bool = true, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
+        try await request(server: account.server, path: path, method: method, query: query + (includeUserID ? [URLQueryItem(name: "userId", value: account.userId)] : []), body: body, token: account.accessToken, identity: account.deviceID, receipt: receipt)
     }
-    private func request(server: Server, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, token: String? = nil, identity: String? = nil, timeout: TimeInterval = 60) async throws -> Data {
+    private func request(server: Server, path: String, method: String = "GET", query: [URLQueryItem] = [], body: [String:Any]? = nil, token: String? = nil, identity: String? = nil, timeout: TimeInterval = 60, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
         let url = try ServerURLs.endpoint(server, path: path, query: query)
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         request.setValue(AuthorizationHeader.build(deviceID: identity ?? deviceID, deviceName: deviceName, version: version, token: token), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body); request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        return try await responseData(for: request, server: server)
+        return try await responseData(for: request, server: server, receipt: receipt)
     }
-    private func responseData(for request: URLRequest, server: Server) async throws -> Data {
+    private func responseData(for request: URLRequest, server: Server, receipt: ((PlaybackHTTPOutcome) -> Void)? = nil) async throws -> Data {
+        let begin = DispatchTime.now().uptimeNanoseconds
+        var status: Int?, failure = "none"
+        defer { receipt?(.init(status: status, failure: failure,
+                              elapsedMs: Int64((DispatchTime.now().uptimeNanoseconds - begin) / 1_000_000))) }
         let data: Data; let response: URLResponse
         do { (data, response) = try await session.data(for: request) }
-        catch { if Task.isCancelled { throw CancellationError() }; throw ClientError.network }
-        guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
-        guard let responseURL = http.url, ServerURLs.isSameOrigin(server.url, responseURL) else { throw ClientError.unsafeStreamURL }
-        if http.statusCode == 401 { throw ClientError.invalidCredentials }
-        guard (200..<300).contains(http.statusCode) else { throw ClientError.server(http.statusCode) }
+        catch {
+            let code = (error as? URLError)?.code
+            failure = Task.isCancelled || code == .cancelled ? "cancelled" : code == .timedOut ? "timeout" : "network"
+            if Task.isCancelled { throw CancellationError() }; throw ClientError.network
+        }
+        guard let http = response as? HTTPURLResponse else { failure = "invalidresponse"; throw ClientError.invalidResponse }
+        status = http.statusCode
+        guard let responseURL = http.url, ServerURLs.isSameOrigin(server.url, responseURL) else { failure = "invalidresponse"; throw ClientError.unsafeStreamURL }
+        if http.statusCode == 401 { failure = "http"; throw ClientError.invalidCredentials }
+        guard (200..<300).contains(http.statusCode) else { failure = "http"; throw ClientError.server(http.statusCode) }
         return data
     }
 }

@@ -8,14 +8,50 @@ import PictureshowTransport
 import OSLog
 import MediaAccessibility
 
+/// AVKit drives the same public seek API as app controls. Capture a viewing-owned
+/// receipt before invoking AVFoundation; forwarding the original completion keeps
+/// AVKit's transport behavior intact while giving the session an actual result.
+final class ViewingAVPlayer: AVPlayer {
+    struct SeekReceipt: Equatable, Sendable { let generation: Int; let revision: Int; let target: Int64 }
+    private let receiptLock = NSLock()
+    private var pendingReceipt: (SeekReceipt, @Sendable (SeekReceipt, Bool) -> Void)?
+    func arm(_ receipt: SeekReceipt?, completion: @escaping @Sendable (SeekReceipt, Bool) -> Void = { _, _ in }) {
+        receiptLock.lock(); defer { receiptLock.unlock() }
+        pendingReceipt = receipt.map { ($0, completion) }
+    }
+    private func observer(for time: CMTime) -> ((Bool) -> Void)? {
+        receiptLock.lock(); let value = pendingReceipt; receiptLock.unlock()
+        guard time.seconds.isFinite, let (receipt, callback) = value, abs(Ticks.seconds(receipt.target) - time.seconds) < 0.001 else { return nil }
+        return { callback(receipt, $0) }
+    }
+    override func seek(to time: CMTime) {
+        let observe = observer(for: time)
+        super.seek(to: time, toleranceBefore: .positiveInfinity, toleranceAfter: .positiveInfinity) { observe?($0) }
+    }
+    override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime) {
+        let observe = observer(for: time)
+        super.seek(to: time, toleranceBefore: toleranceBefore, toleranceAfter: toleranceAfter) { observe?($0) }
+    }
+    override func seek(to time: CMTime, completionHandler: @escaping (Bool) -> Void) {
+        let observe = observer(for: time)
+        super.seek(to: time, completionHandler: { finished in observe?(finished); completionHandler(finished) })
+    }
+    override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime, completionHandler: @escaping (Bool) -> Void) {
+        let observe = observer(for: time)
+        super.seek(to: time, toleranceBefore: toleranceBefore, toleranceAfter: toleranceAfter) { finished in
+            observe?(finished); completionHandler(finished)
+        }
+    }
+}
+
 /// A viewing owns reports. Decoder replacements own encoders, never another viewing Start/Stop.
 @MainActor final class PlaybackSession: ObservableObject, Identifiable {
     let id = UUID()
     let player: AVPlayer
     @Published private(set) var item: MediaItem
-    @Published private(set) var decision: PlayDecision? { didSet { trackLabels.update(decision?.source.mediaStreams ?? []) } }
+    @Published private(set) var decision: PlayDecision? { didSet { trackLabels.update(decision?.source.mediaStreams ?? [], sourceID: decision.map { "\($0.itemID)|\($0.source.id ?? "")" }) } }
     @Published private(set) var status = "Preparing playback…"
-    @Published private(set) var error: String?
+    @Published private(set) var error: String? { didSet { if error != nil { trackLabels.cancelOpen() } } }
     @Published private(set) var reportError: String?
     @Published private(set) var positionTicks: Int64 = 0
     @Published private(set) var changingTracks = false
@@ -58,6 +94,7 @@ import MediaAccessibility
     private var timeoutTask: Task<Void, Never>?
     private var reportTail: Task<Void, Never>?
     private var reportsQueued = 0
+    private var reportSequence = 0
     private var failedStart: (PlayDecision, Int64, Bool, Bool)?
     private var failedProgress: (PlayDecision, Int64, Bool)?
     private var finalReport: (PlayDecision, Int64, Bool)?
@@ -76,6 +113,7 @@ import MediaAccessibility
     private var closeTask: Task<Void, Never>?
     private var pauseIntent = false
     private var pendingSeekTicks: Int64?
+    private var nativeSeekPending = false
     private var seekRevision = 0
     private var segments: [MediaSegment] = []
     private var extrasItem: MediaItem?
@@ -94,7 +132,7 @@ import MediaAccessibility
     private var stalledSince: Date?
     private var lastObservedTicks: Int64 = 0
 
-    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = AVPlayer(), externalSubtitles: ExternalTextSubtitles? = nil, diagnostics: PlaybackDiagnostics? = nil) {
+    init(client: JellyfinClient, account: Account, item: MediaItem, preferences: PlaybackPreferences = .init(), player: AVPlayer = ViewingAVPlayer(), externalSubtitles: ExternalTextSubtitles? = nil, diagnostics: PlaybackDiagnostics? = nil) {
         self.client = client; self.account = account; self.item = item; self.preferences = preferences; self.player = player
         self.diagnostics = diagnostics ?? PlaybackDiagnostics()
         self.externalSubtitles = externalSubtitles ?? ExternalTextSubtitles()
@@ -154,7 +192,7 @@ import MediaAccessibility
         do { url = try ServerPlaybackURL.make(decisionURL: next.url, server: account.server.url,
                                              token: account.accessToken, requiredHeaders: next.headers) }
         catch { try? await client.stopEncoding(account: account, decision: next); throw error }
-        decision = next; positionTicks = startTicks
+        decision = next; positionTicks = pendingSeekTicks ?? startTicks
         observeSubtitleSelection(next.subtitleIndex)
         selectExternalText(for: next)
         // Session identifiers support scoped encoder cleanup after an interrupted pilot.
@@ -256,6 +294,9 @@ import MediaAccessibility
                 avItem.select(nil, in: group)
             }
             guard !Task.isCancelled, !self.closed, self.generation == version else { return }
+            // Initial AVKit/programmatic selection is a baseline, never a choice.
+            await self.recordNativeSelection(self.player.currentItem, establishingBaseline: true)
+            guard !Task.isCancelled, !self.closed, self.generation == version else { return }
             var target = self.pendingSeekTicks ?? decision.startTicks
             var correctingSeek = false
             while target > 0 || correctingSeek {
@@ -274,9 +315,6 @@ import MediaAccessibility
                 break
             }
             self.pendingSeekTicks = nil; self.positionTicks = target
-            // Initial AVKit/programmatic selection is a baseline, never a choice.
-            await self.recordNativeSelection(self.player.currentItem, establishingBaseline: true)
-            guard !Task.isCancelled, !self.closed, self.generation == version else { return }
             self.timelineReady = true; self.waitingForVideo = false
             self.status = self.playbackMethodStatus
             Logger(subsystem: "app.pictureshow", category: "Playback").notice("Native ready viewing=\(self.viewingID.uuidString, privacy: .public) durationSeconds=\(self.durationSeconds ?? -1) targetTicks=\(target)")
@@ -298,19 +336,54 @@ import MediaAccessibility
         enqueueProgress()
     }
     func nativeSeekBegan(_ seconds: Double) { lastSeekTime = Date(); countdownElapsed = 0 }
-    func backgrounded() { pauseIntent = true; isPaused = true; player.pause(); enqueueProgress() }
+    /// AVKit owns transport seeks. Return the viewing target synchronously so its
+    /// internal seek uses the accumulated intent even while currentTime lags.
+    func nativeSeekTarget(from oldSeconds: Double, to targetSeconds: Double) -> Double {
+        guard !closed, oldSeconds.isFinite, targetSeconds.isFinite else { return targetSeconds }
+        let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
+        let target = SeekSteps.target(positionMs: Ticks.from(seconds: oldSeconds) / 10_000,
+                                      pendingMs: pendingSeekTicks.map { $0 / 10_000 },
+                                      deltaMs: Ticks.from(seconds: targetSeconds - oldSeconds) / 10_000,
+                                      durationMs: upper / 10_000) * 10_000
+        seekRevision += 1; pendingSeekTicks = target; nativeSeekPending = true
+        (player as? ViewingAVPlayer)?.arm(.init(generation: generation, revision: seekRevision, target: target)) { [weak self] receipt, success in
+            Task { @MainActor in self?.nativeSeekCompleted(receipt, success: success) }
+        }
+        positionTicks = target; nativeSeekBegan(Ticks.seconds(target))
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["PICTURESHOW_SEEK_DIAGNOSTICS"] == "1" {
+            Logger(subsystem: "app.pictureshow", category: "Playback").notice("seek-native uptimeMs=\(Int64(ProcessInfo.processInfo.systemUptime * 1_000)) fromMs=\(Ticks.from(seconds: oldSeconds) / 10_000) proposedMs=\(Ticks.from(seconds: targetSeconds) / 10_000) targetMs=\(target / 10_000) revision=\(self.seekRevision) generation=\(self.generation)")
+        }
+        #endif
+        return Ticks.seconds(target)
+    }
+    func nativeSeekCompleted(_ receipt: ViewingAVPlayer.SeekReceipt, success: Bool) {
+        guard nativeSeekPending, !closed, success, receipt.generation == generation,
+              receipt.revision == seekRevision, receipt.target == pendingSeekTicks else { return }
+        nativeSeekPending = false; pendingSeekTicks = nil; positionTicks = receipt.target
+        (player as? ViewingAVPlayer)?.arm(nil)
+        diagnostics.record("seek.nativeCompleted")
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["PICTURESHOW_SEEK_DIAGNOSTICS"] == "1" {
+            Logger(subsystem: "app.pictureshow", category: "Playback").notice("seek-native-complete uptimeMs=\(Int64(ProcessInfo.processInfo.systemUptime * 1_000)) targetMs=\(receipt.target / 10_000) revision=\(receipt.revision) generation=\(receipt.generation)")
+        }
+        #endif
+        enqueueProgress()
+    }
+    func backgrounded() { trackLabels.cancelOpen(); pauseIntent = true; isPaused = true; player.pause(); enqueueProgress() }
     @discardableResult func seek(by seconds: Double) -> Int64 {
         let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
-        let target = min(upper, max(0, Ticks.adding(pendingSeekTicks ?? currentTicks, Ticks.from(seconds: seconds))))
+        let target = SeekSteps.target(positionMs: currentTicks / 10_000, pendingMs: pendingSeekTicks.map { $0 / 10_000 }, deltaMs: Ticks.from(seconds: seconds) / 10_000, durationMs: upper / 10_000) * 10_000
         seek(toTicks: target)
         return target
     }
     func seek(toTicks ticks: Int64) {
         guard !closed else { return }
+        nativeSeekPending = false; (player as? ViewingAVPlayer)?.arm(nil)
         seekRevision += 1
         let revision = seekRevision, version = generation
         let upper = durationSeconds.map(Ticks.from(seconds:)) ?? Int64.max
-        let target = min(upper, max(0, ticks)); pendingSeekTicks = target; lastSeekTime = Date()
+        let target = min(upper, max(0, ticks)); pendingSeekTicks = target; positionTicks = target; lastSeekTime = Date()
         countdownElapsed = 0
         guard timelineReady else { positionTicks = target; return }
         player.seek(to: CMTime(seconds: Ticks.seconds(target), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] success in
@@ -342,14 +415,15 @@ import MediaAccessibility
         : "AVKit uses the system caption renderer. Per-viewing subtitle timing is not exposed by Apple's public player API."
     }
     private var currentTicks: Int64 {
-        guard timelineReady else { return pendingSeekTicks ?? positionTicks }
+        if let pendingSeekTicks { return pendingSeekTicks }
+        guard timelineReady else { return positionTicks }
         let seconds = player.currentTime().seconds
         return seconds.isFinite ? max(0, Ticks.from(seconds: seconds)) : positionTicks
     }
     private func tick() {
         guard timelineReady, !closed else { return }
         positionTicks = currentTicks
-        subtitleCue = externalSubtitles.text(atFullMediaMs: positionTicks / 10_000)
+        subtitleCue = externalSubtitles.text(atFullMediaMs: Ticks.from(seconds: player.currentTime().seconds.isFinite ? player.currentTime().seconds : Ticks.seconds(positionTicks)) / 10_000)
         let now = Date(), elapsed = min(1, now.timeIntervalSince(lastTickTime)); lastTickTime = now
         let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         if !pauseIntent && (waiting || lastObservedTicks == positionTicks) {
@@ -448,58 +522,73 @@ import MediaAccessibility
             switching = false; return
         }
         externalSubtitles.release(); subtitleCue = nil
-        item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil
-        viewingID = UUID(); audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false; hevcFallbackUsed = false
+        item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil; nativeSeekPending = false
+        viewingID = UUID(); reportSequence = 0; audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false; hevcFallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
         segments = []; chapters = []; skipped = []; extrasTask = nil; pauseIntent = false
         do { try await prepare(startTicks: 0, audio: nil, subtitle: nil) } catch { self.error = "Could not start the next episode. Go back and try again." }
         switching = false
     }
+    /// Snapshot only after the previous attempt completes. A queued periodic report
+    /// observes the viewer's current selection instead of replaying an obsolete body.
     private func enqueueReport(decision: PlayDecision, kind: String, ticks: Int64, paused: Bool) {
         if kind == "progress", reportsQueued >= 2 { return }
-        // Value snapshot at enqueue time: retries cannot inherit a later choice.
-        let muted = decision.audioIndex == -1
-        let decision = reportingDecision(decision)
+        let viewing = viewingID
         reportsQueued += 1
-        #if DEBUG
-        Logger(subsystem: "app.pictureshow", category: "Reports").notice("Queued report kind=\(kind, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public) ticks=\(ticks) paused=\(paused)")
-        #endif
         let previous = reportTail
         reportTail = Task { [self] in
             await previous?.value
             defer { reportsQueued -= 1 }
-            do {
-                if kind != "start", let (first, position, paused, firstMuted) = failedStart {
-                    try await client.reportStart(account: account, decision: first, positionTicks: position, paused: paused, isMuted: firstMuted)
-                    failedStart = nil
-                }
-                if kind == "start" { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused, isMuted: muted) }
-                else if kind == "stop" { try await client.reportStopped(account: account, decision: decision, positionTicks: ticks, failed: error != nil) }
-                else { try await client.reportProgress(account: account, decision: decision, positionTicks: ticks, paused: paused, isMuted: muted) }
-                #if DEBUG
-                Logger(subsystem: "app.pictureshow", category: "Reports").notice("Accepted report kind=\(kind, privacy: .public) viewing=\(self.viewingID.uuidString, privacy: .public) ticks=\(ticks)")
-                #endif
-                if kind == "start" { failedStart = nil }
-                if kind == "progress" { failedProgress = nil }
-                if kind == "stop" { failedStop = nil; failedProgress = nil }
-                clearReportErrorIfRecovered()
-            } catch {
-                if kind == "start" { failedStart = (decision, ticks, paused, muted) }
-                if kind == "progress" { failedProgress = (decision, ticks, paused) }
-                if kind == "stop" { failedStop = (decision, ticks, self.error != nil) }
-                reportError = "The server could not save progress. Resume may be unavailable. Check your connection."
+            guard viewingID == viewing else { return }
+            let value = kind == "stop" ? decision : self.decision ?? decision
+            let position = kind == "progress" ? currentTicks : ticks
+            let pause = kind == "progress" ? pauseIntent : paused
+            let succeeded = await attemptReport(value, kind: kind, ticks: position, paused: pause)
+            // Start/Progress failure is visible but is never replayed as an old snapshot.
+            // A later current check-in may recover. Stop gets one immediate retry.
+            if !succeeded, kind == "stop" {
+                _ = await attemptReport(value, kind: kind, ticks: position, paused: pause)
             }
         }
     }
+    @discardableResult private func attemptReport(_ value: PlayDecision, kind: String, ticks: Int64, paused: Bool) async -> Bool {
+        let report = reportingDecision(value)
+        let audioViewer = audioChosenByViewer, subtitleViewer = subtitleChosenByViewer
+        let body = kind == "stop"
+            ? PlaybackReports.stopped(decision: report, positionTicks: max(0, ticks), failed: error != nil)
+            : PlaybackReports.progress(decision: report, positionTicks: max(0, ticks), paused: paused,
+                                       audioIndex: report.audioIndex, subtitleIndex: report.subtitleIndex,
+                                       isMuted: value.audioIndex == -1)
+        reportSequence += 1
+        let sequence = reportSequence
+        let fields = PlaybackReportFields.describe(kind: kind, positionTicks: max(0, ticks), audio: report.audioIndex,
+                                                   subtitle: report.subtitleIndex, audioViewer: audioViewer, subtitleViewer: subtitleViewer)
+        let item = value.itemID, session = value.playSessionId ?? "-"
+        let outcome = await client.sendReportAttempt(account: account, kind: kind, body: body)
+        let line = "report item=\(item) session=\(session) seq=\(sequence) \(fields) status=\(outcome.status.map(String.init) ?? "none") failure=\(outcome.failure) elapsedMs=\(outcome.elapsedMs)"
+        Logger(subsystem: "app.pictureshow", category: "Playback").notice("\(line, privacy: .public)")
+        diagnostics.report(line)
+        if outcome.succeeded {
+            failedStart = nil; failedProgress = nil
+            if kind == "stop" { failedStop = nil }
+            clearReportErrorIfRecovered()
+        } else {
+            if kind == "progress" || kind == "start" { failedProgress = (report, ticks, paused) }
+            if kind == "stop" { failedStop = (report, ticks, error != nil) }
+            reportError = "The server could not save progress. Resume may be unavailable. Check your connection."
+        }
+        return outcome.succeeded
+    }
     private func enqueueProgress() { if started, !stopped, let decision { enqueueReport(decision: decision, kind: "progress", ticks: currentTicks, paused: pauseIntent) } }
     func beginClosing() {
-        guard !closed else { return }; closed = true; generation += 1; player.pause()
+        guard !closed else { return }; trackLabels.cancelOpen(); closed = true; generation += 1; player.pause()
         externalSubtitles.release(); subtitleCue = nil
         closeTask = Task { [self] in await finishViewing(); terminal = true }
     }
     func stop() async { beginClosing(); await closeTask?.value }
     private func releaseStream() async {
         positionTicks = completedTicks ?? currentTicks; generation += 1; timelineReady = false
+        (player as? ViewingAVPlayer)?.arm(nil)
         nativeSelectionBaseline = [:]; nativeSelectionRevision += 1
         timeoutTask?.cancel(); timeoutTask = nil
         startTask?.cancel(); await startTask?.value; startTask = nil
@@ -513,20 +602,16 @@ import MediaAccessibility
             catch { failedEncodings.append(decision); reportError = "The server could not stop an encoding. Retry saving progress from details." }
         }
     }
+    var requiresPlayedSave: Bool { failedPlayedID != nil || (completionTask != nil && !completionCommitted) }
     func retrySaving() async {
         await reportTail?.value
         if let failedPlayedID {
             do { _ = try await client.played(account: account, itemID: failedPlayedID, value: true); self.failedPlayedID = nil; completionCommitted = true }
             catch { reportError = "The server could not mark this title watched. Check your connection and retry." }
         }
-        if let (decision, ticks, paused, muted) = failedStart {
-            do { try await client.reportStart(account: account, decision: decision, positionTicks: ticks, paused: paused, isMuted: muted); failedStart = nil }
-            catch { reportError = "The server could not record playback. Check your connection and retry."; return }
-        }
         if failedStop == nil, failedProgress != nil, let finalReport { failedStop = finalReport }
-        if let (decision, ticks, failed) = failedStop {
-            do { try await client.reportStopped(account: account, decision: decision, positionTicks: ticks, failed: failed); failedStop = nil; failedProgress = nil }
-            catch { reportError = "The server could not save the final position. Check your connection and retry." }
+        if let (decision, ticks, _) = failedStop {
+            guard await attemptReport(decision, kind: "stop", ticks: ticks, paused: true) else { return }
         }
         let pending = failedEncodings; failedEncodings = []
         for decision in pending {
@@ -542,6 +627,7 @@ import MediaAccessibility
     private func finishViewing() async {
         guard !stopped else { return }; positionTicks = completedTicks ?? currentTicks; stopped = true
         extrasTask?.cancel(); timeoutTask?.cancel()
+        if let completionTask { _ = await completionTask.value }
         let last = decision.map(reportingDecision)
         await releaseStream()
         if started, let last { finalReport = (last, positionTicks, error != nil); enqueueReport(decision: last, kind: "stop", ticks: positionTicks, paused: true) }
@@ -549,13 +635,14 @@ import MediaAccessibility
     }
     /// A panel submits only the chosen type. The other type is read when this
     /// serialized command executes, after any earlier replacement completes.
-    func selectTrack(type: String, index: Int) async {
+    func selectTrack(type: String, index: Int, menuGeneration: Int? = nil) async {
         guard type == "Audio" || type == "Subtitle", !closed else { return }
         let viewing = viewingID
         let previous = trackTail
         let command = Task { [weak self] in
             await previous?.value
-            guard let self, !self.closed, self.viewingID == viewing, let current = self.decision else { return }
+            guard let self, !self.closed, self.viewingID == viewing, let current = self.decision,
+                  menuGeneration == nil || self.trackLabels.prepared?.generation == menuGeneration else { return }
             self.selectionIntentRevision += 1
             if type == "Audio" { self.audioChosenByViewer = true }
             else {
@@ -603,8 +690,8 @@ import MediaAccessibility
         let position = pendingSeekTicks ?? currentTicks
         enqueueProgress(); await reportTail?.value; await releaseStream()
         guard !closed else { changingTracks = false; return }
-        pendingSeekTicks = position
-        do { try await prepare(startTicks: position, audio: audio, subtitle: subtitle, forceHLS: true, forceVideoTranscode: forceVideoTranscode) }
+        pendingSeekTicks = pendingSeekTicks ?? position
+        do { try await prepare(startTicks: pendingSeekTicks ?? position, audio: audio, subtitle: subtitle, forceHLS: true, forceVideoTranscode: forceVideoTranscode) }
         catch { self.error = "Could not apply the selected tracks. Go back and try again." }
         changingTracks = false
     }
@@ -661,6 +748,7 @@ import MediaAccessibility
         }
     }
     private func failed() async {
+        trackLabels.cancelOpen()
         guard !changingTracks, !closed else { return }
         let failure = player.currentItem?.error as NSError?
         Logger(subsystem: "app.pictureshow", category: "Playback").error("Native playback failure domain=\(failure?.domain ?? "unknown", privacy: .public) code=\(failure?.code ?? 0)")
@@ -752,7 +840,12 @@ import MediaAccessibility
 @MainActor final class PlaybackDiagnostics {
     private(set) var counts: [String: Int] = [:]
     private let sink: (String, Int) -> Void
+    private(set) var reportLines: [String] = []
     init(sink: @escaping (String, Int) -> Void = { _, _ in }) { self.sink = sink }
+    func report(_ line: String) {
+        if reportLines.count >= 64 { reportLines.removeFirst() }
+        reportLines.append(line); record("report")
+    }
     func record(_ event: String) {
         counts[event, default: 0] += 1
         sink(event, counts[event, default: 0])

@@ -10,6 +10,33 @@ public struct DetailFailurePresentation: Equatable, Sendable {
 
 /// Portable presentation decisions. The app owns focus and announcement delivery.
 public enum DetailFeedback {
+    public static func readCanReplaceCompletion(completionItem: String, completionRead: Int64, item: String, read: Int64, succeeded: Bool) -> Bool {
+        succeeded && completionItem == item && read > completionRead
+    }
+
+    public static func needsPendingControls(loading: Bool, firstArrival: Bool, canQueue: Bool, returningFromPlayback: Bool = false) -> Bool {
+        loading && firstArrival && canQueue && !returningFromPlayback
+    }
+
+    public static func requestedActionLabel(target: String, newlyAccepted: Bool) -> String {
+        guard newlyAccepted else { return "\(heldActionLabel(target: target)) already requested" }
+        switch target {
+        case "primary": return "Play requested"
+        case "from-start": return "Start requested"
+        default: return "\(heldActionLabel(target: target)) change requested"
+        }
+    }
+
+    public static func catalogRevisionNeedsRefresh(previous: Int64?, current: Int64) -> Bool { previous == nil || previous != current }
+    public static func readBandText(retrying: Bool, reason: String) -> String { retrying ? "Loading item. Please wait." : reason }
+    public static func sessionNeedsRead(newRevision: Bool, refreshed: Bool, container: Bool, alreadyConfirmed: Bool) -> Bool {
+        newRevision && (refreshed || container) && !(refreshed && alreadyConfirmed)
+    }
+    public static func readHasFailure(readFailed: Bool, reason: String?, mutationReady: Bool) -> Bool { reason != nil && (readFailed || !mutationReady) }
+    public static func requestCueRemainsActive(active: Bool, readerLeftAction: Bool, requested: Bool = true) -> Bool { active && requested && !readerLeftAction }
+    public static func hasConfirmedLeafRead(readSucceeded: Bool, sameUserData: Bool, container: Bool) -> Bool { readSucceeded && sameUserData && !container }
+    public static func readRequiresDependents(type: String) -> Bool { ["Series", "Season"].contains(type) }
+
     /// Actual toggle state only. Availability belongs to native disabled semantics.
     public static func actionDescription(currentState: String?, available: Bool) -> String? {
         available ? currentState : nil
