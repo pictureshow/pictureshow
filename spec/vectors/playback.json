@@ -921,6 +921,58 @@
         "pickedIndex": 3
       },
       "expected": false
+    },
+    {
+      "id": "report-fields-automatic-start",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "start",
+        "positionTicks": 901230000,
+        "audio": null,
+        "subtitle": null,
+        "audioViewer": false,
+        "subtitleViewer": false
+      },
+      "expected": "kind=start positionMs=90123 audio=omitted subtitle=omitted audioOrigin=automatic subtitleOrigin=automatic"
+    },
+    {
+      "id": "report-fields-viewer-subtitle-progress",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "progress",
+        "positionTicks": 901230000,
+        "audio": null,
+        "subtitle": 4,
+        "audioViewer": false,
+        "subtitleViewer": true
+      },
+      "expected": "kind=progress positionMs=90123 audio=omitted subtitle=4 audioOrigin=automatic subtitleOrigin=viewer"
+    },
+    {
+      "id": "report-fields-viewer-off-progress",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "progress",
+        "positionTicks": 901230000,
+        "audio": 2,
+        "subtitle": -1,
+        "audioViewer": true,
+        "subtitleViewer": true
+      },
+      "expected": "kind=progress positionMs=90123 audio=2 subtitle=-1 audioOrigin=viewer subtitleOrigin=viewer"
+    },
+    {
+      "id": "report-fields-viewer-stop-omits-indices",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "stop",
+        "positionTicks": 901230000,
+        "audio": 2,
+        "subtitle": 4,
+        "audioViewer": true,
+        "subtitleViewer": true
+      },
+      "expected": "kind=stop positionMs=90123 audio=omitted subtitle=omitted audioOrigin=viewer subtitleOrigin=viewer"
     }
   ]
 }

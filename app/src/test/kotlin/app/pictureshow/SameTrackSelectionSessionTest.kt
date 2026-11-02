@@ -69,7 +69,7 @@ class SameTrackSelectionSessionTest {
                         "type=${if (type == MediaStreamType.Audio) "audio" else "subtitle"} " +
                             "stream=${if (index < 0) "off" else index} ready=true positionMs=128379"
                     ),
-                    lines.last()
+                    lines.last { it.startsWith("track-reselect ") }
                 )
                 session.close()
                 runCurrent()

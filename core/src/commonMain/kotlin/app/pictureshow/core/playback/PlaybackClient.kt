@@ -106,14 +106,32 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         }
     }
 
-    suspend fun reportStart(account: Account, info: PlaybackProgressInfo): ClientResult<Unit> =
-        request(account, "Sessions/Playing", PlaybackJson.encodeToString(PlaybackProgressInfo.serializer(), info)) { }
+    suspend fun reportStart(
+        account: Account,
+        info: PlaybackProgressInfo,
+        observe: ((PlaybackHttpOutcome) -> Unit)? = null
+    ): ClientResult<Unit> =
+        request(account, "Sessions/Playing", PlaybackJson.encodeToString(PlaybackProgressInfo.serializer(), info), observe = observe) { }
 
-    suspend fun reportProgress(account: Account, info: PlaybackProgressInfo): ClientResult<Unit> =
-        request(account, "Sessions/Playing/Progress", PlaybackJson.encodeToString(PlaybackProgressInfo.serializer(), info)) { }
+    suspend fun reportProgress(
+        account: Account,
+        info: PlaybackProgressInfo,
+        observe: ((PlaybackHttpOutcome) -> Unit)? = null
+    ): ClientResult<Unit> = request(
+        account,
+        "Sessions/Playing/Progress",
+        PlaybackJson.encodeToString(PlaybackProgressInfo.serializer(), info),
+        observe = observe
+    ) {
+    }
 
-    suspend fun reportStopped(account: Account, info: PlaybackStopInfo): ClientResult<Unit> =
-        request(account, "Sessions/Playing/Stopped", PlaybackJson.encodeToString(PlaybackStopInfo.serializer(), info)) { }
+    suspend fun reportStopped(
+        account: Account,
+        info: PlaybackStopInfo,
+        observe: ((PlaybackHttpOutcome) -> Unit)? = null
+    ): ClientResult<Unit> =
+        request(account, "Sessions/Playing/Stopped", PlaybackJson.encodeToString(PlaybackStopInfo.serializer(), info), observe = observe) {
+        }
 
     /** End only this device's encode for this play session; never stop another viewer's stream. */
     suspend fun stopEncoding(account: Account, playSessionId: String): ClientResult<Unit> = request(
@@ -130,31 +148,47 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         path: String,
         body: String?,
         method: HttpMethod = HttpMethod.Post,
+        observe: ((PlaybackHttpOutcome) -> Unit)? = null,
         decode: (String) -> T
-    ): ClientResult<T> = try {
-        withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
-            val response = client.request("${account.server.url.trimEnd('/')}/$path") {
-                this.method = method
-                headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
-                if (body != null) {
-                    contentType(ContentType.Application.Json)
-                    setBody(body)
+    ): ClientResult<T> {
+        var status: Int? = null
+        var failure: PlaybackReportFailure? = null
+        try {
+            return withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
+                val response = client.request("${account.server.url.trimEnd('/')}/$path") {
+                    this.method = method
+                    headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
+                    if (body != null) {
+                        contentType(ContentType.Application.Json)
+                        setBody(body)
+                    }
                 }
+                status = response.status.value
+                if (response.status.value !in 200..299) failure = PlaybackReportFailure.Http
+                when (response.status.value) {
+                    in 200..299 -> ClientResult.Success(decode(response.bodyAsText()))
+                    401 -> failure(ErrorKind.INVALID_CREDENTIALS, "The server no longer accepts this sign-in. Sign in again.")
+                    else -> failure(ErrorKind.SERVER, "The server could not complete the request (${response.status.value}).")
+                }
+            } ?: run {
+                failure = PlaybackReportFailure.Timeout
+                failure(ErrorKind.NETWORK, "The server took too long to respond. Check your connection and try again.")
             }
-            when (response.status.value) {
-                in 200..299 -> ClientResult.Success(decode(response.bodyAsText()))
-                401 -> failure(ErrorKind.INVALID_CREDENTIALS, "The server no longer accepts this sign-in. Sign in again.")
-                else -> failure(ErrorKind.SERVER, "The server could not complete the request (${response.status.value}).")
-            }
-        } ?: failure(ErrorKind.NETWORK, "The server took too long to respond. Check your connection and try again.")
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (_: SerializationException) {
-        failure(ErrorKind.INVALID_RESPONSE, "The server returned an unreadable response.")
-    } catch (_: IllegalArgumentException) {
-        failure(ErrorKind.INVALID_RESPONSE, "The server returned an incomplete response.")
-    } catch (_: Exception) {
-        failure(ErrorKind.NETWORK, "Could not reach the server. Check your connection and try again.")
+        } catch (cancelled: CancellationException) {
+            failure = PlaybackReportFailure.Cancelled
+            throw cancelled
+        } catch (_: SerializationException) {
+            failure = PlaybackReportFailure.InvalidResponse
+            return failure(ErrorKind.INVALID_RESPONSE, "The server returned an unreadable response.")
+        } catch (_: IllegalArgumentException) {
+            failure = PlaybackReportFailure.InvalidResponse
+            return failure(ErrorKind.INVALID_RESPONSE, "The server returned an incomplete response.")
+        } catch (_: Exception) {
+            failure = PlaybackReportFailure.Network
+            return failure(ErrorKind.NETWORK, "Could not reach the server. Check your connection and try again.")
+        } finally {
+            observe?.invoke(PlaybackHttpOutcome(status, failure))
+        }
     }
 
     private fun failure(kind: ErrorKind, message: String) = ClientResult.Failure(ClientError(kind, message))

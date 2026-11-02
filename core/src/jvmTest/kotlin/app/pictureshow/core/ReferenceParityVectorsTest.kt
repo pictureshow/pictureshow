@@ -131,6 +131,16 @@ class ReferenceParityVectorsTest {
                 deviceId = credentials.optionalText("deviceId")
             )
         return when (operation) {
+            "playback-report-fields" -> JsonPrimitive(
+                app.pictureshow.core.playback.PlaybackReportFields.describe(
+                    input.text("kind"),
+                    input.getValue("positionTicks").jsonPrimitive.long,
+                    input["audio"]?.jsonPrimitive?.intOrNull,
+                    input["subtitle"]?.jsonPrimitive?.intOrNull,
+                    input.getValue("audioViewer").jsonPrimitive.boolean,
+                    input.getValue("subtitleViewer").jsonPrimitive.boolean
+                )
+            )
             "track-selection-unchanged" -> JsonPrimitive(
                 app.pictureshow.core.playback.TrackSelection.unchanged(input.int("currentIndex"), input.int("pickedIndex"))
             )
