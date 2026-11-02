@@ -312,11 +312,11 @@ struct PlayerOptions: View {
                         #endif
                         Section("Audio") {
                             track("Off", index: -1, type: "Audio", selected: audio == -1)
-                            ForEach(menu?.audio ?? []) { track($0.title, index: $0.id, type: "Audio", selected: audio == $0.id) }
+                            ForEach(menu?.audio ?? []) { track(trackTitle($0), index: $0.id, type: "Audio", selected: audio == $0.id) }
                         }
                         Section("Subtitles") {
                             track("Off", index: -1, type: "Subtitle", selected: subtitle == -1)
-                            ForEach(menu?.subtitles ?? []) { track($0.title, index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
+                            ForEach(menu?.subtitles ?? []) { track(trackTitle($0), index: $0.id, type: "Subtitle", selected: subtitle == $0.id) }
                             Text(session.subtitleTimingExplanation).font(.caption)
                             if let status = session.subtitleStatus { Text(status).font(.caption).accessibilityIdentifier("subtitleLoadingStatus") }
                         }
@@ -324,7 +324,7 @@ struct PlayerOptions: View {
                     }
                 }
             }
-            .pictureshowNavigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : "Audio and subtitles")
+            .pictureshowNavigationTitle(kind == "seek" ? "Seek" : kind == "chapters" ? "Chapters" : trackPanelTitle)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done", action: closePanel).accessibilityIdentifier("playerOptionsDone") } }
         }
         .onChange(of: session.decision?.audioIndex) { _, value in
@@ -342,6 +342,20 @@ struct PlayerOptions: View {
         .onChange(of: trackMenus.waitingToOpen) { _, waiting in
             if !waiting && trackMenus.openMenu == nil && menu == nil { closePanel() }
         }
+    }
+    private func trackTitle(_ value: TrackLabel) -> String {
+        #if os(tvOS)
+        return value.menuTitle
+        #else
+        return value.title
+        #endif
+    }
+    private var trackPanelTitle: String {
+        #if os(tvOS)
+        return "Tracks"
+        #else
+        return "Audio and subtitles"
+        #endif
     }
     private func closePanel() { done(); dismiss() }
     private func track(_ title: String, index: Int, type: String, selected: Bool) -> some View {
