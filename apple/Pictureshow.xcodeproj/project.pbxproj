@@ -10,6 +10,7 @@
 		10FF7DE827E875AC9A8B6996 /* PictureshowTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 8DCA7E7F54A8A046DB8216E5 /* PictureshowTransport */; };
 		11BAEB09CF2F5909D00F4003 /* SeekCompletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08BBE72B201F8BCA82D1D56 /* SeekCompletionTests.swift */; };
 		13D8668701E6604D929B2632 /* ExternalTextSubtitles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4336B9D9C705C912361FA47C /* ExternalTextSubtitles.swift */; };
+		1F06DF598BEDFFFFF50FA12E /* NativeTrackHTTPFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1016F511A8BEB68C68FA588E /* NativeTrackHTTPFixture.swift */; };
 		22EEFD74CE9BD3CE4CAB0AE7 /* NativePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED20D6B4E0FF0CBFDE61285F /* NativePlayer.swift */; };
 		2315B71227D493238750EE59 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		23178F52ECB499187B8771AD /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414DE71D03568307C1B5DF0A /* SearchView.swift */; };
@@ -27,6 +28,7 @@
 		6C903B48798CB4B7D4BA728C /* DetailRecoveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE682A4DF76AD816EAEF225 /* DetailRecoveryUITests.swift */; };
 		72E0D67C0C6D06E42C187125 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D979FD5F6655B17B01A6E075 /* SettingsView.swift */; };
 		737327C39FADF1424FEC543C /* AccessibilityStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92C95D89DC790C3EB88A395 /* AccessibilityStatus.swift */; };
+		7519EFC91890A682D5B8FC52 /* NativeTrackHTTPFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1016F511A8BEB68C68FA588E /* NativeTrackHTTPFixture.swift */; };
 		882EB3B90D8B8FFBD8952D4F /* PlaybackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDD6E0937BBEEAE9622CF83 /* PlaybackSession.swift */; };
 		90441AC588AA02C9BCB67941 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23DE8E3C9A071C533008D69 /* DesignTokens.swift */; };
 		931B8B697C2B6334882D8C7A /* CatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FA85AA82A654E61D1D5117 /* CatalogViews.swift */; };
@@ -94,6 +96,7 @@
 		0574B9F5F8ACC028256A7851 /* PictureshowTransport */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PictureshowTransport; path = PictureshowTransport; sourceTree = SOURCE_ROOT; };
 		0C91A71C6A0E4957660B0A18 /* AccountStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStorageTests.swift; sourceTree = "<group>"; };
 		0CFDDCBD010D6461EC33712E /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		1016F511A8BEB68C68FA588E /* NativeTrackHTTPFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTrackHTTPFixture.swift; sourceTree = "<group>"; };
 		11E0148B4068A19A5C78D094 /* Pictureshow-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CD5723AAA6FA2FF9EFD6B8F /* Pictureshow-iOS-UnitTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Pictureshow-iOS-UnitTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F8E5103DB47A19B32019DE1 /* PictureshowCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PictureshowCore; path = PictureshowCore; sourceTree = SOURCE_ROOT; };
@@ -196,6 +199,7 @@
 			children = (
 				98193AB8CC2DAA971427E2A9 /* AppleSliceUITests.swift */,
 				EFE682A4DF76AD816EAEF225 /* DetailRecoveryUITests.swift */,
+				1016F511A8BEB68C68FA588E /* NativeTrackHTTPFixture.swift */,
 			);
 			path = UITests;
 			sourceTree = "<group>";
@@ -470,6 +474,7 @@
 			files = (
 				52394F3A0C4E4E0873BCAF8A /* AppleSliceUITests.swift in Sources */,
 				6C903B48798CB4B7D4BA728C /* DetailRecoveryUITests.swift in Sources */,
+				1F06DF598BEDFFFFF50FA12E /* NativeTrackHTTPFixture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -512,6 +517,7 @@
 			files = (
 				AA4BA9DB243741B7F7ECDCBF /* AppleSliceUITests.swift in Sources */,
 				3B16A92B5B8FE296B0F4318D /* DetailRecoveryUITests.swift in Sources */,
+				7519EFC91890A682D5B8FC52 /* NativeTrackHTTPFixture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
