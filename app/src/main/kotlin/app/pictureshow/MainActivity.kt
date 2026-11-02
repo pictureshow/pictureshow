@@ -727,7 +727,7 @@ internal fun Pictureshow(
                     onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
                     onSignOut = profile::signOut,
                     onSearch = { nav.navigate(searchRoute()) },
-                    onResume = vm::reload,
+                    onResume = vm::resumed,
                     onSettings = { nav.navigate("settings") }
                 )
             }

@@ -181,7 +181,8 @@ class CatalogDetailBusyFocusTest {
         compose.mainClock.advanceTimeBy(100)
         compose.runOnIdle { assertEquals(listOf("played"), calls) }
         compose.onNodeWithTag("detail:favorite").assertIsEnabled()
-        compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+            .performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithText("Favorite change requested").assertExists()
         compose.onNodeWithTag("detail:favorite").performSemanticsAction(SemanticsActions.OnClick) { it() }

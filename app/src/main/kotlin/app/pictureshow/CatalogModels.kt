@@ -14,8 +14,10 @@ import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.assembleHome
 import app.pictureshow.core.isEmptyContainer
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -25,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 
 /** Shared across an account's back stack so detail changes immediately reach existing screens. */
 class CatalogSession(val service: CatalogService, private val accounts: AccountStore, private val onRefresh: () -> Unit = {}) {
@@ -90,8 +93,58 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
         }
     }
 
+    private data class CompletionRead(val revision: Long, val fresh: CompletableDeferred<MediaItem>)
+    private var itemReadRevision = 0L
+    private val completionReads = mutableMapOf<Pair<String, String>, MutableSet<CompletionRead>>()
+
+    /** Full detail reads may also satisfy an older post-Stop completion check. */
+    internal suspend fun readItem(account: Account, id: String, apply: (MediaItem) -> Unit = {}): ClientResult<MediaItem> {
+        val revision = ++itemReadRevision
+        val result = call(account) { item(account, id) }
+        currentCoroutineContext().ensureActive()
+        val fresh = (result as? ClientResult.Success)?.value
+        if (fresh != null) {
+            // Main.immediate may resume the report and its refresh collector inline.
+            // Its originating page must own the full result before that publication.
+            apply(fresh)
+            currentCoroutineContext().ensureActive()
+            completionReads[account.key to id]?.toList()?.forEach {
+                if (app.pictureshow.core.detailReadCanReplaceCompletion(id, it.revision, fresh.id, revision, true)) {
+                    it.fresh.complete(fresh)
+                }
+            }
+        }
+        return result
+    }
+
+    /** Keep the report's write guard, but do not wait for an obsolete read after Retry succeeds. */
+    internal suspend fun completionItem(account: Account, id: String): ClientResult<MediaItem> {
+        val key = account.key to id
+        val waiting = CompletionRead(++itemReadRevision, CompletableDeferred())
+        completionReads.getOrPut(key) { mutableSetOf() }.add(waiting)
+        // Cleanup may outlive reporting: the advance path joins its report job.
+        // Always cancel this transport scope in finally, including caller cancellation.
+        val transport = SupervisorJob()
+        val original = CoroutineScope(currentCoroutineContext() + transport).async { call(account) { item(account, id) } }
+        return try {
+            select {
+                waiting.fresh.onAwait { ClientResult.Success(it) }
+                original.onAwait { it }
+            }
+        } finally {
+            completionReads[key]?.let {
+                it.remove(waiting)
+                if (it.isEmpty()) completionReads.remove(key)
+            }
+            transport.cancel()
+        }
+    }
+
     suspend fun <T> call(account: Account, block: suspend CatalogService.() -> ClientResult<T>): ClientResult<T> {
         val result = service.block()
+        // A canceled transport can finish cleanup after a newer successful read. It no
+        // longer owns account expiry or any other result side effect.
+        currentCoroutineContext().ensureActive()
         if (result is ClientResult.Failure &&
             result.error.kind in listOf(ErrorKind.INVALID_CREDENTIALS, ErrorKind.EXPIRED)
         ) {
@@ -186,7 +239,19 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
     private var job: Job? = null
 
     init {
-        viewModelScope.launch { session.changes.collect { reload() } }
+        viewModelScope.launch {
+            var revision: Long? = null
+            session.changes.collect { changes ->
+                if (app.pictureshow.core.catalogRevisionNeedsRefresh(revision, changes.revision)) reload()
+                revision = changes.revision
+            }
+        }
+    }
+
+    private val readLifecycle = app.pictureshow.core.DetailReadLifecycle()
+
+    fun resumed() {
+        if (readLifecycle.resumed()) reload()
     }
 
     fun reload() {
@@ -387,10 +452,18 @@ class CatalogDetailViewModel(private val account: Account, private val original:
     init {
         reload(retainRows = false)
         viewModelScope.launch {
-            var refreshRevision = 0L
+            var revision = initialChanges.revision
+            var refreshRevision = initialChanges.refreshRevision
             session.changes.collect { changes ->
+                val changed = app.pictureshow.core.catalogRevisionNeedsRefresh(revision, changes.revision)
                 val refreshed = changes.refreshRevision != refreshRevision
+                revision = changes.revision
                 refreshRevision = changes.refreshRevision
+                val alreadyConfirmed = app.pictureshow.core.detailHasConfirmedLeafRead(
+                    state.value.readSucceeded,
+                    changes.users[original.id]?.let { it == state.value.item?.userData } == true,
+                    original.type in CONTAINER_TYPES
+                )
                 // Refresh discards older local mutations and carries only a just-acknowledged
                 // playback completion. Apply that state while loading; the fresh read then wins.
                 mutableState.update { state ->
@@ -405,7 +478,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                             !(original.id in changes.pendingPlayback && !state.playbackPending)
                     )
                 }
-                if (changes.revision > 0 && (refreshed || original.type in CONTAINER_TYPES)) {
+                if (app.pictureshow.core.detailSessionNeedsRead(changed, refreshed, original.type in CONTAINER_TYPES, alreadyConfirmed)) {
                     reload(retainRows = !refreshed && state.value.item != null)
                 }
             }
@@ -464,13 +537,20 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                 it.copy(
                     loading = !retainRows || retryDeadline != null,
                     error = null,
+                    readFailed = false,
                     readSucceeded = false,
                     readAttempt =
                     it.readAttempt + 1
                 )
             }
             detailTiming("item-start")
-            val result = session.call(account) { item(account, original.id) }
+            val result = session.readItem(account, original.id) { item ->
+                if (item.type != "Series") parentReadPending = false
+                mutableState.update { it.copy(item = item) }
+                // A full leaf read can acknowledge completion immediately. Containers
+                // still require their episode and Next up reads before becoming ready.
+                if (!app.pictureshow.core.detailReadRequiresDependents(item.type)) playbackRead()
+            }
             detailTiming("item-end", "success=${result is ClientResult.Success}")
             // A canceled RESUMED request must not overwrite the post-report refresh, even when
             // its transport finishes cancellation in a non-cancellable cleanup block.
@@ -482,11 +562,6 @@ class CatalogDetailViewModel(private val account: Account, private val original:
                 }
                 is ClientResult.Success -> {
                     val item = result.value
-                    if (item.type != "Series") parentReadPending = false
-                    mutableState.update { it.copy(item = item) }
-                    // A parent header says nothing about its episode rows or Next up. Keep the
-                    // same stale-data guard until all of that page's authoritative reads land.
-                    if (item.type !in listOf("Series", "Season")) playbackRead()
                     if (item.type == "Series") {
                         detailTiming("next-start")
                         val next = session.call(account) { nextUp(account, item.id) }

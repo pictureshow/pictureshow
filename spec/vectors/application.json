@@ -3739,6 +3739,542 @@
         false,
         false
       ]
+    },
+    {
+      "id": "detail.f3.completion-new-success",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 2,
+        "succeeded": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.completion-older-success",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 0,
+        "succeeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.completion-same-read",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 1,
+        "succeeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.completion-new-failure",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 2,
+        "succeeded": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.completion-other-item",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "episode",
+        "read": 2,
+        "succeeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-0",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": false,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-1",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": false,
+        "canQueue": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-2",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": true,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-3",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": true,
+        "canQueue": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-4",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": false,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-5",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": false,
+        "canQueue": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-6",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": true,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-7",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": true,
+        "canQueue": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.request-primary-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "primary",
+        "newlyAccepted": false
+      },
+      "expected": "Play already requested"
+    },
+    {
+      "id": "detail.f3.request-primary-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "primary",
+        "newlyAccepted": true
+      },
+      "expected": "Play requested"
+    },
+    {
+      "id": "detail.f3.request-from-start-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "from-start",
+        "newlyAccepted": false
+      },
+      "expected": "Play from start already requested"
+    },
+    {
+      "id": "detail.f3.request-from-start-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "from-start",
+        "newlyAccepted": true
+      },
+      "expected": "Start requested"
+    },
+    {
+      "id": "detail.f3.request-played-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "played",
+        "newlyAccepted": false
+      },
+      "expected": "Watched already requested"
+    },
+    {
+      "id": "detail.f3.request-played-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "played",
+        "newlyAccepted": true
+      },
+      "expected": "Watched change requested"
+    },
+    {
+      "id": "detail.f3.request-favorite-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "favorite",
+        "newlyAccepted": false
+      },
+      "expected": "Favorite already requested"
+    },
+    {
+      "id": "detail.f3.request-favorite-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "favorite",
+        "newlyAccepted": true
+      },
+      "expected": "Favorite change requested"
+    },
+    {
+      "id": "detail.f3.revision-0",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": null,
+        "current": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.revision-1",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": null,
+        "current": 9
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.revision-2",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": 0,
+        "current": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.revision-3",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": 9,
+        "current": 9
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.revision-4",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": 9,
+        "current": 10
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.band-false",
+      "operation": "detail-read-band",
+      "input": {
+        "retrying": false,
+        "reason": "Server unavailable (503)."
+      },
+      "expected": "Server unavailable (503)."
+    },
+    {
+      "id": "detail.f3.band-true",
+      "operation": "detail-read-band",
+      "input": {
+        "retrying": true,
+        "reason": "Server unavailable (503)."
+      },
+      "expected": "Loading item. Please wait."
+    },
+    {
+      "id": "detail.f3.session-historical",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": false,
+        "refreshed": true,
+        "container": true,
+        "alreadyConfirmed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.session-pending-only",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": false,
+        "refreshed": false,
+        "container": true,
+        "alreadyConfirmed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.session-refresh-leaf",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": true,
+        "container": false,
+        "alreadyConfirmed": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.session-confirmed-leaf",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": true,
+        "container": false,
+        "alreadyConfirmed": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.session-container-mutation",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": false,
+        "container": true,
+        "alreadyConfirmed": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.session-leaf-mutation",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": false,
+        "container": false,
+        "alreadyConfirmed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.failure-old-flag-pending",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": true,
+        "reason": null,
+        "mutationReady": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.failure-current-read-failure",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": true,
+        "reason": "Server unavailable (503).",
+        "mutationReady": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.failure-failed-first-read",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": false,
+        "reason": "Server unavailable (503).",
+        "mutationReady": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.failure-write-error",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": false,
+        "reason": "Write failed (503).",
+        "mutationReady": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.failure-settled",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": false,
+        "reason": null,
+        "mutationReady": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.pending-return-is-not-cold",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": true,
+        "canQueue": true,
+        "returningFromPlayback": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-stays-on-action",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.request-cue-ends-on-text",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-does-not-rearm-on-action",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": false,
+        "readerLeftAction": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-inactive-on-text",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": false,
+        "readerLeftAction": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-consumed",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": false,
+        "requested": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-applied",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": true,
+        "sameUserData": true,
+        "container": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-not-applied",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": false,
+        "sameUserData": true,
+        "container": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-changed",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": true,
+        "sameUserData": false,
+        "container": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-container",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": true,
+        "sameUserData": true,
+        "container": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-series",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Series"
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.read-dependencies-season",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Season"
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.read-dependencies-movie",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Movie"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-episode",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Episode"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-boxset",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "BoxSet"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-folder",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Folder"
+      },
+      "expected": false
     }
   ]
 }

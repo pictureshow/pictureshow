@@ -114,7 +114,7 @@ class CatalogDetailReadRecoveryTest {
         compose.mainClock.autoAdvance = true
     }
 
-    @Test fun aFreshHandoffKeepsThePublishedReasonAndRejectsAnotherRetry() {
+    @Test fun aFreshHandoffReportsLoadingAndRejectsAnotherRetry() {
         val item = MediaItem("film", "Invented film", "Movie")
         val reason = "The server is unavailable. The previous request expired and will not run."
         val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = reason))
@@ -132,7 +132,13 @@ class CatalogDetailReadRecoveryTest {
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { state.value = state.value.copy(loading = false) }
         awaitFreshRetryPublication()
-        compose.onNodeWithText(reason).assertExists()
+        compose.onNodeWithText(reason).assertDoesNotExist()
+        compose.onNodeWithTag("detail:read-error").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.Text,
+                listOf(androidx.compose.ui.text.AnnotatedString("Loading item. Please wait."))
+            )
+        )
         compose.onNodeWithText("Retrying…").assertExists()
         compose.onNodeWithTag("detail:retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.runOnIdle { assertEquals(1, retries) }
@@ -532,7 +538,7 @@ class CatalogDetailReadRecoveryTest {
         }
         fun bounds(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val hero = bounds("detail:hero")
-        val suffix = if (returning) "-pending" else ""
+        val suffix = "-pending"
         val played = bounds("detail:played$suffix")
         val favorite = bounds("detail:favorite$suffix")
         compose.runOnIdle { state.value = state.value.copy(loading = false, error = "The server took too long to respond. Try again.") }
@@ -543,7 +549,8 @@ class CatalogDetailReadRecoveryTest {
         val retry = compose.onNodeWithText("Retry").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithText("Retry").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("Retrying…").assertIsFocused().assertIsEnabled()
-        compose.onNodeWithText("The server took too long to respond. Try again.").assertExists()
+        compose.onNodeWithText("The server took too long to respond. Try again.").assertDoesNotExist()
+        compose.onNodeWithText("Loading item. Please wait.").assertExists()
         assertEquals(retry, compose.onNodeWithText("Retrying…").fetchSemanticsNode().boundsInRoot)
         assertEquals(hero, bounds("detail:hero"), "A held Retry retains its header and a real focused control")
         compose.onNodeWithText("Retrying…").performSemanticsAction(SemanticsActions.OnClick) { it() }

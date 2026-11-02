@@ -61,7 +61,8 @@ class CompletionPresentationTest {
         compose.onNodeWithText("Retry").performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle { kotlin.test.assertEquals(1, retries) }
         compose.onNodeWithText("Retrying…").assertIsFocused().assertIsDisplayed()
-        compose.onNodeWithText("Could not load watch state.").assertIsDisplayed()
+        compose.onNodeWithText("Could not load watch state.").assertDoesNotExist()
+        compose.onNodeWithText("Loading item. Please wait.").assertIsDisplayed()
         compose.onNodeWithTag("detail:played", useUnmergedTree = true).assertIsNotEnabled()
         compose.onNodeWithText("Saving progress…").assertDoesNotExist()
         compose.runOnIdle {

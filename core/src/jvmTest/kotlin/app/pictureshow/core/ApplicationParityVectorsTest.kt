@@ -58,6 +58,73 @@ class ApplicationParityVectorsTest {
             try {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
+                    "detail-read-failure" -> JsonPrimitive(
+                        detailReadHasFailure(
+                            input.getValue("readFailed").jsonPrimitive.booleanOrNull!!,
+                            input["reason"]?.jsonPrimitive?.contentOrNull,
+                            input.getValue("mutationReady").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-read-dependencies" -> JsonPrimitive(
+                        detailReadRequiresDependents(input.getValue("type").jsonPrimitive.content)
+                    )
+                    "detail-confirmed-leaf" -> JsonPrimitive(
+                        detailHasConfirmedLeafRead(
+                            input.getValue("readSucceeded").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("sameUserData").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("container").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-session-read" -> JsonPrimitive(
+                        detailSessionNeedsRead(
+                            input.getValue("newRevision").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("refreshed").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("container").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("alreadyConfirmed").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-completion-read" -> JsonPrimitive(
+                        detailReadCanReplaceCompletion(
+                            input.getValue("completionItem").jsonPrimitive.content,
+                            input.getValue("completionRead").jsonPrimitive.long,
+                            input.getValue("item").jsonPrimitive.content,
+                            input.getValue("read").jsonPrimitive.long,
+                            input.getValue("succeeded").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-cold-pending" -> JsonPrimitive(
+                        detailNeedsPendingControls(
+                            input.getValue("loading").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("firstArrival").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("canQueue").jsonPrimitive.booleanOrNull!!,
+                            input["returningFromPlayback"]?.jsonPrimitive?.booleanOrNull ?: false
+                        )
+                    )
+                    "detail-request-cue-active" -> JsonPrimitive(
+                        detailRequestCueRemainsActive(
+                            input.getValue("active").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("readerLeftAction").jsonPrimitive.booleanOrNull!!,
+                            input["requested"]?.jsonPrimitive?.booleanOrNull ?: true
+                        )
+                    )
+                    "detail-requested-label" -> JsonPrimitive(
+                        detailRequestedActionLabel(
+                            input.getValue("target").jsonPrimitive.content,
+                            input.getValue("newlyAccepted").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "catalog-refresh-revision" -> JsonPrimitive(
+                        catalogRevisionNeedsRefresh(
+                            input["previous"]?.jsonPrimitive?.longOrNull,
+                            input.getValue("current").jsonPrimitive.long
+                        )
+                    )
+                    "detail-read-band" -> JsonPrimitive(
+                        detailReadBandText(
+                            input.getValue("retrying").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("reason").jsonPrimitive.content
+                        )
+                    )
                     "detail-arrival-publication" -> JsonPrimitive(
                         detailArrivalAwaitsAction(
                             input.getValue("loading").jsonPrimitive.booleanOrNull!!,

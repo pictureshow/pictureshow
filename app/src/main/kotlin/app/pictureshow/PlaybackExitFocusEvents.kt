@@ -101,7 +101,7 @@ internal class PlaybackExitFocusDelegate(
 }
 
 /** Reader text selection is independent of Compose's input-focused action. */
-internal enum class PlaybackReaderTarget { NONE, ACTION, TEXT }
+internal enum class PlaybackReaderTarget { NONE, ACTION, OTHER_ACTION, TEXT }
 
 internal class PlaybackReaderMovement {
     private var sawAction = false
@@ -126,6 +126,8 @@ internal fun playbackReaderTarget(host: View): PlaybackReaderTarget {
             node.isFocused &&
                 node.isClickable &&
                 node.className?.toString() in setOf("android.view.View", "android.widget.Button") -> PlaybackReaderTarget.ACTION
+            node.isClickable &&
+                node.className?.toString() in setOf("android.view.View", "android.widget.Button") -> PlaybackReaderTarget.OTHER_ACTION
             !node.isClickable && node.className?.toString() == "android.widget.TextView" -> PlaybackReaderTarget.TEXT
             else -> PlaybackReaderTarget.NONE
         }
