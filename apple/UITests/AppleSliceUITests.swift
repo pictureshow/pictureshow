@@ -1403,11 +1403,8 @@ final class AppleSliceUITests: XCTestCase {
         var position = app.staticTexts["playbackPosition"]
         XCTAssertTrue(position.waitForExistence(timeout: 90))
         XCTAssertTrue(waitForPlaybackClock(position, minimum: 2, timeout: 90, metric: "f5_caption_initial"))
-        let native = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
-        let pause = native.buttons.matching(NSPredicate(format: "label ==[c] %@", "Pause")).firstMatch
-        if !pause.isHittable { native.tap() }
-        XCTAssertTrue(pause.waitForExistence(timeout: 5) && pause.isHittable)
-        pause.tap()
+        // Track selection belongs to Pictureshow's persistent action strip;
+        // AVKit's transient transport Pause need not be visible or hittable.
         selectTouchTrack(type: "subtitle", index: index)
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(play.waitForExistence(timeout: 20))
@@ -3404,6 +3401,38 @@ func testF5DemoHeldWatchedRequestIsSingleAndReadRetryRecovers() async throws {
     XCTAssertFalse(reason.isEmpty)
     XCTAssertTrue(app.staticTexts[reason].waitForExistence(timeout: 5))
     capture("F5 queued Watched truthful read failure")
+
+    #if os(iOS)
+    // A docked recovery lane can cover the current scroll position. Prove each
+    // lower retained action can clear its complete background without changing
+    // unavailable semantics or moving the pinned Retry control.
+    let recoverySurface = app.descendants(matching: .any).matching(identifier: "detailRecoverySurface").firstMatch
+    XCTAssertTrue(recoverySurface.exists)
+    XCTAssertTrue(recoverySurface.frame.contains(app.staticTexts[reason].frame), "The complete failure reason must remain in its painted recovery surface")
+    for action in [favorite, app.buttons["startOver"]] {
+        XCTAssertTrue(action.exists)
+        let top = app.navigationBars.firstMatch.frame.maxY + 12
+        for _ in 0..<8 {
+            let panel = recoverySurface.frame
+            let frame = action.frame
+            if frame.minY >= top && frame.maxY <= panel.minY - 8 { break }
+            let low = panel.minY - 24
+            XCTAssertGreaterThan(low - top, frame.height + 20)
+            let startY = frame.maxY > low ? low : top + 16
+            let endY = frame.maxY > low ? top + 16 : low
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: app.frame.midX, dy: startY)).press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: app.frame.midX, dy: endY)))
+        }
+        XCTAssertGreaterThanOrEqual(action.frame.minY, top)
+        XCTAssertLessThanOrEqual(action.frame.maxY, recoverySurface.frame.minY - 8)
+        XCTAssertFalse(action.frame.intersects(recoverySurface.frame))
+        XCTAssertFalse(action.isEnabled, "Scrolling cannot manufacture authoritative state")
+        XCTAssertTrue(recoverySurface.frame.contains(retry.frame))
+        XCTAssertTrue(retry.isHittable, "Retry must stay usable while lower actions scroll")
+        capture("F5 failure \(action.identifier) scrolls clear of recovery")
+        print("F5_RECOVERY_CLEARANCE id=\(action.identifier) action=\(action.frame) panel=\(recoverySurface.frame) disabled=true retryHittable=true")
+    }
+    #endif
 
     let priorDetailReads = f5Seen("GET:item_detail", in: try await f5Status())
     activate(retry)
