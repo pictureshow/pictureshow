@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -178,6 +179,8 @@ internal fun PlayerItemScreen(
     val emptyState = remember { MutableStateFlow(PlaybackState()) }
     val state by (controller?.state ?: emptyState).collectAsState()
     val player by output.player.collectAsState()
+    val speedState by output.speed.collectAsState()
+    var extraPanel by remember { mutableStateOf<String?>(null) }
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
     var setupError by remember { mutableStateOf<String?>(null) }
@@ -206,6 +209,13 @@ internal fun PlayerItemScreen(
     val audioFocus = remember { FocusRequester() }
     val subtitleFocus = remember { FocusRequester() }
     val chaptersFocus = remember { FocusRequester() }
+    val speedFocus = remember { FocusRequester() }
+    val infoFocus = remember { FocusRequester() }
+    fun openExtraPanel(title: String, opener: FocusRequester) {
+        // Keep the opener stable for both key and touch activation.
+        opener.requestFocus()
+        extraPanel = title
+    }
     val timelineFocus = remember { FocusRequester() }
     var seekOpen by remember { mutableStateOf(false) }
     var restoringSeekFocus by remember { mutableStateOf(false) }
@@ -235,6 +245,7 @@ internal fun PlayerItemScreen(
     var exitRequested by remember { mutableStateOf(false) }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
+        extraPanel = null
         chooserRequest = null
         if (!exitRequested && !switching) {
             PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=$reason"))
@@ -314,6 +325,10 @@ internal fun PlayerItemScreen(
     fun handleBack() {
         when {
             switching -> finish(reason = "back-during-next")
+            extraPanel != null -> {
+                returnFocus = if (extraPanel == "Playback speed") speedFocus else infoFocus
+                extraPanel = null
+            }
             chaptersOpen -> {
                 chaptersOpen = false
                 returnFocus = chaptersFocus
@@ -442,8 +457,8 @@ internal fun PlayerItemScreen(
             seekPreview = null
         }
     }
-    LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, restoringSeekFocus) {
-        if (controls && focusControls && !chaptersOpen && chooser == null && !seekOpen && !restoringSeekFocus) {
+    LaunchedEffect(controls, focusControls, chaptersOpen, chooser, seekOpen, extraPanel, restoringSeekFocus) {
+        if (controls && focusControls && !chaptersOpen && chooser == null && !seekOpen && extraPanel == null && !restoringSeekFocus) {
             playFocus.requestFocus()
             focusControls = false
         }
@@ -479,6 +494,7 @@ internal fun PlayerItemScreen(
             seekOpen = false
             chooserRequest = null
             chaptersOpen = false
+            extraPanel = null
         }
     }
     LaunchedEffect(accessibleControls) {
@@ -487,11 +503,12 @@ internal fun PlayerItemScreen(
             focusControls = true
         }
     }
-    LaunchedEffect(returnFocus, chooser, chaptersOpen, seekOpen, windowFocused) {
+    LaunchedEffect(returnFocus, chooser, chaptersOpen, seekOpen, extraPanel, windowFocused) {
         val target = returnFocus
-        if (target != null && windowFocused && chooser == null && !chaptersOpen && !seekOpen) {
+        if (target != null && windowFocused && chooser == null && extraPanel == null && !chaptersOpen && !seekOpen) {
             androidx.compose.runtime.withFrameNanos { }
             val requested = target.requestFocus()
+            PlaybackDiagnostics.write("panel-return requested=$requested")
             if (restoringSeekFocus && accessibleControls) {
                 val started = android.os.SystemClock.uptimeMillis()
                 val acknowledged = awaitInitialPlayerPanelFocus(view, "player:position")
@@ -513,7 +530,11 @@ internal fun PlayerItemScreen(
             delay(500)
         }
     }
-    ControlsAutoHide(controls, accessibleControls || paused || actionsFocused || chooser != null || chaptersOpen || seekOpen, interaction) {
+    ControlsAutoHide(
+        controls,
+        accessibleControls || paused || actionsFocused || chooser != null || extraPanel != null || chaptersOpen || seekOpen,
+        interaction
+    ) {
         controls = false
         rootFocus.requestFocus()
     }
@@ -546,14 +567,20 @@ internal fun PlayerItemScreen(
         }
     }
 
-    PlayerSeekHost(seekOpen && error == null, player = {
+    PlayerSeekHost((seekOpen || extraPanel != null) && error == null && !switching, player = {
         Box(
             Modifier.fillMaxSize().background(Color.Black).testTag("player:surface")
                 .onGloballyPositioned { playerTop = it.positionInRoot().y.toInt() }
-                .focusProperties { canFocus = !restoringSeekFocus && !seekOpen }.focusRequester(rootFocus)
+                .focusProperties { canFocus = !restoringSeekFocus && !seekOpen && extraPanel == null }.focusRequester(rootFocus)
                 .onFocusChanged { rootFocused = it.isFocused }
+                .playerTouchClick {
+                    if (chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching) {
+                        controls = true
+                        interaction++
+                    }
+                }
                 .playerRemoteKeys(
-                    enabled = chooser == null && !chaptersOpen && !seekOpen && error == null && !switching,
+                    enabled = chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching,
                     rootFocused = rootFocused,
                     seek = ::seek,
                     showControls = {
@@ -594,8 +621,9 @@ internal fun PlayerItemScreen(
         ) {
             ContentFrame(player, Modifier.fillMaxSize().clearAndSetSemantics {})
             val controlsVisible =
-                controls && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
-            val actionsVisible = !restoringSeekFocus && chooser == null && !chaptersOpen && !seekOpen && error == null && !switching
+                controls && chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching
+            val actionsVisible =
+                !restoringSeekFocus && chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching
             // Removal can run after the composition that created the callback; read current state.
             val actionReturnVisible by rememberUpdatedState(actionsVisible)
             val actionReturnControls by rememberUpdatedState(controlsVisible)
@@ -638,13 +666,16 @@ internal fun PlayerItemScreen(
                 }
                 LaunchedEffect(error) { errorFocus.requestFocus() }
             }
-            if (controlsVisible) {
+            // Keep opener nodes composed while the sibling modal hides this player tree.
+            if (controlsVisible || (controls && extraPanel != null && error == null && !switching)) {
                 Column(
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged {
-                        controlsHeight = with(density) { it.height.toDp() }
-                    }.onGloballyPositioned {
-                        controlsTop = it.positionInRoot().y.toInt()
-                    }.semantics { isTraversalGroup = true }.background(Color(0xE610131C)).padding(36.dp),
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .then(if (extraPanel != null) Modifier.alpha(0f).clearAndSetSemantics { hideFromAccessibility() } else Modifier)
+                        .onSizeChanged {
+                            controlsHeight = with(density) { it.height.toDp() }
+                        }.onGloballyPositioned {
+                            controlsTop = it.positionInRoot().y.toInt()
+                        }.semantics { isTraversalGroup = true }.background(Color(0xE610131C)).padding(36.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     val sourceId = state.decision?.mediaSourceId
@@ -712,6 +743,22 @@ internal fun PlayerItemScreen(
                                 chaptersOpen = true
                                 seekPreview = null
                             }, modifier = Modifier.focusRequester(chaptersFocus)) { Text("Chapters") }
+                        }
+                        Button(
+                            scale = playerButtonScale(),
+                            onClick = {
+                                openExtraPanel("Playback speed", speedFocus)
+                            },
+                            modifier = Modifier.focusRequester(speedFocus).playerTouchClick {
+                                openExtraPanel("Playback speed", speedFocus)
+                            }
+                        ) {
+                            Text("Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}")
+                        }
+                        Button(scale = playerButtonScale(), onClick = {
+                            openExtraPanel("Playback info", infoFocus)
+                        }, modifier = Modifier.focusRequester(infoFocus).playerTouchClick { openExtraPanel("Playback info", infoFocus) }) {
+                            Text("Playback info")
                         }
                         Button(scale = playerButtonScale(), onClick = { finish(reason = "stop-button") }) {
                             Text("Stop")
@@ -840,16 +887,44 @@ internal fun PlayerItemScreen(
             }
         }
     }, seek = {
-        PlayerPanel("Seek", {
-            seekOpen = false
-            restoringSeekFocus = true
-            returnFocus = timelineFocus
-        }, onHandoff = { restoringSeekFocus = true }, inActivityWindow = true) {
-            SeekPanel(position, duration, ::seek) {
-                close {
-                    seekOpen = false
-                    restoringSeekFocus = true
-                    returnFocus = timelineFocus
+        extraPanel?.takeIf { error == null && !switching }?.let { title ->
+            val dismiss: () -> Unit = {
+                extraPanel = null
+                returnFocus = if (title == "Playback speed") speedFocus else infoFocus
+            }
+            PlayerPanel(title, dismiss, scrollable = title != "Playback speed", inActivityWindow = true) {
+                if (title == "Playback speed") {
+                    SpeedChoices(speedState, state.decision?.method == app.pictureshow.core.playback.PlayMethod.Transcode) { value ->
+                        select({
+                            output.setSpeed(value)
+                            interaction++
+                        }, dismiss)
+                    }
+                } else {
+                    PlaybackInformationContent(
+                        state.decision,
+                        state.audioIndex,
+                        state.subtitleIndex,
+                        localPreferences.bitrateMbps,
+                        player
+                    ) {
+                        close(dismiss)
+                    }
+                }
+            }
+        }
+        if (seekOpen) {
+            PlayerPanel("Seek", {
+                seekOpen = false
+                restoringSeekFocus = true
+                returnFocus = timelineFocus
+            }, onHandoff = { restoringSeekFocus = true }, inActivityWindow = true) {
+                SeekPanel(position, duration, ::seek) {
+                    close {
+                        seekOpen = false
+                        restoringSeekFocus = true
+                        returnFocus = timelineFocus
+                    }
                 }
             }
         }

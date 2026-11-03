@@ -1,7 +1,7 @@
 # Language-neutral reference vectors
 
 All `.json` files here are executable test inputs, not schemas or documentation snapshots. Discover them recursively.
-The current runners accept schema version 1 and the suites `reference`, `application` and `recovery`. There is no update mode.
+The current runners accept schema version 1 and the suites `reference`, `application`, `recovery` and `playback-information`. There is no update mode.
 
 ```json
 {
@@ -147,3 +147,16 @@ failure. The primary metadata remains available to the UI's retained presentatio
 user state authoritative. The `native.catalog.projection-missing.*` cases also require INVALID_RESPONSE when a
 successful batch contains no matching item (empty array or only another ID). That is missing authoritative UserData,
 not a usable fallback. Both implementations require a matching item before completing the detail read.
+
+## Playback information and speed (PLAY-25/26)
+
+`playback-information.json` uses suite `playback-information`, schema 1, executed by
+`PlaybackInformationVectorsTest`. Cases use exact string expectations. Operations: `reason` takes a server
+`reason` code and optional `qualityMbps`; `method` takes a report-enum `method` and invented playback `url`;
+`subtitle` takes a Jellyfin `source` and selected `index`; `bitrate` takes nullable bits per second; `speed`
+takes a numeric rate and boolean `encoded` and returns the string `true` or `false`. Reasons use device-neutral
+wording so TV, phone, Apple and web can share it. Unknown reason strings are never displayed verbatim.
+A quality cap is a possible remedy, not proof it is the only conversion cause. The server may rewrite its media
+metadata: label that metadata separately from the actual received formats, and never turn a list of candidate
+codecs into a claim about the output. An explicit all-copy audio/video URL is remux; otherwise retain the
+server's negotiated method. These vectors do not prove real decoder speed, pitch or encoded output behavior.
