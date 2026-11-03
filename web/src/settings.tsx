@@ -218,38 +218,55 @@ export function Settings({
                         ))}
                     </select>
                 </label>
-                <label className="switch-label">
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        checked={value.passthrough}
-                        onChange={(e) => patch("passthrough", e.target.checked)}
-                    />
-                    Allow audio passthrough
-                </label>
-                <p className="muted">
-                    This browser does not expose encoded audio passthrough or
-                    the connected speaker layout. Playback uses supported
-                    decoded audio or server conversion; this preference cannot
-                    grant a capability.
-                </p>
-                <label className="switch-label">
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        data-focus="setting:conversion-notice"
-                        aria-describedby="conversion-notice-caption"
-                        checked={value.conversionNotice}
-                        onChange={(e) =>
-                            patch("conversionNotice", e.target.checked)
-                        }
-                    />
-                    Conversion notice: {value.conversionNotice ? "On" : "Off"}
-                </label>
-                <p className="muted" id="conversion-notice-caption">
-                    Shows a short note when the server has to convert a video
-                    for this browser.
-                </p>
+                <div className="switch-row">
+                    <label className="switch-label">
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            aria-describedby="passthrough-caption"
+                            checked={value.passthrough}
+                            onChange={(e) =>
+                                patch("passthrough", e.target.checked)
+                            }
+                        />
+                        Allow audio passthrough
+                    </label>
+                    <p
+                        className="muted switch-caption"
+                        id="passthrough-caption"
+                    >
+                        This browser does not expose encoded audio passthrough
+                        or the connected speaker layout. Playback uses supported
+                        decoded audio or server conversion; this preference
+                        cannot grant a capability.
+                    </p>
+                </div>
+                <div className="switch-row">
+                    <label className="switch-label">
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            data-focus="setting:conversion-notice"
+                            aria-describedby="conversion-notice-caption"
+                            checked={value.conversionNotice}
+                            onChange={(e) =>
+                                patch("conversionNotice", e.target.checked)
+                            }
+                        />
+                        Conversion notice
+                        {/* The switch itself carries the state for assistive tech. */}
+                        <span className="switch-state" aria-hidden="true">
+                            {value.conversionNotice ? "On" : "Off"}
+                        </span>
+                    </label>
+                    <p
+                        className="muted switch-caption"
+                        id="conversion-notice-caption"
+                    >
+                        Shows a short note when the server has to convert a
+                        video for this browser.
+                    </p>
+                </div>
                 <label>
                     Subtitle size
                     <select

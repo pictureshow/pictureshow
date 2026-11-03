@@ -139,9 +139,16 @@ export function speedSupported(speed: unknown, encoded: boolean) {
 /** PLAY-27: the default device noun; each platform passes its own ("this browser" on web). */
 export const CONVERSION_DEVICE = "this device";
 export const BROWSER_DEVICE = "this browser";
-/** Web's path to Playback info: the notice itself is clickable; Down reveals the controls. */
-export const BROWSER_NOTICE_ACTION =
-    "Click or tap it, or press Down, then Playback info.";
+/**
+ * Web's path to Playback info, written for the input in use: the notice is clickable or
+ * tappable, and from the keyboard Down reveals the controls that hold Playback info.
+ */
+export const BROWSER_NOTICE_ACTIONS = {
+    mouse: "Click this note for details and fixes.",
+    touch: "Tap this note for details and fixes.",
+    keyboard: "Press Down, then choose Playback info.",
+} as const;
+export type NoticeInput = keyof typeof BROWSER_NOTICE_ACTIONS;
 
 /** Ordered by how useful fixing it is: the first category lets the video play directly. */
 const noticeCategories: Array<[string[], string]> = [
@@ -248,24 +255,102 @@ export function conversionNotice(
     };
 }
 
+const noticeInputKeys = new Set([
+    "method",
+    "url",
+    "reasons",
+    "device",
+    "subtitleIndex",
+    "source",
+]);
+const noticeMethods = new Set(["DirectPlay", "DirectStream", "Transcode"]);
+const streamKeys = new Set([
+    "Type",
+    "Index",
+    "Codec",
+    "DeliveryMethod",
+    "IsExternal",
+]);
+const plainObject = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === "object" && !Array.isArray(v);
+const nonEmptyString = (v: unknown): v is string =>
+    typeof v === "string" && v.trim() !== "";
+
+/** Why a conversion-notice vector input is malformed, or undefined when it is well formed. */
+export function conversionNoticeInputProblem(input: unknown) {
+    if (!plainObject(input)) return "input is not an object";
+    const unknownKey = Object.keys(input).find((k) => !noticeInputKeys.has(k));
+    if (unknownKey) return `unknown input key ${unknownKey}`;
+    if (!noticeMethods.has(input.method as string))
+        return "method is not DirectPlay, DirectStream or Transcode";
+    if (typeof input.url !== "string") return "url is not a string";
+    if (
+        !Array.isArray(input.reasons) ||
+        !input.reasons.every((r) => typeof r === "string")
+    )
+        return "reasons is not an array of strings";
+    if (!nonEmptyString(input.device))
+        return "device is not a non-empty string";
+    if (
+        input.subtitleIndex !== undefined &&
+        !(
+            Number.isInteger(input.subtitleIndex) &&
+            (input.subtitleIndex as number) >= -1
+        )
+    )
+        return "subtitleIndex is not an integer of at least -1";
+    if (input.source !== undefined) {
+        if (!plainObject(input.source)) return "source is not an object";
+        const sourceKey = Object.keys(input.source).find(
+            (k) => k !== "MediaStreams",
+        );
+        if (sourceKey) return `unknown source key ${sourceKey}`;
+        const streams = input.source.MediaStreams;
+        if (streams !== undefined) {
+            if (!Array.isArray(streams))
+                return "source.MediaStreams is not an array";
+            for (const stream of streams) {
+                if (!plainObject(stream)) return "a stream is not an object";
+                const key = Object.keys(stream).find((k) => !streamKeys.has(k));
+                if (key) return `unknown stream key ${key}`;
+                if (
+                    !["Video", "Audio", "Subtitle"].includes(
+                        stream.Type as string,
+                    )
+                )
+                    return "a stream Type is not Video, Audio or Subtitle";
+                if (
+                    !Number.isInteger(stream.Index) ||
+                    (stream.Index as number) < 0
+                )
+                    return "a stream Index is not a non-negative integer";
+                if (stream.Codec !== undefined && !nonEmptyString(stream.Codec))
+                    return "a stream Codec is not a non-empty string";
+                if (
+                    stream.DeliveryMethod !== undefined &&
+                    !nonEmptyString(stream.DeliveryMethod)
+                )
+                    return "a stream DeliveryMethod is not a non-empty string";
+                if (
+                    stream.IsExternal !== undefined &&
+                    typeof stream.IsExternal !== "boolean"
+                )
+                    return "a stream IsExternal is not a boolean";
+            }
+        }
+    }
+    return undefined;
+}
+
 /** Strictly validated vector input; malformed cases throw instead of passing. */
 export function conversionNoticeVector(input: unknown): string {
-    const i = input as Record<string, unknown> | null;
-    if (
-        !i ||
-        typeof i !== "object" ||
-        typeof i.method !== "string" ||
-        typeof i.url !== "string" ||
-        !Array.isArray(i.reasons) ||
-        i.reasons.some((r) => typeof r !== "string") ||
-        typeof i.device !== "string" ||
-        !i.device ||
-        (i.subtitleIndex !== undefined &&
-            typeof i.subtitleIndex !== "number") ||
-        (i.source !== undefined &&
-            (typeof i.source !== "object" || i.source === null))
-    )
-        throw new Error("Malformed conversion-notice vector input");
+    const problem = conversionNoticeInputProblem(input);
+    if (problem)
+        throw new Error(`Malformed conversion-notice vector input: ${problem}`);
+    const i = input as Record<string, unknown> & {
+        device: string;
+        reasons: string[];
+    };
     const notice = conversionNotice(
         {
             method: i.method,
@@ -348,5 +433,179 @@ export const CHROMIUM_DECODE_STEPS = [
     "Open chrome://gpu and look under “Video Acceleration Information” for a “Decode hevc main” (or “main 10”) row. It is missing without a GPU and driver that decode it, and over Remote Desktop or in a virtual machine.",
     "Update the graphics driver from its vendor, or through Windows Update optional updates.",
     "Try Microsoft Edge.",
-    "Use a Pictureshow app for TV, phone or desktop.",
 ] as const;
+
+const lower = (codes: readonly string[]) =>
+    new Set(codes.map((c) => c.toLowerCase()));
+const videoWhat: Array<[string[], string]> = [
+    [["videocodecnotsupported"], "video format"],
+    [["videorangetypenotsupported"], "HDR format"],
+    [
+        [
+            "videoprofilenotsupported",
+            "videolevelnotsupported",
+            "videobitdepthnotsupported",
+            "refframesnotsupported",
+        ],
+        "video encoding",
+    ],
+    [["videoresolutionnotsupported"], "resolution"],
+    [["videoframeratenotsupported"], "frame rate"],
+    [["interlacedvideonotsupported"], "interlaced video"],
+    [["anamorphicvideonotsupported"], "non-square pixels"],
+    [["videorotationnotsupported"], "rotation"],
+];
+const bitrateCodes = [
+    "containerbitrateexceedslimit",
+    "videobitratenotsupported",
+    "audiobitratenotsupported",
+];
+const audioCodes = [
+    "audiocodecnotsupported",
+    "audiochannelsnotsupported",
+    "audioprofilenotsupported",
+    "audiosampleratenotsupported",
+    "audiobitdepthnotsupported",
+    "secondaryaudionotsupported",
+];
+
+/** What the viewer can act on, most useful first. */
+export type ConversionKind =
+    | "direct"
+    | "remux"
+    | "video"
+    | "burn-in"
+    | "bitrate"
+    | "audio"
+    | "unexplained";
+
+export function conversionKind(
+    method: unknown,
+    url: unknown,
+    codes: readonly string[],
+    burnedIn: boolean,
+): ConversionKind {
+    const label = playbackMethod(method, url);
+    if (label === "Direct play") return "direct";
+    if (label !== "Transcode")
+        return label === "Not reported" ? "unexplained" : "remux";
+    const set = lower(codes);
+    if (
+        urlParameter(url, "VideoCodec") !== "copy" &&
+        videoWhat.some(([c]) => c.some((code) => set.has(code)))
+    )
+        return "video";
+    if (burnedIn && set.has("subtitlecodecnotsupported")) return "burn-in";
+    if (bitrateCodes.some((c) => set.has(c))) return "bitrate";
+    if (audioCodes.some((c) => set.has(c))) return "audio";
+    return "unexplained";
+}
+
+/** PLAY-26 web: one plain sentence that opens Playback info. Uses "convert", never "transcode". */
+export function conversionSummary(
+    kind: ConversionKind,
+    codes: readonly string[],
+    options: {
+        device?: string;
+        videoFormat?: string;
+        qualityMbps?: number;
+    } = {},
+) {
+    const device = options.device ?? BROWSER_DEVICE;
+    switch (kind) {
+        case "direct":
+            return `${capitalize(device)} is playing the file directly, with no conversion.`;
+        case "remux":
+            return `The server is repackaging this video for ${device} without converting it, so the quality is unchanged.`;
+        case "video": {
+            const set = lower(codes);
+            const what =
+                videoWhat.find(([c]) => c.some((code) => set.has(code)))?.[1] ??
+                "video format";
+            const format =
+                what === "video format" && options.videoFormat
+                    ? ` (${options.videoFormat})`
+                    : "";
+            return `The server is converting this video because ${device} can't play its ${what}${format}.`;
+        }
+        case "burn-in":
+            return "The server is converting this video to burn the selected subtitles into the picture.";
+        case "bitrate":
+            return typeof options.qualityMbps === "number" &&
+                Number.isFinite(options.qualityMbps) &&
+                options.qualityMbps > 0
+                ? `The server is converting this video to keep it under your ${options.qualityMbps} Mbps quality limit.`
+                : "The server is converting this video to keep it under a bitrate limit.";
+        case "audio":
+            return `The server is converting this video's sound because ${device} can't play its audio format.`;
+        case "unexplained":
+            return "The server is converting this video and did not say why.";
+    }
+}
+const capitalize = (text: string) =>
+    text.charAt(0).toUpperCase() + text.slice(1);
+
+export type BrowserFamily = "chrome" | "edge" | "firefox" | "safari" | "other";
+export function browserFamily(userAgent: string): BrowserFamily {
+    if (/\bEdg(e|A|iOS)?\//.test(userAgent)) return "edge";
+    if (/(iPhone|iPad|iPod)/.test(userAgent)) return "safari";
+    if (/\b(Firefox|FxiOS)\//.test(userAgent)) return "firefox";
+    if (/(Chrome|Chromium)\//.test(userAgent) && !/\bOPR\//.test(userAgent))
+        return "chrome";
+    if (/\bSafari\//.test(userAgent) && /\bVersion\//.test(userAgent))
+        return "safari";
+    return "other";
+}
+
+const appRemedy = "Use a Pictureshow app on your TV, phone or computer.";
+/** Plain remedies for the viewer, tailored to the browser; empty when nothing helps. */
+export function conversionRemedies(
+    kind: ConversionKind,
+    browser: BrowserFamily,
+): string[] {
+    switch (kind) {
+        case "video":
+            switch (browser) {
+                case "chrome":
+                    return [
+                        "Turn on “Use graphics acceleration when available” in Chrome's System settings, then relaunch Chrome.",
+                        "Try Microsoft Edge, which plays more video formats on Windows.",
+                        appRemedy,
+                    ];
+                case "edge":
+                    return [
+                        "Turn on “Use graphics acceleration when available” in Edge's System and performance settings, then restart Edge.",
+                        appRemedy,
+                    ];
+                case "firefox":
+                    return [
+                        "Open Pictureshow in Chrome or Edge, which play more video formats.",
+                        appRemedy,
+                    ];
+                case "safari":
+                    return [
+                        "Update macOS or iOS; newer versions of Safari play more video formats.",
+                        appRemedy,
+                    ];
+                default:
+                    return [
+                        "Open Pictureshow in Chrome, Edge or Safari, which play more video formats.",
+                        appRemedy,
+                    ];
+            }
+        case "burn-in":
+            return [
+                "Turn subtitles off, or choose a text subtitle track, so they don't need to be burned in.",
+            ];
+        case "bitrate":
+            return [
+                "Raise Max streaming bitrate in Settings to try the original quality.",
+            ];
+        case "audio":
+            return [
+                "Choose another audio track in Audio, if one is available.",
+            ];
+        default:
+            return [];
+    }
+}

@@ -828,3 +828,60 @@ test("CAT-09/11 pending Watched is accepting (not aria-disabled) and runs after 
     expect(writes).toBe(1);
     expect(played).toBe(true);
 });
+
+test("presses during Saving… are queued, not dropped: a different action runs next and a repeat deduplicates", async ({
+    page,
+}) => {
+    // Android queueReadyMutation: returning controls keep focus while a mutation is busy,
+    // and a fresh press joins the same ordered queue (CAT-07, CAT-09).
+    let favorite = false,
+        played = false,
+        holdFavorite: (() => void) | undefined;
+    const writes: string[] = [];
+    const item = () => ({
+        ...movie(),
+        UserData: { ...movie().UserData, IsFavorite: favorite, Played: played },
+    });
+    await start(page, async (url, method) => {
+        if (url.pathname === "/Items/movie") return { body: item() };
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        )
+            return { body: { Items: [item()] } };
+        if (url.pathname === "/UserFavoriteItems/movie") {
+            writes.push(`favorite ${method}`);
+            await new Promise<void>((resolve) => (holdFavorite = resolve));
+            favorite = method === "POST";
+            return { body: { IsFavorite: favorite, Played: played } };
+        }
+        if (url.pathname === "/UserPlayedItems/movie") {
+            writes.push(`watched ${method}`);
+            played = method === "POST";
+            return { body: { IsFavorite: favorite, Played: played } };
+        }
+        return {};
+    });
+    await openMovie(page);
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    const watchedButton = page.locator('[data-focus="watched"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    // The same button again while saving deduplicates; Mark watched is a distinct request.
+    await favoriteButton.click();
+    await watchedButton.click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Watched change requested",
+    );
+    expect(writes).toEqual(["favorite POST"]);
+    holdFavorite!();
+    await expect(
+        page.getByRole("button", { name: "Remove favorite", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+        page.getByRole("button", { name: "Mark unwatched", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(500);
+    // One favorite write (the repeat joined it) and the watched press ran after it.
+    expect(writes).toEqual(["favorite POST", "watched POST"]);
+});

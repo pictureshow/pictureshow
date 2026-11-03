@@ -67,6 +67,24 @@ button {
     align-items: center;
     gap: 16px;
 }
+/* A switch and its help text read as one group; the help aligns with the label text. */
+.setting-list .switch-row {
+    display: grid;
+    gap: 4px;
+}
+.setting-list .switch-caption {
+    margin: 0;
+    padding-left: 40px;
+}
+.setting-list .switch-state {
+    margin-left: auto;
+    color: var(--muted, inherit);
+    font-variant-numeric: tabular-nums;
+}
+.setting-list .switch-label input {
+    margin: 0;
+    flex: none;
+}
 .switch-label input {
     width: 24px !important;
     min-height: 24px !important;

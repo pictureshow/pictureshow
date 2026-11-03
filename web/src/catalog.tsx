@@ -1323,8 +1323,10 @@ export function Detail({
         return () => clearInterval(timer);
     }, [pendingMessage, loading, savingReport]);
     function offer(action: PendingAction) {
-        if (!alive.current || openingPlayback.current || writing || refusing)
-            return;
+        // A press during "Saving…" is not dropped: like Android's queueReadyMutation it
+        // joins the same ordered queue (CAT-09: distinct requests serialize, duplicates
+        // deduplicate) and runs against the state the save returns.
+        if (!alive.current || openingPlayback.current || refusing) return;
         if (queue.current.some((p) => sameAction(p.action, action))) return;
         if (queue.current.length >= 32) {
             setPendingMessage(
@@ -1334,6 +1336,20 @@ export function Detail({
         }
         queue.current.push({ action, expires: Date.now() + 30000 });
         if (action.kind === "watched") recordPlayedChoice(client, id);
+        if (writePending.current && readyRef.current) {
+            requestedCue.current = action.kind;
+            setPendingMessage(
+                `${action.kind === "play" ? "Play" : action.kind === "restart" ? "Play from start" : action.kind === "watched" ? "Watched change" : "Favorite change"} requested. It runs after the current change saves.`,
+            );
+            cue(
+                action.kind === "play"
+                    ? "Play requested"
+                    : action.kind === "restart"
+                      ? "Start requested"
+                      : `${action.kind === "watched" ? "Watched" : "Favorite"} change requested`,
+                "request",
+            );
+        }
         if (!readyRef.current) {
             cancelReady();
             requestedCue.current = action.kind;

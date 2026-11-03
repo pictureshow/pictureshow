@@ -16,9 +16,13 @@ import {
 } from "@pictureshow/core";
 import {
     BROWSER_DEVICE,
-    BROWSER_NOTICE_ACTION,
+    BROWSER_NOTICE_ACTIONS,
     CHROMIUM_DECODE_STEPS,
+    browserFamily,
+    conversionKind,
     conversionNotice,
+    conversionRemedies,
+    conversionSummary,
     cueNearTop,
     formatBitrate,
     playbackMethod,
@@ -27,6 +31,7 @@ import {
     transcodeReason,
     transcodeReasons,
     type ConversionNotice,
+    type NoticeInput,
 } from "@pictureshow/core/playback-information";
 import {
     visibilityPlay,
@@ -410,6 +415,8 @@ export function Player({
     ).current;
     const [speed, setSpeed] = useState(1),
         [speedMessage, setSpeedMessage] = useState(""),
+        // A speed reset the viewer did not ask for, shown in the status line too.
+        [speedNote, setSpeedNote] = useState(""),
         [playbackReady, setPlaybackReady] = useState(false),
         [received, setReceived] = useState<{ video?: string; audio?: string }>(
             {},
@@ -420,9 +427,19 @@ export function Player({
         ),
         [shownNotice, setShownNotice] = useState<ConversionNotice>(),
         [announcement, setAnnouncement] = useState(""),
+        // The notice's action line follows the input in use: coarse pointers start on touch.
+        [noticeInput, setNoticeInput] = useState<NoticeInput>(() =>
+            typeof matchMedia === "function" &&
+            matchMedia("(pointer: coarse)").matches
+                ? "touch"
+                : "mouse",
+        ),
         [topCue, setTopCue] = useState(false),
         [noticeTop, setNoticeTop] = useState<number>();
     const speedRef = useRef(1),
+        speedNoteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+            undefined,
+        ),
         noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
             undefined,
         );
@@ -447,6 +464,7 @@ export function Player({
             speedRef.current = rate;
             setSpeed(rate);
             setSpeedMessage("");
+            setSpeedNote("");
             closePanel();
         } else {
             applyRate(el, speedRef.current);
@@ -462,10 +480,17 @@ export function Player({
             speedRef.current = 1;
             applyRate(el, 1);
             setSpeed(1);
-            if (previous !== 1)
-                setSpeedMessage(
-                    `Speed returned to 1× because this stream could not keep ${rateLabel(previous)}. Choose Speed to try again.`,
-                );
+            if (previous !== 1) {
+                // Shown in the player's status line as well as the Speed panel, so a
+                // viewer who never reopens Speed still learns why the rate changed.
+                const message = `Speed returned to 1× because this stream could not keep ${rateLabel(previous)}. Choose Speed to try again.`;
+                setSpeedMessage(message);
+                setSpeedNote(message);
+                clearTimeout(speedNoteTimer.current);
+                speedNoteTimer.current = setTimeout(() => {
+                    if (alive.current) setSpeedNote("");
+                }, 8000);
+            }
         }
         setVideoSize(el.videoWidth ? `${el.videoWidth}×${el.videoHeight}` : "");
         setPlaybackReady(true);
@@ -2220,15 +2245,16 @@ export function Player({
     ]);
     // PLAY-27: the decision behind this viewing's picture, gated on this browser's
     // own per-file check so a notice never blames it for video it could decode.
-    const playing = decision ?? viewing.current.decision;
+    // Only the current decision counts: while a new negotiation is pending there is
+    // nothing settled to describe, and the previous stream's decision would be stale.
     const conversion = (() => {
-        if (!playing || !activeSource) return null;
+        if (!decision) return null;
         const found = conversionNotice(
             {
-                method: playing.method,
-                url: playing.url,
-                reasons: transcodeReasons(playing.url),
-                source: activeSource,
+                method: decision.method,
+                url: decision.url,
+                reasons: transcodeReasons(decision.url),
+                source: decision.source,
             },
             subtitleIndex,
             BROWSER_DEVICE,
@@ -2237,7 +2263,7 @@ export function Player({
         if (
             !found.burnIn &&
             canDecodeVideo(
-                activeSource,
+                decision.source,
                 (mime) => video.current?.canPlayType(mime) === "probably",
             )
         )
@@ -2256,7 +2282,7 @@ export function Player({
         setShownNotice(conversion);
         // Announced once per viewing; a later return from under a panel is silent.
         setAnnouncement(
-            `${conversion.title}. ${conversion.reason} ${BROWSER_NOTICE_ACTION}`,
+            `${conversion.title}. ${conversion.reason} ${BROWSER_NOTICE_ACTIONS[noticeInput]}`,
         );
         // The 10 seconds keep running while something hides the notice.
         noticeTimer.current = setTimeout(() => {
@@ -2265,7 +2291,28 @@ export function Player({
             setAnnouncement("");
         }, 10000);
     }, [noticePhase, conversion?.reason, playbackReady]);
-    useEffect(() => () => clearTimeout(noticeTimer.current), []);
+    useEffect(
+        () => () => {
+            clearTimeout(noticeTimer.current);
+            clearTimeout(speedNoteTimer.current);
+        },
+        [],
+    );
+    useEffect(() => {
+        // The last input decides the notice's action line.
+        const pointer = (e: PointerEvent) =>
+            setNoticeInput(e.pointerType === "mouse" ? "mouse" : "touch");
+        const key = (e: KeyboardEvent) => {
+            if (!e.metaKey && !e.ctrlKey && !e.altKey)
+                setNoticeInput("keyboard");
+        };
+        window.addEventListener("pointerdown", pointer, true);
+        window.addEventListener("keydown", key, true);
+        return () => {
+            window.removeEventListener("pointerdown", pointer, true);
+            window.removeEventListener("keydown", key, true);
+        };
+    }, []);
     useEffect(() => {
         const track = video.current?.textTracks[0];
         if (!track || !subtitleBlob) {
@@ -2569,9 +2616,28 @@ export function Player({
         subtitleBlob,
     ]);
     function info() {
-        const d = playing;
-        const method = d ? playbackMethod(d.method, d.url) : "Not reported";
-        const codes = d?.method === "Transcode" ? transcodeReasons(d.url) : [];
+        // Only the current decision: a pending negotiation shows no previous stream's data.
+        const d = decision;
+        if (!d)
+            return (
+                <div
+                    className="playback-info"
+                    data-scroll
+                    data-panel-first
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Playback info details"
+                >
+                    <p className="playback-info-summary" role="status">
+                        Preparing the new stream. Its details appear here when
+                        it is ready.
+                    </p>
+                </div>
+            );
+        const method = playbackMethod(d.method, d.url);
+        const source = d.source;
+        const sourceStreams = source.MediaStreams ?? [];
+        const codes = d.method === "Transcode" ? transcodeReasons(d.url) : [];
         const reasons = [
             ...new Set(
                 codes.map((code) =>
@@ -2582,8 +2648,8 @@ export function Player({
                 ),
             ),
         ];
-        const videoStream = streams.find((s) => s.Type === "Video");
-        const audioStream = streams.find(
+        const videoStream = sourceStreams.find((s) => s.Type === "Video");
+        const audioStream = sourceStreams.find(
             (s) => s.Type === "Audio" && s.Index === audioIndex,
         );
         const notReported = (v: unknown) =>
@@ -2602,7 +2668,24 @@ export function Player({
                 ))}
             </dl>
         );
-        const browserSteps = !!conversion && !conversion.burnIn && chromium();
+        const subtitles = subtitleDelivery(source, subtitleIndex);
+        const kind = conversionKind(
+            d.method,
+            d.url,
+            codes,
+            subtitles === "Burned in",
+        );
+        // Plain name only ("HEVC"), without the raw codec id codecName appends.
+        const format = codecName(videoStream?.Codec).replace(/ \(.*\)$/, "");
+        const summary = conversionSummary(kind, codes, {
+            videoFormat: format === "Not reported" ? undefined : format,
+            qualityMbps: preferences.bitrateMbps ?? undefined,
+        });
+        const remedies = conversionRemedies(
+            kind,
+            browserFamily(navigator.userAgent),
+        );
+        const browserSteps = kind === "video" && chromium();
         return (
             <div
                 className="playback-info"
@@ -2612,85 +2695,108 @@ export function Player({
                 role="region"
                 aria-label="Playback info details"
             >
-                {method !== "Direct play" && method !== "Not reported" && (
-                    <section aria-label="Why the server converts">
-                        <h3>Why the server converts</h3>
-                        {reasons.length ? (
-                            <ul>
-                                {reasons.map((r) => (
-                                    <li key={r}>{r}</li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p>The server did not say why it is converting.</p>
-                        )}
-                        {browserSteps && (
-                            <>
-                                <p>
-                                    Chrome or Edge may be able to decode it with
-                                    hardware help. Try these steps in order:
-                                </p>
-                                <ol>
-                                    {CHROMIUM_DECODE_STEPS.map((step) => (
-                                        <li key={step}>{step}</li>
-                                    ))}
-                                </ol>
-                            </>
-                        )}
+                <p className="playback-info-summary">{summary}</p>
+                {remedies.length > 0 && (
+                    <section aria-label="What you can do">
+                        <h3>What you can do</h3>
+                        <ul>
+                            {remedies.map((r) => (
+                                <li key={r}>{r}</li>
+                            ))}
+                        </ul>
                     </section>
                 )}
                 <section aria-label="Playback">
                     <h3>Playback</h3>
                     {rows([
-                        ["Method", method],
-                        [
-                            "Subtitles",
-                            subtitleDelivery(activeSource, subtitleIndex),
-                        ],
+                        ["Subtitles", subtitles],
                         ["Speed", rateLabel(speed)],
                     ])}
                 </section>
-                <section aria-label="Reported by the server">
-                    <h3>Reported by the server</h3>
-                    <p className="muted">
-                        The server may describe the converted stream rather than
-                        the file.
-                    </p>
-                    {rows([
-                        ["Container", notReported(activeSource?.Container)],
-                        ...(d?.method === "Transcode"
-                            ? ([
-                                  [
-                                      "Stream container",
-                                      notReported(
-                                          activeSource?.TranscodingContainer,
-                                      ),
-                                  ],
-                              ] as Array<[string, string]>)
-                            : []),
-                        ["Bitrate", formatBitrate(activeSource?.Bitrate)],
-                        ["Video codec", notReported(videoStream?.Codec)],
-                        ["Video resolution", resolution(videoStream)],
-                        ["Video bitrate", formatBitrate(videoStream?.BitRate)],
-                        ["Audio codec", notReported(audioStream?.Codec)],
-                        ["Audio channels", notReported(audioStream?.Channels)],
-                        ["Audio bitrate", formatBitrate(audioStream?.BitRate)],
-                    ])}
-                </section>
-                <section aria-label="Received by this browser">
-                    <h3>Received by this browser</h3>
-                    {!received.video && !received.audio && (
-                        <p className="muted">
-                            This browser plays this stream itself and does not
-                            report the formats it received.
-                        </p>
+                <details className="technical-details">
+                    <summary>Technical details</summary>
+                    {rows([["Method", method]])}
+                    {method !== "Direct play" && method !== "Not reported" && (
+                        <section aria-label="Why the server converts">
+                            <h3>Why the server converts</h3>
+                            {reasons.length ? (
+                                <ul>
+                                    {reasons.map((r) => (
+                                        <li key={r}>{r}</li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p>
+                                    The server did not say why it is converting.
+                                </p>
+                            )}
+                            {browserSteps && (
+                                <>
+                                    <p>
+                                        Chrome or Edge may be able to decode it
+                                        with hardware help. Try these steps in
+                                        order:
+                                    </p>
+                                    <ol>
+                                        {CHROMIUM_DECODE_STEPS.map((step) => (
+                                            <li key={step}>{step}</li>
+                                        ))}
+                                    </ol>
+                                </>
+                            )}
+                        </section>
                     )}
-                    {rows([
-                        ["Video format", codecName(received.video)],
-                        ["Resolution", videoSize || "Not reported"],
-                        ["Audio format", codecName(received.audio)],
-                    ])}
-                </section>
+                    <section aria-label="Reported by the server">
+                        <h3>Reported by the server</h3>
+                        <p className="muted">
+                            The server may describe the converted stream rather
+                            than the file.
+                        </p>
+                        {rows([
+                            ["Container", notReported(source.Container)],
+                            ...(d.method === "Transcode"
+                                ? ([
+                                      [
+                                          "Stream container",
+                                          notReported(
+                                              source.TranscodingContainer,
+                                          ),
+                                      ],
+                                  ] as Array<[string, string]>)
+                                : []),
+                            ["Bitrate", formatBitrate(source.Bitrate)],
+                            ["Video codec", notReported(videoStream?.Codec)],
+                            ["Video resolution", resolution(videoStream)],
+                            [
+                                "Video bitrate",
+                                formatBitrate(videoStream?.BitRate),
+                            ],
+                            ["Audio codec", notReported(audioStream?.Codec)],
+                            [
+                                "Audio channels",
+                                notReported(audioStream?.Channels),
+                            ],
+                            [
+                                "Audio bitrate",
+                                formatBitrate(audioStream?.BitRate),
+                            ],
+                        ])}
+                    </section>
+                    <section aria-label="Received by this browser">
+                        <h3>Received by this browser</h3>
+                        {!received.video && !received.audio && (
+                            <p className="muted">
+                                This browser plays this stream itself and does
+                                not report the formats it received.
+                            </p>
+                        )}
+                        {rows([
+                            ["Video format", codecName(received.video)],
+                            ["Resolution", videoSize || "Not reported"],
+                            ["Audio format", codecName(received.audio)],
+                        ])}
+                    </section>
+                </details>
             </div>
         );
     }
@@ -2778,7 +2884,7 @@ export function Player({
                 {error ||
                     reportError ||
                     notice ||
-                    (buffering ? "Preparing playback…" : "")}
+                    (buffering ? "Preparing playback…" : speedNote)}
             </div>
             {reportError && !error && (
                 <button
@@ -2838,7 +2944,8 @@ export function Player({
                         {shownNotice.title}
                     </p>
                     <p className="conversion-notice-line">
-                        {shownNotice.reason} {BROWSER_NOTICE_ACTION}
+                        {shownNotice.reason}{" "}
+                        {BROWSER_NOTICE_ACTIONS[noticeInput]}
                     </p>
                 </div>
             )}
@@ -3131,9 +3238,12 @@ export function Player({
                         e.preventDefault();
                         e.stopPropagation();
                         // Playback info's text scrolls with Up/Down before focus moves on.
-                        const scroller = document.activeElement as HTMLElement;
+                        const scroller = (
+                            document.activeElement as HTMLElement | null
+                        )?.closest<HTMLElement>("[data-scroll]");
                         if (
-                            scroller?.dataset.scroll !== undefined &&
+                            scroller &&
+                            e.currentTarget.contains(scroller) &&
                             (e.key === "ArrowDown" || e.key === "ArrowUp")
                         ) {
                             const down = e.key === "ArrowDown";
@@ -3151,7 +3261,7 @@ export function Player({
                         if (e.repeat) return;
                         const nodes = [
                             ...e.currentTarget.querySelectorAll<HTMLElement>(
-                                "button:not([disabled]),input:not([disabled]),[data-scroll]",
+                                "button:not([disabled]),input:not([disabled]),[data-scroll],summary",
                             ),
                         ].filter((n) => n.getClientRects().length);
                         const current = nodes.indexOf(
@@ -3196,7 +3306,7 @@ export function Player({
                         <p className="muted">
                             Pitch is preserved. Speed applies to this video
                             only.
-                            {playing?.method === "Transcode"
+                            {decision?.method === "Transcode"
                                 ? " The server is converting this video, so faster speeds may pause to buffer."
                                 : ""}
                         </p>
