@@ -21,6 +21,26 @@ async function media(page: Page, action: string, details = {}) {
         { action, details },
     );
 }
+async function onePausedProgress(f: { reports: any[] }) {
+    // One stop is one IsPaused=true Progress, including any queued native
+    // pause event that follows the latch.
+    const paused = () =>
+        f.reports.filter(
+            (r) => r.path.endsWith("/Progress") && r.body.IsPaused === true,
+        ).length;
+    await expect.poll(paused).toBeGreaterThanOrEqual(1);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(
+        paused(),
+        JSON.stringify(
+            f.reports.map((r) => [
+                r.path,
+                r.body.IsPaused,
+                r.body.PositionTicks,
+            ]),
+        ),
+    ).toBe(1);
+}
 async function setup(page: Page, hls = false) {
     // Invoke the actual registered app actions in engines whose headless OS
     // does not surface hardware Media Session controls. This is not an OS pilot.
@@ -144,6 +164,7 @@ for (const event of ["pagehide", "freeze", "browser-pause"] as const)
         await expect
             .poll(() => video.evaluate((v: HTMLVideoElement) => v.paused))
             .toBe(true);
+        await onePausedProgress(f);
         await media(page, "play");
         await video.evaluate((v) => v.dispatchEvent(new Event("playing")));
         await page.waitForTimeout(200);
@@ -216,7 +237,7 @@ test("hidden HLS replacement keeps playing and its owned pause cannot swallow a 
 test("a browser pause queued behind visibility return still requires deliberate foreground Play", async ({
     page,
 }) => {
-    await setup(page);
+    const f = await setup(page);
     await hidden(page, true);
     await page.evaluate(() => {
         document.querySelector("video")!.pause();
@@ -230,6 +251,7 @@ test("a browser pause queued behind visibility return still requires deliberate 
     expect(
         await page.locator("video").evaluate((v: HTMLVideoElement) => v.paused),
     ).toBe(true);
+    await onePausedProgress(f);
     await media(page, "play");
     await expect
         .poll(() =>

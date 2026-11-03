@@ -201,6 +201,11 @@ export function Player({
         stopLatched = useRef(false),
         playAttempt = useRef(0),
         ownPauses = useRef(new WeakMap<HTMLMediaElement, number>()),
+        // latchStop has already sent this stop's paused Progress; the decoder's
+        // queued pause event must not report it again.
+        latchPauseReported = useRef<HTMLMediaElement | undefined>(undefined),
+        // When the decoder's periodic Progress last ran; a stop's own report resets it.
+        periodicProgressAt = useRef(0),
         pauseIntent = useRef(false),
         completionDeferred = useRef(false),
         completionSaved = useRef(false),
@@ -888,6 +893,8 @@ export function Player({
         sample();
         pauseDecoder();
         report("progress");
+        periodicProgressAt.current = Date.now();
+        latchPauseReported.current = video.current ?? undefined;
         console.info(
             `PictureshowPlayback lifecycle stop=${reason} paused=true positionMs=${Math.floor(viewing.current.position * 1000)}`,
         );
@@ -1211,12 +1218,13 @@ export function Player({
     // In particular, WebKit can still own a paused final-frame presentation.
     useLayoutEffect(() => {
         const el = video.current!;
+        // Each decoder reports its first Progress on its first clock update.
+        periodicProgressAt.current = 0;
         let disposed = false,
             hls: Hls | undefined,
             current: Decision | undefined,
             hasPlayed = false,
             needsGesture = false,
-            lastProgress = 0,
             lastPlaybackClock = Number.NaN,
             finalFragmentBuffered = false,
             mediaDuration: number | undefined;
@@ -1280,8 +1288,8 @@ export function Player({
                         : value,
                 );
             }
-            if (Date.now() - lastProgress >= 10000) {
-                lastProgress = Date.now();
+            if (Date.now() - periodicProgressAt.current >= 10000) {
+                periodicProgressAt.current = Date.now();
                 report("progress");
             }
         }
@@ -1404,6 +1412,9 @@ export function Player({
         }
         function playing() {
             if (!current || disposed) return;
+            // A latch without a following pause event must not swallow a later one.
+            if (latchPauseReported.current === el)
+                latchPauseReported.current = undefined;
             if (!backgroundPlayAllowed()) pauseIntent.current = true;
             if (desired.current.revision !== request.revision) {
                 setRequest({ ...desired.current });
@@ -1437,7 +1448,17 @@ export function Player({
             if (disposed || !current) return;
             if (!owned && document.hidden && !el.ended && !pauseIntent.current)
                 latchStop("browser-pause");
+            if (latchPauseReported.current === el) {
+                // latchStop sampled, paused the UI and reported this stop. Of
+                // update(), only the clock baseline remains (its recovery
+                // branch requires a playing decoder).
+                latchPauseReported.current = undefined;
+                if (!replacing.current) lastPlaybackClock = el.currentTime;
+                return;
+            }
             if (replacing.current) return;
+            // This handler reports below; update() must not add its periodic one.
+            periodicProgressAt.current = Date.now();
             update();
             if (!el.ended) {
                 setPaused(pauseIntent.current);
