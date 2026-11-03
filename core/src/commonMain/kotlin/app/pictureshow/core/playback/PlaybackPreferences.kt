@@ -15,7 +15,9 @@ data class PlaybackPreferences(
     val passthrough: Boolean = true,
     val subtitleSize: SubtitleSize = SubtitleSize.System,
     val subtitleBackground: SubtitleBackground = SubtitleBackground.System,
-    val segmentModes: Map<SegmentType, SegmentMode> = emptyMap()
+    val segmentModes: Map<SegmentType, SegmentMode> = emptyMap(),
+    /** PLAY-27: tell the viewer when the server converts video for this device. */
+    val conversionNotice: Boolean = true
 ) {
     fun deviceSettings() = PlaybackSettings(
         maxStreamingBitrate = bitrateMbps?.times(1_000_000) ?: PlaybackSettings.DEFAULT_MAX_STREAMING_BITRATE,
@@ -29,7 +31,8 @@ data class PlaybackPreferences(
             passthrough: Boolean? = null,
             subtitleSize: String? = null,
             subtitleBackground: String? = null,
-            segmentModes: Map<SegmentType, String?> = emptyMap()
+            segmentModes: Map<SegmentType, String?> = emptyMap(),
+            conversionNotice: Boolean? = null
         ) = PlaybackPreferences(
             bitrateMbps = bitrateMbps?.takeIf { it in BITRATES },
             passthrough = passthrough ?: true,
@@ -37,7 +40,8 @@ data class PlaybackPreferences(
             subtitleBackground = SubtitleBackground.entries.firstOrNull { it.name == subtitleBackground } ?: SubtitleBackground.System,
             segmentModes = SegmentType.entries.filter { it != SegmentType.Unknown }.associateWith { type ->
                 SegmentMode.entries.firstOrNull { it.name == segmentModes[type] } ?: SegmentMode.Ask
-            }
+            },
+            conversionNotice = conversionNotice ?: true
         )
 
         fun validateBitrate(bitrateMbps: Int?) {

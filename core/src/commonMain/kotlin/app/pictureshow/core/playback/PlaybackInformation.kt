@@ -111,6 +111,9 @@ object PlaybackInformation {
         else -> "The server reported an additional conversion requirement that this client does not recognize."
     }
 
+    /** An explicit `VideoCodec=copy` means the server repackages the video without re-encoding it. */
+    internal fun videoCopied(decision: PlayDecision): Boolean = parameter(decision, "VideoCodec") == "copy"
+
     private fun parameter(decision: PlayDecision, name: String): String? = runCatching {
         Url(decision.url).parameters.entries().firstOrNull { it.key.equals(name, true) }?.value?.singleOrNull()?.lowercase()
     }.getOrNull()
