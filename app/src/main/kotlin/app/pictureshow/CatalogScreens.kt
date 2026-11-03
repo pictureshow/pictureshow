@@ -1851,11 +1851,21 @@ fun CatalogDetail(
             }
         }
     }
-    LaunchedEffect(lifecycleState, state.loading, state.readSucceeded, semanticsRevealed, pendingSemanticsRevealed, restored) {
-        detailTiming(
-            "publication",
-            "loading=${state.loading} succeeded=${state.readSucceeded} revealed=$semanticsRevealed pendingRevealed=$pendingSemanticsRevealed restored=$restored metadataHidden=$arrivalMetadataHidden lifecycle=$lifecycleState"
-        )
+    LaunchedEffect(
+        lifecycleState,
+        state.loading,
+        state.readSucceeded,
+        semanticsRevealed,
+        pendingSemanticsRevealed,
+        pendingFocusRestored,
+        restored
+    ) {
+        val fields = "loading=${state.loading} succeeded=${state.readSucceeded} revealed=$semanticsRevealed " +
+            "pendingRevealed=$pendingSemanticsRevealed pendingFocused=$pendingFocusRestored restored=$restored " +
+            "metadataHidden=$arrivalMetadataHidden lifecycle=$lifecycleState"
+        // Release builds have no timing sink; the device timeline reads this one line per change
+        // (debug builds get the same line, so it is not also sent to the sink).
+        PlaybackDiagnostics.write("detail-handoff phase=publication uptime=${android.os.SystemClock.uptimeMillis()} $fields")
     }
     LaunchedEffect(
         lifecycleState,
