@@ -22,6 +22,21 @@ import {
 } from "@pictureshow/core";
 import "./catalog.css";
 import {
+    projectCompletion,
+    completionReadVersion,
+    recordPlayedChoice,
+    settleCompletionRead,
+    subscribeCompletion,
+} from "./completion-intents";
+
+function useCompletionPresentation(client: Jellyfin) {
+    const [, changed] = useState(0);
+    useEffect(
+        () => subscribeCompletion(client, () => changed((value) => value + 1)),
+        [client],
+    );
+}
+import {
     beginDetailRead,
     publishDetailRead,
     detailReadConfirmedCompletion,
@@ -86,6 +101,8 @@ const playable = (item: Item) =>
     ["Movie", "Episode", "Video"].includes(item.Type);
 const accountKey = (client: Jellyfin) =>
     `${client.server.id}:${client.account!.user.Id}`;
+const reportFailureMessage =
+    "Playback progress could not be saved. Retry saving progress to continue.";
 const errorText = (error: unknown) =>
     error instanceof Error
         ? error.message
@@ -300,6 +317,7 @@ export function Cards({
     grid = false,
     onOpen,
 }: Props & { row: Row; grid?: boolean; onOpen?: () => void }) {
+    useCompletionPresentation(client);
     return (
         <section
             className={`catalog-shelf${["resume", "next"].includes(row.key) ? " catalog-resume-shelf" : ""}`}
@@ -310,7 +328,8 @@ export function Cards({
                 className={grid ? "catalog-grid" : "catalog-cards"}
                 data-shelf={row.key}
             >
-                {(row.items as CatalogItem[]).map((item, index) => {
+                {(row.items as CatalogItem[]).map((raw, index) => {
+                    const item = projectCompletion(client, raw);
                     const art = imagePath(item, 480, item.Type === "Episode"),
                         state = itemState(item);
                     const subtitle =
@@ -418,14 +437,16 @@ function RetryNotice({
     retry,
     busy = false,
     label = "Retry",
+    announce = true,
 }: {
     error: string;
     retry: () => void;
     busy?: boolean;
     label?: string;
+    announce?: boolean;
 }) {
     return (
-        <div className="catalog-error" role="alert">
+        <div className="catalog-error" role={announce ? "alert" : undefined}>
             <p>{error}</p>
             <button type="button" onClick={retry} disabled={busy}>
                 {busy ? "Retrying…" : label}
@@ -681,6 +702,7 @@ type DetailData = {
     seasons: CatalogItem[];
     episodes: CatalogItem[];
     next?: CatalogItem;
+    completionRead?: number;
 };
 const detailCache = new Map<string, DetailData>();
 const mutations = new Map<string, number>();
@@ -710,6 +732,7 @@ function freshBudget<T>(
     });
 }
 async function detailData(client: Jellyfin, id: string): Promise<DetailData> {
+    const completionRead = completionReadVersion();
     const item = (await client.detail(id)) as CatalogItem;
     let seasons: CatalogItem[] = [],
         episodes: CatalogItem[] = [],
@@ -739,7 +762,7 @@ async function detailData(client: Jellyfin, id: string): Promise<DetailData> {
                 `Shows/${encode(item.SeriesId!)}/Episodes?seasonId=${encode(id)}&fields=${encode(CARD_FIELDS)}`,
             )
         ).Items;
-    return { item, seasons, episodes, next };
+    return { item, seasons, episodes, next, completionRead };
 }
 function detailPlay(data: DetailData): CatalogItem | undefined {
     if (playable(data.item)) return data.item;
@@ -774,6 +797,7 @@ export function Detail({
     retryReport?: () => Promise<void>;
     onBack?: () => void;
 }) {
+    useCompletionPresentation(client);
     const cacheKey = `${accountKey(client)}:${id}`,
         initial = detailCache.get(cacheKey);
     const [data, setData] = useState<DetailData | undefined>(initial),
@@ -788,7 +812,8 @@ export function Detail({
         [pendingMessage, setPendingMessage] = useState(""),
         [season, setSeason] = useState<string>(),
         [feedback, setFeedback] = useState(""),
-        [focusedAction, setFocusedAction] = useState<string>();
+        [focusedAction, setFocusedAction] = useState<string>(),
+        [graceElapsed, setGraceElapsed] = useState(false);
     const dataRef = useRef(data),
         readyRef = useRef(false),
         queue = useRef<{ action: PendingAction; expires: number }[]>([]),
@@ -807,7 +832,18 @@ export function Detail({
         heldFocus = useRef<string | undefined>(undefined),
         heldElement = useRef<HTMLElement | null>(null),
         requestedCue = useRef<string | undefined>(undefined),
-        latestRead = useRef(0);
+        presentedCompletion = useRef(false),
+        latestRead = useRef(0),
+        requestExpired = useRef(false),
+        cueTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
+        cuePending = useRef<
+            | {
+                  text: string;
+                  expires: number;
+                  kind: "ready" | "request" | "failure";
+              }
+            | undefined
+        >(undefined);
     dataRef.current = data;
     const reportReady = useRef(!reportBarrier),
         retryReportRef = useRef(retryReport),
@@ -825,8 +861,54 @@ export function Detail({
         return () => {
             alive.current = false;
             queue.current = [];
+            heldFocus.current = undefined;
+            heldElement.current = null;
+            cuePending.current = undefined;
+            clearTimeout(cueTimer.current);
             readGen.current++;
         };
+    }, [cacheKey]);
+    function flushCue() {
+        clearTimeout(cueTimer.current);
+        const pending = cuePending.current;
+        if (!pending || !alive.current) return;
+        if (
+            Date.now() >= pending.expires ||
+            document.visibilityState !== "visible"
+        ) {
+            cuePending.current = undefined;
+            return;
+        }
+        setFeedback(pending.text);
+        cuePending.current = undefined;
+    }
+    function cue(text: string, kind: "ready" | "request" | "failure") {
+        clearTimeout(cueTimer.current);
+        setFeedback("");
+        cuePending.current = { text, kind, expires: Date.now() + 30000 };
+        cueTimer.current = setTimeout(flushCue, 180);
+    }
+    function cancelReady() {
+        heldFocus.current = undefined;
+        heldElement.current = null;
+        if (cuePending.current?.kind === "ready") {
+            cuePending.current = undefined;
+            clearTimeout(cueTimer.current);
+        }
+        setFeedback("");
+    }
+    useEffect(() => {
+        const clearReaderVisit = () => {
+            if (document.visibilityState === "visible") return;
+            heldFocus.current = undefined;
+            heldElement.current = null;
+            cuePending.current = undefined;
+            clearTimeout(cueTimer.current);
+            setFeedback("");
+        };
+        document.addEventListener("visibilitychange", clearReaderVisit);
+        return () =>
+            document.removeEventListener("visibilitychange", clearReaderVisit);
     }, [cacheKey]);
     function publishReportOutcome(error?: unknown) {
         // Pre-ack detail data cannot authorize a resume/next target. Invalidate
@@ -845,10 +927,11 @@ export function Detail({
         }
         setLoading(true);
         clearReportErrorOnRead.current = error === undefined;
-        if (error !== undefined)
-            setReportError(
-                `Playback progress could not be saved. The latest viewing position may be missing. ${errorText(error)}`,
-            );
+        if (error !== undefined) {
+            cancelReady();
+            cue(reportFailureMessage, "failure");
+            setReportError(reportFailureMessage);
+        }
         setAttempt((value) => value + 1);
     }
     async function retrySavingProgress() {
@@ -904,6 +987,11 @@ export function Detail({
         let live = true;
         readyRef.current = false;
         setLoading(true);
+        setGraceElapsed(false);
+        cancelReady();
+        const grace = setTimeout(() => {
+            if (live) setGraceElapsed(true);
+        }, 1500);
         freshBudget(detailData(client, id), controller.signal)
             .then((value) => {
                 if (!live || gen !== readGen.current) return;
@@ -911,6 +999,13 @@ export function Detail({
                     setAttempt((v) => v + 1);
                     return;
                 }
+                for (const raw of [
+                    value.item,
+                    ...value.seasons,
+                    ...value.episodes,
+                    ...(value.next ? [value.next] : []),
+                ])
+                    settleCompletionRead(client, raw, value.completionRead);
                 detailCache.set(cacheKey, value);
                 dataRef.current = value;
                 setData(value);
@@ -954,15 +1049,22 @@ export function Detail({
                 )
                     return;
                 setLoading(false);
-                setFeedback("");
-                setReadError(errorText(error));
+                cancelReady();
+                requestExpired.current ||= queue.current.length > 0;
+                queue.current = [];
+                requestedCue.current = undefined;
+                setPendingMessage("");
+                const reason = errorText(error);
+                setReadError(reason);
+                cue(
+                    `Loading failed. ${reason} Retry is available.${requestExpired.current ? " The previous request expired and will not run." : ""}`,
+                    "failure",
+                );
                 notify(error);
-                requestAnimationFrame(() => {
-                    if (alive.current) retryRef.current?.focus();
-                });
             });
         return () => {
             live = false;
+            clearTimeout(grace);
             controller.abort();
         };
     }, [cacheKey, client.account!.accessToken, attempt]);
@@ -996,6 +1098,9 @@ export function Detail({
             !active?.hasAttribute("disabled");
         if (
             !ready &&
+            graceElapsed &&
+            !readError &&
+            queue.current.length === 0 &&
             action &&
             ["play", "watched", "favorite", "restart"].includes(action)
         ) {
@@ -1008,13 +1113,22 @@ export function Detail({
             document.visibilityState === "visible"
         ) {
             heldFocus.current = undefined;
-            setFeedback("Ready");
+            cue("Ready", "ready");
         } else if (action !== heldFocus.current) heldFocus.current = undefined;
-    }, [ready, selected]);
+    }, [ready, selected, graceElapsed, readError]);
     function detailFocus(event: React.FocusEvent) {
         const action = (event.target as HTMLElement).dataset.focus;
         if (action !== focusedAction) {
-            setFeedback("");
+            // Ordinary focus owns the next speech. A failure/acceptance waits
+            // behind it; a Ready for the previous action is discarded.
+            if (cuePending.current?.kind === "ready") cancelReady();
+            else {
+                setFeedback("");
+                if (cuePending.current) {
+                    clearTimeout(cueTimer.current);
+                    cueTimer.current = setTimeout(flushCue, 180);
+                }
+            }
             requestedCue.current = undefined;
             setFocusedAction(action);
         }
@@ -1022,12 +1136,12 @@ export function Detail({
     function retryDetail() {
         if (loading) return;
         requestedCue.current = undefined;
-        setFeedback("Loading item. Please wait.");
+        requestExpired.current = false;
+        cuePending.current = undefined;
+        clearTimeout(cueTimer.current);
+        setFeedback("");
         setAttempt((value) => value + 1);
     }
-    useLayoutEffect(() => {
-        if (readError && !loading) retryRef.current?.focus();
-    }, [readError, loading]);
     const process = useCallback(async () => {
         if (processing.current || !readyRef.current || !alive.current) return;
         processing.current = true;
@@ -1035,8 +1149,9 @@ export function Detail({
             while (queue.current.length && readyRef.current && alive.current) {
                 const pending = queue.current.shift()!;
                 if (pending.expires < Date.now()) {
+                    requestExpired.current = true;
                     setPendingMessage(
-                        "The requested action expired while waiting for this item. Choose it again.",
+                        "The previous request expired and will not run. Choose it again.",
                     );
                     continue;
                 }
@@ -1149,6 +1264,11 @@ export function Detail({
                     if (!alive.current) return;
                     queue.current = [];
                     setWriteError(errorText(error));
+                    cancelReady();
+                    cue(
+                        `Change failed. ${errorText(error)} Retry saving is available.`,
+                        "failure",
+                    );
                     notify(error);
                 } finally {
                     if (alive.current) {
@@ -1171,9 +1291,10 @@ export function Detail({
             queue.current = queue.current.filter((p) => p.expires > Date.now());
             if (before !== queue.current.length) {
                 requestedCue.current = undefined;
-                setFeedback("");
+                requestExpired.current = true;
+                cancelReady();
                 setPendingMessage(
-                    "The requested action expired while waiting for this item. Choose it again.",
+                    "The previous request expired and will not run. Choose it again.",
                 );
             }
         }, 1000);
@@ -1189,14 +1310,17 @@ export function Detail({
             return;
         }
         queue.current.push({ action, expires: Date.now() + 30000 });
+        if (action.kind === "watched") recordPlayedChoice(client, id);
         if (!readyRef.current) {
+            cancelReady();
             requestedCue.current = action.kind;
-            setFeedback(
+            cue(
                 action.kind === "play"
                     ? "Play requested"
                     : action.kind === "restart"
                       ? "Start requested"
                       : `${action.kind === "watched" ? "Watched" : "Favorite"} change requested`,
+                "request",
             );
             setPendingMessage(
                 action.kind === "play"
@@ -1208,8 +1332,9 @@ export function Detail({
         }
         void process();
     }
-    function actionLabel(kind: PendingAction["kind"], normal: string) {
-        if (!queue.current.some((p) => p.action.kind === kind)) return normal;
+    function queuedActionName(kind: PendingAction["kind"]) {
+        if (!queue.current.some((p) => p.action.kind === kind))
+            return undefined;
         const noun =
             kind === "play"
                 ? "Play"
@@ -1218,10 +1343,87 @@ export function Detail({
                   : kind === "watched"
                     ? "Watched"
                     : "Favorite";
-        return requestedCue.current === kind
-            ? `${noun}${kind === "watched" || kind === "favorite" ? " change" : ""} requested`
-            : `${noun} already requested`;
+        return `${noun} already requested`;
     }
+    function actionLabel(kind: PendingAction["kind"], normal: string) {
+        const requested = queuedActionName(kind);
+        if (requested)
+            return (
+                <span className="catalog-requested-label">
+                    {requested.slice(0, -" already requested".length)}{" "}
+                    <small>already requested</small>
+                </span>
+            );
+        return !readyRef.current && graceElapsed && !readError ? (
+            <span className="catalog-requested-label">
+                {normal} <small>when ready</small>
+            </span>
+        ) : (
+            normal
+        );
+    }
+    const readRecovery = readError ? (
+        <div className="catalog-error" aria-live="off">
+            <p>
+                {loading ? (
+                    <>
+                        Loading item. Please wait.
+                        <small className="catalog-previous-reason">
+                            Previous attempt: {readError}
+                        </small>
+                    </>
+                ) : (
+                    readError
+                )}
+            </p>
+            <button
+                data-focus="detail-retry"
+                aria-description={
+                    requestExpired.current
+                        ? "The previous request expired and will not run"
+                        : undefined
+                }
+                ref={retryRef}
+                aria-disabled={loading}
+                onClick={retryDetail}
+            >
+                {loading ? "Retrying…" : "Retry"}
+            </button>
+        </div>
+    ) : null;
+    const reportRecovery = reportError ? (
+        <div className="catalog-error" aria-live="off">
+            <p>{reportError}</p>
+            {retryReport ? (
+                <button
+                    ref={reportRetryRef}
+                    onClick={() => void retrySavingProgress()}
+                    aria-disabled={
+                        savingReport || clearReportErrorOnRead.current
+                    }
+                >
+                    {savingReport
+                        ? "Saving progress…"
+                        : clearReportErrorOnRead.current
+                          ? "Loading item…"
+                          : "Retry saving progress"}
+                </button>
+            ) : (
+                <button
+                    onClick={() => {
+                        if (!loading) {
+                            readyRef.current = false;
+                            setLoading(true);
+                            setAttempt((value) => value + 1);
+                        }
+                    }}
+                    aria-disabled={loading}
+                >
+                    Reload item information
+                </button>
+            )}
+        </div>
+    ) : null;
     const feedbackNode = (
         <div
             className="catalog-reader-feedback"
@@ -1273,6 +1475,8 @@ export function Detail({
                 onFocusCapture={detailFocus}
             >
                 {feedbackNode}
+                {readRecovery}
+                {reportRecovery}
                 <div className="catalog-loading-slots">
                     <h1>
                         {readError && !loading
@@ -1287,6 +1491,7 @@ export function Detail({
                             ref={primaryRef}
                             className="primary"
                             data-focus="play"
+                            aria-label={queuedActionName("play")}
                             data-autofocus
                             aria-disabled="true"
                             onClick={() => offer({ kind: "play" })}
@@ -1295,6 +1500,7 @@ export function Detail({
                         </button>
                         <button
                             data-focus="watched"
+                            aria-label={queuedActionName("watched")}
                             aria-disabled="true"
                             onClick={() =>
                                 offer({ kind: "watched", desired: true })
@@ -1305,6 +1511,7 @@ export function Detail({
                         <button
                             ref={favoriteRef}
                             data-focus="favorite"
+                            aria-label={queuedActionName("favorite")}
                             aria-disabled="true"
                             onClick={() =>
                                 offer({ kind: "favorite", desired: true })
@@ -1314,6 +1521,7 @@ export function Detail({
                         </button>
                         <button
                             data-focus="restart"
+                            aria-label={queuedActionName("restart")}
                             aria-disabled="true"
                             onClick={() => offer({ kind: "restart" })}
                         >
@@ -1321,56 +1529,7 @@ export function Detail({
                         </button>
                     </div>
                 </div>
-                {reportError && (
-                    <div className="catalog-error" role="alert">
-                        <p>{reportError}</p>
-                        {retryReport && (
-                            <button
-                                ref={reportRetryRef}
-                                onClick={() => void retrySavingProgress()}
-                                aria-disabled={
-                                    savingReport ||
-                                    clearReportErrorOnRead.current
-                                }
-                            >
-                                {savingReport
-                                    ? "Saving progress…"
-                                    : clearReportErrorOnRead.current
-                                      ? "Loading item…"
-                                      : "Retry saving progress"}
-                            </button>
-                        )}
-                    </div>
-                )}
-                {readError ? (
-                    <div
-                        className="catalog-error"
-                        role={loading ? undefined : "alert"}
-                    >
-                        <p>
-                            {loading ? (
-                                <>
-                                    Loading item. Please wait.
-                                    <small className="catalog-previous-reason">
-                                        Previous attempt: {readError}
-                                    </small>
-                                </>
-                            ) : (
-                                readError
-                            )}
-                        </p>
-                        <button
-                            data-focus="detail-retry"
-                            ref={retryRef}
-                            onClick={() => {
-                                retryDetail();
-                            }}
-                            aria-disabled={loading}
-                        >
-                            {loading ? "Retrying…" : "Retry"}
-                        </button>
-                    </div>
-                ) : (
+                {!readError && !reportError && !writeError && (
                     <p aria-live="off">
                         {pendingMessage ||
                             (savingReport
@@ -1380,7 +1539,7 @@ export function Detail({
                 )}
             </div>
         );
-    const current = data?.item ?? shown,
+    const current = projectCompletion(client, data?.item ?? shown),
         target = data ? detailPlay(data) : undefined,
         isContainer = ["Series", "Season"].includes(shown.Type),
         isLibrary = ["CollectionFolder", "Folder", "UserView"].includes(
@@ -1403,6 +1562,10 @@ export function Detail({
                 : undefined),
         acceptedWatched = watched(current),
         acceptedFavorite = !!current.UserData?.IsFavorite;
+    // A failed completion restores its own known raw value even while report
+    // recovery holds commands. Unrelated cached controls retain neutral state
+    // until their current read succeeds.
+    if (current !== (data?.item ?? shown)) presentedCompletion.current = true;
     const episodes =
         data?.episodes.filter(
             (item) =>
@@ -1414,6 +1577,27 @@ export function Detail({
                 item.ParentIndexNumber ===
                     data.seasons.find((s) => s.Id === season)?.IndexNumber,
         ) ?? [];
+    const detailStatus = (!readError || savingReport) &&
+        !reportError &&
+        !writeError &&
+        (!ready || pendingMessage) && (
+            <div
+                className="catalog-detail-status"
+                aria-live="off"
+                ref={statusRef}
+            >
+                {pendingMessage ||
+                    (savingReport
+                        ? loading || readError
+                            ? "Saving progress…"
+                            : "Item loaded. Saving progress…"
+                        : loading
+                          ? isContainer
+                              ? "Loading episodes…"
+                              : "Loading item…"
+                          : "")}
+            </div>
+        );
     return (
         <div
             className={`catalog-page catalog-detail-page${isLibrary ? " catalog-library-page" : ""}${shown.Type === "Person" ? " catalog-person-page" : ""}${shown.Type === "Episode" ? " catalog-episode-page" : ""}`}
@@ -1422,6 +1606,9 @@ export function Detail({
             onFocusCapture={detailFocus}
         >
             {feedbackNode}
+            {readRecovery}
+            {reportRecovery}
+            {detailStatus}
             <article aria-label={shown.Name}>
                 <section className="catalog-detail-hero">
                     <div className="catalog-detail-copy">
@@ -1461,6 +1648,7 @@ export function Detail({
                                         ref={primaryRef}
                                         className="primary"
                                         data-focus="play"
+                                        aria-label={queuedActionName("play")}
                                         data-autofocus
                                         aria-disabled={!ready || !target}
                                         disabled={!target && !loading}
@@ -1477,18 +1665,32 @@ export function Detail({
                                     !initial && (
                                         <button
                                             data-focus="restart"
+                                            aria-label={queuedActionName(
+                                                "restart",
+                                            )}
                                             aria-disabled={!ready}
                                             onClick={() =>
                                                 offer({ kind: "restart" })
                                             }
                                         >
-                                            Play from start
+                                            {ready
+                                                ? "Play from start"
+                                                : actionLabel(
+                                                      "restart",
+                                                      "Play from start",
+                                                  )}
                                         </button>
                                     )}
                                 <button
                                     data-focus="watched"
+                                    aria-label={queuedActionName("watched")}
                                     aria-pressed={
-                                        ready ? acceptedWatched : undefined
+                                        ready ||
+                                        (presentedCompletion.current &&
+                                            typeof current.UserData?.Played ===
+                                                "boolean")
+                                            ? acceptedWatched
+                                            : undefined
                                     }
                                     aria-disabled={!ready || !canMark}
                                     disabled={!canMark}
@@ -1511,6 +1713,7 @@ export function Detail({
                                 <button
                                     ref={favoriteRef}
                                     data-focus="favorite"
+                                    aria-label={queuedActionName("favorite")}
                                     aria-pressed={
                                         ready ? acceptedFavorite : undefined
                                     }
@@ -1535,13 +1738,21 @@ export function Detail({
                                     initial && (
                                         <button
                                             data-focus="restart"
+                                            aria-label={queuedActionName(
+                                                "restart",
+                                            )}
                                             aria-disabled={!ready || !target}
                                             disabled={!target && !loading}
                                             onClick={() =>
                                                 offer({ kind: "restart" })
                                             }
                                         >
-                                            Play from start
+                                            {ready
+                                                ? "Play from start"
+                                                : actionLabel(
+                                                      "restart",
+                                                      "Play from start",
+                                                  )}
                                         </button>
                                     )}
                             </div>
@@ -1570,91 +1781,9 @@ export function Detail({
                             </div>
                         ))}
                 </section>
-                {(!ready || pendingMessage) && (
-                    <div
-                        className="catalog-detail-status"
-                        aria-live="off"
-                        ref={statusRef}
-                    >
-                        {pendingMessage ||
-                            (savingReport
-                                ? loading
-                                    ? "Saving progress…"
-                                    : "Item loaded. Saving progress…"
-                                : loading
-                                  ? isContainer
-                                      ? "Loading episodes…"
-                                      : "Loading item…"
-                                  : reportError && !reportReady.current
-                                    ? "Item loaded. Playback progress still needs saving."
-                                    : "")}
-                    </div>
-                )}
-                {readError && (
-                    <div
-                        className="catalog-error"
-                        role={loading ? undefined : "alert"}
-                    >
-                        <p>
-                            {loading ? (
-                                <>
-                                    Loading item. Please wait.
-                                    <small className="catalog-previous-reason">
-                                        Previous attempt: {readError}
-                                    </small>
-                                </>
-                            ) : (
-                                readError
-                            )}
-                        </p>
-                        <button
-                            data-focus="detail-retry"
-                            ref={retryRef}
-                            aria-disabled={loading}
-                            onClick={() => {
-                                retryDetail();
-                            }}
-                        >
-                            {loading ? "Retrying…" : "Retry"}
-                        </button>
-                    </div>
-                )}
-                {reportError && (
-                    <div className="catalog-error" role="alert">
-                        <p>{reportError}</p>
-                        {retryReport ? (
-                            <button
-                                ref={reportRetryRef}
-                                onClick={() => void retrySavingProgress()}
-                                aria-disabled={
-                                    savingReport ||
-                                    clearReportErrorOnRead.current
-                                }
-                            >
-                                {savingReport
-                                    ? "Saving progress…"
-                                    : clearReportErrorOnRead.current
-                                      ? "Loading item…"
-                                      : "Retry saving progress"}
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    if (!loading) {
-                                        readyRef.current = false;
-                                        setLoading(true);
-                                        setAttempt((value) => value + 1);
-                                    }
-                                }}
-                                aria-disabled={loading}
-                            >
-                                Reload item information
-                            </button>
-                        )}
-                    </div>
-                )}
                 {writeError && (
                     <RetryNotice
+                        announce={false}
                         error={`Change failed. ${writeError}`}
                         retry={() => {
                             const retry = lastWrite.current;

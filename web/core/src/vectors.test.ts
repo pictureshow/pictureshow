@@ -42,13 +42,21 @@ import {
 } from "./parity";
 import { referenceProfile, referenceCompatibility } from "./reference-profile";
 import * as rc26 from "./rc26";
+import * as rc28 from "./rc28";
+import * as playbackInformation from "./playback-information";
+import {
+    controlProjection,
+    controlSuites,
+    runControlCase,
+} from "./control";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))
     .map((p) => String(p));
-const ids = new Set<string>();
+const ids = new Set<string>(),
+    foundControlSuites = new Set<string>();
 // Full Media3 profile fixtures are evaluated as pure reference-policy translations.
 // Runtime browser playback uses its own actual MIME/MSE/native capability probes.
 // Passing these inputs is not a claim that browsers render Android formats.
@@ -56,7 +64,13 @@ for (const file of files) {
     const suite = JSON.parse(readFileSync(spec + "/vectors/" + file, "utf8"));
     if (
         suite.schemaVersion !== 1 ||
-        !["reference", "application", "recovery"].includes(suite.suite) ||
+        ![
+            "reference",
+            "application",
+            "recovery",
+            "playback-information",
+            ...controlSuites,
+        ].includes(suite.suite) ||
         !Array.isArray(suite.cases)
     )
         throw new Error("Unsupported vector envelope: " + file);
@@ -64,6 +78,46 @@ for (const file of files) {
         if (ids.has(c.id)) throw new Error("Duplicate vector ID: " + c.id);
         ids.add(c.id);
     }
+    if (controlSuites.has(suite.suite)) {
+        if (foundControlSuites.has(suite.suite))
+            throw new Error("Duplicate control vector suite: " + suite.suite);
+        foundControlSuites.add(suite.suite);
+        describe("control " + file, () => {
+            for (const c of suite.cases)
+                it(c.id, () => {
+                    const steps = runControlCase(suite.suite, c);
+                    for (const step of steps)
+                        expect(
+                            controlProjection(step.actual, step.expected),
+                        ).toEqual(step.expected);
+                });
+        });
+        continue;
+    }
+    const browserVisibilityExpected: Record<string, boolean> = {
+        "visibility-native-foreground": true,
+        "visibility-native-stopped": true,
+        "visibility-returned-latched": false,
+        "visibility-paused-request": false,
+        "visibility-web-background": true,
+        "visibility-web-paused": false,
+    };
+    // Preserve every shared case verbatim. Also feed all six visibility inputs
+    // our actual background policy, with explicit browser-policy expectations.
+    for (const c of suite.cases.filter(
+        (c: any) => c.operation === "visibility-play",
+    ))
+        it("browser background policy: " + c.id, () => {
+            expect(browserVisibilityExpected).toHaveProperty(c.id);
+            expect(
+                rc28.visibilityPlay(
+                    c.input.requested,
+                    rc28.WEB_FOREGROUND_REQUIRED,
+                    c.input.foreground,
+                    c.input.pauseLatched,
+                ),
+            ).toBe(browserVisibilityExpected[c.id]);
+        });
     const runnable = suite.cases;
     describe("shared " + file, () => {
         for (const c of runnable)
@@ -72,6 +126,171 @@ for (const file of files) {
                     ctx = suite.context;
                 let value: unknown;
                 switch (c.operation) {
+                    case "visibility-play":
+                        value = rc28.visibilityPlay(
+                            i.requested,
+                            i.foregroundRequired,
+                            i.foreground,
+                            i.pauseLatched,
+                        );
+                        break;
+                    case "detail-retry-description":
+                        value = rc28.detailRetryDescription(i.reason);
+                        break;
+                    case "detail-quiet-departing-change":
+                        value = rc28.detailQuietDepartingChange(
+                            i.handoff,
+                            i.action,
+                            i.onlyLabelChanged,
+                        );
+                        break;
+                    case "detail-quiet-request-rediscovery":
+                        value = rc28.detailQuietRequestRediscovery(
+                            i.action,
+                            i.onlyLabelChanged,
+                            i.rediscovery,
+                        );
+                        break;
+                    case "detail-request-once-feedback": {
+                        const feedback = new rc28.DetailRequestOnceFeedback();
+                        value = i.steps.map((step: any) =>
+                            feedback.update(
+                                step.request ?? null,
+                                step.eligible,
+                                step.submitted,
+                            ),
+                        );
+                        break;
+                    }
+                    case "detail-held-label-presentation":
+                        value = rc28.detailHeldLabelPresentation(
+                            i.selectedWhileHeld,
+                            i.heldLabelRequested,
+                        );
+                        break;
+                    case "detail-feedback-source":
+                        value = rc28.detailFeedbackSource(
+                            i.currentPage,
+                            i.selectedAction,
+                        );
+                        break;
+                    case "detail-pending-presentation-label":
+                        value = rc28.detailPendingPresentationLabel(
+                            i.held,
+                            i.requested,
+                            i.available,
+                            i.plain,
+                            i.pending,
+                        );
+                        break;
+                    case "detail-completion-presented-played":
+                        value = rc28.detailCompletionPresentedPlayed(
+                            i.played,
+                            i.completionIntent,
+                        );
+                        break;
+                    case "detail-played-request-notice":
+                        value = rc28.detailPlayedRequestNotice(
+                            i.wanted,
+                            i.current,
+                        );
+                        break;
+                    case "detail-reader-focus-clear":
+                        value = rc28.detailReaderFocusClear(
+                            i.currentPage,
+                            i.ownedHeader,
+                            i.sameNativeNode,
+                        );
+                        break;
+                    case "detail-retry-failure-cue":
+                        value = rc28.detailRetryFailureCue(
+                            i.baseline ?? null,
+                            i.attempt,
+                            i.loading,
+                            i.failed,
+                            i.resumed,
+                        );
+                        break;
+                    case "detail-retry-attempt-succeeded":
+                        value = rc28.detailRetryAttemptSucceeded(
+                            i.baseline ?? null,
+                            i.attempt,
+                            i.loading,
+                            i.failed,
+                        );
+                        break;
+                    case "detail-raw-read-acknowledgement":
+                        value = rc28.detailRawReadAcknowledgement(
+                            i.raw,
+                            i.acknowledged,
+                        );
+                        break;
+                    case "detail-pending-presentation-visible":
+                        value = rc28.detailPendingPresentationVisible(
+                            i.waiting,
+                            i.resumed,
+                            i.published,
+                        );
+                        break;
+                    case "detail-completion-intent-retained":
+                        value = rc28.detailCompletionIntentRetained(
+                            i.reportFailed,
+                            i.reportPending,
+                            i.rawReadSucceeded,
+                        );
+                        break;
+                    case "detail-retry-cue-can-wait":
+                        value = rc28.detailRetryCueCanWait(
+                            i.accessibilityEnabled,
+                            i.elapsedMillis,
+                        );
+                        break;
+                    case "detail-completion-may-apply":
+                        value = rc28.detailCompletionMayApply(
+                            i.reportChoiceRevision ?? null,
+                            i.currentChoiceRevision,
+                        );
+                        break;
+                    case "detail-pending-feedback":
+                        value = rc28.detailPendingFeedback(i.steps);
+                        break;
+                    case "detail-pending-plain-label":
+                        value = rc28.detailPendingPlainLabel(
+                            i.target,
+                            i.known,
+                            i.played,
+                            i.favorite,
+                        );
+                        break;
+                    case "reason":
+                        value = playbackInformation.transcodeReason(
+                            i.reason,
+                            i.qualityMbps,
+                        );
+                        break;
+                    case "method":
+                        value = playbackInformation.playbackMethod(
+                            i.method,
+                            i.url,
+                        );
+                        break;
+                    case "subtitle":
+                        value = playbackInformation.subtitleDelivery(
+                            i.source,
+                            i.index,
+                        );
+                        break;
+                    case "bitrate":
+                        value = playbackInformation.formatBitrate(i.bitrate);
+                        break;
+                    case "speed":
+                        value = String(
+                            playbackInformation.speedSupported(
+                                i.speed,
+                                i.encoded,
+                            ),
+                        );
+                        break;
                     case "external-subtitle-loading":
                         value = {
                             retryDelayMs: rc26.externalSubtitleRetryDelay(
@@ -171,6 +390,12 @@ for (const file of files) {
                                 s.focused ?? null,
                                 s.resumed,
                                 s.usable ?? true,
+                                {
+                                    presented: s.presented ?? false,
+                                    cancelled: s.cancelled ?? false,
+                                    submitted: s.submitted ?? true,
+                                    nativePresented: s.nativePresented ?? null,
+                                },
                             ),
                         );
                         break;
@@ -203,6 +428,7 @@ for (const file of files) {
                             i.accessibilityEnabled,
                             i.sourceIsPlayback,
                             i.destinationIsCatalog,
+                            i.returning ?? false,
                         );
                         break;
                     case "detail-arrival-publication":
@@ -281,6 +507,7 @@ for (const file of files) {
                             i.active,
                             i.readerLeftAction,
                             i.requested ?? true,
+                            i.presented ?? true,
                         );
                         break;
                     case "detail-confirmed-leaf":
@@ -701,3 +928,6 @@ for (const file of files) {
             });
     });
 }
+for (const suite of controlSuites)
+    if (!foundControlSuites.has(suite))
+        throw new Error("Missing control vector suite: " + suite);

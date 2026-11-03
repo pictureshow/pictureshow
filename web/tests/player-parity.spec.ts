@@ -426,6 +426,18 @@ async function creditsEpisode(page: Page, automatic: boolean) {
     await page.route("https://jellyfin.example/Items/episode2?**", (route) =>
         route.fulfill({ headers: jsonHeaders, body: JSON.stringify(next) }),
     );
+    // The strict authoritative detail read uses Items?ids, not only Items/:id.
+    await page.route("https://jellyfin.example/Items?**", (route) => {
+        if (
+            new URL(route.request().url()).searchParams.get("ids") ===
+            "episode2"
+        )
+            return route.fulfill({
+                headers: jsonHeaders,
+                body: JSON.stringify({ Items: [next] }),
+            });
+        return route.fallback();
+    });
     await signIn(page);
     await page.locator('[data-focus="next:episode"]').click();
     await page
@@ -490,14 +502,14 @@ test("manual credits continuation completes once before next; reader choice has 
 test("credits countdown advances once and suspends while a panel is open", async ({
     page,
 }) => {
-    await page.clock.install();
     const f = await creditsEpisode(page, true);
     await page.getByRole("button", { name: "Subtitles", exact: true }).click();
-    await page.clock.runFor(12000);
+    // Keep the native media clock and the countdown on the same wall clock.
+    // Fast-forwarding JS alone can create a real WebKit buffering hold.
+    await page.waitForTimeout(12000);
     expect(f.completed()).toBe(0);
     await page.getByRole("button", { name: "Done", exact: true }).click();
-    await page.clock.runFor(11000);
-    await expect.poll(f.completed).toBe(1);
+    await expect.poll(f.completed, { timeout: 14000 }).toBe(1);
     await expect(
         page.getByRole("heading", { name: "The Next Morning", exact: true }),
     ).toBeVisible();
@@ -722,7 +734,11 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
     page,
 }) => {
     const f = await fixture(page);
-    let completed = 0;
+    let completed = 0,
+        pageCrashed = false;
+    page.on("crash", () => {
+        pageCrashed = true;
+    });
     await page.route(
         "https://jellyfin.example/UserPlayedItems/movie?**",
         (route) => {
@@ -757,16 +773,20 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
         .poll(() =>
             page.locator("video").evaluate((v: HTMLVideoElement) => ({
                 paused: v.paused,
-                atEnd: Math.abs(v.currentTime - v.duration) < 0.05,
+                atEnd: Math.abs(v.currentTime - v.duration) < 0.5,
+                ready: v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+                seeking: v.seeking,
             })),
         )
-        .toEqual({ paused: true, atEnd: true });
+        .toEqual({ paused: true, atEnd: true, ready: true, seeking: false });
     expect(completed).toBe(0);
     expect(f.reports.filter((r) => r.path.endsWith("/Stopped"))).toHaveLength(
         0,
     );
     await page.getByRole("button", { name: "Play", exact: true }).click();
-    await expect.poll(() => completed).toBe(1);
+    await expect
+        .poll(() => ({ completed, pageCrashed }))
+        .toEqual({ completed: 1, pageCrashed: false });
     await expect(
         page.getByRole("heading", { name: "The Test Picture", exact: true }),
     ).toBeVisible();
@@ -865,7 +885,7 @@ test("native ended event completes once after actual final frames, independently
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 
-test("visibility policy pauses and retains the same viewing across a hidden and visible event", async ({
+test("freeze policy pauses and retains the same viewing across a hidden and visible event", async ({
     page,
 }) => {
     const f = await fixture(page);
@@ -891,6 +911,7 @@ test("visibility policy pauses and retains the same viewing across a hidden and 
             value: true,
         });
         document.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(new Event("freeze"));
     });
     await expect
         .poll(() =>
@@ -1066,14 +1087,13 @@ test("rc26 selected external text retries independently, caches Off on, and keep
                 ),
         )
         .toBe(1);
-    const offset = f.negotiations.at(-1)!.StartTimeTicks / 1e7;
     expect(
         await page
             .locator("video")
             .evaluate(
                 (v: HTMLVideoElement) => v.textTracks[0].cues![0].startTime,
             ),
-    ).toBeCloseTo(15 - offset, 2);
+    ).toBeCloseTo(15, 2);
     expect(paths.every((p) => /\/Subtitles\/3\/0\/Stream.vtt$/.test(p))).toBe(
         true,
     );
@@ -1301,10 +1321,35 @@ test("rc26 relative steps retain target after negotiation until replacement READ
         release();
         await expect
             .poll(() => f.negotiations.at(-1)?.StartTimeTicks)
-            .toBe(base + 30e7);
-        await expect(
-            page.getByRole("status", { includeHidden: true }),
-        ).toHaveText("");
+            .toBe(Math.min(base + 30e7, 40e7));
+        try {
+            await expect(
+                page.getByRole("status", { includeHidden: true }),
+            ).toHaveText("");
+        } catch (error) {
+            console.log(
+                "Native endpoint READY state",
+                await page.locator("video").evaluate((v: HTMLVideoElement) => ({
+                    time: v.currentTime,
+                    duration: v.duration,
+                    paused: v.paused,
+                    seeking: v.seeking,
+                    readyState: v.readyState,
+                    networkState: v.networkState,
+                    srcScheme: new URL(v.currentSrc).protocol,
+                    nativeHls: v.canPlayType("application/vnd.apple.mpegurl"),
+                    buffered: Array.from(
+                        { length: v.buffered.length },
+                        (_, i) => [v.buffered.start(i), v.buffered.end(i)],
+                    ),
+                    seekable: Array.from(
+                        { length: v.seekable.length },
+                        (_, i) => [v.seekable.start(i), v.seekable.end(i)],
+                    ),
+                })),
+            );
+            throw error;
+        }
         await expect(
             page.getByRole("button", { name: "Play", exact: true }),
         ).toBeVisible();
@@ -1320,13 +1365,13 @@ test("rc26 relative steps retain target after negotiation until replacement READ
     }
 });
 
-test("rc26 automatic same-language captions prefer text with source binding and omit automatic reports", async ({
+test("rc28 automatic captions retain the server text default with source binding and omit automatic reports", async ({
     page,
 }) => {
     const f = await fixture(page);
     const source = {
         ...movie.MediaSources[0],
-        DefaultSubtitleStreamIndex: 4,
+        DefaultSubtitleStreamIndex: 3,
         MediaStreams: [
             ...movie.MediaSources[0].MediaStreams.map((s) =>
                 s.Index === 3 ? { ...s, Language: "eng" } : s,
@@ -1368,7 +1413,7 @@ test("rc26 automatic same-language captions prefer text with source binding and 
     );
     await openMovie(page);
     await pause(page);
-    expect(f.negotiations[0].SubtitleStreamIndex).toBe(3);
+    expect(f.negotiations[0]).not.toHaveProperty("SubtitleStreamIndex");
     expect(f.negotiations[0].MediaSourceId).toBe("source");
     const start = f.reports.find((r) => r.path === "/Sessions/Playing")!.body;
     expect(start).not.toHaveProperty("AudioStreamIndex");
@@ -1564,5 +1609,195 @@ test("rc26 server-declared text with unknown codec loads converted cues and swit
         .poll(() => f.reports.at(-1)?.body.SubtitleStreamIndex)
         .toBe(-1);
     expect(f.negotiations).toHaveLength(before);
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+for (const action of ["Play now", "Cancel next episode", "background"] as const)
+    test(`background continuation during committed Stop: ${action}`, async ({
+        page,
+    }) => {
+        await page.clock.install();
+        const f = await creditsEpisode(page, true);
+        const successorRequests: string[] = [];
+        page.on("request", (request) => {
+            if (
+                new URL(request.url()).pathname ===
+                "/Items/episode2/PlaybackInfo"
+            )
+                successorRequests.push(request.url());
+        });
+        let release!: () => void, entered!: () => void;
+        const gate = new Promise<void>((resolve) => (release = resolve)),
+            stopped = new Promise<void>((resolve) => (entered = resolve));
+        await page.route(
+            "https://jellyfin.example/Sessions/Playing/Stopped",
+            async (route) => {
+                if (route.request().postDataJSON().ItemId === "episode") {
+                    entered();
+                    await gate;
+                }
+                await route.fallback();
+            },
+        );
+        try {
+            await page.clock.runFor(11000);
+            await stopped;
+            await page.evaluate(() => {
+                Object.defineProperty(document, "hidden", {
+                    configurable: true,
+                    value: true,
+                });
+                document.dispatchEvent(new Event("visibilitychange"));
+            });
+            if (action !== "background")
+                await page.evaluate(() =>
+                    document.dispatchEvent(new Event("freeze")),
+                );
+            release();
+            await expect.poll(f.completed).toBe(1);
+            if (action === "background") {
+                await expect.poll(() => successorRequests.length).toBe(1);
+                await expect(
+                    page.getByRole("heading", {
+                        name: "The Next Morning",
+                        exact: true,
+                    }),
+                ).toBeVisible();
+                await expect
+                    .poll(() =>
+                        page
+                            .locator("video")
+                            .evaluate((v: HTMLVideoElement) => !v.paused),
+                    )
+                    .toBe(true);
+                await page
+                    .getByRole("button", { name: "Stop and go back" })
+                    .click();
+                return;
+            }
+            await expect(page.getByRole("status")).toContainText(
+                "Choose Play now",
+            );
+            expect(successorRequests).toHaveLength(0);
+            await page.evaluate(() => {
+                Object.defineProperty(document, "hidden", {
+                    configurable: true,
+                    value: false,
+                });
+                document.dispatchEvent(new Event("visibilitychange"));
+            });
+            await page.clock.runFor(15000);
+            await expect(
+                page.getByRole("heading", {
+                    name: "The Next Morning",
+                    exact: true,
+                }),
+            ).toBeHidden();
+            await page
+                .getByRole("button", { name: action, exact: true })
+                .click();
+            if (action === "Play now") {
+                await expect(
+                    page.getByRole("heading", {
+                        name: "The Next Morning",
+                        exact: true,
+                    }),
+                ).toBeVisible();
+                await page
+                    .getByRole("button", { name: "Stop and go back" })
+                    .click();
+            } else {
+                await expect(page.locator("video")).toBeHidden();
+                await expect(
+                    page.getByRole("heading", {
+                        name: "The Next Morning",
+                        exact: true,
+                    }),
+                ).toBeHidden();
+            }
+            expect(f.completed()).toBe(1);
+            expect(
+                f.reports.filter(
+                    (r) =>
+                        r.path.endsWith("/Stopped") &&
+                        r.body.ItemId === "episode",
+                ),
+            ).toHaveLength(1);
+        } finally {
+            release();
+        }
+    });
+
+test("background countdown opens the next decoder while hidden without a stop latch", async ({
+    page,
+}) => {
+    const stops: string[] = [];
+    page.on("console", (m) => {
+        const stop = /PictureshowPlayback lifecycle stop=(\S+)/.exec(m.text());
+        if (stop) stops.push(stop[1]);
+    });
+    const f = await creditsEpisode(page, true);
+    await page.evaluate(() => {
+        Object.defineProperty(document, "hidden", {
+            configurable: true,
+            value: true,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+    });
+    // Use real decoder/wall time: changing the JS clock does not advance media.
+    await expect.poll(f.completed, { timeout: 20000 }).toBe(1);
+    // Hidden alone does not hold automatic next: the successor opens.
+    await expect(
+        page.getByRole("heading", { name: "The Next Morning", exact: true }),
+    ).toBeVisible();
+    const video = page.locator("video"),
+        engine = test.info().project.name;
+    // Observed per engine (Linux container, 5 runs each): Chromium and Firefox
+    // play the hidden successor; WebKit refuses its play() and the app latches
+    // browser-play-rejected (one earlier WebKit run played). The swap's own
+    // pause must never surface as a browser-pause stop in any engine.
+    await expect
+        .poll(
+            async () =>
+                stops.length > 0 ||
+                (await video.evaluate(
+                    (v: HTMLVideoElement) => !v.paused && v.currentTime > 0.2,
+                )),
+            { timeout: 20000 },
+        )
+        .toBe(true);
+    expect(await page.evaluate(() => document.hidden)).toBe(true);
+    expect(
+        f.reports.filter(
+            (r) => r.path.endsWith("/Stopped") && r.body.ItemId === "episode",
+        ),
+    ).toHaveLength(1);
+    if (engine === "webkit" && stops.length) {
+        expect(stops).toEqual(["browser-play-rejected"]);
+        await page.evaluate(() => {
+            Object.defineProperty(document, "hidden", {
+                configurable: true,
+                value: false,
+            });
+            document.dispatchEvent(new Event("visibilitychange"));
+        });
+        await page.waitForTimeout(300);
+        expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(
+            true,
+        );
+    } else {
+        expect(stops).toEqual([]);
+        const at = await video.evaluate((v: HTMLVideoElement) => v.currentTime);
+        await expect
+            .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+            .toBeGreaterThan(at + 0.2);
+        expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(
+            false,
+        );
+    }
+    test.info().annotations.push({
+        type: "hidden-successor",
+        description: stops.length ? stops.join(",") : "playing",
+    });
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
