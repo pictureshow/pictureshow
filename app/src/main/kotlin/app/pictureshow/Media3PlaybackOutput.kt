@@ -37,6 +37,12 @@ internal class Media3PlaybackOutput(
     private val renderersFactory: RenderersFactory? = null,
     private val subtitleDelay: SubtitleDelay = SubtitleDelay()
 ) : PlaybackOutput {
+    private val viewingSpeed = ViewingPlaybackSpeed()
+    val speed = viewingSpeed.state
+    fun setSpeed(value: Float) {
+        viewingSpeed.select(value, mutablePlayer.value)
+        PlaybackDiagnostics.write("speed requested=$value effective=${speed.value.speed} pitch=1.0 positionMs=${position().milliseconds}")
+    }
     private val mutablePlayer = MutableStateFlow<Player?>(null)
     val player = mutablePlayer.asStateFlow()
     var subtitleDiagnostics: SubtitleCueDiagnostics? = null
@@ -202,7 +208,12 @@ internal class Media3PlaybackOutput(
         }
         val sourceFactory = DefaultMediaSourceFactory(context, extractors)
             .setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
-        val baseRenderers = renderersFactory ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions)
+        val baseRenderers =
+            renderersFactory ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions) { encoded ->
+                loadHandler.post {
+                    if (current === decision) viewingSpeed.audioOutput(encoded, mutablePlayer.value)
+                }
+            }
         val renderers = RenderersFactory { handler, video, audio, text, metadata ->
             val created = baseRenderers.createRenderers(handler, video, audio, text, metadata)
             videoRenderers = created.filterIsInstance<EndVideoRenderer>()
@@ -293,6 +304,8 @@ internal class Media3PlaybackOutput(
                 }
             }
         })
+        // Set decoder parameters before the stateful wrappers can snapshot an empty, idle player.
+        viewingSpeed.apply(next)
         val gated = ReleaseGatedPlayer(next)
         val managed = ReopeningPlayer(gated, ::playIntent)
         reopenState = managed
@@ -306,6 +319,10 @@ internal class Media3PlaybackOutput(
         var initialReady = false
         var initialTargetMs = positionMs
         listener = object : Player.Listener {
+            override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
+                if (activePlayer === next) viewingSpeed.observed(playbackParameters)
+            }
+
             override fun onRenderedFirstFrame() {
                 if (BuildConfig.DEBUG && activePlayer === next) {
                     Log.d(

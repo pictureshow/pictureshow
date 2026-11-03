@@ -5711,6 +5711,416 @@
         "elapsedMillis": 30001
       },
       "expected": false
+    },
+    {
+      "id": "detail.f7.completion.no-choice",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": 0,
+        "currentChoiceRevision": 0
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.completion.later-choice",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": 0,
+        "currentChoiceRevision": 1
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.completion.next-report",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": 1,
+        "currentChoiceRevision": 1
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.once",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "favorite",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "primary",
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.fast-read",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": false,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": false,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.first-focus-after-grace",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": null,
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.request-cancels",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.pause-and-new-grace",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": false,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null,
+        "primary"
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.retry-delivery",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false,
+            "submitted": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "primary",
+        "primary",
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.lower",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "from-start",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "from-start",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "from-start"
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.reader",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.sighted",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.catalog",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.catalog.reader",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.forward.recovery",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true,
+        "returning": false
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.plain.played",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "played",
+        "known": true,
+        "played": true,
+        "favorite": false
+      },
+      "expected": "Mark unwatched",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.plain.unplayed",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "played",
+        "known": true,
+        "played": false,
+        "favorite": false
+      },
+      "expected": "Mark watched",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.plain.unknown-season",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "played",
+        "known": false,
+        "played": true,
+        "favorite": false
+      },
+      "expected": "Watched",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.plain.favorite",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "favorite",
+        "known": true,
+        "played": false,
+        "favorite": true
+      },
+      "expected": "Unfavorite",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.completion.retired-report",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": null,
+        "currentChoiceRevision": 1
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
     }
   ]
 }

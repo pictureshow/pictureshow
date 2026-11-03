@@ -377,9 +377,13 @@ internal fun Pictureshow(
         exitTransition = {
             catalogExitTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route)
         },
-        // Pop/player return retains the existing transition and focus handoff timing.
-        popEnterTransition = { catalogEnterTransition(false, null, null) },
-        popExitTransition = { catalogExitTransition(false, null, null) },
+        // Returning from the player must not spend the focus budget in a decorative fade.
+        popEnterTransition = {
+            catalogEnterTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route, returning = true)
+        },
+        popExitTransition = {
+            catalogExitTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route, returning = true)
+        },
         modifier = Modifier.fillMaxSize().catalogSearchKey(
             enabled = state.snapshot.currentAccount?.expired == false && isCatalogSearchRoute(backStackEntry?.destination?.route),
             onSearch = {
@@ -854,6 +858,7 @@ internal fun Pictureshow(
                         },
                         onPendingControlsReady = { exitHandoff?.live(entry.id, it) },
                         onPendingQueueExpired = { exitHandoff?.expired(entry.id) == true },
+                        onPlayedRequest = vm::playedRequested,
                         origin = item
                     )
                 }

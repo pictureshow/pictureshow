@@ -90,6 +90,7 @@ data class MediaStream(
     @SerialName("Level") val level: Double? = null,
     @SerialName("BitDepth") val bitDepth: Int? = null,
     @SerialName("Channels") val channels: Int? = null,
+    @SerialName("BitRate") val bitRate: Int? = null,
     @SerialName("Width") val width: Int? = null,
     @SerialName("Height") val height: Int? = null,
     @SerialName("RealFrameRate") val realFrameRate: Double? = null,

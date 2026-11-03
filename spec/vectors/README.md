@@ -1,7 +1,7 @@
 # Language-neutral reference vectors
 
 All `.json` files here are executable test inputs, not schemas or documentation snapshots. Discover them recursively.
-The current runners accept schema version 1 and the suites `reference`, `application` and `recovery`. There is no update mode.
+The current runners accept schema version 1 and the suites `reference`, `application`, `recovery` and `playback-information`. There is no update mode.
 
 ```json
 {
@@ -147,3 +147,154 @@ failure. The primary metadata remains available to the UI's retained presentatio
 user state authoritative. The `native.catalog.projection-missing.*` cases also require INVALID_RESPONSE when a
 successful batch contains no matching item (empty array or only another ID). That is missing authoritative UserData,
 not a usable fallback. Both implementations require a matching item before completing the detail read.
+
+## Playback information and speed (PLAY-25/26)
+
+`playback-information.json` uses suite `playback-information`, schema 1, executed by
+`PlaybackInformationVectorsTest`. Cases use exact string expectations. Operations: `reason` takes a server
+`reason` code and optional `qualityMbps`; `method` takes a report-enum `method` and invented playback `url`;
+`subtitle` takes a Jellyfin `source` and selected `index`; `bitrate` takes nullable bits per second; `speed`
+takes a numeric rate and boolean `encoded` and returns the string `true` or `false`. Reasons use device-neutral
+wording so TV, phone, Apple and web can share it. Unknown reason strings are never displayed verbatim.
+A quality cap is a possible remedy, not proof it is the only conversion cause. The server may rewrite its media
+metadata: label that metadata separately from the actual received formats, and never turn a list of candidate
+codecs into a claim about the output. An explicit all-copy audio/video URL is remux; otherwise retain the
+server's negotiated method. These vectors do not prove real decoder speed, pitch or encoded output behavior.
+
+## Shared control trace format (schema 1)
+
+The five control suites below execute `core/control` production reducers through `ControlVectorsTest`.
+Each case has `id`, `operation`, `state`, and nonempty `steps`. A step has an `event` and a nonempty
+`expected` projection of the returned state. Objects in `expected` recursively select fields; arrays,
+strings, booleans and null compare exactly, including JSON type and array order. Omitted expected fields
+are deliberately unasserted. Each step feeds its complete actual state into the next step; `queue`
+uses the returned `queue` member. Defaults below apply only to input state/events, never to expectations.
+Unknown suite, case operation, event operation, or event field is a failure. These traces are Kotlin
+reference contracts ready for translation; Apple/web execution is still unproved.
+
+**Exact encoding:** every signed 64-bit control value is a canonical decimal **JSON string**, even zero:
+`ticks`, `positionTicks`, `durationTicks`, `generation`, `sequence`, `revision`, `completion`, `ticket`,
+`sentAtMs`, `nowMs`, report sequence and command ID. Range is −9223372036854775808 through
+9223372036854775807. No leading plus/zero, exponent, fraction, whitespace or negative zero. Kotlin uses
+Long; Swift uses Int64; TypeScript must use BigInt/string arithmetic and must not pass these through
+Number or JSON numeric decoding. Track indices, move indices and schemaVersion are ordinary small JSON
+integers. A millisecond is 10,000 ticks. Signed relative deltas may be negative; positions are nonnegative.
+Malformed seek strings are ordinary rejected events, not decoder crashes. Overflowing relative addition
+saturates before clamping to [0,durationTicks]. This extends the earlier suites' safe-number encoding;
+those existing suites and their immutable expectations retain their original schema.
+
+Gradle packages these five named files in `control-vectors`, and legacy files in `parity-vectors`.
+This retains the existing fail-on-unknown legacy runner byte-for-byte. The new runner inventories all
+packaged control suites, rejects unknown operations, enforces unique case IDs and runs all trace steps.
+There is no snapshot recording/update mode.
+
+### session-owner
+
+Operations: `owner` and `temporary`. `owner` state requires `owner:{server,viewer,device,session,generation,kind}`;
+`kind` is local/jellyfin/cast. `local` defaults to owner, candidate is null, phase active, intent empty/paused,
+route native, generation owner.generation, reportSequence −1. `ControlIntent` contains entry (nullable), ticks
+(0), paused (true), ordered queue entry IDs ([]), repeat (off), stored shuffle ([]), nullable audio/subtitle
+indices. IDs are opaque, never credentials or media URLs. Handoff intent is an immutable snapshot.
+
+Owner events: `replace`/`viewer-switch` require a newer identity and reset reporting/route/intent;
+`report` requires exact active owner plus a strictly newer sequence; `airplay`/`native-route` retain the
+local identity. `select` validates same server/viewer and newer nonlocal target. Then `connect`, `prepare`,
+`local-paused`, `ready` use that exact candidate. Prepare emits pause-local; only the local pause acknowledgment
+allows request-remote. Readiness must observe exact preserved ticks before ownership commits. `fail`,
+`timeout`, `cancel` invalidate the candidate and expose paused Resume here. `disconnect` only requests refresh.
+`return` emits stop-remote; `remote-stopped` uses confirmed to choose return-ready versus return-uncertain.
+`resume-here` needs a new local generation, and confirmed=true when remote Stop is uncertain. No failure or
+network event emits play-local. Effects are instructions to adapters, not evidence an output acted.
+
+`temporary` state has records ([]), effect none, reason null. Each record binds stable server/viewer/device,
+requesting sender and generation; phase starts creating, secretRef null. `create` permits one live record per
+stable server/viewer/device. `issued` accepts only the bound sender/generation and checks returnedViewer;
+a wrong viewer enters cleanup. `end` creates pending-persist; `persisted` permits authenticated logout;
+`logout-failed` retains pending-revoke; `reconnect` retries logout before new provisioning. `logout-ok` removes
+the record and emits erase-secret. `use` is allowed only while active. secretRef is an opaque private-storage
+handle; actual bearer credentials are adapter-owned. This is lifecycle policy, not proof of persistent storage,
+HTTP logout, Quick Connect sender addressing, or server device-record cleanup.
+
+### session-command
+
+Operation `command`. Required state owner; defaults: play/pause/seek/stop capabilities, authorized/fresh true,
+empty paused observed ControlIntent, maximum Int64 durationTicks, sequence 0, seekTarget/pending null. Each
+accepted intent requires matching owner, fresh authorization, advertised capability and increasing positive ID.
+Events always carry owner. `intent.value` names play/pause/stop/seek-absolute/seek-relative/play-now. Queue edits use their
+separate revision reducer. Track, volume and navigation commands are rejected as unsupported until their
+respective observation adapters are implemented; a transport observation cannot confirm them. Seek arguments are `entry` decimal strings; for nonseek intents entry is an optional target
+entry ID. Repeated Pause expresses paused=true; there is no toggle operation. A seek's dispatch contains an
+absolute bounded ticks target even when the original operation was relative; adapters must apply that absolute
+value. Subsequent relative intents accumulate from seekTarget, including while the earlier dispatch is pending.
+
+State pending contains id, operation, nullable entry/ticks/paused, sentAtMs and result sent/confirmed/rejected/
+unknown. `http` never confirms playback. `observe` supplies id, nowMs, entry, value (observed ticks) and paused;
+only the current sent ID and matching desired fields before 5,000ms confirm it. Stop additionally
+requires stopped=true in the observation; paused alone never confirms Stop. Play-now requires an entry ID. `timeout` at 5,000ms makes
+it unknown and requests refresh. Late acknowledgments cannot confirm another command. `denied` removes rights;
+`disconnect` expires pending intent. `refresh` supplies ticks/entry/paused, authorization and current capabilities;
+it enables only new deliberate commands, never dispatches an old one. No event automatically retries a mutation.
+Native inputs that still use the accepted player path are explicitly outside this new transport adapter boundary.
+
+### queue-edit
+
+Operations `queue` and `store`. Queue state requires server/viewer. Defaults: entries/order/history/operations/
+failed empty, current null, positionTicks/revision/generation/completion zero, paused true, repeat off, shuffled
+false. Entries are `{id,media,downloaded:false}`; duplicate media IDs are intentional, entry IDs must be unique.
+Order is the stored playback permutation; entries is canonical order. History records navigation history.
+Visited defaults to distinct history for initial states and records only this shuffle traversal; Repeat All wrap
+starts a new visited set while retaining full Previous history. Previous rebuilds traversal visits before its
+selected entry. Shuffle/unshuffle use visited/current, so old traversal history cannot hide upcoming entries.
+Every `queue` event includes expected revision/generation (default zero); mismatch refreshes or rejects. A
+nonempty operationId deduplicates one successful local operation within this queue generation. Replays are
+recognized before revision checking. Reducer output is `{queue,outcome,removed:[]}`. A successful change
+increments revision once; a rejected/duplicate operation retains the queue. All returned queues are proposals.
+
+Edits: play-now replaces context/starts first entry; play-next inserts its block after current; append adds
+at end. With no current, insertion is at zero and remains stopped. remove uses entry ID and selects the
+successor at the removed current index, else final previous; move removes an ID and inserts at final index,
+preserving current/clock. During shuffle move changes canonical order while retaining the audible permutation.
+clear-upcoming keeps current/history; clear-all stops. Invalid IDs/blocks/indices are rejected.
+
+`store` state has committed queue, pending/retry null, ticket 0, effect none, reason null, removed []. `edit` contains
+a queue event; a changed proposal becomes pending and emits persist. No second mutation is accepted while
+pending. `persisted` with the exact ticket publishes; `persist-failed` rolls back to committed, retains the exact proposal in retry and offers retry.
+`retry-persist` moves that exact proposal back to pending with a new ticket; a new edit discards the failed proposal.
+Tickets increase across failures; delayed acknowledgments cannot publish another edit. `restore` takes saved,
+accessible (validated entry IDs), offline. It checks server/viewer, retains only accessible entries and, offline,
+only downloaded entries; removed IDs are disclosed, current is preserved if available, otherwise first retained
+at zero. Restores increment generation to invalidate pre-restoration commands, are paused and persist before publish. The adapter supplies accessibility from local storage
+when offline: this reducer has no network effect. `partition` switches to an empty paused server/viewer queue
+and invalidates old acknowledgments. Storage loading/validation/retry UI remain adapter work.
+
+### queue-order
+
+Operations `queue`, `store` and `transfer`. Same queue schema as queue-edit. repeat accepts off/one/all;
+shuffle requires an exact explicit permutation of unvisited upcoming IDs, preserving history/current;
+unshuffle restores canonical upcoming order excluding visited IDs. No PRNG is involved.
+
+Replacing/restarting current through play-now/remove-current/previous/play/retry/clear-all also increments the completion token.
+end/next/error require the current completion token (default zero), consume it once and increment it even on
+stop/error. Natural end honors One; explicit next ignores One; only All wraps. Previous restarts current only
+above 30,000,000 ticks; at/below it selects history/previous, first Off/One restarts and All wraps. position
+sets nonnegative ticks; play/pause express intent; retry is deliberate and clears failure traversal. Automatic
+music error marks one failed entry per traversal, skips only unfailed upcoming entries, and stops when exhausted
+even with All. Video error pauses the same entry. Each skip returns skipped-unavailable for adapter disclosure.
+
+`transfer` state has queue, intent, effect none, unavailable []. prepare compares queue/repeat/shuffle/audio/
+subtitle support; matchingAudio/matchingSubtitles list the exact supported selected indices (including
+explicit −1 Off). Generic track-selection capability alone does not establish a match. An inconsistent
+queue/current intent snapshot requests refresh. Missing selections require explicit replacement confirmation before transfer. It retains
+position/current/pause and supported tracks, strips unsupported selections only after confirmation. attach
+requires a valid authoritative same-server/viewer queue and replaces the phone snapshot; missing snapshot requests
+refresh, wrong partition rejects. Adapters must explain unavailable before confirmation and perform transport I/O.
+
+### playback-mode
+
+Operation `mode`. Defaults: ownerKind local, media video, explicitAudio false, group/requestedRoute null, leaving false, effect
+none. background emits pause-video for local video or nonexplicit audio, keep-audio for deliberate audio, and
+keep-receiver for remote controllers. transport emits group-request when attached to SyncPlay, otherwise
+owner-command. route accepts cast/airplay: with a group it emits require-leave, without one select-route. cancel
+retains group. leave requests leave-group; only a subsequent confirmed left acknowledgment selects the route.
+No external-route SyncPlay clock is started. OS delivery, browser suspension and actual platform playback
+continuation require platform qualification; these vectors decide routing only.

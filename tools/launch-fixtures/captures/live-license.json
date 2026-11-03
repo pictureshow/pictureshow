@@ -1,0 +1,43 @@
+{
+  "license": "CC0-1.0",
+  "creator": "Legitimate LLC",
+  "content": "Original generated live test signals and synthetic XMLTV/M3U metadata; no third-party media",
+  "sources": [
+    "live.sh",
+    "guide.py"
+  ],
+  "channels": [
+    {
+      "id": "ps-test-a",
+      "color": "blue",
+      "toneHz": 440
+    },
+    {
+      "id": "ps-test-b",
+      "color": "red",
+      "toneHz": 880
+    }
+  ],
+  "video": {
+    "width": 320,
+    "height": 180,
+    "fps": 24,
+    "codec": "h264",
+    "elapsedAndFrameOverlay": true
+  },
+  "audio": {
+    "sampleRate": 48000,
+    "codec": "aac",
+    "bitrate": 64000
+  },
+  "hls": {
+    "segmentSeconds": 2,
+    "windowSegments": 6
+  },
+  "guide": {
+    "relativeUtc": true,
+    "hours": 48,
+    "series": "Scope Series",
+    "intentionalGapsAndOverlap": true
+  }
+}

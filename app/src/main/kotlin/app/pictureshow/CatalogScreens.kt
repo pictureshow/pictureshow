@@ -707,7 +707,8 @@ fun CatalogDetail(
     origin: MediaItem? = null,
     onPendingControlsReady: (Boolean) -> Unit = {},
     onPendingQueueNeeded: () -> Unit = {},
-    onPendingQueueExpired: (() -> Boolean)? = null
+    onPendingQueueExpired: (() -> Boolean)? = null,
+    onPlayedRequest: () -> Unit = {}
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     DisposableEffect(Unit) {
@@ -775,6 +776,7 @@ fun CatalogDetail(
     var headerInputTarget by remember { mutableStateOf<String?>(null) }
     var pendingViewerMoved by remember { mutableStateOf(false) }
     val readiness = remember { app.pictureshow.core.DetailReadyFeedback() }
+    val pendingFeedback = remember { app.pictureshow.core.DetailPendingFeedback() }
     var readyDeliveryTarget by remember { mutableStateOf<String?>(null) }
     val feedbackChannel =
         rememberDetailFeedbackChannel(playbackWaiting && pendingSemanticsRevealed && lifecycleState == Lifecycle.State.RESUMED) { target ->
@@ -889,6 +891,7 @@ fun CatalogDetail(
     val latestItem by rememberUpdatedState(state.item)
     val latestBusy by rememberUpdatedState(state.busy)
     val latestOnPlayed by rememberUpdatedState(onPlayed)
+    val reportPlayedRequest by rememberUpdatedState(onPlayedRequest)
     val latestOnFavorite by rememberUpdatedState(onFavorite)
     val queuePendingAction by rememberUpdatedState(onPendingAction)
     // The handoff releases intents in order. Mutations can remain busy across frames;
@@ -1042,6 +1045,7 @@ fun CatalogDetail(
             commandNotice = "The request could not be saved. Try again."
         } else {
             readyQueuedTargets = readyQueuedTargets + target
+            if (watched) reportPlayedRequest()
             if (latestBusy) {
                 requestCueVersion++
                 requestCueTarget = target
@@ -1215,6 +1219,7 @@ fun CatalogDetail(
                         }
                     ) {
                         pendingQueuedTargets = pendingQueuedTargets + "played"
+                        reportPlayedRequest()
                     }
                 }
             },
@@ -1242,7 +1247,12 @@ fun CatalogDetail(
                 presentHeldLabels,
                 target in actions.requestedTargets,
                 actions.available,
-                app.pictureshow.core.detailHeldActionLabel(target),
+                app.pictureshow.core.detailPendingPlainLabel(
+                    target,
+                    state.item != null,
+                    pendingItem?.isWatched == true,
+                    pendingItem?.userData?.isFavorite == true
+                ),
                 pending
             )
             actions.copy(
@@ -1267,16 +1277,32 @@ fun CatalogDetail(
         if (!focused && requestCueTarget == target) requestCueTarget = null
         if (focused) {
             headerInputTarget = target
+            pendingFeedback.update(
+                playbackWaiting,
+                presentHeldLabels,
+                target,
+                lifecycleState == Lifecycle.State.RESUMED && cueAccessibility.isEnabled,
+                recoveryActive || state.error != null || waitHadRequest
+            )
             if (playbackWaiting) pendingTarget(target)
         } else if (headerInputTarget == target) {
             headerInputTarget = null
         }
     }
+    val latestPendingActions by rememberUpdatedState(pendingActions)
+    val latestHeldLabels by rememberUpdatedState(presentHeldLabels)
     // Reader navigation can select static text without changing Compose input focus.
     LaunchedEffect(playbackWaiting, pendingSemanticsRevealed, lifecycleState, requestCueTarget, requestCueVersion, readyDeliveryTarget) {
         val accessibility = focusHost.context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         val observingPendingFocus = playbackWaiting && pendingSemanticsRevealed
+        pendingFeedback.update(
+            observingPendingFocus,
+            latestHeldLabels,
+            headerInputTarget,
+            lifecycleState == Lifecycle.State.RESUMED && accessibility.isEnabled,
+            latestError != null || waitHadRequest
+        )
         if ((observingPendingFocus || requestCueTarget != null || readyDeliveryTarget != null) &&
             lifecycleState == Lifecycle.State.RESUMED &&
             accessibility.isEnabled
@@ -1288,6 +1314,29 @@ fun CatalogDetail(
                 accessibility.isEnabled
             ) {
                 val readerTarget = playbackReaderTarget(focusHost)
+                val pendingTarget = pendingFeedback.update(
+                    observingPendingFocus,
+                    latestHeldLabels,
+                    headerInputTarget,
+                    true,
+                    latestError != null ||
+                        waitHadRequest ||
+                        readerTarget != PlaybackReaderTarget.ACTION ||
+                        !detailReaderFocusMatches(focusHost, headerInputTarget)
+                )
+                if (pendingTarget != null) {
+                    val actions = latestPendingActions
+                    val label = when (pendingTarget) {
+                        "primary" -> actions?.playLabel
+                        "from-start" -> actions?.fromStartLabel
+                        "played" -> actions?.playedLabel
+                        else -> actions?.favoriteLabel
+                    }
+                    if (label != null && feedbackChannel.send(pendingTarget, label)) {
+                        pendingFeedback.submitted()
+                        readiness.presented(pendingTarget)
+                    }
+                }
                 if (readerTarget == PlaybackReaderTarget.ACTION && detailReaderFocusMatches(focusHost, requestCueTarget)) {
                     requestPresented = true
                     val target = requestCueTarget
@@ -1395,8 +1444,8 @@ fun CatalogDetail(
     }
     val arrivalMetadataHidden = app.pictureshow.core.detailMetadataAwaitsHandoff(
         hasActions,
-        restored || !arrivalPending,
-        playbackLayout || playbackWaiting,
+        restored || pendingFocusRestored || !arrivalPending,
+        playbackReturn || state.playbackPending,
         recoveryActive || state.error != null || state.readFailed
     )
     val arrivalMetadataSemantics = if (arrivalMetadataHidden) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
@@ -1823,6 +1872,11 @@ fun CatalogDetail(
                 it.second.map(MediaItem::id)
         }
     ) {
+        PlaybackDiagnostics.write(
+            "detail-handoff phase=restore-start uptime=${android.os.SystemClock.uptimeMillis()} " +
+                "lifecycle=$lifecycleState loading=${state.loading} waiting=$playbackWaiting " +
+                "pendingPublished=$pendingSemanticsRevealed focused=${headerInputTarget != null}"
+        )
         // Navigation composes the returning page before its transition has finished. A focus
         // event then is hidden from TalkBack, which falls back to the heading/overview instead.
         if (lifecycleState != Lifecycle.State.RESUMED) {
@@ -1942,15 +1996,20 @@ fun CatalogDetail(
                         // Use the same unfocused publication sequence as the fresh return below.
                         pendingFocus.requestFocus()
                         pendingSemanticsRevealed = true
+                        PlaybackDiagnostics.write("detail-handoff phase=pending-publish uptime=${android.os.SystemClock.uptimeMillis()}")
                     }
                     // A loading-phase update can cancel this effect between publication and focus.
                     repeat(2) { withFrameNanos { } }
+                    PlaybackDiagnostics.write("detail-handoff phase=pending-request uptime=${android.os.SystemClock.uptimeMillis()}")
                     pendingFocusRestored = when (pendingHeaderTarget) {
                         "played" -> playedFocus
                         "favorite" -> favoriteFocus
                         "from-start" -> fromStartFocus
                         else -> initial
                     }.requestFocus()
+                    PlaybackDiagnostics.write(
+                        "detail-handoff phase=pending-result uptime=${android.os.SystemClock.uptimeMillis()} focused=$pendingFocusRestored"
+                    )
                 }
             } else {
                 pendingSemanticsRevealed = false
@@ -2055,8 +2114,10 @@ fun CatalogDetail(
             // owner focus cannot help on TV: View.clearFocus synchronously refocuses the first item.
             semanticsRevealed = true
             detailTiming("focus-publish")
+            PlaybackDiagnostics.write("detail-handoff phase=fresh-publish uptime=${android.os.SystemClock.uptimeMillis()}")
             repeat(2) { withFrameNanos { } }
             detailTiming("focus-request")
+            PlaybackDiagnostics.write("detail-handoff phase=fresh-request uptime=${android.os.SystemClock.uptimeMillis()}")
             var handoffTarget = "viewer"
             var handoffFocused = playbackContentFocused(focusHost) == true
             if (focusInputRevision == inputBeforeRestore) {
