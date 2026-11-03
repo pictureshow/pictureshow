@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -72,6 +73,7 @@ class ConversionNoticeTest {
         var notice by mutableStateOf<ConversionNotice?>(null)
         var allowed by mutableStateOf(false)
         var pressed = 0
+        // State written from the test thread with a paused clock: send apply notifications so the composition sees it.
         compose.mainClock.autoAdvance = false
         compose.setContent {
             MaterialTheme {
@@ -88,10 +90,12 @@ class ConversionNoticeTest {
 
         // Not yet ready: a qualifying decision waits rather than flashing behind "Preparing playback".
         notice = codec
+        Snapshot.sendApplyNotifications()
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithTag("player:conversion-notice").assertDoesNotExist()
 
         allowed = true
+        Snapshot.sendApplyNotifications()
         compose.mainClock.advanceTimeBy(100)
         val node = compose.onNodeWithTag("player:conversion-notice").fetchSemanticsNode()
         assertEquals(LiveRegionMode.Polite, node.config.getOrNull(SemanticsProperties.LiveRegion))
@@ -110,8 +114,10 @@ class ConversionNoticeTest {
 
         // A renegotiation later in the same viewing does not repeat the notice.
         notice = null
+        Snapshot.sendApplyNotifications()
         compose.mainClock.advanceTimeBy(100)
         notice = range
+        Snapshot.sendApplyNotifications()
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithTag("player:conversion-notice").assertDoesNotExist()
     }
