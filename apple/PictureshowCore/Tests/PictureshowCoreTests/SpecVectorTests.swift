@@ -45,6 +45,12 @@ final class SpecVectorTests:XCTestCase {
     func testRC28PolicyVectors() async throws {
         try await runVectors(operations: ["caption-index", "detail-ready-feedback", "detail-request-cue-active", "detail-pending-presentation-visible", "detail-pending-presentation-label", "detail-held-label-presentation", "detail-feedback-source", "detail-quiet-departing-change", "detail-quiet-request-rediscovery", "detail-reader-focus-clear", "detail-retry-description", "detail-retry-failure-cue", "detail-retry-attempt-succeeded", "detail-retry-cue-can-wait", "detail-completion-presented-played", "detail-completion-intent-retained", "detail-raw-read-acknowledgement", "detail-played-request-notice", "detail-request-once-feedback", "visibility-play"])
     }
+    func testRC29DetailPolicyVectors() async throws {
+        try await runVectors(operations: ["detail-completion-may-apply", "detail-pending-feedback", "detail-pending-plain-label", "catalog-arrival-animation"])
+    }
+    func testPlaybackInformationVectors() async throws {
+        try await runVectors(operations: ["reason", "method", "subtitle", "bitrate", "speed"])
+    }
     func testF4PolicyVectors() async throws {
         try await runVectors(operations: ["detail-completion-read", "detail-cold-pending", "detail-requested-label", "catalog-refresh-revision", "detail-read-band", "detail-session-read", "detail-read-failure", "detail-request-cue-active", "detail-confirmed-leaf", "detail-read-dependencies", "seek-step", "playback-report-fields"])
     }
@@ -73,26 +79,67 @@ final class SpecVectorTests:XCTestCase {
         XCTAssertFalse(files.isEmpty,"No shared vectors at \(vectors.path)")
         // Validate every envelope and global case identity before any operation can perform mock HTTP work.
         var ids=Set<String>()
+        let controlSuites:Set<String>=["session-owner","session-command","queue-edit","queue-order","playback-mode"]
+        let allowedSuites:Set<String>=Set(["reference","application","recovery","playback-information"]).union(controlSuites)
+        var discoveredControlSuites=Set<String>()
         let documents=try files.map { file -> ([String:Any],[[String:Any]]) in
             let document=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any])
             guard try required(Int.self,document,"schemaVersion") == 1 else { throw NSError(domain:"Unknown vector schema in \(file.lastPathComponent)",code:1) }
             let suite=try required(String.self,document,"suite")
-            guard ["reference","application","recovery"].contains(suite) else { throw NSError(domain:"Unknown vector suite \(suite)",code:1) }
+            guard allowedSuites.contains(suite) else { throw NSError(domain:"Unknown vector suite \(suite)",code:1) }
+            if controlSuites.contains(suite) {
+                guard discoveredControlSuites.insert(suite).inserted else { throw NSError(domain:"Duplicate control suite \(suite)",code:1) }
+            }
             let cases=try XCTUnwrap(document["cases"] as? [[String:Any]])
             guard !cases.isEmpty else { throw NSError(domain:"Empty vector suite \(file.lastPathComponent)",code:1) }
             for vector in cases {
                 let id=try required(String.self,vector,"id"),operation=try required(String.self,vector,"operation")
-                guard !id.isEmpty,!operation.isEmpty,ids.insert(id).inserted,vector["input"] is [String:Any],vector["expected"] != nil else { throw NSError(domain:"Malformed or duplicate vector \(id)",code:1) }
+                guard !id.isEmpty,!operation.isEmpty,ids.insert(id).inserted else { throw NSError(domain:"Malformed or duplicate vector \(id)",code:1) }
+                if controlSuites.contains(suite) {
+                    let allowedOperations:[String:Set<String>]=[
+                        "session-owner":["owner","temporary"], "session-command":["command"],
+                        "queue-edit":["queue","store"], "queue-order":["queue","transfer"],
+                        "playback-mode":["mode"]
+                    ]
+                    guard allowedOperations[suite]?.contains(operation) == true,
+                          vector["state"] is [String:Any], let steps=vector["steps"] as? [[String:Any]], !steps.isEmpty,
+                          vector["input"] == nil, vector["expected"] == nil else { throw NSError(domain:"Malformed control vector \(id) or unknown operation \(operation)",code:1) }
+                    for step in steps {
+                        guard step["event"] is [String:Any], let expected=step["expected"] as? [String:Any], !expected.isEmpty else { throw NSError(domain:"Malformed control step in \(id)",code:1) }
+                    }
+                } else {
+                    guard vector["input"] is [String:Any],vector["expected"] != nil else { throw NSError(domain:"Malformed vector \(id)",code:1) }
+                }
             }
             return (document,cases)
         }
-        var count=0;var counts:[String:Int]=[:];var failures:[String]=[]
+        guard discoveredControlSuites == controlSuites else { throw NSError(domain:"Missing control suites: \(controlSuites.subtracting(discoveredControlSuites).sorted())",code:1) }
+        var count=0;var counts:[String:Int]=[:];var stepsBySuite:[String:Int]=[:];var failures:[String]=[]
         for (document,cases) in documents{
             let suite=text(document,"suite")
-            for vector in cases{if let operations, !operations.contains(text(vector,"operation")) { continue };let id=text(vector,"id");do{let result=try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:]);let actual=try json(result),expected=try json(vector["expected"]!);if actual != expected{failures.append("\(id)\n expected: \(expected)\n actual: \(actual)")}}catch{failures.append("\(id): \(error)")};count+=1;counts[suite,default:0]+=1}
+            for vector in cases {
+                if let operations, !operations.contains(text(vector,"operation")) { continue }
+                if controlSuites.contains(suite) {
+                    guard operations == nil else { continue }
+                    let id=text(vector,"id")
+                    do {
+                        let steps=try ControlTraceRunner.run(suite:suite,operation:text(vector,"operation"),id:id,state:vector["state"] as! [String:Any],steps:vector["steps"] as! [[String:Any]])
+                        if steps > 0 { stepsBySuite[suite,default:0] += steps }
+                    } catch { failures.append("\(id): \(error)") }
+                    count+=1;counts[suite,default:0]+=1
+                    continue
+                }
+                let id=text(vector,"id")
+                do {
+                    let result=try await execute(text(vector,"operation"),input:vector["input"] as! [String:Any],context:document["context"] as? [String:Any] ?? [:])
+                    let actual=try json(result),expected=try json(vector["expected"]!)
+                    if actual != expected { failures.append("\(id)\n expected: \(expected)\n actual: \(actual)") }
+                } catch { failures.append("\(id): \(error)") }
+                count+=1;counts[suite,default:0]+=1
+            }
         }
         XCTAssertGreaterThan(count, 0)
-        print("\(operations == nil ? "Shared" : "Targeted") vectors: \(count) executed \(counts), \(failures.count) failures; no skipped cases within the selected cohort.")
+        print("\(operations == nil ? "Shared" : "Targeted") vectors: \(count) cases executed \(counts), control trace steps \(stepsBySuite), \(failures.count) failures; no skipped cases within the selected cohort.")
         XCTAssertTrue(failures.isEmpty,failures.joined(separator:"\n"))
     }
     func execute(_ operation:String,input i:[String:Any],context:[String:Any])async throws->Any{
@@ -161,7 +208,22 @@ final class SpecVectorTests:XCTestCase {
                 return previous?.message as Any? ?? NSNull()
             }
         case "detail-request-priority":return DetailFeedback.requestIsUrgent(newlyAccepted:try required(Bool.self,i,"newlyAccepted"),requested:try required(Bool.self,i,"requested"),available:try required(Bool.self,i,"available"))
-        case "catalog-arrival-animation":return DetailFeedback.catalogArrivalUsesAnimation(accessibilityEnabled:try required(Bool.self,i,"accessibilityEnabled"),sourceIsPlayback:try required(Bool.self,i,"sourceIsPlayback"),destinationIsCatalog:try required(Bool.self,i,"destinationIsCatalog"))
+        case "catalog-arrival-animation":return DetailFeedback.catalogArrivalUsesAnimation(accessibilityEnabled:try required(Bool.self,i,"accessibilityEnabled"),sourceIsPlayback:try required(Bool.self,i,"sourceIsPlayback"),destinationIsCatalog:try required(Bool.self,i,"destinationIsCatalog"),returning:try defaulted(Bool.self,i,"returning",false))
+        case "detail-completion-may-apply":return DetailFeedback.completionMayApply(reportChoiceRevision:try required(Int64?.self,i,"reportChoiceRevision"),currentChoiceRevision:try required(Int64.self,i,"currentChoiceRevision"))
+        case "detail-pending-feedback":
+            struct Step: Decodable { let waiting: Bool; let graceExpired: Bool; let focused: String?; let resumed: Bool; let cancelled: Bool; let submitted: Bool? }
+            var feedback = DetailPendingFeedback()
+            return try required([Step].self,i,"steps").map { step -> Any in
+                let cue = feedback.update(waiting:step.waiting,graceExpired:step.graceExpired,focused:step.focused,resumed:step.resumed,cancelled:step.cancelled)
+                if cue != nil, step.submitted ?? true { feedback.submitted() }
+                return cue as Any? ?? NSNull()
+            }
+        case "detail-pending-plain-label":return DetailFeedback.pendingPlainLabel(target:try required(String.self,i,"target"),known:try required(Bool.self,i,"known"),played:try required(Bool.self,i,"played"),favorite:try required(Bool.self,i,"favorite"))
+        case "reason":return PlaybackInformation.reason(try required(String.self,i,"reason"),qualityMbps:try defaulted(Int?.self,i,"qualityMbps",nil))
+        case "method":return PlaybackInformation.method(try required(String.self,i,"method"),url:try required(String.self,i,"url"))
+        case "subtitle":return PlaybackInformation.subtitle(source:try decode(MediaSource.self,i["source"]!),selectedIndex:try required(Int.self,i,"index"))
+        case "bitrate":return PlaybackInformation.bitrate(try required(Int64?.self,i,"bitrate"))
+        case "speed":return String(PlaybackSpeeds.canApply(try required(Double.self,i,"speed"),encodedOutput:try required(Bool.self,i,"encoded")))
         case "detail-arrival-publication":return DetailFeedback.arrivalAwaitsAction(loading:try required(Bool.self,i,"loading"),contentRevealed:try required(Bool.self,i,"contentRevealed"),returningFromPlayback:try required(Bool.self,i,"returningFromPlayback"))
         case "settings":let p=try decode(PlaybackPreferences.self,i);return ["bitrateMbps":p.bitrateMbps as Any? ?? NSNull(),"passthrough":p.passthrough,"subtitleSize":p.subtitleSize.rawValue,"subtitleBackground":p.subtitleBackground.rawValue,"segmentModes":Dictionary(uniqueKeysWithValues:p.segmentModes.map{($0.key.rawValue,$0.value.rawValue)}),"maxStreamingBitrate":p.maxStreamingBitrate,"passthroughEnabled":p.passthrough]
         case "validate-bitrate":do{try PlaybackPreferences.validateBitrate(optionalInt(i,"bitrateMbps"));return ["valid":true]}catch{return ["valid":false]}

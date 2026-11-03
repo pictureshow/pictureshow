@@ -224,6 +224,8 @@ enum DetailCommand: Equatable {
     func chooseSeason(_ id: String, model: AppModel) { selectedSeason = id; if let item { deadline = nil; refresh(id: item.id, model: model, restart: true) } }
     @discardableResult func offer(_ command: DetailCommand, model: AppModel) -> Bool {
         guard readError == nil, enqueue(command) else { return false }
+        if case .watched = command, let item { model.acceptedPlayedChoice(itemID: item.id) }
+        if case .toggleWatched = command, let item { model.acceptedPlayedChoice(itemID: item.id) }
         drain(model: model)
         return true
     }

@@ -71,8 +71,9 @@ public enum DetailFeedback {
         newlyAccepted && requested && available
     }
 
-    public static func catalogArrivalUsesAnimation(accessibilityEnabled: Bool, sourceIsPlayback: Bool, destinationIsCatalog: Bool) -> Bool {
-        !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog
+    public static func catalogArrivalUsesAnimation(accessibilityEnabled: Bool, sourceIsPlayback: Bool, destinationIsCatalog: Bool, returning: Bool = false) -> Bool {
+        if returning { return !(sourceIsPlayback && destinationIsCatalog) }
+        return !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog
     }
 
     /// Initial metadata waits for the action destination; retained pages and playback returns do not.
@@ -115,6 +116,43 @@ public enum DetailFeedback {
         wanted == current ? "Nothing changed. This item is already \(current ? "watched" : "unwatched")." : nil
     }
 
+    /// A viewer choice accepted after a completion report begins supersedes that report.
+    public static func completionMayApply(reportChoiceRevision: Int64?, currentChoiceRevision: Int64) -> Bool {
+        reportChoiceRevision == currentChoiceRevision
+    }
+
+    /// Use known retained UserData for a plain pending label; unknown season state stays neutral.
+    public static func pendingPlainLabel(target: String, known: Bool, played: Bool, favorite: Bool) -> String {
+        guard known else { return heldActionLabel(target: target) }
+        switch target {
+        case "played": return played ? "Mark unwatched" : "Mark watched"
+        case "favorite": return favorite ? "Unfavorite" : "Favorite"
+        default: return heldActionLabel(target: target)
+        }
+    }
+
+}
+
+/// Captures the control selected during the quiet grace and returns one explicit pending cue.
+public struct DetailPendingFeedback: Sendable {
+    private var graceTarget: String?
+    private var wasSubmitted = false
+
+    public init() {}
+
+    public mutating func update(waiting: Bool, graceExpired: Bool, focused: String?, resumed: Bool, cancelled: Bool) -> String? {
+        guard waiting, resumed, !cancelled else {
+            graceTarget = nil
+            wasSubmitted = false
+            return nil
+        }
+        if !graceExpired { graceTarget = focused }
+        return focused.flatMap { target in
+            graceExpired && !wasSubmitted && target == graceTarget ? target : nil
+        }
+    }
+
+    public mutating func submitted() { wasSubmitted = true }
 }
 
 public enum DetailAvailability {

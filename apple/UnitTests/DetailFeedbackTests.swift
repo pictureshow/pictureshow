@@ -11,6 +11,8 @@ import PictureshowCore
 
 private final class DetailFixtureProtocol: URLProtocol {
     static var itemType = "Movie"
+    static var itemPlayed = false
+    static var playedWrites: [String] = []
     static var failItems = false
     static var failEpisodes = false
     static var itemReads = 0
@@ -23,6 +25,7 @@ private final class DetailFixtureProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         if request.url!.path.hasSuffix("/Users/Me") { Self.homeReads += 1 }
+        if request.url!.path.hasSuffix("/UserPlayedItems/title") { Self.playedWrites.append(request.httpMethod ?? "") }
         if request.url!.path.hasSuffix("/Items/title") {
             Self.itemReads += 1
             if Self.holdItems { Self.held.append(self); return }
@@ -35,9 +38,13 @@ private final class DetailFixtureProtocol: URLProtocol {
         var body: [String: Any] = ["Items": []]
         if path.hasSuffix("/Items/title") {
             if Self.failItems { status = Self.itemFailureStatus }
-            body = ["Id": "title", "Name": "Fixture title", "Type": Self.itemType, "SeriesId": "series", "UserData": ["Played": false, "IsFavorite": false]]
+            body = ["Id": "title", "Name": "Fixture title", "Type": Self.itemType, "SeriesId": "series", "UserData": ["Played": Self.itemPlayed, "IsFavorite": false]]
+        } else if path.hasSuffix("/UserPlayedItems/title") {
+            if request.httpMethod == "POST" { Self.itemPlayed = true }
+            if request.httpMethod == "DELETE" { Self.itemPlayed = false }
+            body = ["Played": Self.itemPlayed, "IsFavorite": false]
         } else if path.hasSuffix("/Items") {
-            body = ["Items": [["Id": "title", "Name": "Fixture title", "Type": Self.itemType, "UserData": ["Played": false, "IsFavorite": false]]]]
+            body = ["Items": [["Id": "title", "Name": "Fixture title", "Type": Self.itemType, "UserData": ["Played": Self.itemPlayed, "IsFavorite": false]]]]
         } else if path.hasSuffix("/Episodes") {
             Self.episodeReads += 1
             if Self.failEpisodes { status = 503 }
@@ -80,6 +87,36 @@ private final class DetailFixtureProtocol: URLProtocol {
         model.settlePlayedProjection(latest, reporting: false)
         XCTAssertTrue(model.presented(latest).isWatched)
         XCTAssertFalse(model.presented(raw).isWatched, "A settled projection does not override later raw reads")
+    }
+    func testRC29AcceptedUnplayedChoiceSupersedesCompletionAndDrainsAfterSaveBarrier() async throws {
+        DetailFixtureProtocol.itemPlayed = false
+        let model = AppModel(client: client(), account: account)
+        model.playbackSaving = true
+        let detail = DetailState()
+        detail.refresh(id: "title", model: model)
+        try await settled(detail)
+        let raw = try XCTUnwrap(detail.item)
+        let owner = model.beginPlayedProjection(raw.id, rawPlayed: raw.userData.played)
+        XCTAssertTrue(model.completionMayApply(itemID: raw.id, owner: owner))
+
+        DetailFixtureProtocol.itemPlayed = true
+        detail.refresh(id: "title", model: model, restart: true)
+        try await settled(detail)
+        XCTAssertEqual(detail.item?.isWatched, true, "The server has accepted natural completion while its save response is pending")
+        XCTAssertTrue(detail.offer(.watched(false), model: model))
+        XCTAssertFalse(model.completionMayApply(itemID: raw.id, owner: owner), "The accepted Unplayed choice is newer than the natural completion report")
+        model.finishPlayedProjection(raw.id, owner: owner, success: true)
+        XCTAssertTrue(model.presented(raw).isWatched, "The stale completion projection returns to authoritative state while the accepted choice waits")
+
+        model.playbackSaving = false
+        detail.drain(model: model)
+        for _ in 0..<100 {
+            if DetailFixtureProtocol.playedWrites.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(DetailFixtureProtocol.playedWrites, ["DELETE"], "The queued user choice runs after the completion save barrier")
+        XCTAssertEqual(detail.item?.isWatched, false)
+        detail.leave()
     }
     func testF5RawReadBeforeStopCannotSettleSuccessfulPlayedOwner() {
         let model = AppModel(client: client(), account: account)
@@ -140,7 +177,7 @@ private final class DetailFixtureProtocol: URLProtocol {
         delivery.resume(); enabled = false; delivery.submit(AccessibilityCue(message: "Off")); XCTAssertEqual(posts, 2)
     }
     override func tearDown() {
-        DetailFixtureProtocol.itemType = "Movie"; DetailFixtureProtocol.failItems = false; DetailFixtureProtocol.failEpisodes = false
+        DetailFixtureProtocol.itemType = "Movie"; DetailFixtureProtocol.itemPlayed = false; DetailFixtureProtocol.playedWrites = []; DetailFixtureProtocol.failItems = false; DetailFixtureProtocol.failEpisodes = false
         DetailFixtureProtocol.holdItems = false; DetailFixtureProtocol.itemReads = 0; DetailFixtureProtocol.episodeReads = 0; DetailFixtureProtocol.held = []; DetailFixtureProtocol.homeReads = 0; DetailFixtureProtocol.itemFailureStatus = 503
     }
     private let account = Account(server: Server(url: URL(string: "https://media.example.test/jellyfin")!), userId: "viewer", username: "Viewer", accessToken: "fixture-token", deviceID: "fixture-device")

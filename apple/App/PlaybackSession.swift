@@ -45,6 +45,11 @@ final class ViewingAVPlayer: AVPlayer {
         defer { applyingViewingIntent = false }
         super.play()
     }
+    func playFromViewing(rate: Float) {
+        applyingViewingIntent = true
+        defer { applyingViewingIntent = false }
+        if rate == 1 { super.play() } else { super.playImmediately(atRate: rate) }
+    }
     func pauseFromViewing() {
         applyingViewingIntent = true
         defer { applyingViewingIntent = false }
@@ -92,6 +97,7 @@ final class ViewingAVPlayer: AVPlayer {
     @Published private(set) var error: String? { didSet { if error != nil { trackLabels.cancelOpen() } } }
     @Published private(set) var reportError: String?
     @Published private(set) var positionTicks: Int64 = 0
+    @Published private(set) var playbackRate: Double = 1
     @Published private(set) var changingTracks = false
     @Published private(set) var terminal = false
     @Published private(set) var isPaused = false
@@ -154,9 +160,12 @@ final class ViewingAVPlayer: AVPlayer {
     private var stopGeneration = 0
     private var lifecycleObservers: [NSObjectProtocol] = []
     // The catalog owns played presentation separately from raw server data.
-    var onCompletionBegan: ((String) -> UUID)?
+    var onCompletionChoiceRevision: ((String) -> Int64)?
+    var onCompletionBegan: ((String, Int64) -> UUID)?
+    var onCompletionMayApply: ((String, UUID) -> Bool)?
     var onCompletionReportFinished: ((String, UUID, Bool) -> Void)?
     private var completionOwners: [String: UUID] = [:]
+    private var completionChoiceRevisions: [String: Int64] = [:]
     var onCompletionFinished: ((String, UUID, Bool) -> Void)?
     private var pendingSeekTicks: Int64?
     private var seekFallbackTicks: Int64?
@@ -171,6 +180,7 @@ final class ViewingAVPlayer: AVPlayer {
     private var nextLookupPending = true
     private var switching = false
     private var completionCommitted = false
+    private var speedState = PlaybackSpeedState()
     private var completedTicks: Int64?
     private var lastReportTime = Date.distantPast
     private var lastTickTime = Date()
@@ -268,6 +278,7 @@ final class ViewingAVPlayer: AVPlayer {
         status = playbackMethodStatus
         player.isMuted = audio == -1
         let avItem = AVPlayerItem(url: url)
+        avItem.audioTimePitchAlgorithm = .timeDomain
         var textAttributes: [String: Any] = [:]
         if let scale = preferences.subtitleSize.scale { textAttributes[kCMTextMarkupAttribute_RelativeFontSize as String] = scale * 100 }
         if preferences.subtitleBackground != .system {
@@ -445,9 +456,30 @@ final class ViewingAVPlayer: AVPlayer {
     }
     private func playPlayer() {
         guard isForeground, !pauseIntent else { pausePlayer(); return }
-        if let player = player as? ViewingAVPlayer { player.playFromViewing() }
-        else { player.play() }
+        player.defaultRate = Float(playbackRate)
+        player.currentItem?.audioTimePitchAlgorithm = .timeDomain
+        if let player = player as? ViewingAVPlayer { player.playFromViewing(rate: Float(playbackRate)) }
+        else if playbackRate == 1 { player.play() }
+        else { player.playImmediately(atRate: Float(playbackRate)) }
     }
+
+    /// Applies the portable speed policy to the current viewing. The caller supplies
+    /// output evidence when an encoded route cannot change rate; Apple currently
+    /// reports its AVKit-managed output as unknown and does not claim passthrough.
+    @discardableResult func selectPlaybackSpeed(_ requested: Double, encodedOutput: Bool = false) -> Bool {
+        let accepted = speedState.select(requested, encodedOutput: encodedOutput)
+        playbackRate = speedState.rate
+        player.defaultRate = Float(playbackRate)
+        player.currentItem?.audioTimePitchAlgorithm = .timeDomain
+        if timelineReady, isForeground, !pauseIntent {
+            if let player = player as? ViewingAVPlayer { player.playFromViewing(rate: Float(playbackRate)) }
+            else if playbackRate == 1 { player.play() }
+            else { player.playImmediately(atRate: Float(playbackRate)) }
+        }
+        return accepted
+    }
+
+    var playbackSpeedWarning: String? { PlaybackSpeeds.warning(isTranscoding: decision?.method == .transcode) }
     private func pausePlayer() {
         if let player = player as? ViewingAVPlayer { player.pauseFromViewing() }
         else { player.pause() }
@@ -592,6 +624,7 @@ final class ViewingAVPlayer: AVPlayer {
     }
     func physicalEnd(readerRequiresManual: Bool? = nil) async {
         guard !closed, !switching, isForeground, !pauseIntent, pendingSeekTicks == nil else { return }
+        captureCompletionChoiceRevision(for: item.id)
         let lifecycleVersion = stopGeneration
         let manualContinuation = readerRequiresManual ?? UIAccessibility.isVoiceOverRunning
         if item.type == "Episode", !continuationCancelled {
@@ -616,15 +649,23 @@ final class ViewingAVPlayer: AVPlayer {
         if let completionTask { return await completionTask.value }
         let itemID = item.id
         if let duration = durationSeconds { positionTicks = PlaybackEndPosition.completed(currentTicks / 10_000, durationMs: Int64(duration * 1000)) * 10_000; completedTicks = positionTicks }
-        let token = onCompletionBegan?(itemID)
+        captureCompletionChoiceRevision(for: itemID)
+        let choiceRevision = completionChoiceRevisions[itemID] ?? 0
+        let token = onCompletionBegan?(itemID, choiceRevision)
         if let token { completionOwners[itemID] = token }
         let task = Task { [self] in
             var succeeded = false
             defer { if let token { onCompletionFinished?(itemID, token, succeeded) } }
+            if let token, onCompletionMayApply?(itemID, token) == false {
+                completionCommitted = true; failedPlayedID = nil
+                return true
+            }
             do {
                 _ = try await client.played(account: account, itemID: itemID, value: true)
                 try Task.checkCancellation()
-                completionCommitted = true; failedPlayedID = nil; succeeded = true; return true
+                completionCommitted = true; failedPlayedID = nil
+                succeeded = token.map { onCompletionMayApply?(itemID, $0) ?? true } ?? true
+                return true
             } catch { failedPlayedID = itemID; reportError = "The server could not mark this title watched. Retry saving progress from details."; return false }
         }
         completionTask = task
@@ -632,6 +673,7 @@ final class ViewingAVPlayer: AVPlayer {
     }
     func advance(automatic: Bool = false) async {
         guard !switching, !closed, isForeground, (!automatic || !pauseIntent), let next = nextItem else { return }
+        captureCompletionChoiceRevision(for: item.id)
         let lifecycleVersion = stopGeneration
         switching = true
         guard await completeIfNeeded(), !closed else {
@@ -648,6 +690,7 @@ final class ViewingAVPlayer: AVPlayer {
         }
         guard isForeground, stopGeneration == lifecycleVersion, (!automatic || !pauseIntent) else { switching = false; return }
         externalSubtitles.release(); subtitleCue = nil
+        speedState.beginNextViewing(); playbackRate = speedState.rate; player.defaultRate = Float(playbackRate)
         item = next; decision = nil; completedTicks = nil; pendingSeekTicks = nil; seekFallbackTicks = nil; nativeSeekPending = false
         viewingID = UUID(); reportSequence = 0; audioChosenByViewer = false; subtitleChosenByViewer = false; subtitleSelectionCount = 0; observedSubtitleSelection = false; observedSubtitleIndex = nil; started = false; stopped = false; completionCommitted = false; fallbackUsed = false; hevcFallbackUsed = false
         continuationCancelled = false; countdownElapsed = 0; nextCountdown = nil; nextItem = nil; nextLookupPending = true; nextLookupFailed = false
@@ -732,18 +775,30 @@ final class ViewingAVPlayer: AVPlayer {
     }
     var completionReportingFailed: Bool { failedPlayedID != nil || failedStop != nil }
     var requiresPlayedSave: Bool { failedPlayedID != nil || (completionTask != nil && !completionCommitted) }
+    private func captureCompletionChoiceRevision(for itemID: String) {
+        if completionChoiceRevisions[itemID] == nil {
+            completionChoiceRevisions[itemID] = onCompletionChoiceRevision?(itemID) ?? 0
+        }
+    }
     func retrySaving() async {
         await reportTail?.value
         if let failedPlayedID {
-            let token = onCompletionBegan?(failedPlayedID)
+            if let previousOwner = completionOwners[failedPlayedID], onCompletionMayApply?(failedPlayedID, previousOwner) == false {
+                self.failedPlayedID = nil; completionCommitted = true
+            } else {
+            captureCompletionChoiceRevision(for: failedPlayedID)
+            let choiceRevision = completionChoiceRevisions[failedPlayedID] ?? 0
+            let token = onCompletionBegan?(failedPlayedID, choiceRevision)
             if let token { completionOwners[failedPlayedID] = token }
             var succeeded = false
             defer { if let token { onCompletionFinished?(failedPlayedID, token, succeeded) } }
             do {
                 _ = try await client.played(account: account, itemID: failedPlayedID, value: true)
                 try Task.checkCancellation()
-                self.failedPlayedID = nil; completionCommitted = true; succeeded = true
+                self.failedPlayedID = nil; completionCommitted = true
+                succeeded = token.map { onCompletionMayApply?(failedPlayedID, $0) ?? true } ?? true
             } catch { reportError = "The server could not mark this title watched. Check your connection and retry." }
+            }
         }
         if failedStop == nil, failedProgress != nil, let finalReport { failedStop = finalReport }
         if let (decision, ticks, _) = failedStop {

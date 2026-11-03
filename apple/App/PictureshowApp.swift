@@ -77,7 +77,8 @@ struct AccountSnapshot: Codable {
         var transport: Task<Void, Never>?
     }
     private var completionRead: CompletionRead?
-    private struct PlayedProjection { let owner: UUID; var active: Set<UUID>; var raw: Bool; var failed = false; var awaitingReport = true }
+    private struct PlayedProjection { let owner: UUID; let choiceRevision: Int64; var active: Set<UUID>; var raw: Bool; var failed = false; var awaitingReport = true }
+    private var playedChoiceRevisions: [String: Int64] = [:]
     private var sessionPlayedOwners: [UUID: [String: UUID]] = [:]
     @Published private var playedProjections: [String: PlayedProjection] = [:]
     func presented(_ item: MediaItem) -> MediaItem {
@@ -85,20 +86,30 @@ struct AccountSnapshot: Codable {
         var shown = item; shown.userData.played = projection.failed ? projection.raw : true
         return shown
     }
-    @discardableResult func beginPlayedProjection(_ itemID: String, rawPlayed: Bool) -> UUID {
+    @discardableResult func beginPlayedProjection(_ itemID: String, rawPlayed: Bool, choiceRevision: Int64? = nil) -> UUID {
         let token = UUID(); var active = playedProjections[itemID]?.active ?? []; active.insert(token)
-        playedProjections[itemID] = PlayedProjection(owner: token, active: active, raw: playedProjections[itemID]?.raw ?? rawPlayed)
+        playedProjections[itemID] = PlayedProjection(owner: token, choiceRevision: choiceRevision ?? playedChoiceRevisions[itemID] ?? 0, active: active, raw: playedProjections[itemID]?.raw ?? rawPlayed)
         return token
+    }
+    func acceptedPlayedChoice(itemID: String) {
+        playedChoiceRevisions[itemID, default: 0] += 1
+    }
+    func playedChoiceRevision(for itemID: String) -> Int64 { playedChoiceRevisions[itemID] ?? 0 }
+    func completionMayApply(itemID: String, owner: UUID) -> Bool {
+        guard let projection = playedProjections[itemID], projection.owner == owner else { return true }
+        return DetailFeedback.completionMayApply(reportChoiceRevision: projection.choiceRevision, currentChoiceRevision: playedChoiceRevisions[itemID] ?? 0)
     }
     func finishPlayedProjection(_ itemID: String, owner: UUID, success: Bool) {
         guard var projection = playedProjections[itemID], projection.active.remove(owner) != nil else { return }
-        if projection.owner == owner { projection.failed = !success }
+        if projection.owner == owner {
+            projection.failed = !success || !DetailFeedback.completionMayApply(reportChoiceRevision: projection.choiceRevision, currentChoiceRevision: playedChoiceRevisions[itemID] ?? 0)
+        }
         playedProjections[itemID] = projection
     }
     func finishPlayedReport(_ itemID: String, owner: UUID, success: Bool) {
         guard var projection = playedProjections[itemID], projection.owner == owner else { return }
         projection.awaitingReport = false
-        projection.failed = !success
+        projection.failed = !success || !DetailFeedback.completionMayApply(reportChoiceRevision: projection.choiceRevision, currentChoiceRevision: playedChoiceRevisions[itemID] ?? 0)
         playedProjections[itemID] = projection
     }
     func withdrawPlayedProjection(_ itemID: String, owner: UUID) {
@@ -242,7 +253,7 @@ struct AccountSnapshot: Codable {
         }
     }
     private func resetCatalogOwnership() {
-        cancelCompletionRead(); detailReadOwners = [:]; playedProjections = [:]; sessionPlayedOwners = [:]
+        cancelCompletionRead(); detailReadOwners = [:]; playedProjections = [:]; playedChoiceRevisions = [:]; sessionPlayedOwners = [:]
         loadedHomeRevision = nil; loadedHomeAccount = nil
         loadingHomeRevision = nil; loadingHomeAccount = nil
     }
@@ -281,11 +292,15 @@ struct AccountSnapshot: Codable {
         defer { preparing = false }
         do {
             let session = PlaybackSession(client: client, account: account, item: item, preferences: preferences.value)
-            session.onCompletionBegan = { [weak self, weak session] itemID in
+            session.onCompletionChoiceRevision = { [weak self] itemID in self?.playedChoiceRevision(for: itemID) ?? 0 }
+            session.onCompletionBegan = { [weak self, weak session] itemID, choiceRevision in
                 guard let self, self.accountGeneration == accountVersion else { return UUID() }
-                let token = self.beginPlayedProjection(itemID, rawPlayed: session?.item.userData.played ?? false)
+                let token = self.beginPlayedProjection(itemID, rawPlayed: session?.item.userData.played ?? false, choiceRevision: choiceRevision)
                 if let session { self.sessionPlayedOwners[session.id, default: [:]][itemID] = token }
                 return token
+            }
+            session.onCompletionMayApply = { [weak self] itemID, token in
+                self?.completionMayApply(itemID: itemID, owner: token) ?? true
             }
             session.onCompletionReportFinished = { [weak self] itemID, token, success in
                 guard let self, self.accountGeneration == accountVersion else { return }
