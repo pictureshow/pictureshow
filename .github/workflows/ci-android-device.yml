@@ -77,12 +77,20 @@ jobs:
           fi
           image="system-images;android-35;google_apis;x86_64"
           image_path="$sdk_root/system-images/android-35/google_apis/x86_64"
+          sdkmanager_bin="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$sdkmanager_bin" ]]; then
+            sdkmanager_bin="$(find "$sdk_root/cmdline-tools" -type f -path '*/bin/sdkmanager' -print | sort -V | tail -n 1)"
+          fi
+          if [[ -z "$sdkmanager_bin" || ! -x "$sdkmanager_bin" ]]; then
+            echo "::error::Android SDK manager is not available under $sdk_root/cmdline-tools"
+            exit 1
+          fi
           mkdir -p "$(dirname "$image_path")"
           set +o pipefail
-          yes | sdkmanager --sdk_root="$sdk_root" --licenses > /dev/null
+          yes | "$sdkmanager_bin" --sdk_root="$sdk_root" --licenses > /dev/null
           set -o pipefail
           for attempt in 1 2 3; do
-            if sdkmanager --sdk_root="$sdk_root" --install "$image" --channel=0; then
+            if "$sdkmanager_bin" --sdk_root="$sdk_root" --install "$image" --channel=0; then
               exit 0
             fi
             echo "::warning::Android emulator image download attempt $attempt failed"
