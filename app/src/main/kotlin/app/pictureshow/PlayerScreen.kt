@@ -671,8 +671,15 @@ internal fun PlayerItemScreen(
             // PLAY-27: top of the frame, away from bottom subtitles and controls; never takes remote focus.
             ConversionNoticeHost(
                 state.decision?.takeIf { localPreferences.conversionNotice }?.let { ConversionNotice.of(it, state.subtitleIndex) },
-                allowed = player != null && foreground && !state.preparing && error == null && !switching &&
-                    chooser == null && extraPanel == null && !chaptersOpen && !seekOpen,
+                allowed = player != null &&
+                    foreground &&
+                    !state.preparing &&
+                    error == null &&
+                    !switching &&
+                    chooser == null &&
+                    extraPanel == null &&
+                    !chaptersOpen &&
+                    !seekOpen,
                 modifier = Modifier.align(Alignment.TopStart).padding(36.dp)
             ) {
                 controls = true

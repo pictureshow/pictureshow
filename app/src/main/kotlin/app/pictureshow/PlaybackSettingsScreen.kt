@@ -262,7 +262,10 @@ internal fun PlaybackSettingsScreen(
                 }
             ) { Text("Tell me when the server converts video: ${if (local.conversionNotice) "On" else "Off"}") }
         }
-        Text("When this TV can't play a video's format, the server converts it, which costs quality and server work. The notice says why and how to avoid it.")
+        Text(
+            "When this TV can't play a video's format, the server converts it, which costs quality and server work. " +
+                "The notice says why and how to avoid it."
+        )
         Button(onClick = onBack, modifier = Modifier.testTag("settings:back")) { Text("Back") }
     }
     LaunchedEffect(Unit) {
