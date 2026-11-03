@@ -1575,7 +1575,7 @@ export function Detail({
                 item.ParentIndexNumber ===
                     data.seasons.find((s) => s.Id === season)?.IndexNumber,
         ) ?? [];
-    const detailStatus = !readError &&
+    const detailStatus = (!readError || savingReport) &&
         !reportError &&
         !writeError &&
         (!ready || pendingMessage) && (

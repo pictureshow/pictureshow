@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { expect, test } from "@playwright/test";
 import { fixture, movie, signIn } from "./fixtures";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 test("rc26 newer authoritative detail releases Saving progress while the completion read remains held", async ({
     page,
@@ -124,6 +126,44 @@ test("rc26 newer authoritative detail releases Saving progress while the complet
     await expect(page.locator(".catalog-detail-status")).toContainText(
         "Saving progress",
     );
+    const evidenceDirectory = process.env.WEB_F3_EVIDENCE;
+    if (evidenceDirectory) {
+        const directory = join(evidenceDirectory, test.info().project.name);
+        mkdirSync(join(directory, "full"), { recursive: true });
+        writeFileSync(
+            join(directory, "completion-read-error-pending.aria.txt"),
+            await page.locator("body").ariaSnapshot(),
+        );
+        const previous = page.viewportSize();
+        for (const [name, width, height] of [
+            ["desktop", 1280, 800],
+            ["phone", 390, 844],
+        ] as const) {
+            await page.setViewportSize({ width, height });
+            await expect(retry).toBeVisible();
+            await expect(page.locator(".catalog-detail-status")).toContainText(
+                "Saving progress",
+            );
+            await page.screenshot({
+                path: join(
+                    directory,
+                    "full",
+                    `completion-read-error-pending-${name}.jpg`,
+                ),
+                type: "jpeg",
+                quality: 90,
+            });
+            await page.screenshot({
+                path: join(
+                    directory,
+                    `completion-read-error-pending-${name}.jpg`,
+                ),
+                type: "jpeg",
+                quality: 50,
+            });
+        }
+        if (previous) await page.setViewportSize(previous);
+    }
     await retry.click();
     const play = page.locator('[data-focus="play"]');
     await expect(play).toHaveAttribute("aria-disabled", "false");
