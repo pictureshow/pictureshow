@@ -1,11 +1,16 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import type { Item, Jellyfin } from "@pictureshow/core";
+import { detailCompletionMayApply } from "@pictureshow/core/rc28";
 
 // Provisional presentation is separate from the authoritative server snapshots.
 // The account includes its token so a late operation cannot affect a new login.
 const account = (client: Jellyfin) =>
     `${client.server.url}:${client.account!.user.Id}:${client.account!.accessToken}`;
-const claims = new Map<string, { token: number; active: boolean }>();
+const claims = new Map<
+    string,
+    { token: number; active: boolean; reportChoiceRevision: number }
+>();
+const choiceRevisions = new Map<string, number>();
 const listeners = new Map<string, Set<() => void>>();
 let sequence = 0;
 const key = (client: Jellyfin, id: string) => `${account(client)}:${id}`;
@@ -24,9 +29,45 @@ export function subscribeCompletion(client: Jellyfin, listener: () => void) {
 }
 export function beginCompletion(client: Jellyfin, id: string) {
     const token = ++sequence;
-    claims.set(key(client, id), { token, active: true });
+    claims.set(key(client, id), {
+        token,
+        active: true,
+        reportChoiceRevision: choiceRevisions.get(key(client, id)) ?? 0,
+    });
     changed(client);
     return token;
+}
+
+/** Record an accepted Played/Unplayed choice before its queued write starts. */
+export function recordPlayedChoice(client: Jellyfin, id: string) {
+    const identity = key(client, id),
+        claim = claims.get(identity);
+    if (!claim) return 0;
+    const revision =
+        (choiceRevisions.get(identity) ?? claim.reportChoiceRevision) + 1;
+    choiceRevisions.set(identity, revision);
+    if (!detailCompletionMayApply(claim.reportChoiceRevision, revision)) {
+        claims.delete(identity);
+        choiceRevisions.delete(identity);
+    }
+    changed(client);
+    return revision;
+}
+
+/** Only the completion report that captured this choice revision may apply. */
+export function completionMayApply(
+    client: Jellyfin,
+    id: string,
+    token: number,
+) {
+    const claim = claims.get(key(client, id));
+    return (
+        claim?.token === token &&
+        detailCompletionMayApply(
+            claim.reportChoiceRevision,
+            choiceRevisions.get(key(client, id)) ?? 0,
+        )
+    );
 }
 export function finishCompletion(
     client: Jellyfin,
@@ -38,7 +79,10 @@ export function finishCompletion(
         claim = claims.get(identity);
     if (claim?.token !== token) return;
     if (succeeded) claim.active = false;
-    else claims.delete(identity);
+    else {
+        claims.delete(identity);
+        choiceRevisions.delete(identity);
+    }
     changed(client);
 }
 // Called only for a complete, successful leaf/episode read, never a projection.
@@ -55,6 +99,7 @@ export function settleCompletionRead(
         claim = claims.get(identity);
     if (claim && !claim.active && started >= claim.token) {
         claims.delete(identity);
+        choiceRevisions.delete(identity);
         changed(client);
     }
 }

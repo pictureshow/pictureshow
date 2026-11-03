@@ -43,13 +43,20 @@ import {
 import { referenceProfile, referenceCompatibility } from "./reference-profile";
 import * as rc26 from "./rc26";
 import * as rc28 from "./rc28";
+import * as playbackInformation from "./playback-information";
+import {
+    controlProjection,
+    controlSuites,
+    runControlCase,
+} from "./control";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))
     .map((p) => String(p));
-const ids = new Set<string>();
+const ids = new Set<string>(),
+    foundControlSuites = new Set<string>();
 // Full Media3 profile fixtures are evaluated as pure reference-policy translations.
 // Runtime browser playback uses its own actual MIME/MSE/native capability probes.
 // Passing these inputs is not a claim that browsers render Android formats.
@@ -57,13 +64,35 @@ for (const file of files) {
     const suite = JSON.parse(readFileSync(spec + "/vectors/" + file, "utf8"));
     if (
         suite.schemaVersion !== 1 ||
-        !["reference", "application", "recovery"].includes(suite.suite) ||
+        ![
+            "reference",
+            "application",
+            "recovery",
+            "playback-information",
+            ...controlSuites,
+        ].includes(suite.suite) ||
         !Array.isArray(suite.cases)
     )
         throw new Error("Unsupported vector envelope: " + file);
     for (const c of suite.cases) {
         if (ids.has(c.id)) throw new Error("Duplicate vector ID: " + c.id);
         ids.add(c.id);
+    }
+    if (controlSuites.has(suite.suite)) {
+        if (foundControlSuites.has(suite.suite))
+            throw new Error("Duplicate control vector suite: " + suite.suite);
+        foundControlSuites.add(suite.suite);
+        describe("control " + file, () => {
+            for (const c of suite.cases)
+                it(c.id, () => {
+                    const steps = runControlCase(suite.suite, c);
+                    for (const step of steps)
+                        expect(
+                            controlProjection(step.actual, step.expected),
+                        ).toEqual(step.expected);
+                });
+        });
+        continue;
     }
     const browserVisibilityExpected: Record<string, boolean> = {
         "visibility-native-foreground": true,
@@ -216,6 +245,52 @@ for (const file of files) {
                             i.elapsedMillis,
                         );
                         break;
+                    case "detail-completion-may-apply":
+                        value = rc28.detailCompletionMayApply(
+                            i.reportChoiceRevision ?? null,
+                            i.currentChoiceRevision,
+                        );
+                        break;
+                    case "detail-pending-feedback":
+                        value = rc28.detailPendingFeedback(i.steps);
+                        break;
+                    case "detail-pending-plain-label":
+                        value = rc28.detailPendingPlainLabel(
+                            i.target,
+                            i.known,
+                            i.played,
+                            i.favorite,
+                        );
+                        break;
+                    case "reason":
+                        value = playbackInformation.transcodeReason(
+                            i.reason,
+                            i.qualityMbps,
+                        );
+                        break;
+                    case "method":
+                        value = playbackInformation.playbackMethod(
+                            i.method,
+                            i.url,
+                        );
+                        break;
+                    case "subtitle":
+                        value = playbackInformation.subtitleDelivery(
+                            i.source,
+                            i.index,
+                        );
+                        break;
+                    case "bitrate":
+                        value = playbackInformation.formatBitrate(i.bitrate);
+                        break;
+                    case "speed":
+                        value = String(
+                            playbackInformation.speedSupported(
+                                i.speed,
+                                i.encoded,
+                            ),
+                        );
+                        break;
                     case "external-subtitle-loading":
                         value = {
                             retryDelayMs: rc26.externalSubtitleRetryDelay(
@@ -353,6 +428,7 @@ for (const file of files) {
                             i.accessibilityEnabled,
                             i.sourceIsPlayback,
                             i.destinationIsCatalog,
+                            i.returning ?? false,
                         );
                         break;
                     case "detail-arrival-publication":
@@ -852,3 +928,6 @@ for (const file of files) {
             });
     });
 }
+for (const suite of controlSuites)
+    if (!foundControlSuites.has(suite))
+        throw new Error("Missing control vector suite: " + suite);

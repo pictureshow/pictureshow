@@ -113,3 +113,71 @@ export const detailRetryCueCanWait = (
     accessibilityEnabled: boolean,
     elapsedMillis: number,
 ) => accessibilityEnabled && elapsedMillis < 30_000;
+
+/** A later accepted viewer choice owns played state over this report. */
+export const detailCompletionMayApply = (
+    reportChoiceRevision: number | null,
+    currentChoiceRevision: number,
+) =>
+    reportChoiceRevision !== null &&
+    reportChoiceRevision === currentChoiceRevision;
+
+/** Plain focus text uses authoritative state when known and a neutral state otherwise. */
+export const detailPendingPlainLabel = (
+    target: string,
+    known: boolean,
+    played: boolean,
+    favorite: boolean,
+) => {
+    if (target === "favorite") return favorite ? "Unfavorite" : "Favorite";
+    if (known) return played ? "Mark unwatched" : "Mark watched";
+    return played ? "Watched" : "Unwatched";
+};
+
+/**
+ * One announcement is eligible only for the same focused action held through
+ * the grace period. A failed live-region submission remains eligible for a
+ * later attempt; fast completion, pause, cancellation or a focus change clears it.
+ */
+export function detailPendingFeedback(
+    steps: Array<{
+        waiting: boolean;
+        graceExpired: boolean;
+        focused: string | null;
+        resumed: boolean;
+        cancelled: boolean;
+        submitted?: boolean;
+    }>,
+) {
+    let held: string | null = null;
+    let cue: string | null = null;
+    let consumed = false;
+    return steps.map((step) => {
+        if (!step.waiting || !step.resumed || step.cancelled) {
+            held = null;
+            cue = null;
+            consumed = false;
+            return null;
+        }
+        if (!step.graceExpired) {
+            held = step.focused;
+            cue = null;
+            consumed = false;
+            return null;
+        }
+        if (step.focused !== held) {
+            held = null;
+            cue = null;
+            consumed = false;
+            return null;
+        }
+        if (cue === null && !consumed && held !== null) cue = held;
+        if (cue === null) return null;
+        const eligible = cue;
+        if (step.submitted !== false) {
+            consumed = true;
+            cue = null;
+        }
+        return eligible;
+    });
+}

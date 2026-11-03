@@ -24,6 +24,7 @@ import "./catalog.css";
 import {
     projectCompletion,
     completionReadVersion,
+    recordPlayedChoice,
     settleCompletionRead,
     subscribeCompletion,
 } from "./completion-intents";
@@ -1309,6 +1310,7 @@ export function Detail({
             return;
         }
         queue.current.push({ action, expires: Date.now() + 30000 });
+        if (action.kind === "watched") recordPlayedChoice(client, id);
         if (!readyRef.current) {
             cancelReady();
             requestedCue.current = action.kind;

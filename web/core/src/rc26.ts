@@ -148,7 +148,11 @@ export const catalogArrivalUsesAnimation = (
     accessibilityEnabled: boolean,
     sourceIsPlayback: boolean,
     destinationIsCatalog: boolean,
-) => !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog;
+    returning = false,
+) =>
+    returning
+        ? !(sourceIsPlayback && destinationIsCatalog)
+        : !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog;
 export const detailArrivalAwaitsAction = (
     loading: boolean,
     contentRevealed: boolean,

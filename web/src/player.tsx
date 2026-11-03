@@ -19,7 +19,11 @@ import {
 } from "@pictureshow/core/rc28";
 import "./player.css";
 import { readCompletionDetail, invalidateCatalogAccount } from "./detail-reads";
-import { beginCompletion, finishCompletion } from "./completion-intents";
+import {
+    beginCompletion,
+    completionMayApply,
+    finishCompletion,
+} from "./completion-intents";
 import {
     playbackReportFields,
     externalSubtitleRetryDelay,
@@ -1068,8 +1072,18 @@ export function Player({
             await stop();
             if (stopError.current) throw new Error(stopError.current);
             if (leaving.current) throw new Error("Completion cancelled.");
+            if (!completionMayApply(client, item.Id, projection)) {
+                completionSaved.current = true;
+                succeeded = true;
+                return;
+            }
             const fresh = await readCompletionDetail(client, item.Id);
             if (leaving.current) throw new Error("Completion cancelled.");
+            if (!completionMayApply(client, item.Id, projection)) {
+                completionSaved.current = true;
+                succeeded = true;
+                return;
+            }
             if (!fresh.UserData?.Played)
                 await client.request(
                     `UserPlayedItems/${encode(item.Id)}?userId=${encode(client.account!.user.Id)}`,

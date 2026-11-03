@@ -4,8 +4,10 @@ import type { Item, Jellyfin } from "@pictureshow/core";
 import {
     beginCompletion,
     completionReadVersion,
+    completionMayApply,
     finishCompletion,
     projectCompletion,
+    recordPlayedChoice,
     settleCompletionRead,
     subscribeCompletion,
 } from "./completion-intents";
@@ -62,6 +64,22 @@ describe("owned completion presentation", () => {
         expect(projectCompletion(api, raw).UserData?.Played).toBe(true);
         settleCompletionRead(api, raw, completionReadVersion());
         expect(projectCompletion(api, raw)).toBe(raw);
+    });
+    it("an accepted later watched choice retires only its report and a later report captures the new revision", () => {
+        const api = client("choice-precedence"),
+            first = beginCompletion(api, raw.Id);
+        expect(completionMayApply(api, raw.Id, first)).toBe(true);
+        expect(projectCompletion(api, raw).UserData?.Played).toBe(true);
+
+        recordPlayedChoice(api, raw.Id);
+        expect(completionMayApply(api, raw.Id, first)).toBe(false);
+        expect(projectCompletion(api, raw)).toBe(raw);
+
+        const next = beginCompletion(api, raw.Id);
+        expect(completionMayApply(api, raw.Id, first)).toBe(false);
+        expect(completionMayApply(api, raw.Id, next)).toBe(true);
+        recordPlayedChoice(api, raw.Id);
+        expect(completionMayApply(api, raw.Id, next)).toBe(false);
     });
     it("notifies only its account and isolates replaced credentials", () => {
         const api = client("owned"),
