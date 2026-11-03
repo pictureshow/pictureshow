@@ -12,7 +12,22 @@ import {
     type Item,
     type Decision,
     type Stream,
+    canDecodeVideo,
 } from "@pictureshow/core";
+import {
+    BROWSER_DEVICE,
+    BROWSER_NOTICE_ACTION,
+    CHROMIUM_DECODE_STEPS,
+    conversionNotice,
+    cueNearTop,
+    formatBitrate,
+    playbackMethod,
+    speedSupported,
+    subtitleDelivery,
+    transcodeReason,
+    transcodeReasons,
+    type ConversionNotice,
+} from "@pictureshow/core/playback-information";
 import {
     visibilityPlay,
     WEB_FOREGROUND_REQUIRED,
@@ -75,7 +90,42 @@ export type PlayerPreferences = {
         Record<SegmentType, "Ask" | "Auto" | "Automatic" | "Off">
     >;
     screenReader?: boolean;
+    /** SET-11; missing means On. Read once when the player opens. */
+    conversionNotice?: boolean;
 };
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+const rateLabel = (rate: number) => `${rate}×`;
+/** Friendly name for a codec string the decoder actually received. */
+function codecName(codec: string | undefined) {
+    if (!codec) return "Not reported";
+    const id = codec.toLowerCase();
+    const name = id.startsWith("avc")
+        ? "H.264"
+        : id.startsWith("hvc") || id.startsWith("hev")
+          ? "HEVC"
+          : id.startsWith("av01")
+            ? "AV1"
+            : id.startsWith("vp09") || id === "vp9"
+              ? "VP9"
+              : id.startsWith("mp4a.40.34") || id === "mp3"
+                ? "MP3"
+                : id.startsWith("mp4a")
+                  ? "AAC"
+                  : id === "ac-3"
+                    ? "AC-3"
+                    : id === "ec-3"
+                      ? "E-AC-3"
+                      : id === "opus"
+                        ? "Opus"
+                        : id === "flac" || id === "fLaC".toLowerCase()
+                          ? "FLAC"
+                          : undefined;
+    return name ? `${name} (${codec})` : codec;
+}
+const chromium = () =>
+    typeof navigator !== "undefined" &&
+    /(Chrome|Chromium|Edg)\//.test(navigator.userAgent) &&
+    !/\bOPR\//.test(navigator.userAgent);
 type Chapter = {
     StartPositionTicks?: number;
     Name?: string;
@@ -116,7 +166,9 @@ type Viewing = {
     stopped: boolean;
     queue: Promise<unknown>;
 };
-type Panel = "Audio" | "Subtitles" | "Chapters" | "Seek";
+type Panel = "Audio" | "Subtitles" | "Chapters" | "Seek" | "Speed" | "Info";
+const panelTitle = (panel: Panel) =>
+    panel === "Info" ? "Playback info" : panel;
 const clock = (s: number) =>
     `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
 const plausibleDuration = (n: number) =>
@@ -352,6 +404,72 @@ export function Player({
     const textSubtitle = localText(selectedSubtitle);
     const burned = subtitleIndex >= 0 && !textSubtitle;
     const [selectionRevision, setSelectionRevision] = useState(0);
+    // PLAY-25/26/27 state belongs to this viewing (the player is keyed by item).
+    const noticeEnabled = useRef(
+        preferences.conversionNotice !== false,
+    ).current;
+    const [speed, setSpeed] = useState(1),
+        [speedMessage, setSpeedMessage] = useState(""),
+        [playbackReady, setPlaybackReady] = useState(false),
+        [received, setReceived] = useState<{ video?: string; audio?: string }>(
+            {},
+        ),
+        [videoSize, setVideoSize] = useState(""),
+        [noticePhase, setNoticePhase] = useState<"waiting" | "active" | "done">(
+            "waiting",
+        ),
+        [shownNotice, setShownNotice] = useState<ConversionNotice>(),
+        [announcement, setAnnouncement] = useState(""),
+        [topCue, setTopCue] = useState(false),
+        [noticeTop, setNoticeTop] = useState<number>();
+    const speedRef = useRef(1),
+        noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+            undefined,
+        );
+    /** Ask the element for a rate and report whether it is really active. */
+    function applyRate(el: HTMLVideoElement, rate: number) {
+        try {
+            el.preservesPitch = true;
+            el.defaultPlaybackRate = rate;
+            el.playbackRate = rate;
+        } catch {}
+        return el.playbackRate === rate;
+    }
+    function chooseSpeed(rate: number) {
+        const el = video.current;
+        if (!el || !speedSupported(rate, false)) {
+            setSpeedMessage(
+                `${rateLabel(rate)} is not available for this video. Speed stays at ${rateLabel(speedRef.current)}.`,
+            );
+            return;
+        }
+        if (applyRate(el, rate)) {
+            speedRef.current = rate;
+            setSpeed(rate);
+            setSpeedMessage("");
+            closePanel();
+        } else {
+            applyRate(el, speedRef.current);
+            setSpeedMessage(
+                `This browser could not play this video at ${rateLabel(rate)}. Speed stays at ${rateLabel(speedRef.current)}.`,
+            );
+        }
+    }
+    /** A new or replaced decoder keeps the viewing's speed, or says why it cannot. */
+    function decoderReady(el: HTMLVideoElement) {
+        if (!applyRate(el, speedRef.current)) {
+            const previous = speedRef.current;
+            speedRef.current = 1;
+            applyRate(el, 1);
+            setSpeed(1);
+            if (previous !== 1)
+                setSpeedMessage(
+                    `Speed returned to 1× because this stream could not keep ${rateLabel(previous)}. Choose Speed to try again.`,
+                );
+        }
+        setVideoSize(el.videoWidth ? `${el.videoWidth}×${el.videoHeight}` : "");
+        setPlaybackReady(true);
+    }
     async function sendReport(
         d: Decision,
         event: "start" | "progress" | "stop",
@@ -1250,6 +1368,8 @@ export function Player({
         setNotice("Preparing playback…");
         setBuffering(true);
         setDecision(undefined);
+        setPlaybackReady(false);
+        setReceived({});
         replacing.current = true;
         const probe = (mime: string) => el.canPlayType(mime) === "probably";
         const clearWaiting = () => {
@@ -1382,6 +1502,7 @@ export function Player({
                 return false;
             if (!backgroundPlayAllowed()) pauseIntent.current = true;
             replacing.current = false;
+            decoderReady(el);
             if (pendingSeek.current === request.position)
                 pendingSeek.current = undefined;
             pausedAtPhysicalEnd.current = atLogicalEnd();
@@ -1704,6 +1825,23 @@ export function Player({
                 hls.on(Hls.Events.BUFFERED_TO_END, () => {
                     finalFragmentBuffered = true;
                     settleEndpoint();
+                });
+                // Codecs the demuxer found in the received stream, not the server's metadata.
+                hls.on(Hls.Events.BUFFER_CODECS, (_event, data) => {
+                    const codecs = [
+                        data.video?.codec,
+                        data.audio?.codec,
+                        ...(data.audiovideo?.codec?.split(",") ?? []),
+                    ]
+                        .filter((c): c is string => !!c)
+                        .map((c) => c.trim());
+                    const audioCodec = (c: string) =>
+                        /^(mp4a|ac-3|ec-3|opus|flac|mp3)/i.test(c);
+                    if (!disposed)
+                        setReceived({
+                            video: codecs.find((c) => !audioCodec(c)),
+                            audio: codecs.find(audioCodec),
+                        });
                 });
                 hls.on(Hls.Events.ERROR, (_event, data) => {
                     if (data.fatal) fail();
@@ -2080,6 +2218,107 @@ export function Player({
         panel,
         seekPreview,
     ]);
+    // PLAY-27: the decision behind this viewing's picture, gated on this browser's
+    // own per-file check so a notice never blames it for video it could decode.
+    const playing = decision ?? viewing.current.decision;
+    const conversion = (() => {
+        if (!playing || !activeSource) return null;
+        const found = conversionNotice(
+            {
+                method: playing.method,
+                url: playing.url,
+                reasons: transcodeReasons(playing.url),
+                source: activeSource,
+            },
+            subtitleIndex,
+            BROWSER_DEVICE,
+        );
+        if (!found) return null;
+        if (
+            !found.burnIn &&
+            canDecodeVideo(
+                activeSource,
+                (mime) => video.current?.canPlayType(mime) === "probably",
+            )
+        )
+            return null;
+        return found;
+    })();
+    useEffect(() => {
+        if (
+            noticePhase !== "waiting" ||
+            !noticeEnabled ||
+            !conversion ||
+            !playbackReady
+        )
+            return;
+        setNoticePhase("active");
+        setShownNotice(conversion);
+        // Announced once per viewing; a later return from under a panel is silent.
+        setAnnouncement(
+            `${conversion.title}. ${conversion.reason} ${BROWSER_NOTICE_ACTION}`,
+        );
+        // The 10 seconds keep running while something hides the notice.
+        noticeTimer.current = setTimeout(() => {
+            if (!alive.current) return;
+            setNoticePhase("done");
+            setAnnouncement("");
+        }, 10000);
+    }, [noticePhase, conversion?.reason, playbackReady]);
+    useEffect(() => () => clearTimeout(noticeTimer.current), []);
+    useEffect(() => {
+        const track = video.current?.textTracks[0];
+        if (!track || !subtitleBlob) {
+            setTopCue(false);
+            return;
+        }
+        const check = () =>
+            setTopCue(
+                Array.from(track.activeCues ?? []).some((cue) => {
+                    const authored = cues.current.get(cue);
+                    return (
+                        !!authored && cueNearTop(authored.line, authored.snap)
+                    );
+                }),
+            );
+        track.addEventListener("cuechange", check);
+        check();
+        return () => track.removeEventListener("cuechange", check);
+    }, [subtitleBlob]);
+    const noticeVisible =
+        noticePhase === "active" &&
+        !!shownNotice &&
+        !panel &&
+        !pendingPanel.current &&
+        seekPreview === undefined &&
+        !error &&
+        !nextEligible &&
+        !topCue;
+    useLayoutEffect(() => {
+        // Keep the notice clear of the visible controls' heading at the top.
+        const heading =
+            root.current?.querySelector<HTMLElement>(".player-heading");
+        const top = root.current?.getBoundingClientRect().top ?? 0;
+        setNoticeTop(
+            controls && heading
+                ? heading.getBoundingClientRect().bottom - top + 8
+                : undefined,
+        );
+    }, [controls, noticeVisible]);
+    useEffect(() => {
+        const el = video.current;
+        if (!el) return;
+        const size = () =>
+            setVideoSize(
+                el.videoWidth ? `${el.videoWidth}×${el.videoHeight}` : "",
+            );
+        el.addEventListener("resize", size);
+        el.addEventListener("loadedmetadata", size);
+        return () => {
+            el.removeEventListener("resize", size);
+            el.removeEventListener("loadedmetadata", size);
+        };
+    }, []);
     function surfaceKey(e: React.KeyboardEvent) {
         if (e.key === "Enter" || e.key === "ArrowUp" || e.key === "ArrowDown") {
             e.preventDefault();
@@ -2329,6 +2568,132 @@ export function Player({
         preferences.subtitleSize,
         subtitleBlob,
     ]);
+    function info() {
+        const d = playing;
+        const method = d ? playbackMethod(d.method, d.url) : "Not reported";
+        const codes = d?.method === "Transcode" ? transcodeReasons(d.url) : [];
+        const reasons = [
+            ...new Set(
+                codes.map((code) =>
+                    // Core wording names "this device"; on the web the decoder is the browser.
+                    transcodeReason(code, preferences.bitrateMbps ?? undefined)
+                        .replace(/\bThis device\b/g, "This browser")
+                        .replace(/\bthis device\b/g, "this browser"),
+                ),
+            ),
+        ];
+        const videoStream = streams.find((s) => s.Type === "Video");
+        const audioStream = streams.find(
+            (s) => s.Type === "Audio" && s.Index === audioIndex,
+        );
+        const notReported = (v: unknown) =>
+            v === undefined || v === null || v === ""
+                ? "Not reported"
+                : String(v);
+        const resolution = (s?: Stream) =>
+            s?.Width && s?.Height ? `${s.Width}×${s.Height}` : "Not reported";
+        const rows = (entries: Array<[string, string]>) => (
+            <dl>
+                {entries.map(([k, v]) => (
+                    <div key={k}>
+                        <dt>{k}</dt>
+                        <dd>{v}</dd>
+                    </div>
+                ))}
+            </dl>
+        );
+        const browserSteps = !!conversion && !conversion.burnIn && chromium();
+        return (
+            <div
+                className="playback-info"
+                data-scroll
+                data-panel-first
+                tabIndex={0}
+                role="region"
+                aria-label="Playback info details"
+            >
+                {method !== "Direct play" && method !== "Not reported" && (
+                    <section aria-label="Why the server converts">
+                        <h3>Why the server converts</h3>
+                        {reasons.length ? (
+                            <ul>
+                                {reasons.map((r) => (
+                                    <li key={r}>{r}</li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p>The server did not say why it is converting.</p>
+                        )}
+                        {browserSteps && (
+                            <>
+                                <p>
+                                    Chrome or Edge may be able to decode it with
+                                    hardware help. Try these steps in order:
+                                </p>
+                                <ol>
+                                    {CHROMIUM_DECODE_STEPS.map((step) => (
+                                        <li key={step}>{step}</li>
+                                    ))}
+                                </ol>
+                            </>
+                        )}
+                    </section>
+                )}
+                <section aria-label="Playback">
+                    <h3>Playback</h3>
+                    {rows([
+                        ["Method", method],
+                        [
+                            "Subtitles",
+                            subtitleDelivery(activeSource, subtitleIndex),
+                        ],
+                        ["Speed", rateLabel(speed)],
+                    ])}
+                </section>
+                <section aria-label="Reported by the server">
+                    <h3>Reported by the server</h3>
+                    <p className="muted">
+                        The server may describe the converted stream rather than
+                        the file.
+                    </p>
+                    {rows([
+                        ["Container", notReported(activeSource?.Container)],
+                        ...(d?.method === "Transcode"
+                            ? ([
+                                  [
+                                      "Stream container",
+                                      notReported(
+                                          activeSource?.TranscodingContainer,
+                                      ),
+                                  ],
+                              ] as Array<[string, string]>)
+                            : []),
+                        ["Bitrate", formatBitrate(activeSource?.Bitrate)],
+                        ["Video codec", notReported(videoStream?.Codec)],
+                        ["Video resolution", resolution(videoStream)],
+                        ["Video bitrate", formatBitrate(videoStream?.BitRate)],
+                        ["Audio codec", notReported(audioStream?.Codec)],
+                        ["Audio channels", notReported(audioStream?.Channels)],
+                        ["Audio bitrate", formatBitrate(audioStream?.BitRate)],
+                    ])}
+                </section>
+                <section aria-label="Received by this browser">
+                    <h3>Received by this browser</h3>
+                    {!received.video && !received.audio && (
+                        <p className="muted">
+                            This browser plays this stream itself and does not
+                            report the formats it received.
+                        </p>
+                    )}
+                    {rows([
+                        ["Video format", codecName(received.video)],
+                        ["Resolution", videoSize || "Not reported"],
+                        ["Audio format", codecName(received.audio)],
+                    ])}
+                </section>
+            </div>
+        );
+    }
     const preview = seekPreview !== undefined && tp && frame !== undefined && (
         <aside
             className="trickplay-preview"
@@ -2443,6 +2808,38 @@ export function Player({
                         Retry playback
                     </button>
                     <button onClick={() => leave(true)}>Back to details</button>
+                </div>
+            )}
+            <div className="sr-only" aria-live="polite" aria-atomic="true">
+                {announcement}
+            </div>
+            {noticeVisible && shownNotice && (
+                <div
+                    className="conversion-notice"
+                    role="button"
+                    aria-label={`${shownNotice.title}. ${shownNotice.reason} Opens Playback info.`}
+                    style={
+                        noticeTop !== undefined ? { top: noticeTop } : undefined
+                    }
+                    // Never takes keyboard focus: a press opens Playback info and
+                    // the opener stays whatever the viewer had focused.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        openPanel(
+                            "Info",
+                            (document.activeElement as HTMLElement | null) ??
+                                video.current ??
+                                undefined,
+                        );
+                    }}
+                >
+                    <p className="conversion-notice-title">
+                        {shownNotice.title}
+                    </p>
+                    <p className="conversion-notice-line">
+                        {shownNotice.reason} {BROWSER_NOTICE_ACTION}
+                    </p>
                 </div>
             )}
             {nextEligible && !panel && (
@@ -2634,6 +3031,22 @@ export function Player({
                         >
                             Chapters
                         </button>
+                        <button
+                            aria-label={`Speed, ${rateLabel(speed)}`}
+                            onClick={(e) => openPanel("Speed", e.currentTarget)}
+                            disabled={
+                                (!decision && !viewing.current.decision) ||
+                                !!error
+                            }
+                        >
+                            Speed {rateLabel(speed)}
+                        </button>
+                        <button
+                            onClick={(e) => openPanel("Info", e.currentTarget)}
+                            disabled={!decision && !viewing.current.decision}
+                        >
+                            Playback info
+                        </button>
                         <label>
                             Volume
                             <input
@@ -2701,7 +3114,7 @@ export function Player({
             <dialog
                 ref={panelElement}
                 className="player-panel"
-                aria-label={panel ?? "Player controls"}
+                aria-label={panel ? panelTitle(panel) : "Player controls"}
                 onCancel={(e) => {
                     e.preventDefault();
                     closePanel();
@@ -2717,10 +3130,28 @@ export function Player({
                     } else if (e.key.startsWith("Arrow")) {
                         e.preventDefault();
                         e.stopPropagation();
+                        // Playback info's text scrolls with Up/Down before focus moves on.
+                        const scroller = document.activeElement as HTMLElement;
+                        if (
+                            scroller?.dataset.scroll !== undefined &&
+                            (e.key === "ArrowDown" || e.key === "ArrowUp")
+                        ) {
+                            const down = e.key === "ArrowDown";
+                            if (
+                                down
+                                    ? scroller.scrollTop +
+                                          scroller.clientHeight <
+                                      scroller.scrollHeight - 1
+                                    : scroller.scrollTop > 0
+                            ) {
+                                scroller.scrollTop += down ? 64 : -64;
+                                return;
+                            }
+                        }
                         if (e.repeat) return;
                         const nodes = [
                             ...e.currentTarget.querySelectorAll<HTMLElement>(
-                                "button:not([disabled]),input:not([disabled])",
+                                "button:not([disabled]),input:not([disabled]),[data-scroll]",
                             ),
                         ].filter((n) => n.getClientRects().length);
                         const current = nodes.indexOf(
@@ -2745,7 +3176,34 @@ export function Player({
                     }
                 }}
             >
-                <h2>{panel}</h2>
+                <h2>{panel && panelTitle(panel)}</h2>
+                {panel === "Speed" && (
+                    <div>
+                        <div role="radiogroup" aria-label="Playback speed">
+                            {SPEEDS.map((rate) => (
+                                <button
+                                    key={rate}
+                                    role="radio"
+                                    aria-checked={speed === rate}
+                                    onClick={() => chooseSpeed(rate)}
+                                >
+                                    {rate === 1
+                                        ? "1× (normal)"
+                                        : rateLabel(rate)}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="muted">
+                            Pitch is preserved. Speed applies to this video
+                            only.
+                            {playing?.method === "Transcode"
+                                ? " The server is converting this video, so faster speeds may pause to buffer."
+                                : ""}
+                        </p>
+                        <p role="status">{speedMessage}</p>
+                    </div>
+                )}
+                {panel === "Info" && info()}
                 {panel === "Seek" ? (
                     <div>
                         {preview}

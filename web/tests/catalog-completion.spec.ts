@@ -217,6 +217,9 @@ test("a later accepted unwatch choice wins while the completion read remains hel
         if (previous) await page.setViewportSize(previous);
     }
     const watched = page.locator('[data-focus="watched"]');
+    // The report barrier will schedule a fresh read, so Watched accepts.
+    await expect(watched).toHaveAttribute("data-state", "pending");
+    await expect(watched).toHaveAttribute("aria-disabled", "false");
     const watchedBox = await watched.boundingBox();
     expect(watchedBox).not.toBeNull();
     await page.mouse.click(

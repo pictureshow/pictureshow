@@ -80,7 +80,9 @@ function allCopy(url: unknown) {
     try {
         const parsed = new URL(url, "https://pictureshow.invalid");
         const copy = (key: string) =>
-            parsed.searchParams.getAll(key).some((v) => v.toLowerCase() === "copy");
+            parsed.searchParams
+                .getAll(key)
+                .some((v) => v.toLowerCase() === "copy");
         return copy("VideoCodec") && copy("AudioCodec");
     } catch {
         return false;
@@ -96,7 +98,8 @@ export function playbackMethod(method: unknown, url?: unknown) {
 }
 
 export function subtitleDelivery(
-    source: { MediaStreams?: Array<Record<string, unknown>> } | null | undefined,
+    source:
+        { MediaStreams?: Array<Record<string, unknown>> } | null | undefined,
     index: unknown,
 ) {
     if (index === -1) return "Off";
@@ -108,10 +111,7 @@ export function subtitleDelivery(
     );
     if (!stream) return "Not reported";
     if (stream.DeliveryMethod === "Encode") return "Burned in";
-    if (
-        stream.IsExternal === true ||
-        stream.DeliveryMethod === "External"
-    )
+    if (stream.IsExternal === true || stream.DeliveryMethod === "External")
         return "External";
     return "Embedded";
 }
@@ -135,3 +135,218 @@ export function speedSupported(speed: unknown, encoded: boolean) {
         (!encoded || speed === 1)
     );
 }
+
+/** PLAY-27: the default device noun; each platform passes its own ("this browser" on web). */
+export const CONVERSION_DEVICE = "this device";
+export const BROWSER_DEVICE = "this browser";
+/** Web's path to Playback info: the notice itself is clickable; Down reveals the controls. */
+export const BROWSER_NOTICE_ACTION =
+    "Click or tap it, or press Down, then Playback info.";
+
+/** Ordered by how useful fixing it is: the first category lets the video play directly. */
+const noticeCategories: Array<[string[], string]> = [
+    [["videocodecnotsupported"], "Its video format won't play on %s."],
+    [["videorangetypenotsupported"], "Its HDR format won't play on %s."],
+    [
+        [
+            "videoprofilenotsupported",
+            "videolevelnotsupported",
+            "videobitdepthnotsupported",
+            "refframesnotsupported",
+        ],
+        "Its video encoding is too demanding for %s.",
+    ],
+    [["videoresolutionnotsupported"], "Its resolution is too high for %s."],
+    [["videoframeratenotsupported"], "Its frame rate is too high for %s."],
+    [["interlacedvideonotsupported"], "Its interlaced video won't play on %s."],
+    [
+        ["anamorphicvideonotsupported"],
+        "Its non-square pixels won't display on %s.",
+    ],
+    [["videorotationnotsupported"], "Its rotation won't display on %s."],
+];
+const burnedInReason = "The selected subtitles must be burned in for %s.";
+
+export type ConversionNotice = {
+    title: string;
+    reason: string;
+    /** True when the reason is subtitle burn-in rather than a video limit. */
+    burnIn: boolean;
+};
+
+export function conversionNoticeTitle(device = CONVERSION_DEVICE) {
+    return `Converting this video for ${device}`;
+}
+
+/** The URL's single parameter value, matching the name case-insensitively. */
+function urlParameter(url: unknown, name: string) {
+    if (typeof url !== "string") return undefined;
+    try {
+        const parsed = new URL(url, "https://pictureshow.invalid");
+        const values = [...parsed.searchParams.entries()]
+            .filter(([key]) => key.toLowerCase() === name.toLowerCase())
+            .map(([, value]) => value);
+        return values.length === 1 ? values[0].toLowerCase() : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** Jellyfin lists its reasons in the transcoding URL's TranscodeReasons parameter. */
+export function transcodeReasons(url: unknown): string[] {
+    if (typeof url !== "string") return [];
+    try {
+        const parsed = new URL(url, "https://pictureshow.invalid");
+        return [...parsed.searchParams.entries()]
+            .filter(([key]) => key.toLowerCase() === "transcodereasons")
+            .flatMap(([, value]) => value.split(","))
+            .map((value) => value.trim())
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * PLAY-27. Returns null when no notice applies. Only a device limit that re-encodes
+ * the video qualifies; a copied video stream is a remux unless burn-in is reported.
+ */
+export function conversionNotice(
+    decision: {
+        method: unknown;
+        url: unknown;
+        reasons: readonly unknown[];
+        source?: { MediaStreams?: Array<Record<string, unknown>> } | null;
+    },
+    subtitleIndex: unknown,
+    device = CONVERSION_DEVICE,
+): ConversionNotice | null {
+    if (decision.method !== "Transcode") return null;
+    const reasons = new Set(
+        decision.reasons
+            .filter((r): r is string => typeof r === "string")
+            .map((r) => r.toLowerCase()),
+    );
+    const burnedIn =
+        reasons.has("subtitlecodecnotsupported") &&
+        subtitleDelivery(decision.source, subtitleIndex) === "Burned in";
+    const copied =
+        playbackMethod(decision.method, decision.url) !== "Transcode" ||
+        urlParameter(decision.url, "VideoCodec") === "copy";
+    const why = copied
+        ? burnedIn
+            ? burnedInReason
+            : undefined
+        : (noticeCategories.find(([codes]) =>
+              codes.some((code) => reasons.has(code)),
+          )?.[1] ?? (burnedIn ? burnedInReason : undefined));
+    if (!why) return null;
+    return {
+        title: conversionNoticeTitle(device),
+        reason: why.replaceAll("%s", device),
+        burnIn: why === burnedInReason,
+    };
+}
+
+/** Strictly validated vector input; malformed cases throw instead of passing. */
+export function conversionNoticeVector(input: unknown): string {
+    const i = input as Record<string, unknown> | null;
+    if (
+        !i ||
+        typeof i !== "object" ||
+        typeof i.method !== "string" ||
+        typeof i.url !== "string" ||
+        !Array.isArray(i.reasons) ||
+        i.reasons.some((r) => typeof r !== "string") ||
+        typeof i.device !== "string" ||
+        !i.device ||
+        (i.subtitleIndex !== undefined &&
+            typeof i.subtitleIndex !== "number") ||
+        (i.source !== undefined &&
+            (typeof i.source !== "object" || i.source === null))
+    )
+        throw new Error("Malformed conversion-notice vector input");
+    const notice = conversionNotice(
+        {
+            method: i.method,
+            url: i.url,
+            reasons: i.reasons,
+            source: i.source as {
+                MediaStreams?: Array<Record<string, unknown>>;
+            },
+        },
+        i.subtitleIndex ?? -1,
+        i.device,
+    );
+    return notice ? `${notice.title}\n${notice.reason}` : "none";
+}
+
+function record(input: unknown) {
+    if (!input || typeof input !== "object" || Array.isArray(input))
+        throw new Error("Malformed playback-information vector input");
+    return input as Record<string, unknown>;
+}
+
+/**
+ * The strict runner for `playback-information.json`. Every operation is known here;
+ * an unknown operation or a malformed input throws so the vector fails.
+ */
+export function runVector(c: {
+    id?: unknown;
+    operation?: unknown;
+    input?: unknown;
+    expected?: unknown;
+}): unknown {
+    if (typeof c?.id !== "string" || !("expected" in c))
+        throw new Error("Malformed playback-information vector case");
+    const i = record(c.input);
+    switch (c.operation) {
+        case "reason":
+            if (!("reason" in i))
+                throw new Error("Malformed reason vector input");
+            return transcodeReason(i.reason, i.qualityMbps);
+        case "method":
+            return playbackMethod(i.method, i.url);
+        case "subtitle":
+            if (!("index" in i))
+                throw new Error("Malformed subtitle vector input");
+            return subtitleDelivery(
+                i.source as { MediaStreams?: Array<Record<string, unknown>> },
+                i.index,
+            );
+        case "bitrate":
+            return formatBitrate(i.bitrate);
+        case "speed":
+            if (typeof i.encoded !== "boolean")
+                throw new Error("Malformed speed vector input");
+            return String(speedSupported(i.speed, i.encoded));
+        case "conversion-notice":
+            return conversionNoticeVector(i);
+        default:
+            throw new Error(
+                "Unknown playback-information operation: " +
+                    String(c.operation),
+            );
+    }
+}
+
+/**
+ * PLAY-27 yields to top-positioned cues: a fraction line in the top half, or a
+ * non-negative line number. "auto" and negative (bottom-relative) lines do not count.
+ */
+export function cueNearTop(line: unknown, snapToLines: unknown) {
+    if (typeof line !== "number" || !Number.isFinite(line)) return false;
+    return snapToLines === false ? line < 50 : line >= 0;
+}
+
+/**
+ * PLAY-27 web note: Chrome/Edge steps, shown before the core remedy in Playback info
+ * only when this browser's own decision is the limit.
+ */
+export const CHROMIUM_DECODE_STEPS = [
+    "Open chrome://settings/system, turn on “Use graphics acceleration when available”, then select Relaunch.",
+    "Open chrome://gpu and look under “Video Acceleration Information” for a “Decode hevc main” (or “main 10”) row. It is missing without a GPU and driver that decode it, and over Remote Desktop or in a virtual machine.",
+    "Update the graphics driver from its vendor, or through Windows Update optional updates.",
+    "Try Microsoft Edge.",
+    "Use a Pictureshow app for TV, phone or desktop.",
+] as const;

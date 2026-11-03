@@ -1075,6 +1075,27 @@ export function Detail({
         !savingReport &&
         reportReady.current;
     readyRef.current = ready;
+    // An authoritative read failure refuses detail commands (CAT-11) unless the
+    // returning report barrier will still schedule a fresh read (CAT-09/13).
+    const refusing = !!readError && !savingReport;
+    // Accessibility state follows behavior: a pending slot accepts and queues
+    // the press, so it is not aria-disabled; only a refusing slot is.
+    function slotState(unavailable: boolean) {
+        const state =
+            unavailable || refusing
+                ? "unavailable"
+                : ready
+                  ? "ready"
+                  : "pending";
+        return {
+            "data-state": state,
+            "aria-disabled": state === "unavailable",
+            "aria-description":
+                state === "pending"
+                    ? "Runs when this item is ready"
+                    : undefined,
+        } as const;
+    }
     const selected = focusedAction;
     useLayoutEffect(() => {
         let active = document.activeElement as HTMLElement | null;
@@ -1094,7 +1115,8 @@ export function Detail({
         const action = active?.dataset.focus;
         const sameHeld = action && action === heldFocus.current;
         const usable =
-            active?.getAttribute("aria-disabled") === "false" &&
+            ready &&
+            active?.dataset.state === "ready" &&
             !active?.hasAttribute("disabled");
         if (
             !ready &&
@@ -1301,7 +1323,8 @@ export function Detail({
         return () => clearInterval(timer);
     }, [pendingMessage, loading, savingReport]);
     function offer(action: PendingAction) {
-        if (!alive.current || openingPlayback.current || writing) return;
+        if (!alive.current || openingPlayback.current || writing || refusing)
+            return;
         if (queue.current.some((p) => sameAction(p.action, action))) return;
         if (queue.current.length >= 32) {
             setPendingMessage(
@@ -1493,7 +1516,7 @@ export function Detail({
                             data-focus="play"
                             aria-label={queuedActionName("play")}
                             data-autofocus
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() => offer({ kind: "play" })}
                         >
                             {actionLabel("play", "Play")}
@@ -1501,7 +1524,7 @@ export function Detail({
                         <button
                             data-focus="watched"
                             aria-label={queuedActionName("watched")}
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() =>
                                 offer({ kind: "watched", desired: true })
                             }
@@ -1512,7 +1535,7 @@ export function Detail({
                             ref={favoriteRef}
                             data-focus="favorite"
                             aria-label={queuedActionName("favorite")}
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() =>
                                 offer({ kind: "favorite", desired: true })
                             }
@@ -1522,7 +1545,7 @@ export function Detail({
                         <button
                             data-focus="restart"
                             aria-label={queuedActionName("restart")}
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() => offer({ kind: "restart" })}
                         >
                             {actionLabel("restart", "Play from start")}
@@ -1650,7 +1673,7 @@ export function Detail({
                                         data-focus="play"
                                         aria-label={queuedActionName("play")}
                                         data-autofocus
-                                        aria-disabled={!ready || !target}
+                                        {...slotState(!target && !loading)}
                                         disabled={!target && !loading}
                                         onClick={() => offer({ kind: "play" })}
                                     >
@@ -1668,7 +1691,7 @@ export function Detail({
                                             aria-label={queuedActionName(
                                                 "restart",
                                             )}
-                                            aria-disabled={!ready}
+                                            {...slotState(false)}
                                             onClick={() =>
                                                 offer({ kind: "restart" })
                                             }
@@ -1692,7 +1715,7 @@ export function Detail({
                                             ? acceptedWatched
                                             : undefined
                                     }
-                                    aria-disabled={!ready || !canMark}
+                                    {...slotState(!canMark)}
                                     disabled={!canMark}
                                     onClick={() =>
                                         offer({
@@ -1717,7 +1740,7 @@ export function Detail({
                                     aria-pressed={
                                         ready ? acceptedFavorite : undefined
                                     }
-                                    aria-disabled={!ready}
+                                    {...slotState(false)}
                                     onClick={() =>
                                         offer({
                                             kind: "favorite",
@@ -1741,7 +1764,7 @@ export function Detail({
                                             aria-label={queuedActionName(
                                                 "restart",
                                             )}
-                                            aria-disabled={!ready || !target}
+                                            {...slotState(!target && !loading)}
                                             disabled={!target && !loading}
                                             onClick={() =>
                                                 offer({ kind: "restart" })

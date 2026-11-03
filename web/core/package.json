@@ -6,6 +6,7 @@
         ".": "./src/index.ts",
         "./parity": "./src/parity.ts",
         "./rc26": "./src/rc26.ts",
-        "./rc28": "./src/rc28.ts"
+        "./rc28": "./src/rc28.ts",
+        "./playback-information": "./src/playback-information.ts"
     }
 }

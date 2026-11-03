@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 import { describe, it, expect } from "vitest";
 import {
+    canDecodeVideo,
     authenticatedMediaRequest,
     progressReport,
     ticks,
@@ -351,4 +352,33 @@ it("pending seeks retain an exact ten-second tick delta at fractional browser-cl
     const start = 10.118449;
     expect(ticks(start + 10 + 10 - 10) - ticks(start)).toBe(100_000_000);
     expect(ticks(-0.00000015)).toBe(-1);
+});
+
+describe("PLAY-27 per-file browser video gate", () => {
+    const source = (codec: string, extra: Record<string, unknown> = {}) =>
+        ({
+            Id: "s",
+            MediaStreams: [{ Type: "Video", Index: 0, Codec: codec, ...extra }],
+        }) as any;
+    const probe = (supported: string[]) => (mime: string) =>
+        supported.some((codec) => mime.includes(codec));
+    it("asks the browser about the source's own video codec", () => {
+        expect(canDecodeVideo(source("hevc"), probe(["hvc1"]))).toBe(true);
+        expect(canDecodeVideo(source("hevc"), probe(["avc1"]))).toBe(false);
+        expect(canDecodeVideo(source("h264"), probe(["avc1"]))).toBe(true);
+    });
+    it("treats limits the browser path cannot meet as not decodable", () => {
+        const all = probe(["avc1", "hvc1"]);
+        expect(canDecodeVideo(source("hevc", { BitDepth: 10 }), all)).toBe(
+            false,
+        );
+        expect(canDecodeVideo(source("h264", { Width: 7680 }), all)).toBe(
+            false,
+        );
+        expect(
+            canDecodeVideo(source("h264", { RealFrameRate: 120 }), all),
+        ).toBe(false);
+        expect(canDecodeVideo(source("mpeg2video"), all)).toBe(false);
+        expect(canDecodeVideo(undefined, all)).toBe(false);
+    });
 });

@@ -23,7 +23,7 @@ test("130 percent layout budget keeps phone, desktop and TV keyboard targets rea
         await expect(card).toBeFocused();
         await page.keyboard.press("Enter");
         const play = page.locator('[data-focus="play"]');
-        await expect(play).toHaveAttribute("aria-disabled", "false");
+        await expect(play).toHaveAttribute("data-state", "ready");
         await play.focus();
         await expect(play).toBeInViewport({ ratio: 1 });
         await page.keyboard.press("Escape");
@@ -66,8 +66,8 @@ test("focused TV card metadata and selected track rows keep WCAG text contrast",
     await contrast();
     await page.keyboard.press("Enter");
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
-        "aria-disabled",
-        "false",
+        "data-state",
+        "ready",
     );
     await page.keyboard.press("Enter");
     await expect(page.locator("video")).toBeVisible();

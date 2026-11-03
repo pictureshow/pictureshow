@@ -4,6 +4,8 @@ import { Jellyfin, encode } from "@pictureshow/core";
 export type Preferences = {
     bitrateMbps: number | null;
     passthrough: boolean;
+    /** SET-11: PLAY-27's notice, default On; read when the player opens. */
+    conversionNotice: boolean;
     subtitleSize: "System" | "Small" | "Normal" | "Large" | "ExtraLarge";
     subtitleBackground: "System" | "None" | "Shadow" | "Box";
     segments: Record<
@@ -15,6 +17,7 @@ export type Preferences = {
 export const defaultPreferences: Preferences = {
     bitrateMbps: null,
     passthrough: true,
+    conversionNotice: true,
     subtitleSize: "System",
     subtitleBackground: "System",
     segments: {
@@ -39,6 +42,8 @@ export function readPreferences(): Preferences {
             ? v.bitrateMbps
             : null,
         passthrough: typeof v.passthrough === "boolean" ? v.passthrough : true,
+        conversionNotice:
+            typeof v.conversionNotice === "boolean" ? v.conversionNotice : true,
         subtitleSize: [
             "System",
             "Small",
@@ -227,6 +232,23 @@ export function Settings({
                     the connected speaker layout. Playback uses supported
                     decoded audio or server conversion; this preference cannot
                     grant a capability.
+                </p>
+                <label className="switch-label">
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        data-focus="setting:conversion-notice"
+                        aria-describedby="conversion-notice-caption"
+                        checked={value.conversionNotice}
+                        onChange={(e) =>
+                            patch("conversionNotice", e.target.checked)
+                        }
+                    />
+                    Conversion notice: {value.conversionNotice ? "On" : "Off"}
+                </label>
+                <p className="muted" id="conversion-notice-caption">
+                    Shows a short note when the server has to convert a video
+                    for this browser.
                 </p>
                 <label>
                     Subtitle size

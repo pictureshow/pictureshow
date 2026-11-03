@@ -357,6 +357,10 @@ test("detail Retry retains its target while loading and hands focus to fresh pri
     release!();
     await expect(page.locator('[data-focus="play"]')).toBeFocused();
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
+        "data-state",
+        "ready",
+    );
+    await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
         "aria-disabled",
         "false",
     );
@@ -526,7 +530,8 @@ test("fresh unresolved detail accepts one pending Play and negotiates only after
     await page.locator('[data-focus="latest:library:movie"]').click();
     const pending = page.locator('[data-focus="play"]');
     await expect(pending).toBeFocused();
-    await expect(pending).toHaveAttribute("aria-disabled", "true");
+    await expect(pending).toHaveAttribute("data-state", "pending");
+    await expect(pending).toHaveAttribute("aria-disabled", "false");
     await page.keyboard.press("Enter");
     await expect(page.locator("[data-detail-feedback]")).toContainText(
         "Play requested",
@@ -568,7 +573,8 @@ test("rc28 cold detail starts plain, then announces Ready only after the same fo
     const play = page.locator('[data-focus="play"]');
     await expect(play).toBeFocused();
     await expect(play).toHaveAccessibleName("Play");
-    await expect(play).toHaveAttribute("aria-disabled", "true");
+    await expect(play).toHaveAttribute("data-state", "pending");
+    await expect(play).toHaveAttribute("aria-disabled", "false");
     await page.keyboard.press("ArrowRight");
     const watched = page.locator('[data-focus="watched"]');
     await expect(watched).toBeFocused();
@@ -578,6 +584,7 @@ test("rc28 cold detail starts plain, then announces Ready only after the same fo
     await captureRecovery(page, "held");
     release();
     await expect(watched).toBeFocused();
+    await expect(watched).toHaveAttribute("data-state", "ready");
     await expect(watched).toHaveAttribute("aria-disabled", "false");
     await expect(page.locator("[data-detail-feedback]")).toHaveText("Ready");
     await captureRecovery(page, "ready");
@@ -720,8 +727,104 @@ test("rc26 failed Series read keeps unknown season and toggle state neutral with
     for (const label of ["Watched", "Favorite"]) {
         const action = page.getByRole("button", { name: label, exact: true });
         await expect(action).toHaveAttribute("aria-disabled", "true");
+        await expect(action).toHaveAttribute("data-state", "unavailable");
         await expect(action).not.toHaveAttribute("aria-pressed");
     }
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.locator("[data-detail-feedback]")).toContainText("503");
+});
+
+test("CAT-09/11 pending Watched is accepting (not aria-disabled) and runs after release; read-failure Watched refuses", async ({
+    page,
+}) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let phase: "held" | "fail" | "ok" = "held",
+        played = false,
+        writes = 0;
+    await start(page, async (url, method) => {
+        if (url.pathname === "/Items/movie") {
+            if (phase === "held") await held;
+            if (phase === "fail") return { status: 503 };
+            const item = movie();
+            return {
+                body: {
+                    ...item,
+                    UserData: { ...item.UserData, Played: played },
+                },
+            };
+        }
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        ) {
+            const item = movie();
+            return {
+                body: {
+                    Items: [
+                        {
+                            ...item,
+                            UserData: { ...item.UserData, Played: played },
+                        },
+                    ],
+                },
+            };
+        }
+        if (url.pathname.endsWith("/UserPlayedItems/movie")) {
+            writes++;
+            played = method === "POST";
+            return { body: { Played: played } };
+        }
+        return {};
+    });
+    const press = async (target: ReturnType<Page["locator"]>) => {
+        const box = await target.boundingBox();
+        expect(box).not.toBeNull();
+        await page.mouse.click(
+            box!.x + box!.width / 2,
+            box!.y + box!.height / 2,
+        );
+    };
+    const opener = page.locator('[data-focus="latest:library:movie"]');
+    await opener.click();
+    const watched = page.locator('[data-focus="watched"]');
+    await expect(watched).toHaveAttribute("data-state", "pending");
+    await expect(watched).toHaveAttribute("aria-disabled", "false");
+    await expect(watched).toHaveAttribute(
+        "aria-description",
+        "Runs when this item is ready",
+    );
+    await press(watched);
+    await expect(watched).toContainText("already requested");
+    await expect(watched).toHaveAccessibleName("Watched already requested");
+    expect(writes).toBe(0);
+    phase = "ok";
+    release();
+    await expect.poll(() => writes).toBe(1);
+    expect(played).toBe(true);
+    await expect(watched).toHaveAttribute("data-state", "ready");
+    await expect(watched).toHaveAttribute("aria-pressed", "true");
+    await expect(watched).not.toHaveAttribute("aria-description");
+
+    await page.keyboard.press("Escape");
+    phase = "fail";
+    await opener.click();
+    const retry = page.getByRole("button", { name: "Retry", exact: true });
+    await expect(retry).toBeVisible();
+    await expect(watched).toHaveAttribute("data-state", "unavailable");
+    await expect(watched).toHaveAttribute("aria-disabled", "true");
+    await expect(watched).not.toHaveAttribute("aria-description");
+    await press(watched);
+    await expect(watched).not.toContainText("already requested");
+    await expect(page.locator("[data-detail-feedback]")).not.toContainText(
+        "Watched change requested",
+    );
+    phase = "ok";
+    await retry.click();
+    await expect(watched).toHaveAttribute("data-state", "ready");
+    await page.waitForTimeout(300);
+    expect(writes).toBe(1);
+    expect(played).toBe(true);
 });

@@ -38,6 +38,21 @@ describe("browser persistence boundaries", () => {
             screenReader: true,
         });
     });
+    it("SET-11 conversion notice defaults On, keeps a stored Off and ignores malformed values", () => {
+        const local = storage();
+        vi.stubGlobal("localStorage", local);
+        expect(readPreferences().conversionNotice).toBe(true);
+        local.setItem(
+            "pictureshow.preferences",
+            JSON.stringify({ conversionNotice: false }),
+        );
+        expect(readPreferences().conversionNotice).toBe(false);
+        local.setItem(
+            "pictureshow.preferences",
+            JSON.stringify({ conversionNotice: "off" }),
+        );
+        expect(readPreferences().conversionNotice).toBe(true);
+    });
     it("unreadable account state is recoverable rather than silently discarded", () => {
         const local = storage();
         vi.stubGlobal("localStorage", local);
