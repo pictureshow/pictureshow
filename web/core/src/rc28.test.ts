@@ -7,6 +7,7 @@ import {
     DetailRequestOnceFeedback,
     detailRawReadAcknowledgement,
     visibilityPlay,
+    WEB_FOREGROUND_REQUIRED,
 } from "./rc28";
 
 it("rc28 explicit server captions outrank fallback language, flags and text codec", () => {
@@ -57,10 +58,16 @@ it("rc28 rejected Ready/request submissions retry until accepted and departure c
 });
 
 it("rc28 lifecycle policy preserves pause latch even when background playback is permitted", () => {
-    expect(visibilityPlay(true, false, false, false)).toBe(true);
+    // Web keeps a hidden tab playing; only a retained lifecycle stop pauses.
+    expect(WEB_FOREGROUND_REQUIRED).toBe(false);
+    expect(visibilityPlay(true, WEB_FOREGROUND_REQUIRED, false, false)).toBe(
+        true,
+    );
     expect(visibilityPlay(true, true, false, false)).toBe(false);
     expect(visibilityPlay(true, true, true, true)).toBe(false);
-    expect(visibilityPlay(true, false, false, true)).toBe(false);
+    expect(visibilityPlay(true, WEB_FOREGROUND_REQUIRED, false, true)).toBe(
+        false,
+    );
 });
 it("rc28 acknowledgement compares raw data independently of object-key order", () => {
     expect(

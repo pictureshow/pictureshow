@@ -547,7 +547,7 @@ test("rc28 natural completion projects Watched before acknowledgement and withdr
     await evidence(page, "completion-failed", true);
     await expect(watched).toHaveAccessibleName(/watched/i);
 });
-test("rc28 hidden first preparation stays paused, denies hidden Play, and needs deliberate visible Play", async ({
+test("rc28 freeze during first preparation stays paused, denies hidden Play, and needs deliberate visible Play", async ({
     page,
 }) => {
     const f = await fixture(page),
@@ -565,6 +565,7 @@ test("rc28 hidden first preparation stays paused, denies hidden Play, and needs 
     await page.keyboard.press("Enter");
     await expect.poll(() => started).toBe(true);
     await visible(page, false);
+    await page.evaluate(() => document.dispatchEvent(new Event("freeze")));
     prepare.release();
     const video = page.locator("video");
     await expect
@@ -937,7 +938,7 @@ test("rc28 full-timeline HLS seeks to resume, owns caption boundaries, and resto
         .click();
 });
 
-test("rc28 hidden HLS resume beyond media end reaches a paused bounded READY and completes only on Play", async ({
+test("rc28 stopped hidden HLS resume beyond media end reaches a paused bounded READY and completes only on Play", async ({
     page,
 }) => {
     const f = await fixture(page);
@@ -955,10 +956,12 @@ test("rc28 hidden HLS resume beyond media end reaches a paused bounded READY and
         SupportsDirectPlay: false,
         TranscodingUrl: "/Videos/movie/master.m3u8",
     };
+    const prepare = gate();
     await page.route(
         "https://jellyfin.example/Items/movie/PlaybackInfo",
-        (route) => {
+        async (route) => {
             f.negotiations.push(route.request().postDataJSON());
+            await prepare.promise;
             return route.fulfill({
                 headers,
                 body: JSON.stringify({
@@ -973,6 +976,9 @@ test("rc28 hidden HLS resume beyond media end reaches a paused bounded READY and
     await page.evaluate(() => {
         location.hash = "item=movie&positionMs=45000";
     });
+    await expect.poll(() => f.negotiations.length).toBe(1);
+    await page.evaluate(() => document.dispatchEvent(new Event("freeze")));
+    prepare.release();
     const video = page.locator("video");
     await expect
         .poll(
@@ -1064,7 +1070,10 @@ test("rc28 foreground Play before decoder READY is retained and applied when pre
     await expect
         .poll(() => video.evaluate((v: HTMLVideoElement) => v.seeking))
         .toBe(false);
-    expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+    await page.evaluate(() => document.dispatchEvent(new Event("freeze")));
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.paused))
+        .toBe(true);
     expect(
         f.reports.filter((r) => r.path === "/Sessions/Playing"),
     ).toHaveLength(0);

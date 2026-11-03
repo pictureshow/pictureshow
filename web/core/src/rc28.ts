@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
 /** Lifecycle policy input is explicit: a browser may permit background playback. */
+// Hidden tabs keep concerts, talk shows and music videos playing. Native page
+// stops are represented independently by the retained pause latch.
+export const WEB_FOREGROUND_REQUIRED = false;
 export const visibilityPlay = (
     requested: boolean,
     foregroundRequired: boolean,

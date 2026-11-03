@@ -65,6 +65,30 @@ for (const file of files) {
         if (ids.has(c.id)) throw new Error("Duplicate vector ID: " + c.id);
         ids.add(c.id);
     }
+    const browserVisibilityExpected: Record<string, boolean> = {
+        "visibility-native-foreground": true,
+        "visibility-native-stopped": true,
+        "visibility-returned-latched": false,
+        "visibility-paused-request": false,
+        "visibility-web-background": true,
+        "visibility-web-paused": false,
+    };
+    // Preserve every shared case verbatim. Also feed all six visibility inputs
+    // our actual background policy, with explicit browser-policy expectations.
+    for (const c of suite.cases.filter(
+        (c: any) => c.operation === "visibility-play",
+    ))
+        it("browser background policy: " + c.id, () => {
+            expect(browserVisibilityExpected).toHaveProperty(c.id);
+            expect(
+                rc28.visibilityPlay(
+                    c.input.requested,
+                    rc28.WEB_FOREGROUND_REQUIRED,
+                    c.input.foreground,
+                    c.input.pauseLatched,
+                ),
+            ).toBe(browserVisibilityExpected[c.id]);
+        });
     const runnable = suite.cases;
     describe("shared " + file, () => {
         for (const c of runnable)

@@ -426,6 +426,18 @@ async function creditsEpisode(page: Page, automatic: boolean) {
     await page.route("https://jellyfin.example/Items/episode2?**", (route) =>
         route.fulfill({ headers: jsonHeaders, body: JSON.stringify(next) }),
     );
+    // The strict authoritative detail read uses Items?ids, not only Items/:id.
+    await page.route("https://jellyfin.example/Items?**", (route) => {
+        if (
+            new URL(route.request().url()).searchParams.get("ids") ===
+            "episode2"
+        )
+            return route.fulfill({
+                headers: jsonHeaders,
+                body: JSON.stringify({ Items: [next] }),
+            });
+        return route.fallback();
+    });
     await signIn(page);
     await page.locator('[data-focus="next:episode"]').click();
     await page
@@ -873,7 +885,7 @@ test("native ended event completes once after actual final frames, independently
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 
-test("visibility policy pauses and retains the same viewing across a hidden and visible event", async ({
+test("freeze policy pauses and retains the same viewing across a hidden and visible event", async ({
     page,
 }) => {
     const f = await fixture(page);
@@ -899,6 +911,7 @@ test("visibility policy pauses and retains the same viewing across a hidden and 
             value: true,
         });
         document.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(new Event("freeze"));
     });
     await expect
         .poll(() =>
@@ -1599,8 +1612,8 @@ test("rc26 server-declared text with unknown codec loads converted cues and swit
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 
-for (const action of ["Play now", "Cancel next episode"] as const)
-    test(`rc28 automatic continuation held after hidden during committed Stop requires ${action}`, async ({
+for (const action of ["Play now", "Cancel next episode", "background"] as const)
+    test(`background continuation during committed Stop: ${action}`, async ({
         page,
     }) => {
         await page.clock.install();
@@ -1636,8 +1649,32 @@ for (const action of ["Play now", "Cancel next episode"] as const)
                 });
                 document.dispatchEvent(new Event("visibilitychange"));
             });
+            if (action !== "background")
+                await page.evaluate(() =>
+                    document.dispatchEvent(new Event("freeze")),
+                );
             release();
             await expect.poll(f.completed).toBe(1);
+            if (action === "background") {
+                await expect.poll(() => successorRequests.length).toBe(1);
+                await expect(
+                    page.getByRole("heading", {
+                        name: "The Next Morning",
+                        exact: true,
+                    }),
+                ).toBeVisible();
+                await expect
+                    .poll(() =>
+                        page
+                            .locator("video")
+                            .evaluate((v: HTMLVideoElement) => !v.paused),
+                    )
+                    .toBe(true);
+                await page
+                    .getByRole("button", { name: "Stop and go back" })
+                    .click();
+                return;
+            }
             await expect(page.getByRole("status")).toContainText(
                 "Choose Play now",
             );
@@ -1690,3 +1727,37 @@ for (const action of ["Play now", "Cancel next episode"] as const)
             release();
         }
     });
+
+test("background countdown opens the next decoder while hidden without a stop latch", async ({
+    page,
+}) => {
+    const f = await creditsEpisode(page, true);
+    await page.evaluate(() => {
+        Object.defineProperty(document, "hidden", {
+            configurable: true,
+            value: true,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+    });
+    // Use real decoder/wall time: changing the JS clock does not advance media.
+    await expect.poll(f.completed, { timeout: 20000 }).toBe(1);
+    await expect(
+        page.getByRole("heading", { name: "The Next Morning", exact: true }),
+    ).toBeVisible();
+    await expect
+        .poll(
+            () =>
+                page
+                    .locator("video")
+                    .evaluate((v: HTMLVideoElement) => !v.paused),
+            { timeout: 20000 },
+        )
+        .toBe(true);
+    expect(await page.evaluate(() => document.hidden)).toBe(true);
+    expect(
+        f.reports.filter(
+            (r) => r.path.endsWith("/Stopped") && r.body.ItemId === "episode",
+        ),
+    ).toHaveLength(1);
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});

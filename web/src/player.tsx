@@ -13,6 +13,10 @@ import {
     type Decision,
     type Stream,
 } from "@pictureshow/core";
+import {
+    visibilityPlay,
+    WEB_FOREGROUND_REQUIRED,
+} from "@pictureshow/core/rc28";
 import "./player.css";
 import { readCompletionDetail, invalidateCatalogAccount } from "./detail-reads";
 import { beginCompletion, finishCompletion } from "./completion-intents";
@@ -191,10 +195,13 @@ export function Player({
     const alive = useRef(true),
         leaving = useRef(false),
         replacing = useRef(true),
-        // Browser policy requires a visible document. Keep intent before any decoder exists.
+        // Background tabs may play. A real lifecycle stop is retained before any decoder exists.
         foreground = useRef(!document.hidden),
-        visibilityGeneration = useRef(0),
-        pauseIntent = useRef(document.hidden),
+        stopGeneration = useRef(0),
+        stopLatched = useRef(false),
+        playAttempt = useRef(0),
+        ownPauses = useRef(new WeakMap<HTMLMediaElement, number>()),
+        pauseIntent = useRef(false),
         completionDeferred = useRef(false),
         completionSaved = useRef(false),
         completionProjection = useRef<number | undefined>(undefined),
@@ -237,7 +244,7 @@ export function Player({
         [reportError, setReportError] = useState(""),
         [completionError, setCompletionError] = useState(false),
         [notice, setNotice] = useState("Preparing playback…"),
-        [paused, setPaused] = useState(document.hidden),
+        [paused, setPaused] = useState(false),
         [buffering, setBuffering] = useState(true),
         [position, setPosition] = useState(initialPosition),
         [duration, setDuration] = useState(
@@ -388,9 +395,7 @@ export function Player({
                     d,
                     event,
                     s.position,
-                    !foreground.current ||
-                        document.hidden ||
-                        pauseIntent.current,
+                    stopLatched.current || pauseIntent.current,
                     origins.audio ? s.audio : undefined,
                     origins.subtitle ? s.subtitle : undefined,
                     origins,
@@ -523,7 +528,7 @@ export function Player({
         setPanel(undefined);
         pauseIntent.current = true;
         sample();
-        video.current?.pause();
+        pauseDecoder();
         const barrier = stop(failed).then(() => {
             if (stopError.current) throw new Error(stopError.current);
         });
@@ -632,7 +637,7 @@ export function Player({
         if (replacing.current) return;
         replacing.current = true;
         sample();
-        video.current?.pause();
+        pauseDecoder();
         setRequest({ ...desired.current });
     }
     function seek(to: number) {
@@ -756,8 +761,12 @@ export function Player({
     }
     function toggle() {
         if (completing.current || leaving.current) return;
-        // A media-session Play delivered while hidden cannot clear the pause latch.
-        if (!foreground.current || document.hidden) return;
+        // Background Media Session commands work, but only an active foreground
+        // Play can clear a stop imposed by page lifecycle or the browser/OS.
+        if (stopLatched.current) {
+            if (!foreground.current || document.hidden) return;
+            stopLatched.current = false;
+        }
         if (completionDeferred.current) {
             completionDeferred.current = false;
             void complete(completionNext.current);
@@ -773,9 +782,10 @@ export function Player({
             void physicalEndRef.current();
             return;
         }
-        if (pauseIntent.current) el.pause();
+        if (pauseIntent.current) pauseDecoder(el);
         else
-            void el.play().catch(() => {
+            playMedia(el, () => {
+                if (document.hidden) latchStop("browser-play-rejected");
                 pauseIntent.current = true;
                 setPaused(true);
                 setNotice("Press Play to start playback.");
@@ -831,47 +841,98 @@ export function Player({
     useEffect(() => {
         if (preferences.screenReader) setReader(true);
     }, [preferences.screenReader]);
+    function backgroundPlayAllowed() {
+        return visibilityPlay(
+            true,
+            WEB_FOREGROUND_REQUIRED,
+            foreground.current && !document.hidden,
+            stopLatched.current,
+        );
+    }
+    function playMedia(el: HTMLMediaElement, rejected: () => void) {
+        const attempt = ++playAttempt.current,
+            revision = desired.current.revision,
+            generation = stopGeneration.current;
+        void el.play().catch(() => {
+            // A decoder's late rejection cannot stop its successor, or undo a
+            // newer deliberate command / lifecycle stop and foreground Play.
+            if (
+                !alive.current ||
+                leaving.current ||
+                video.current !== el ||
+                desired.current.revision !== revision ||
+                attempt !== playAttempt.current ||
+                generation !== stopGeneration.current ||
+                pauseIntent.current
+            )
+                return;
+            rejected();
+        });
+    }
+    function pauseDecoder(el = video.current) {
+        if (!el || el.paused) return;
+        // pause events are queued. Account for our own decoder swaps and holds
+        // so a later pause event is not mistaken for a browser background stop.
+        ownPauses.current.set(el, (ownPauses.current.get(el) ?? 0) + 1);
+        el.pause();
+    }
+    function latchStop(reason: string) {
+        foreground.current = false;
+        stopGeneration.current++;
+        stopLatched.current = true;
+        pendingPanel.current = undefined;
+        setPanel(undefined);
+        pauseIntent.current = true;
+        setPaused(true);
+        setControls(true);
+        sample();
+        pauseDecoder();
+        report("progress");
+        console.info(
+            `PictureshowPlayback lifecycle stop=${reason} paused=true positionMs=${Math.floor(viewing.current.position * 1000)}`,
+        );
+    }
     useEffect(() => {
-        const suspend = () => {
-            foreground.current = false;
-            visibilityGeneration.current++;
-            pendingPanel.current = undefined;
-            setPanel(undefined);
-            pauseIntent.current = true;
-            setPaused(true);
-            setControls(true);
-            sample();
-            video.current?.pause();
-            report("progress");
-            console.info(
-                `PictureshowPlayback lifecycle foreground=false paused=true positionMs=${Math.floor(viewing.current.position * 1000)}`,
-            );
-        };
         const visibility = () => {
-            if (document.hidden) suspend();
-            else {
-                // Visibility alone never resumes a stopped/covered viewing.
-                foreground.current = true;
-                console.info(
-                    `PictureshowPlayback lifecycle foreground=true paused=${pauseIntent.current} positionMs=${Math.floor(viewing.current.position * 1000)}`,
-                );
-            }
+            const el = video.current;
+            // A suspended page may receive visibility before its queued native
+            // pause event. Preserve that stop when the retained decoder was
+            // playing, rather than waiting for event delivery while hidden.
+            if (
+                !foreground.current &&
+                !document.hidden &&
+                el?.paused &&
+                !el.ended &&
+                viewing.current.started &&
+                !replacing.current &&
+                !pauseIntent.current &&
+                !(ownPauses.current.get(el) ?? 0)
+            )
+                latchStop("browser-pause-on-return");
+            foreground.current = !document.hidden;
+            console.info(
+                `PictureshowPlayback lifecycle foreground=${foreground.current} paused=${pauseIntent.current} positionMs=${Math.floor(viewing.current.position * 1000)}`,
+            );
         };
         const restore = () => {
             foreground.current = !document.hidden;
         };
         const pagehide = (event: PageTransitionEvent) => {
-            suspend();
-            // BFCache retains this viewing. A permanent document departure ends
-            // it, with a best-effort keepalive Stop before the page disappears.
+            latchStop("pagehide");
+            // BFCache retains this viewing; permanent departure best-effort ends it.
             if (!event.persisted) void stop(false, true);
         };
+        const freeze = () => latchStop("freeze");
         document.addEventListener("visibilitychange", visibility);
+        document.addEventListener("freeze", freeze);
+        document.addEventListener("resume", restore);
         window.addEventListener("pagehide", pagehide);
         window.addEventListener("pageshow", restore);
         visibility();
         return () => {
             document.removeEventListener("visibilitychange", visibility);
+            document.removeEventListener("freeze", freeze);
+            document.removeEventListener("resume", restore);
             window.removeEventListener("pagehide", pagehide);
             window.removeEventListener("pageshow", restore);
         };
@@ -1021,22 +1082,19 @@ export function Player({
         retry = false,
         automatic = false,
     ) {
-        if (
-            completing.current ||
-            leaving.current ||
-            !foreground.current ||
-            document.hidden
-        )
-            return;
+        if (completing.current || leaving.current) return;
+        if (!automatic && foreground.current && !document.hidden)
+            stopLatched.current = false;
+        if (!backgroundPlayAllowed()) return;
         if (automatic && pauseIntent.current) return;
-        const generation = visibilityGeneration.current;
+        const generation = stopGeneration.current;
         completing.current = true;
         completionDeferred.current = false;
         setError("");
         completionNext.current = nextItem;
         pauseIntent.current = true;
         sample();
-        video.current?.pause();
+        pauseDecoder();
         setNotice(
             nextItem ? "Opening next episode…" : "Saving completed playback…",
         );
@@ -1062,13 +1120,11 @@ export function Player({
             return;
         }
         if (!alive.current || leaving.current) return;
-        // A Stop already committed before backgrounding cannot be undone. Keep
+        // A Stop already committed before a lifecycle stop cannot be undone. Keep
         // the completed destination and require an explicit foreground action.
         if (
             nextItem &&
-            (!foreground.current ||
-                document.hidden ||
-                visibilityGeneration.current !== generation)
+            (!backgroundPlayAllowed() || stopGeneration.current !== generation)
         ) {
             completing.current = false;
             completionDeferred.current = true;
@@ -1083,12 +1139,7 @@ export function Player({
         else onBack(stopError.current || undefined);
     }
     async function physicalEnd() {
-        if (
-            ended.current ||
-            pauseIntent.current ||
-            !foreground.current ||
-            document.hidden
-        )
+        if (ended.current || pauseIntent.current || !backgroundPlayAllowed())
             return;
         ended.current = true;
         // A held final frame represents the logical endpoint, not its 1ms
@@ -1129,7 +1180,7 @@ export function Player({
         }
         if (!alive.current || leaving.current) return;
         completionNext.current = found;
-        if (!foreground.current || document.hidden || pauseIntent.current) {
+        if (!backgroundPlayAllowed() || pauseIntent.current) {
             completionDeferred.current = true;
             setNotice(
                 "Playback finished. Press Play to continue or return to details.",
@@ -1307,8 +1358,7 @@ export function Player({
                 Math.abs(el.currentTime - decoderStart()) >= 0.5
             )
                 return false;
-            if (!foreground.current || document.hidden)
-                pauseIntent.current = true;
+            if (!backgroundPlayAllowed()) pauseIntent.current = true;
             replacing.current = false;
             if (pendingSeek.current === request.position)
                 pendingSeek.current = undefined;
@@ -1323,7 +1373,7 @@ export function Player({
             setBuffering(false);
             setNotice("");
             if (!pausedAtPhysicalEnd.current) sample();
-            if (pauseIntent.current) el.pause();
+            if (pauseIntent.current) pauseDecoder(el);
             setPaused(pauseIntent.current);
             if (!viewing.current.started) {
                 viewing.current.started = true;
@@ -1334,16 +1384,17 @@ export function Player({
             // at acknowledgement rather than losing it behind replacement.
             if (!pauseIntent.current) {
                 if (pausedAtPhysicalEnd.current) {
-                    el.pause();
+                    pauseDecoder(el);
                     void physicalEndRef.current();
                 } else if (el.paused)
-                    void el.play().catch(() => {
+                    playMedia(el, () => {
                         if (
                             disposed ||
                             desired.current.revision !== request.revision ||
                             pauseIntent.current
                         )
                             return;
+                        if (document.hidden) latchStop("browser-play-rejected");
                         pauseIntent.current = true;
                         setPaused(true);
                         setNotice("Press Play to start playback.");
@@ -1353,15 +1404,14 @@ export function Player({
         }
         function playing() {
             if (!current || disposed) return;
-            if (!foreground.current || document.hidden)
-                pauseIntent.current = true;
+            if (!backgroundPlayAllowed()) pauseIntent.current = true;
             if (desired.current.revision !== request.revision) {
                 setRequest({ ...desired.current });
                 return;
             }
             hasPlayed = true;
             if (replacing.current) {
-                if (!publishReady() && pauseIntent.current) el.pause();
+                if (!publishReady() && pauseIntent.current) pauseDecoder(el);
                 return;
             }
             releaseTrackCommands();
@@ -1374,7 +1424,7 @@ export function Player({
                 Math.abs(el.currentTime - pendingSeek.current) < 0.5
             )
                 pendingSeek.current = undefined;
-            if (pauseIntent.current) el.pause();
+            if (pauseIntent.current) pauseDecoder(el);
             setPaused(pauseIntent.current);
             if (!viewing.current.started) {
                 viewing.current.started = true;
@@ -1382,7 +1432,12 @@ export function Player({
             } else report("progress");
         }
         function pause() {
-            if (disposed || replacing.current) return;
+            const owned = ownPauses.current.get(el) ?? 0;
+            if (owned) ownPauses.current.set(el, owned - 1);
+            if (disposed || !current) return;
+            if (!owned && document.hidden && !el.ended && !pauseIntent.current)
+                latchStop("browser-pause");
+            if (replacing.current) return;
             update();
             if (!el.ended) {
                 setPaused(pauseIntent.current);
@@ -1443,15 +1498,15 @@ export function Player({
                 mediaDuration = el.duration;
                 setDuration(mediaDuration);
             }
-            if (!foreground.current || document.hidden)
-                pauseIntent.current = true;
+            if (!backgroundPlayAllowed()) pauseIntent.current = true;
             if (pauseIntent.current) {
-                el.pause();
+                pauseDecoder(el);
                 setPaused(true);
                 publishReady();
             } else
-                void el.play().catch(() => {
+                playMedia(el, () => {
                     needsGesture = true;
+                    if (document.hidden) latchStop("browser-play-rejected");
                     pauseIntent.current = true;
                     setPaused(true);
                     publishReady();
@@ -1658,7 +1713,7 @@ export function Player({
             el.removeEventListener("error", onError);
             el.removeEventListener("waiting", waiting);
             el.removeEventListener("stalled", waiting);
-            el.pause();
+            pauseDecoder(el);
             if (hls) disposeHlsDecoder(hls, el, !decoderUnmounting.current);
             else {
                 el.removeAttribute("src");
@@ -1954,7 +2009,7 @@ export function Player({
         )
             return;
         const t = setInterval(() => {
-            if (foreground.current && !document.hidden && !pauseIntent.current)
+            if (backgroundPlayAllowed() && !pauseIntent.current)
                 setCountdown((n) => Math.max(0, n - 1));
         }, 1000);
         return () => clearInterval(t);
@@ -1974,8 +2029,7 @@ export function Player({
             nextEligible &&
             !reader &&
             !paused &&
-            foreground.current &&
-            !document.hidden &&
+            backgroundPlayAllowed() &&
             !pauseIntent.current &&
             !buffering &&
             !panel &&
