@@ -66,6 +66,34 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      - name: Preinstall the emulator image with bounded download retries
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [[ -z "$sdk_root" || ! -d "$sdk_root" ]]; then
+            echo "::error::Android SDK root is not available"
+            exit 1
+          fi
+          image="system-images;android-35;google_apis;x86_64"
+          image_path="$sdk_root/system-images/android-35/google_apis/x86_64"
+          mkdir -p "$(dirname "$image_path")"
+          set +o pipefail
+          yes | sdkmanager --sdk_root="$sdk_root" --licenses > /dev/null
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if sdkmanager --sdk_root="$sdk_root" --install "$image" --channel=0; then
+              exit 0
+            fi
+            echo "::warning::Android emulator image download attempt $attempt failed"
+            rm -rf "$image_path"
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep 10
+            fi
+          done
+          echo "::error::Android emulator image download failed after 3 attempts"
+          exit 1
+
       - name: Run Android instrumented audio decoder tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
