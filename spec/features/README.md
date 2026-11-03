@@ -14,7 +14,15 @@ This is a manifest of observable behavior, with stable feature IDs for platform 
 | Device report, About, licenses, Supporter | [Information and support](information.md) |
 | Phone/tablet adaptation and additions | [Touch](touch.md) |
 | Historical acceptance corpus and unresolved findings | [Evidence and deviations](evidence.md) |
+| Shared launch playback ownership and queue | [Session control and queue (draft)](session-control.md) |
+| Downloads and offline | [Offline (launch draft)](offline.md) |
+| Chromecast, AirPlay and browser output | [Casting (launch draft)](casting.md) |
+| Phone/tablet/web as remote for a TV | [Remote (launch draft)](remote.md) |
+| Music library and background audio | [Music (launch draft)](music.md) |
+| Guide, live tune, recordings and schedules | [Live TV and DVR (launch draft)](live-tv.md) |
+| Watch together | [SyncPlay (launch draft)](syncplay.md) |
+| Exact server operations and version limits for launch drafts | [Launch API reference](launch-api.md) |
 
 `phone` diverged before several fixes in `main`. Its touch screens are additive UI requirements, **not** permission to regress main's reporting, detail freshness, Retry deadlines, HLS recovery or release ordering. A phone behavior that differs is identified explicitly in the touch manifest. Missing Android behavior is recorded as a gap, rather than silently promoted into an existing feature.
 
-The manifests describe existing scope: Jellyfin client, video catalog/playback, saved accounts, diagnostics and voluntary support. General music/photo players, casting, downloads, external players, profile editing and configurable home layouts are not implemented at this snapshot. Their settings inventory entries remain gaps.
+The manifests describe existing scope: Jellyfin client, video catalog/playback, saved accounts, diagnostics and voluntary support. Music, casting, downloads, remote control, Live TV/DVR and SyncPlay remain unimplemented at this snapshot but are required launch scope in the draft manifests above (decision 2026-11-03). Their settings inventory entries remain historical gaps until implementation and evidence land. Photos, external players, profile editing and configurable home layouts are separate inventory work; this draft does not decide their launch status. Drafts and planned vectors are not implementation or qualification claims.
