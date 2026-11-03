@@ -62,24 +62,24 @@ button {
     display: grid;
     gap: 8px;
 }
-.setting-list .switch-label {
+/* The whole row is the switch's label: title and help text on the left, the
+   switch at the end, and a click or tap anywhere on the row flips it. */
+.setting-list .switch-row {
     display: flex;
     align-items: center;
     gap: 16px;
     min-height: 44px;
+    cursor: pointer;
 }
-.setting-list .switch-text {
+.setting-list .switch-copy {
     flex: 1 1 auto;
-}
-/* A switch and its help text read as one group; the help aligns with the label text. */
-.setting-list .switch-row {
     display: grid;
     gap: 4px;
 }
 .setting-list .switch-caption {
-    margin: 0;
-    /* Clear of the switch column so help text never runs under the thumb. */
-    padding-right: 68px;
+    display: block;
+    font-weight: 400;
+    line-height: 1.4;
 }
 /* One drawn switch for every boolean setting: a 52×30 track with a thumb that
    moves to the end and fills with the accent when on. The track border keeps 3:1
@@ -124,12 +124,6 @@ input.switch:focus-visible {
     input.switch {
         transition: none;
     }
-}
-.switch-label input:not(.switch) {
-    width: 24px !important;
-    min-height: 24px !important;
-    height: 24px;
-    accent-color: var(--accent);
 }
 fieldset {
     border: 1px solid var(--border);
@@ -570,8 +564,10 @@ a:focus-visible,
     .signin {
         font-size: 24px;
     }
-    .switch-label {
+    .switch-row .switch-text {
         font-size: 24px;
+    }
+    .switch-row {
         min-height: 48px;
     }
     .app-content button:focus,

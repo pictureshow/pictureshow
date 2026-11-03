@@ -334,6 +334,41 @@ test("no conversion notice for a quality cap or audio-only reason", async ({
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
 
+test("a click anywhere on a setting row's title or help text flips its switch", async ({
+    page,
+}) => {
+    await fixture(page);
+    await signIn(page);
+    await page.locator('[data-focus="home-settings"]').click();
+    const rows = page.locator(".setting-list .switch-row");
+    expect(await rows.count()).toBeGreaterThanOrEqual(3);
+    for (const row of await rows.all()) {
+        const toggle = row.getByRole("switch");
+        // One switch per row, named by the title only, described by the help text.
+        await expect(row.getByRole("switch")).toHaveCount(1);
+        await expect(toggle).toHaveAccessibleName(
+            (await row.locator(".switch-text").textContent())!,
+        );
+        await expect(toggle).toHaveAccessibleDescription(
+            (await row.locator(".switch-caption").textContent())!,
+        );
+        expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        const start = await toggle.isChecked();
+        await row.locator(".switch-text").click();
+        await expect(toggle).toBeChecked({ checked: !start });
+        await row.locator(".switch-caption").click();
+        await expect(toggle).toBeChecked({ checked: start });
+        await toggle.click();
+        await expect(toggle).toBeChecked({ checked: !start });
+        await toggle.click();
+        await expect(toggle).toBeChecked({ checked: start });
+    }
+    await page
+        .getByRole("switch", { name: "Conversion notice" })
+        .scrollIntoViewIfNeeded();
+    await capture(page, "settings-row-target");
+});
+
 test("conversion notice switch: settings row defaults On, Off is stored and suppresses only the notice", async ({
     page,
 }) => {
@@ -392,7 +427,8 @@ test("conversion notice switch: settings row defaults On, Off is stored and supp
         }, selector);
     expect(
         Math.abs(
-            (await textStart(".switch-caption")) - (await textStart("label")),
+            (await textStart(".switch-caption")) -
+                (await textStart(".switch-text")),
         ),
     ).toBeLessThanOrEqual(1);
     expect(captionBox.y - (toggleBox.y + toggleBox.height)).toBeLessThan(16);
@@ -678,11 +714,41 @@ test("speed returns to 1× with a visible explanation when a replacement stream 
     await expect(
         dialog.getByRole("radio", { name: "1× (normal)" }),
     ).toHaveAttribute("aria-checked", "true");
-    // R4: Done stays in view at 1280×800 with the reset message showing.
-    await expect(dialog.getByRole("button", { name: "Done" })).toBeInViewport({
-        ratio: 1,
-    });
+    // R4/PLAY-25: the reset message sits directly under the title, above the
+    // speeds, and both it and Done are fully in view without scrolling.
+    const message = dialog.getByRole("status");
+    const firstRate = dialog.getByRole("radio").first();
+    const heading = dialog.getByRole("heading", { name: "Speed" });
+    const inView = async () => {
+        await expect(message).toBeInViewport({ ratio: 1 });
+        await expect(
+            dialog.getByRole("button", { name: "Done" }),
+        ).toBeInViewport({ ratio: 1 });
+        const [h, m, r] = [
+            (await heading.boundingBox())!,
+            (await message.boundingBox())!,
+            (await firstRate.boundingBox())!,
+        ];
+        expect(m.y).toBeGreaterThanOrEqual(h.y + h.height);
+        expect(m.y - (h.y + h.height)).toBeLessThan(32);
+        expect(m.y + m.height).toBeLessThanOrEqual(r.y);
+        // The message is outside the scrolling body.
+        expect(
+            await message.evaluate((e) => !e.closest(".player-panel-body")),
+        ).toBe(true);
+    };
+    await inView();
+    // A fade above the pinned Done shows that cut content scrolls.
+    expect(
+        await dialog
+            .locator(".player-panel-body")
+            .evaluate((e) => getComputedStyle(e, "::after").backgroundImage),
+    ).toContain("gradient");
     await capture(page, "speed-reset-panel");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await inView();
+    await capture(page, "speed-reset-panel-390");
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
@@ -1033,6 +1099,26 @@ test.describe("touch", () => {
         await capture(page, "settings-switches-390");
         await page.getByRole("switch", { name: "Conversion notice" }).tap();
         await capture(page, "settings-switches-390-off");
+    });
+    test("phone width: tapping a setting's title or help text flips its switch", async ({
+        page,
+    }) => {
+        await fixture(page);
+        await signIn(page);
+        await page.locator('[data-focus="home-settings"]').tap();
+        const rows = page.locator(".setting-list .switch-row");
+        expect(await rows.count()).toBeGreaterThanOrEqual(3);
+        for (const row of await rows.all()) {
+            const toggle = row.getByRole("switch");
+            const start = await toggle.isChecked();
+            await row.locator(".switch-text").tap();
+            await expect(toggle).toBeChecked({ checked: !start });
+            await row.locator(".switch-caption").tap();
+            await expect(toggle).toBeChecked({ checked: start });
+        }
+        const notice = page.getByRole("switch", { name: "Conversion notice" });
+        await notice.scrollIntoViewIfNeeded();
+        await capture(page, "settings-row-target-390");
     });
     test("tapping the notice opens Playback info, and Done closes it", async ({
         page,

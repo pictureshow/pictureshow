@@ -242,9 +242,36 @@
     padding: 4px;
     margin: -4px;
 }
+/* A fade above the pinned Done shows that cut content scrolls. It is sticky, so
+   at the end of the scroll it sits below the last line instead of over it. */
+.player-overlay .player-panel-body::after {
+    content: "";
+    position: sticky;
+    bottom: -4px;
+    display: block;
+    height: 1.5rem;
+    pointer-events: none;
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        var(--color-app-playerPanel)
+    );
+}
 .player-overlay .player-panel > h2,
+.player-overlay .player-panel-status,
 .player-overlay .player-panel-done {
     flex: none;
+}
+.player-overlay .player-panel-status {
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.8rem;
+    border-left: 3px solid var(--accent);
+    border-radius: 0.4rem;
+    background: var(--color-app-playerStatus);
+    line-height: 1.4;
+}
+.player-overlay .player-panel-status:empty {
+    display: none;
 }
 .player-overlay .player-panel-done {
     margin-top: 1rem;

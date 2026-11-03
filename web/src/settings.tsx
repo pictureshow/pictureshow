@@ -405,23 +405,30 @@ function SwitchRow({
     onChange: (value: boolean) => void;
     focus?: string;
 }) {
+    const labelId = `${captionId}-label`;
+    // The whole row (title and help text) is one label, so a click or tap anywhere
+    // on it flips the switch. aria-labelledby keeps the name to the title alone;
+    // the help text is the description.
     return (
-        <div className="switch-row">
-            <label className="switch-label">
-                <span className="switch-text">{label}</span>
-                <input
-                    type="checkbox"
-                    role="switch"
-                    className="switch"
-                    data-focus={focus}
-                    aria-describedby={captionId}
-                    checked={checked}
-                    onChange={(e) => onChange(e.target.checked)}
-                />
-            </label>
-            <p className="muted switch-caption" id={captionId}>
-                {caption}
-            </p>
-        </div>
+        <label className="switch-row">
+            <span className="switch-copy">
+                <span className="switch-text" id={labelId}>
+                    {label}
+                </span>
+                <span className="muted switch-caption" id={captionId}>
+                    {caption}
+                </span>
+            </span>
+            <input
+                type="checkbox"
+                role="switch"
+                className="switch"
+                data-focus={focus}
+                aria-labelledby={labelId}
+                aria-describedby={captionId}
+                checked={checked}
+                onChange={(e) => onChange(e.target.checked)}
+            />
+        </label>
     );
 }

@@ -3325,6 +3325,13 @@ export function Player({
                 }}
             >
                 <h2>{panel && panelTitle(panel)}</h2>
+                {/* PLAY-25: the reset explanation sits under the title, outside the
+                    scrolling body, so it is never below the fold. */}
+                {panel === "Speed" && (
+                    <p role="status" className="player-panel-status">
+                        {speedMessage}
+                    </p>
+                )}
                 {/* The body scrolls; the title and Done stay in view. */}
                 <div className="player-panel-body">
                     {panel === "Speed" && (
@@ -3350,7 +3357,6 @@ export function Player({
                                     ? " The server is converting this video, so faster speeds may pause to buffer."
                                     : ""}
                             </p>
-                            <p role="status">{speedMessage}</p>
                         </div>
                     )}
                     {panel === "Info" && info()}
