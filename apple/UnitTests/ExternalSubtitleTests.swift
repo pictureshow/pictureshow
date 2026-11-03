@@ -283,8 +283,10 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
     private func makeLoader(clock: SubtitleRetryClock) -> ExternalTextSubtitles {
         ExternalTextSubtitles(fetch: { try await ExternalTextSubtitles.fetchBounded($0, configuration: ExternalSubtitleHTTP.configuration()) }, sleep: { try await clock.sleep($0) })
     }
-    private func eventually(_ message: String, _ predicate: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    /// `timeout` is real time. Waits that need many fake-clock retries, each a real loopback
+    /// request, get a longer budget: a 3-core hosted CI simulator manages about 12 per second.
+    private func eventually(_ message: String, timeout: Duration = .seconds(2), _ predicate: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
         while ContinuousClock.now < deadline {
             if predicate() { return }
             try await Task.sleep(for: .milliseconds(5))
@@ -767,7 +769,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
         defer { loader.release(); clock.finish() }
         let (session, player) = try await readySession(loader: loader)
-        try await eventually("Optional retry clock did not cross the 242-second held-failure interval") { clock.elapsedMs >= 242_000 }
+        try await eventually("Optional retry clock did not cross the 242-second held-failure interval", timeout: .seconds(30)) { clock.elapsedMs >= 242_000 }
         XCTAssertEqual(Array(clock.delays.prefix(12)), [1_000,2_000,3_000,4_000,5_000,6_000,7_000,8_000,9_000,10_000,10_000,10_000])
         XCTAssertTrue(loader.unavailable); XCTAssertTrue(loader.loading)
         XCTAssertGreaterThanOrEqual(captionRequests.count, 29)
