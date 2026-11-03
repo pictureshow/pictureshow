@@ -1,0 +1,237 @@
+name: Apple CI
+
+on:
+  push:
+    paths:
+      - apple/**
+      - spec/**
+      - .github/workflows/ci-apple.yml
+  pull_request:
+    paths:
+      - apple/**
+      - spec/**
+      - .github/workflows/ci-apple.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apple:
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: apple-source
+        name: Check whether Apple sources exist on this branch
+        run: |
+          if [[ -f apple/project.yml ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Apple sources are not present on this branch; skipping Apple checks."
+          fi
+
+      - name: Prepare results directory
+        if: steps.apple-source.outputs.available == 'true'
+        run: mkdir -p apple-test-results
+
+      - name: Install XcodeGen when it is not on the runner image
+        if: steps.apple-source.outputs.available == 'true'
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate the Xcode project
+        id: project
+        if: steps.apple-source.outputs.available == 'true'
+        continue-on-error: true
+        run: xcodegen generate --spec apple/project.yml
+
+      - name: Select available iOS and tvOS simulators
+        id: simulators
+        if: steps.apple-source.outputs.available == 'true' && steps.project.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import subprocess
+
+          devices = json.loads(subprocess.check_output(
+              ["xcrun", "simctl", "list", "devices", "available", "--json"], text=True
+          ))["devices"]
+          found = {}
+          for runtime, runtime_devices in devices.items():
+              for device in runtime_devices:
+                  name = device.get("name", "")
+                  if not device.get("isAvailable", True):
+                      continue
+                  if runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS") and name.startswith("iPhone"):
+                      found.setdefault("ios_udid", device["udid"])
+                  if runtime.startswith("com.apple.CoreSimulator.SimRuntime.tvOS") and name.startswith("Apple TV"):
+                      found.setdefault("tvos_udid", device["udid"])
+          if set(found) != {"ios_udid", "tvos_udid"}:
+              raise SystemExit(f"No available iOS and tvOS simulator pair found: {found}")
+          for key, value in found.items():
+              print(f"{key}={value}")
+          PY
+
+      - name: Build and run iOS unit tests on a simulator
+        id: ios-tests
+        if: steps.apple-source.outputs.available == 'true' && steps.project.outcome == 'success' && steps.simulators.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          PICTURESHOW_SPEC_DIR: ${{ github.workspace }}/spec
+          IOS_SIMULATOR_ID: ${{ steps.simulators.outputs.ios_udid }}
+        run: |
+          set -o pipefail
+          destination="platform=iOS Simulator,id=$IOS_SIMULATOR_ID"
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-iOS \
+            -destination "$destination" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            build-for-testing CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/ios-build.log
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-iOS \
+            -destination "$destination" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            -only-testing:Pictureshow-iOS-UnitTests \
+            -resultBundlePath apple-test-results/ios-unit-tests.xcresult \
+            test-without-building CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/ios-unit-tests.log
+
+      - name: Build and run tvOS unit tests on a simulator
+        id: tvos-tests
+        if: steps.apple-source.outputs.available == 'true' && steps.project.outcome == 'success' && steps.simulators.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          PICTURESHOW_SPEC_DIR: ${{ github.workspace }}/spec
+          TVOS_SIMULATOR_ID: ${{ steps.simulators.outputs.tvos_udid }}
+        run: |
+          set -o pipefail
+          destination="platform=tvOS Simulator,id=$TVOS_SIMULATOR_ID"
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-tvOS \
+            -destination "$destination" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            build-for-testing CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/tvos-build.log
+          xcodebuild \
+            -project apple/Pictureshow.xcodeproj \
+            -scheme Pictureshow-tvOS \
+            -destination "$destination" \
+            -derivedDataPath "$RUNNER_TEMP/PictureshowDerivedData" \
+            -parallel-testing-enabled NO \
+            -only-testing:Pictureshow-tvOS-UnitTests \
+            -resultBundlePath apple-test-results/tvos-unit-tests.xcresult \
+            test-without-building CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apple-test-results/tvos-unit-tests.log
+
+      - name: Run Swift core tests and shared vectors
+        id: core-package
+        if: steps.apple-source.outputs.available == 'true'
+        continue-on-error: true
+        shell: bash
+        env:
+          PICTURESHOW_SPEC_DIR: ${{ github.workspace }}/spec
+        run: |
+          set -o pipefail
+          swift test --package-path apple/PictureshowCore 2>&1 | tee apple-test-results/core-package-tests.log
+
+      - name: Run Swift transport tests
+        id: transport-package
+        if: steps.apple-source.outputs.available == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          swift test --package-path apple/PictureshowTransport 2>&1 | tee apple-test-results/transport-package-tests.log
+
+      - name: Collect Apple test counts
+        if: always() && steps.apple-source.outputs.available == 'true'
+        shell: bash
+        run: |
+          set +e
+          for result in apple-test-results/*.xcresult; do
+            [[ -d "$result" ]] || continue
+            summary="${result%.xcresult}-summary.json"
+            xcrun xcresulttool get test-results summary --path "$result" --compact > "$summary"
+          done
+          python3 - <<'PY'
+          import glob
+          import json
+          import re
+          from pathlib import Path
+
+          totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+          summaries = glob.glob("apple-test-results/*-summary.json")
+          for filename in summaries:
+              try:
+                  result = json.loads(Path(filename).read_text())
+              except (OSError, json.JSONDecodeError):
+                  continue
+              totals["tests"] += int(result.get("totalTestCount", 0))
+              totals["failures"] += int(result.get("failedTests", 0))
+              totals["skipped"] += int(result.get("skippedTests", 0))
+
+          for filename in ("core-package-tests.log", "transport-package-tests.log"):
+              path = Path("apple-test-results") / filename
+              if not path.exists():
+                  continue
+              matches = re.findall(r"Executed\s+(\d+)\s+tests?,\s+with\s+(\d+)\s+failures?", path.read_text(errors="replace"))
+              if matches:
+                  tests, failures = map(int, matches[-1])
+                  totals["tests"] += tests
+                  totals["failures"] += failures
+
+          Path("apple-test-results/test-counts.json").write_text(json.dumps(totals, indent=2) + "\n")
+          print(json.dumps(totals, sort_keys=True))
+          PY
+
+      - name: Explain missing Apple sources
+        if: steps.apple-source.outputs.available != 'true'
+        run: |
+          mkdir -p apple-test-results
+          echo '{"tests":0,"failures":0,"errors":0,"skipped":0}' > apple-test-results/test-counts.json
+          echo "Apple sources are not present on this branch; 0 tests ran."
+
+      - name: Enforce Apple test results
+        if: always() && steps.apple-source.outputs.available == 'true'
+        env:
+          PROJECT_OUTCOME: ${{ steps.project.outcome }}
+          SIMULATORS_OUTCOME: ${{ steps.simulators.outcome }}
+          IOS_OUTCOME: ${{ steps.ios-tests.outcome }}
+          TVOS_OUTCOME: ${{ steps.tvos-tests.outcome }}
+          CORE_PACKAGE_OUTCOME: ${{ steps.core-package.outcome }}
+          TRANSPORT_PACKAGE_OUTCOME: ${{ steps.transport-package.outcome }}
+        run: |
+          for outcome in "$PROJECT_OUTCOME" "$SIMULATORS_OUTCOME" "$IOS_OUTCOME" "$TVOS_OUTCOME" "$CORE_PACKAGE_OUTCOME" "$TRANSPORT_PACKAGE_OUTCOME"; do
+            if [[ "$outcome" != success ]]; then
+              echo "Apple CI step did not succeed: $outcome"
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: apple-test-results
+          path: apple-test-results
+          retention-days: 5
+          if-no-files-found: ignore
