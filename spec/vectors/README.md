@@ -161,6 +161,13 @@ metadata: label that metadata separately from the actual received formats, and n
 codecs into a claim about the output. An explicit all-copy audio/video URL is remux; otherwise retain the
 server's negotiated method. These vectors do not prove real decoder speed, pitch or encoded output behavior.
 
+`conversion-notice` (PLAY-27) takes a report-enum `method`, invented playback `url`, `reasons` (array of
+TranscodeReason strings as the server sent them), optional Jellyfin `source` (default empty) and optional
+`subtitleIndex` (default -1, Off). It returns the notice body, or the string `none` when no notice applies. The
+title and footer are fixed strings in PLAY-27. The cases model observed reason sets: a browser without an HEVC path
+(video+audio codec, notice), a browser that copies video and converts audio (no notice), and a Safari remux
+(container+codec tag, no notice), plus caps, burn-in, unknown reasons and the all-copy URL.
+
 ## Shared control trace format (schema 1)
 
 The five control suites below execute `core/control` production reducers through `ControlVectorsTest`.

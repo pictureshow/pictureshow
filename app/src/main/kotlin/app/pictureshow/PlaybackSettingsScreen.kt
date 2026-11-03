@@ -7,6 +7,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -128,6 +130,7 @@ internal val subtitleModes = listOf("Default", "Always", "OnlyForced", "None", "
 internal fun <T> nextSetting(values: List<T>, current: T): T = values[(values.indexOf(current) + 1).mod(values.size)]
 internal fun preferenceLanguageLabel(value: String): String = if (value.isBlank()) "No preference" else trackLanguage(value) ?: value
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlaybackSettingsScreen(
     state: PlaybackSettingsState,
@@ -242,13 +245,24 @@ internal fun PlaybackSettingsScreen(
         // The decoder report is for troubleshooting, so it follows the viewer's own settings.
         Text("Troubleshooting", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text("A technical report of the video and audio formats this TV can play.")
-        Button(
-            onClick = {
-                restoreEntry = "this-tv"
-                onThisTv()
-            },
-            modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
-        ) { Text("This TV") }
+        // Beside This TV, so the vertical remote path from server preferences to This TV and Back stays unchanged.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Button(
+                onClick = {
+                    restoreEntry = "this-tv"
+                    onThisTv()
+                },
+                modifier = Modifier.focusRequester(thisTvFocus).testTag("settings:this-tv")
+            ) { Text("This TV") }
+            Button(
+                onClick = { onLocal { it.copy(conversionNotice = !it.conversionNotice) } },
+                modifier = Modifier.testTag("settings:conversion-notice").semantics {
+                    toggleableState = ToggleableState(local.conversionNotice)
+                    stateDescription = if (local.conversionNotice) "On" else "Off"
+                }
+            ) { Text("Tell me when the server converts video: ${if (local.conversionNotice) "On" else "Off"}") }
+        }
+        Text("When this TV can't play a video's format, the server converts it, which costs quality and server work. The notice says why and how to avoid it.")
         Button(onClick = onBack, modifier = Modifier.testTag("settings:back")) { Text("Back") }
     }
     LaunchedEffect(Unit) {

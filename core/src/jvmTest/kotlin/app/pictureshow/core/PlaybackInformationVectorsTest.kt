@@ -3,6 +3,7 @@
  */
 package app.pictureshow.core
 
+import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
@@ -46,6 +47,18 @@ class PlaybackInformationVectorsTest {
                 )
                 "bitrate" -> PlaybackInformation.bitrate(input["bitrate"]?.jsonPrimitive?.intOrNull)
                 "speed" -> PlaybackSpeeds.allowed(input.getValue("speed").jsonPrimitive.float, text("encoded") == "true").toString()
+                "conversion-notice" -> ConversionNotice.of(
+                    PlayDecision(
+                        "item",
+                        input["source"]?.let { PlaybackJson.decodeFromJsonElement<MediaSourceInfo>(it) } ?: MediaSourceInfo(),
+                        PlayMethod.valueOf(text("method")),
+                        text("url"),
+                        emptyMap(),
+                        null,
+                        input.getValue("reasons").jsonArray.map { it.jsonPrimitive.content }
+                    ),
+                    input["subtitleIndex"]?.jsonPrimitive?.intOrNull ?: -1
+                )?.message ?: "none"
                 else -> error("Unknown operation")
             }
             assertEquals(case.getValue("expected").jsonPrimitive.content, actual, case.getValue("id").jsonPrimitive.content)

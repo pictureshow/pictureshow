@@ -436,10 +436,530 @@
         "reason": "InvalidVideoBitrate"
       },
       "expected": "The server reported an additional conversion requirement that this client does not recognize."
+    },
+    {
+      "id": "playback-information.conversion-notice.windows-chrome-video-and-audio",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "AudioCodecNotSupported"
+        ]
+      },
+      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.windows-chrome-secondary-audio",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "AudioCodecNotSupported",
+          "SecondaryAudioNotSupported"
+        ]
+      },
+      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.windows-chrome-video-only",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported"
+        ]
+      },
+      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.mac-chrome-audio-only",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=av1,hevc,h264,vp9&AudioCodec=aac",
+        "reasons": [
+          "AudioCodecNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.audio-channels-only",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "AudioChannelsNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.safari-remux",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "ContainerNotSupported",
+          "VideoCodecTagNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.codec-tag-only",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecTagNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.container-only",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "ContainerNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.quality-cap-container",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "ContainerBitrateExceedsLimit"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.quality-cap-video",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoBitrateNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.cap-and-codec",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoBitrateNotSupported",
+          "VideoCodecNotSupported"
+        ]
+      },
+      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.subtitle-burn-in",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "SubtitleCodecNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "This device can't show the selected subtitles, so the server is burning them into the video. Choose a text subtitle track or turn subtitles off to watch without conversion."
+    },
+    {
+      "id": "playback-information.conversion-notice.subtitle-converted-not-burned",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "SubtitleCodecNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Hls"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.subtitle-off",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "SubtitleCodecNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": -1
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.burn-in-without-subtitle-reason",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "ContainerBitrateExceedsLimit"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.subtitle-and-level",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "SubtitleCodecNotSupported",
+          "VideoLevelNotSupported"
+        ],
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.hdr-range",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoRangeTypeNotSupported"
+        ]
+      },
+      "expected": "This device can't show the video's HDR format, so the server is converting it. Play an SDR version if there is one, or watch on a device that supports this HDR format."
+    },
+    {
+      "id": "playback-information.conversion-notice.framerate-and-hdr",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoFramerateNotSupported",
+          "VideoRangeTypeNotSupported"
+        ]
+      },
+      "expected": "This device can't show the video's HDR format, so the server is converting it. Play an SDR version if there is one, or watch on a device that supports this HDR format."
+    },
+    {
+      "id": "playback-information.conversion-notice.profile",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoProfileNotSupported"
+        ]
+      },
+      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.level",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoLevelNotSupported"
+        ]
+      },
+      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.bit-depth",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoBitDepthNotSupported"
+        ]
+      },
+      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.ref-frames",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "RefFramesNotSupported"
+        ]
+      },
+      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.resolution",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoResolutionNotSupported"
+        ]
+      },
+      "expected": "The video's resolution is higher than this device supports, so the server is reducing it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.framerate",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoFramerateNotSupported",
+          "AudioChannelsNotSupported"
+        ]
+      },
+      "expected": "The video's frame rate is higher than this device supports, so the server is reducing it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.interlaced",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "InterlacedVideoNotSupported"
+        ]
+      },
+      "expected": "This device can't show interlaced video, so the server is deinterlacing it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.anamorphic",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "AnamorphicVideoNotSupported"
+        ]
+      },
+      "expected": "This device can't show the video's non-square pixels, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.rotation",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoRotationNotSupported"
+        ]
+      },
+      "expected": "This device can't rotate the video, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.lowercase-code",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "videocodecnotsupported"
+        ]
+      },
+      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+    },
+    {
+      "id": "playback-information.conversion-notice.unknown-reason",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "InvalidVideoBitrate"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.no-reasons",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": []
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.unknown-video-stream-info",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "UnknownVideoStreamInfo"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.direct-play-error",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "DirectPlayError"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.direct-play",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "DirectPlay",
+        "url": "https://server.example/videos/item/stream?static=true",
+        "reasons": [
+          "VideoCodecNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.direct-stream",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "DirectStream",
+        "url": "https://server.example/videos/item/stream.mp4",
+        "reasons": [
+          "VideoCodecNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.all-copy-url",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=copy",
+        "reasons": [
+          "VideoCodecNotSupported"
+        ]
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.video-copy-audio-converted",
+      "operation": "conversion-notice",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "AudioCodecNotSupported"
+        ]
+      },
+      "expected": "none"
     }
   ],
   "sources": [
     "core/src/commonMain/kotlin/app/pictureshow/core/playback/PlaybackInformation.kt",
-    "app/src/test/kotlin/app/pictureshow/PlaybackSpeedTest.kt"
+    "app/src/test/kotlin/app/pictureshow/PlaybackSpeedTest.kt",
+    "core/src/commonMain/kotlin/app/pictureshow/core/playback/ConversionNotice.kt"
   ]
 }
