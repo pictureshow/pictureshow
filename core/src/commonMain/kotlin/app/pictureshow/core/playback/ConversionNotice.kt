@@ -8,56 +8,50 @@ package app.pictureshow.core.playback
  *
  * It fires only for a device limit that forces video encoding. Viewer quality caps, audio-only
  * conversion, remux (container or codec-tag changes) and direct play never produce a notice;
- * Playback info (PLAY-26) explains those.
+ * Playback info (PLAY-26) explains those and carries the full remedy.
+ *
+ * [title] and [reason] are short on purpose: the notice is on screen for 10 s. Each platform
+ * appends its own one-line path to Playback info (for example "Press Down, then choose Playback info.").
  */
-data class ConversionNotice(val message: String) {
-    val title: String get() = TITLE
-
+data class ConversionNotice(val title: String, val reason: String) {
     companion object {
-        const val TITLE = "The server is converting this video"
-        const val DETAILS = "Playback info in the player controls has the details."
+        /** The default device noun; each platform passes its own ("this TV", "this phone", "this browser"). */
+        const val DEVICE = "this device"
 
-        /** Ordered by how useful the remedy is: fixing the first category is what lets the video play directly. */
+        /** Ordered by how useful fixing it is: the first category is what lets the video play directly. */
         private val categories: List<Pair<Set<String>, String>> = listOf(
-            setOf("videocodecnotsupported") to
-                "This device can't decode the video's format, so the server is converting it.",
-            setOf("videorangetypenotsupported") to
-                "This device can't show the video's HDR format, so the server is converting it.",
+            setOf("videocodecnotsupported") to "Its video format won't play on %s.",
+            setOf("videorangetypenotsupported") to "Its HDR format won't play on %s.",
             setOf("videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported") to
-                "The video's encoding goes beyond what this device's decoder supports, so the server is converting it.",
-            setOf("videoresolutionnotsupported") to
-                "The video's resolution is higher than this device supports, so the server is reducing it.",
-            setOf("videoframeratenotsupported") to
-                "The video's frame rate is higher than this device supports, so the server is reducing it.",
-            setOf("interlacedvideonotsupported") to
-                "This device can't show interlaced video, so the server is deinterlacing it.",
-            setOf("anamorphicvideonotsupported") to
-                "This device can't show the video's non-square pixels, so the server is converting it.",
-            setOf("videorotationnotsupported") to
-                "This device can't rotate the video, so the server is converting it."
+                "Its video encoding is too demanding for %s.",
+            setOf("videoresolutionnotsupported") to "Its resolution is too high for %s.",
+            setOf("videoframeratenotsupported") to "Its frame rate is too high for %s.",
+            setOf("interlacedvideonotsupported") to "Its interlaced video won't play on %s.",
+            setOf("anamorphicvideonotsupported") to "Its non-square pixels won't display on %s.",
+            setOf("videorotationnotsupported") to "Its rotation won't display on %s."
         )
+        private const val SUBTITLE = "The selected subtitles must be burned in for %s."
 
-        private const val SUBTITLE_WHY = "This device can't show the selected subtitles, so the server is burning them into the video."
-        private const val SUBTITLE_FIX = "Choose a text subtitle track or turn subtitles off to watch without conversion."
-        private const val HDR_FIX = "Play an SDR version if there is one, or watch on a device that supports this HDR format."
-        private const val VIDEO_FIX = "Play another version of this title if there is one, or watch on a device that supports this format."
+        fun title(device: String = DEVICE): String = "Converting this video for $device"
 
         /**
          * [subtitleIndex] is the selected subtitle stream (-1 for Off). Reason codes compare case-insensitively.
          * Returns null when no notice applies.
          */
-        fun of(decision: PlayDecision, subtitleIndex: Int): ConversionNotice? {
-            // Remux, including Jellyfin's all-copy transcode URL, does not re-encode video.
-            if (PlaybackInformation.method(decision) != "Transcode") return null
-            if (PlaybackInformation.videoCopied(decision)) return null
+        fun of(decision: PlayDecision, subtitleIndex: Int, device: String = DEVICE): ConversionNotice? {
+            if (decision.method != PlayMethod.Transcode) return null
             val reasons = decision.transcodeReasons.map { it.lowercase() }.toSet()
-            categories.firstOrNull { (codes, _) -> codes.any(reasons::contains) }?.let { (codes, why) ->
-                val fix = if ("videorangetypenotsupported" in codes) HDR_FIX else VIDEO_FIX
-                return ConversionNotice("$why $fix")
-            }
-            val burnedIn = PlaybackInformation.subtitle(decision.mediaSource, subtitleIndex) == "Burned in"
-            if ("subtitlecodecnotsupported" in reasons && burnedIn) return ConversionNotice("$SUBTITLE_WHY $SUBTITLE_FIX")
-            return null
+            val burnedIn = "subtitlecodecnotsupported" in reasons &&
+                PlaybackInformation.subtitle(decision.mediaSource, subtitleIndex) == "Burned in"
+            // A copied video stream is a remux, so its video reasons did not force encoding. Burning subtitles
+            // into the picture always re-encodes it, so a burn-in report wins over a `VideoCodec=copy` URL.
+            val copied = PlaybackInformation.method(decision) != "Transcode" || PlaybackInformation.videoCopied(decision)
+            val why = when {
+                copied -> SUBTITLE.takeIf { burnedIn }
+                else -> categories.firstOrNull { (codes, _) -> codes.any(reasons::contains) }?.second
+                    ?: SUBTITLE.takeIf { burnedIn }
+            } ?: return null
+            return ConversionNotice(title(device), why.replace("%s", device))
         }
     }
 }

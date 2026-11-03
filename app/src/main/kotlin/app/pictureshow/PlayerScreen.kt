@@ -88,7 +88,6 @@ import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.nextEpisodeTriggerMs
-import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlaybackClient
 import app.pictureshow.core.trickplayTile
@@ -244,6 +243,7 @@ internal fun PlayerItemScreen(
     var deferredNext by remember { mutableStateOf<MediaItem?>(null) }
     var advanceReported by remember { mutableStateOf(false) }
     var exitRequested by remember { mutableStateOf(false) }
+    var topCues by remember { mutableStateOf(false) }
     var conversionDetailsRequested by remember { mutableStateOf(false) }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
@@ -667,11 +667,21 @@ internal fun PlayerItemScreen(
                 }
             }
             val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
-            PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop), output.subtitleDiagnostics)
+            PlayerSubtitles(
+                player,
+                localPreferences.appearance,
+                overlayTop?.minus(playerTop),
+                output.subtitleDiagnostics,
+                onTopCues = { topCues = it }
+            )
             // PLAY-27: top of the frame, away from bottom subtitles and controls; never takes remote focus.
-            ConversionNoticeHost(
-                state.decision?.takeIf { localPreferences.conversionNotice }?.let { ConversionNotice.of(it, state.subtitleIndex) },
-                allowed = player != null &&
+            // It yields while a top-positioned cue (signs, forced translations) is on screen.
+            PlayerConversionNotice(
+                state.decision,
+                state.subtitleIndex,
+                localPreferences,
+                allowed = !topCues &&
+                    player != null &&
                     foreground &&
                     !state.preparing &&
                     error == null &&
@@ -680,7 +690,8 @@ internal fun PlayerItemScreen(
                     extraPanel == null &&
                     !chaptersOpen &&
                     !seekOpen,
-                modifier = Modifier.align(Alignment.TopStart).padding(36.dp)
+                // 48 dp is the TV overscan-safe side margin.
+                modifier = Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 36.dp)
             ) {
                 controls = true
                 interaction++
@@ -991,7 +1002,8 @@ internal fun PlayerSubtitles(
     player: Player?,
     appearance: SubtitleAppearance,
     overlayTop: Int? = null,
-    diagnostics: SubtitleCueDiagnostics? = null
+    diagnostics: SubtitleCueDiagnostics? = null,
+    onTopCues: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val subtitles = remember { SubtitleView(context).apply { isFocusable = false } }
@@ -1037,21 +1049,25 @@ internal fun PlayerSubtitles(
             onDispose { manager?.removeCaptioningChangeListener(listener) }
         }
     }
+    val currentOnTopCues by rememberUpdatedState(onTopCues)
     DisposableEffect(player) {
         videoSize = player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
         cues = player?.currentCues ?: CueGroup.EMPTY_TIME_ZERO
+        currentOnTopCues(cuesNearTop(cues.cues))
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
                 videoSize = size
             }
             override fun onCues(cueGroup: CueGroup) {
                 cues = cueGroup
+                currentOnTopCues(cuesNearTop(cueGroup.cues))
             }
         }
         player?.addListener(listener)
         onDispose {
             player?.removeListener(listener)
             subtitles.setCues(emptyList())
+            currentOnTopCues(false)
         }
     }
 }

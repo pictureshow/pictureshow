@@ -121,3 +121,16 @@ internal fun subtitleCuesInFrame(cues: List<Cue>, videoWidth: Int, videoHeight: 
         builder.build()
     }
 }
+
+/**
+ * PLAY-27 yields to subtitles placed in the top half of the frame (signs, forced translations, WebVTT `line:0`,
+ * SSA `\an8`). Cues without an explicit line sit at the bottom, and a negative line number counts from the bottom.
+ */
+internal fun cuesNearTop(cues: List<Cue>): Boolean = cues.any { cue ->
+    cue.line != Cue.DIMEN_UNSET &&
+        when (cue.lineType) {
+            Cue.LINE_TYPE_FRACTION -> cue.line < 0.5f
+            Cue.LINE_TYPE_NUMBER -> cue.line >= 0f
+            else -> false
+        }
+}

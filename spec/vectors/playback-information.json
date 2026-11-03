@@ -446,9 +446,10 @@
         "reasons": [
           "VideoCodecNotSupported",
           "AudioCodecNotSupported"
-        ]
+        ],
+        "device": "this browser"
       },
-      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this browser\nIts video format won't play on this browser."
     },
     {
       "id": "playback-information.conversion-notice.windows-chrome-secondary-audio",
@@ -460,9 +461,10 @@
           "VideoCodecNotSupported",
           "AudioCodecNotSupported",
           "SecondaryAudioNotSupported"
-        ]
+        ],
+        "device": "this browser"
       },
-      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this browser\nIts video format won't play on this browser."
     },
     {
       "id": "playback-information.conversion-notice.windows-chrome-video-only",
@@ -472,9 +474,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoCodecNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV."
     },
     {
       "id": "playback-information.conversion-notice.mac-chrome-audio-only",
@@ -484,7 +487,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=av1,hevc,h264,vp9&AudioCodec=aac",
         "reasons": [
           "AudioCodecNotSupported"
-        ]
+        ],
+        "device": "this browser"
       },
       "expected": "none"
     },
@@ -496,7 +500,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "AudioChannelsNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -509,7 +514,8 @@
         "reasons": [
           "ContainerNotSupported",
           "VideoCodecTagNotSupported"
-        ]
+        ],
+        "device": "this browser"
       },
       "expected": "none"
     },
@@ -521,7 +527,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoCodecTagNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -533,7 +540,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "ContainerNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -545,7 +553,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "ContainerBitrateExceedsLimit"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -557,7 +566,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoBitrateNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -570,9 +580,10 @@
         "reasons": [
           "VideoBitrateNotSupported",
           "VideoCodecNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV."
     },
     {
       "id": "playback-information.conversion-notice.subtitle-burn-in",
@@ -583,6 +594,7 @@
         "reasons": [
           "SubtitleCodecNotSupported"
         ],
+        "device": "this TV",
         "source": {
           "MediaStreams": [
             {
@@ -600,7 +612,7 @@
         },
         "subtitleIndex": 3
       },
-      "expected": "This device can't show the selected subtitles, so the server is burning them into the video. Choose a text subtitle track or turn subtitles off to watch without conversion."
+      "expected": "Converting this video for this TV\nThe selected subtitles must be burned in for this TV."
     },
     {
       "id": "playback-information.conversion-notice.subtitle-converted-not-burned",
@@ -611,6 +623,7 @@
         "reasons": [
           "SubtitleCodecNotSupported"
         ],
+        "device": "this TV",
         "source": {
           "MediaStreams": [
             {
@@ -639,6 +652,7 @@
         "reasons": [
           "SubtitleCodecNotSupported"
         ],
+        "device": "this TV",
         "source": {
           "MediaStreams": [
             {
@@ -667,6 +681,7 @@
         "reasons": [
           "ContainerBitrateExceedsLimit"
         ],
+        "device": "this TV",
         "source": {
           "MediaStreams": [
             {
@@ -696,6 +711,7 @@
           "SubtitleCodecNotSupported",
           "VideoLevelNotSupported"
         ],
+        "device": "this TV",
         "source": {
           "MediaStreams": [
             {
@@ -713,7 +729,7 @@
         },
         "subtitleIndex": 3
       },
-      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV."
     },
     {
       "id": "playback-information.conversion-notice.hdr-range",
@@ -723,9 +739,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoRangeTypeNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't show the video's HDR format, so the server is converting it. Play an SDR version if there is one, or watch on a device that supports this HDR format."
+      "expected": "Converting this video for this TV\nIts HDR format won't play on this TV."
     },
     {
       "id": "playback-information.conversion-notice.framerate-and-hdr",
@@ -736,9 +753,10 @@
         "reasons": [
           "VideoFramerateNotSupported",
           "VideoRangeTypeNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't show the video's HDR format, so the server is converting it. Play an SDR version if there is one, or watch on a device that supports this HDR format."
+      "expected": "Converting this video for this TV\nIts HDR format won't play on this TV."
     },
     {
       "id": "playback-information.conversion-notice.profile",
@@ -748,9 +766,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoProfileNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV."
     },
     {
       "id": "playback-information.conversion-notice.level",
@@ -760,9 +779,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoLevelNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV."
     },
     {
       "id": "playback-information.conversion-notice.bit-depth",
@@ -772,9 +792,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoBitDepthNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV."
     },
     {
       "id": "playback-information.conversion-notice.ref-frames",
@@ -784,9 +805,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "RefFramesNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "The video's encoding goes beyond what this device's decoder supports, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV."
     },
     {
       "id": "playback-information.conversion-notice.resolution",
@@ -796,9 +818,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoResolutionNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "The video's resolution is higher than this device supports, so the server is reducing it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts resolution is too high for this TV."
     },
     {
       "id": "playback-information.conversion-notice.framerate",
@@ -809,9 +832,10 @@
         "reasons": [
           "VideoFramerateNotSupported",
           "AudioChannelsNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "The video's frame rate is higher than this device supports, so the server is reducing it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts frame rate is too high for this TV."
     },
     {
       "id": "playback-information.conversion-notice.interlaced",
@@ -821,9 +845,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "InterlacedVideoNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't show interlaced video, so the server is deinterlacing it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts interlaced video won't play on this TV."
     },
     {
       "id": "playback-information.conversion-notice.anamorphic",
@@ -833,9 +858,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "AnamorphicVideoNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't show the video's non-square pixels, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts non-square pixels won't display on this TV."
     },
     {
       "id": "playback-information.conversion-notice.rotation",
@@ -845,9 +871,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "VideoRotationNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't rotate the video, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts rotation won't display on this TV."
     },
     {
       "id": "playback-information.conversion-notice.lowercase-code",
@@ -857,9 +884,10 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "videocodecnotsupported"
-        ]
+        ],
+        "device": "this TV"
       },
-      "expected": "This device can't decode the video's format, so the server is converting it. Play another version of this title if there is one, or watch on a device that supports this format."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV."
     },
     {
       "id": "playback-information.conversion-notice.unknown-reason",
@@ -869,7 +897,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "InvalidVideoBitrate"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -879,7 +908,8 @@
       "input": {
         "method": "Transcode",
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
-        "reasons": []
+        "reasons": [],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -891,7 +921,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "UnknownVideoStreamInfo"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -903,7 +934,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
         "reasons": [
           "DirectPlayError"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -915,7 +947,8 @@
         "url": "https://server.example/videos/item/stream?static=true",
         "reasons": [
           "VideoCodecNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -927,7 +960,8 @@
         "url": "https://server.example/videos/item/stream.mp4",
         "reasons": [
           "VideoCodecNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -939,7 +973,8 @@
         "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=copy",
         "reasons": [
           "VideoCodecNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
     },
@@ -952,9 +987,220 @@
         "reasons": [
           "VideoCodecNotSupported",
           "AudioCodecNotSupported"
-        ]
+        ],
+        "device": "this TV"
       },
       "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.burn-in-with-video-copy-url",
+      "operation": "conversion-notice",
+      "description": "Burning subtitles into the picture always re-encodes the video, so a burn-in report wins over a VideoCodec=copy URL.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=aac",
+        "reasons": [
+          "SubtitleCodecNotSupported"
+        ],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "Converting this video for this TV\nThe selected subtitles must be burned in for this TV."
+    },
+    {
+      "id": "playback-information.conversion-notice.burn-in-with-all-copy-url",
+      "operation": "conversion-notice",
+      "description": "Same as burn-in-with-video-copy-url: an all-copy URL cannot carry burned-in subtitles, so the burn-in report is the truth.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=copy",
+        "reasons": [
+          "SubtitleCodecNotSupported"
+        ],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "Converting this video for this TV\nThe selected subtitles must be burned in for this TV."
+    },
+    {
+      "id": "playback-information.conversion-notice.burn-in-with-video-copy-and-codec-reason",
+      "operation": "conversion-notice",
+      "description": "With the video copied, the codec reason did not force encoding; only the burn-in did, so the subtitle reason is the one to show.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "SubtitleCodecNotSupported"
+        ],
+        "device": "this TV",
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Video",
+              "Index": 0,
+              "Codec": "hevc"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Codec": "PGSSUB",
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "subtitleIndex": 3
+      },
+      "expected": "Converting this video for this TV\nThe selected subtitles must be burned in for this TV."
+    },
+    {
+      "id": "playback-information.conversion-notice.codec-and-container-video-copy",
+      "operation": "conversion-notice",
+      "description": "The URL is the evidence of what the server does: VideoCodec=copy means the video is remuxed, whatever reasons are listed.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "ContainerNotSupported"
+        ],
+        "device": "this TV"
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.codec-and-codec-tag-video-copy",
+      "operation": "conversion-notice",
+      "description": "Same boundary as codec-and-container-video-copy: copied video is a remux, so no notice.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=copy&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "VideoCodecTagNotSupported"
+        ],
+        "device": "this TV"
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.codec-and-container-reencode",
+      "operation": "conversion-notice",
+      "description": "A real re-encode URL plus a device codec limit is the case PLAY-27 exists for; the container reason rides along.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "ContainerNotSupported"
+        ],
+        "device": "this TV"
+      },
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV."
+    },
+    {
+      "id": "playback-information.conversion-notice.codec-and-codec-tag-reencode",
+      "operation": "conversion-notice",
+      "description": "A codec-tag reason alone would be a remux, but here the codec limit forces the re-encode the URL shows.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported",
+          "VideoCodecTagNotSupported"
+        ],
+        "device": "this TV"
+      },
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV."
+    },
+    {
+      "id": "playback-information.conversion-notice.container-and-codec-tag-reencode",
+      "operation": "conversion-notice",
+      "description": "No device video limit is reported, so even an encoding URL is not blamed on this device; Playback info explains it.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "ContainerNotSupported",
+          "VideoCodecTagNotSupported"
+        ],
+        "device": "this TV"
+      },
+      "expected": "none"
+    },
+    {
+      "id": "playback-information.conversion-notice.unknown-reason-with-video-reason",
+      "operation": "conversion-notice",
+      "description": "An unrecognised code never blocks a known qualifying reason.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "SomeFutureReason",
+          "VideoResolutionNotSupported"
+        ],
+        "device": "this TV"
+      },
+      "expected": "Converting this video for this TV\nIts resolution is too high for this TV."
+    },
+    {
+      "id": "playback-information.conversion-notice.empty-reason-with-video-reason",
+      "operation": "conversion-notice",
+      "description": "An empty code is ignored; the qualifying frame-rate reason still fires.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "",
+          "VideoFramerateNotSupported"
+        ],
+        "device": "this TV"
+      },
+      "expected": "Converting this video for this TV\nIts frame rate is too high for this TV."
+    },
+    {
+      "id": "playback-information.conversion-notice.phone-device-noun",
+      "operation": "conversion-notice",
+      "description": "The device noun is a parameter so each platform names itself.",
+      "input": {
+        "method": "Transcode",
+        "url": "https://server.example/videos/item/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+        "reasons": [
+          "VideoCodecNotSupported"
+        ],
+        "device": "this phone"
+      },
+      "expected": "Converting this video for this phone\nIts video format won't play on this phone."
     }
   ],
   "sources": [
