@@ -1,0 +1,1709 @@
+{
+  "schemaVersion": 1,
+  "suite": "queue-order",
+  "cases": [
+    {
+      "id": "queue-order.wrap-starts-new-shuffle-traversal",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "c",
+          "b"
+        ],
+        "current": "b",
+        "positionTicks": "0",
+        "paused": false,
+        "history": [
+          "a",
+          "c"
+        ],
+        "visited": [
+          "a",
+          "c"
+        ],
+        "shuffled": true,
+        "repeat": "all"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "next",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "visited": [],
+              "history": [
+                "a",
+                "c",
+                "b"
+              ],
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "unshuffle",
+            "revision": "1"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "c"
+              ],
+              "current": "a",
+              "visited": [],
+              "history": [
+                "a",
+                "c",
+                "b"
+              ]
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "previous",
+            "revision": "2"
+          },
+          "expected": {
+            "queue": {
+              "current": "b",
+              "history": [
+                "a",
+                "c"
+              ],
+              "visited": [
+                "a"
+              ],
+              "positionTicks": "0",
+              "completion": "2"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "next",
+            "revision": "3",
+            "completion": "2"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "visited": [
+                "a",
+                "b"
+              ],
+              "history": [
+                "a",
+                "c",
+                "b"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.shuffle-explicit-permutation-history",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          },
+          {
+            "id": "d",
+            "media": "d",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "shuffle",
+            "revision": "0",
+            "permutation": [
+              "d",
+              "c"
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "d",
+                "c"
+              ],
+              "current": "b",
+              "history": [
+                "a"
+              ],
+              "positionTicks": "20000000",
+              "shuffled": true
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "next",
+            "revision": "1",
+            "completion": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "d",
+              "history": [
+                "a",
+                "b"
+              ],
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "unshuffle",
+            "revision": "2"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "d",
+                "c"
+              ],
+              "current": "d",
+              "history": [
+                "a",
+                "b"
+              ],
+              "shuffled": false
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.bad-permutation-rejected",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "shuffle",
+            "revision": "0",
+            "permutation": [
+              "b",
+              "b"
+            ]
+          },
+          "expected": {
+            "outcome": "invalid-permutation",
+            "queue": {
+              "shuffled": false,
+              "order": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "shuffle",
+            "revision": "0",
+            "permutation": [
+              "a",
+              "c"
+            ]
+          },
+          "expected": {
+            "outcome": "invalid-permutation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.off-end-final",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "c",
+        "positionTicks": "20000000",
+        "paused": false,
+        "repeat": "off"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "end",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "paused": true,
+              "completion": "1"
+            },
+            "outcome": "stopped"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.off-next-final",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "c",
+        "positionTicks": "20000000",
+        "paused": false,
+        "repeat": "off"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "next",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "paused": true,
+              "completion": "1"
+            },
+            "outcome": "stopped"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.one-end-final",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "c",
+        "positionTicks": "20000000",
+        "paused": false,
+        "repeat": "one"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "end",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "paused": false,
+              "completion": "1",
+              "positionTicks": "0"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.one-next-final",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "c",
+        "positionTicks": "20000000",
+        "paused": false,
+        "repeat": "one"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "next",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "paused": true,
+              "completion": "1"
+            },
+            "outcome": "stopped"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.all-end-final",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "c",
+        "positionTicks": "20000000",
+        "paused": false,
+        "repeat": "all"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "end",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "paused": false,
+              "completion": "1",
+              "positionTicks": "0"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.all-next-final",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "c",
+        "positionTicks": "20000000",
+        "paused": false,
+        "repeat": "all"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "next",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "paused": false,
+              "completion": "1",
+              "positionTicks": "0"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.previous-29990000",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "29990000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "previous",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "positionTicks": "0",
+              "paused": false
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.previous-30000000",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "30000000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "previous",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "positionTicks": "0",
+              "paused": false
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.previous-30010000",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "30010000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "previous",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "b",
+              "positionTicks": "0",
+              "paused": false
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.previous-first-off",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "0",
+        "paused": false,
+        "repeat": "off"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "previous",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "positionTicks": "0"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.previous-first-one",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "0",
+        "paused": false,
+        "repeat": "one"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "previous",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "positionTicks": "0"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.previous-first-all",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "0",
+        "paused": false,
+        "repeat": "all"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "previous",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "positionTicks": "0"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.automatic-errors-exhaust-repeat-all",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false,
+        "repeat": "all"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "error",
+            "revision": "0",
+            "music": true
+          },
+          "expected": {
+            "queue": {
+              "current": "b",
+              "failed": [
+                "a"
+              ],
+              "completion": "1"
+            },
+            "outcome": "skipped-unavailable"
+          }
+        },
+        {
+          "event": {
+            "op": "error",
+            "revision": "1",
+            "music": true,
+            "completion": "1"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "failed": [
+                "a",
+                "b"
+              ],
+              "completion": "2"
+            },
+            "outcome": "skipped-unavailable"
+          }
+        },
+        {
+          "event": {
+            "op": "error",
+            "revision": "2",
+            "music": true,
+            "completion": "2"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "failed": [
+                "a",
+                "b",
+                "c"
+              ],
+              "paused": true,
+              "completion": "3"
+            },
+            "outcome": "exhausted"
+          }
+        },
+        {
+          "event": {
+            "op": "error",
+            "revision": "3",
+            "music": true,
+            "completion": "2"
+          },
+          "expected": {
+            "outcome": "duplicate-completion",
+            "queue": {
+              "completion": "3"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "retry",
+            "revision": "3"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "failed": [],
+              "paused": false
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.video-error-does-not-advance",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "error",
+            "revision": "0"
+          },
+          "expected": {
+            "outcome": "video-error",
+            "queue": {
+              "current": "a",
+              "paused": true,
+              "completion": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.completion-once-across-callback-types",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "end",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "current": "b",
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "next",
+            "revision": "1",
+            "completion": "0"
+          },
+          "expected": {
+            "outcome": "duplicate-completion",
+            "queue": {
+              "current": "b",
+              "completion": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.transfer-capabilities-replacement-consent",
+      "operation": "transfer",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b"
+          ],
+          "current": "a",
+          "positionTicks": "9007199254740993",
+          "paused": false,
+          "repeat": "all",
+          "shuffled": true
+        },
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "prepare",
+            "capabilities": [
+              "queue"
+            ]
+          },
+          "expected": {
+            "effect": "require-replacement",
+            "unavailable": [
+              "repeat",
+              "shuffle",
+              "audio",
+              "subtitle"
+            ],
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "prepare",
+            "capabilities": [
+              "queue"
+            ],
+            "confirmed": true
+          },
+          "expected": {
+            "effect": "transfer",
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "off",
+              "shuffle": [],
+              "audio": null,
+              "subtitle": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.transfer-preserves-full-intent",
+      "operation": "transfer",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b"
+          ],
+          "current": "a",
+          "positionTicks": "9007199254740993",
+          "paused": false,
+          "repeat": "all",
+          "shuffled": true
+        },
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "prepare",
+            "capabilities": [
+              "queue",
+              "repeat",
+              "shuffle",
+              "audio",
+              "subtitle"
+            ],
+            "matchingAudio": [
+              2
+            ],
+            "matchingSubtitles": [
+              -1
+            ]
+          },
+          "expected": {
+            "effect": "transfer",
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            },
+            "unavailable": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.attach-authoritative-queue-wins",
+      "operation": "transfer",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b"
+          ],
+          "current": "a",
+          "positionTicks": "9007199254740993",
+          "paused": false,
+          "repeat": "all",
+          "shuffled": true
+        },
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "authoritative": {
+              "server": "s",
+              "viewer": "v",
+              "entries": [
+                {
+                  "id": "a",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "b",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "c",
+                  "media": "c",
+                  "downloaded": true
+                }
+              ],
+              "order": [
+                "a",
+                "b",
+                "c"
+              ],
+              "current": "c",
+              "positionTicks": "345",
+              "paused": false,
+              "repeat": "one",
+              "revision": "42"
+            }
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "revision": "42"
+            },
+            "intent": {
+              "entry": "c",
+              "ticks": "345",
+              "repeat": "one",
+              "queue": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "attach",
+            "authoritative": {
+              "server": "other",
+              "viewer": "v",
+              "entries": [
+                {
+                  "id": "a",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "b",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "c",
+                  "media": "c",
+                  "downloaded": true
+                }
+              ],
+              "order": [
+                "a",
+                "b",
+                "c"
+              ],
+              "current": "a",
+              "positionTicks": "20000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "reject-partition",
+            "queue": {
+              "current": "c",
+              "revision": "42"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.transfer-requires-matching-track-not-generic-support",
+      "operation": "transfer",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b"
+          ],
+          "current": "a",
+          "positionTicks": "9007199254740993",
+          "paused": false,
+          "repeat": "all",
+          "shuffled": true
+        },
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "prepare",
+            "capabilities": [
+              "queue",
+              "repeat",
+              "shuffle",
+              "audio",
+              "subtitle"
+            ],
+            "matchingAudio": [
+              0
+            ],
+            "matchingSubtitles": [
+              3
+            ]
+          },
+          "expected": {
+            "effect": "require-replacement",
+            "unavailable": [
+              "audio",
+              "subtitle"
+            ],
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "prepare",
+            "capabilities": [
+              "queue",
+              "repeat",
+              "shuffle",
+              "audio",
+              "subtitle"
+            ],
+            "matchingAudio": [
+              0
+            ],
+            "matchingSubtitles": [
+              3
+            ],
+            "confirmed": true
+          },
+          "expected": {
+            "effect": "transfer",
+            "intent": {
+              "audio": null,
+              "subtitle": null,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "ticks": "9007199254740993"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.transfer-inconsistent-snapshot-refreshes",
+      "operation": "transfer",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        },
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "prepare",
+            "capabilities": [
+              "queue",
+              "repeat",
+              "shuffle",
+              "audio",
+              "subtitle"
+            ],
+            "matchingAudio": [
+              2
+            ],
+            "matchingSubtitles": [
+              -1
+            ]
+          },
+          "expected": {
+            "effect": "refresh",
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

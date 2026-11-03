@@ -1,0 +1,2364 @@
+{
+  "schemaVersion": 1,
+  "suite": "session-owner",
+  "cases": [
+    {
+      "id": "session-owner.report-identity-sequence",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "report",
+            "reportSequence": "1"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-report"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "other",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "2"
+          },
+          "expected": {
+            "effect": "none",
+            "reportSequence": "1"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "other",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "3"
+          },
+          "expected": {
+            "effect": "none",
+            "reportSequence": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.replace-stale-generation",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "replace",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "reason": "stale-generation",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "replace",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "generation": "3",
+            "reportSequence": "-1"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "9"
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.viewer-switch-clears-intent",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "viewer-switch",
+            "identity": {
+              "server": "s",
+              "viewer": "other",
+              "device": "d",
+              "session": "p",
+              "generation": "4",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "owner": {
+              "viewer": "other"
+            },
+            "intent": {
+              "entry": null,
+              "ticks": "0",
+              "paused": true,
+              "queue": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.airplay-retains-viewing",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "airplay",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "route": "airplay"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "0"
+          },
+          "expected": {
+            "effect": "report",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "native-route",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "route": "native",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.handoff-observed-before-commit",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          },
+          "expected": {
+            "phase": "selecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "connect",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "connecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "prepare",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "preparing",
+            "effect": "pause-local",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "ticks": "9007199254740993"
+          },
+          "expected": {
+            "phase": "preparing",
+            "reason": "not-ready",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "awaiting-ready",
+            "effect": "request-remote",
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "ticks": "0"
+          },
+          "expected": {
+            "reason": "not-ready",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "0",
+              "kind": "jellyfin"
+            },
+            "ticks": "9007199254740993"
+          },
+          "expected": {
+            "reason": "not-ready",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "ticks": "9007199254740993"
+          },
+          "expected": {
+            "phase": "active",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "10"
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.handoff-fail",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          },
+          "expected": {
+            "phase": "selecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "connect",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "connecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "prepare",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "preparing",
+            "effect": "pause-local",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "fail",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "failed",
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": true,
+              "queue": [
+                "a",
+                "b"
+              ]
+            },
+            "effect": "resume-here"
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "ticks": "9007199254740993"
+          },
+          "expected": {
+            "reason": "not-ready",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "effect": "play-local",
+            "intent": {
+              "paused": false,
+              "ticks": "9007199254740993"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.handoff-timeout",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          },
+          "expected": {
+            "phase": "selecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "connect",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "connecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "prepare",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "preparing",
+            "effect": "pause-local",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "timeout",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "failed",
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": true,
+              "queue": [
+                "a",
+                "b"
+              ]
+            },
+            "effect": "resume-here"
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "ticks": "9007199254740993"
+          },
+          "expected": {
+            "reason": "not-ready",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "effect": "play-local",
+            "intent": {
+              "paused": false,
+              "ticks": "9007199254740993"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.handoff-cancel",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          },
+          "expected": {
+            "phase": "selecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "connect",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "connecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "prepare",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "preparing",
+            "effect": "pause-local",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "cancel",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "failed",
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": true,
+              "queue": [
+                "a",
+                "b"
+              ]
+            },
+            "effect": "resume-here"
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "ticks": "9007199254740993"
+          },
+          "expected": {
+            "reason": "not-ready",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "effect": "play-local",
+            "intent": {
+              "paused": false,
+              "ticks": "9007199254740993"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.wrong-target-account",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "other",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "reason": "invalid-target",
+            "candidate": null
+          }
+        },
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "other",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "reason": "invalid-target",
+            "candidate": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.return-true",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "tv",
+          "session": "remote",
+          "generation": "2",
+          "kind": "jellyfin"
+        },
+        "local": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "generation": "2",
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "return",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "returning",
+            "effect": "stop-remote",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "remote-stopped",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "confirmed": true
+          },
+          "expected": {
+            "phase": "return-ready",
+            "effect": "resume-here",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "confirmed": true
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "phase": "active",
+            "effect": "play-local",
+            "intent": {
+              "ticks": "9007199254740993",
+              "paused": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.return-false",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "tv",
+          "session": "remote",
+          "generation": "2",
+          "kind": "jellyfin"
+        },
+        "local": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "generation": "2",
+        "intent": {
+          "entry": "a",
+          "ticks": "9007199254740993",
+          "paused": false,
+          "queue": [
+            "a",
+            "b"
+          ],
+          "repeat": "all",
+          "shuffle": [
+            "a",
+            "b"
+          ],
+          "audio": 2,
+          "subtitle": -1
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "return",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "returning",
+            "effect": "stop-remote",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "remote-stopped",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "confirmed": false
+          },
+          "expected": {
+            "phase": "return-uncertain",
+            "effect": "require-choice",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "reason": "explicit-choice-required",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "confirmed": true
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "new",
+              "generation": "3",
+              "kind": "local"
+            },
+            "phase": "active",
+            "effect": "play-local",
+            "intent": {
+              "ticks": "9007199254740993",
+              "paused": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.network-loss-no-local-play",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "tv",
+          "session": "remote",
+          "generation": "2",
+          "kind": "jellyfin"
+        },
+        "local": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "generation": "2"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "disconnect",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "disconnected",
+            "effect": "refresh",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.temporary-cycle-offline-revoke",
+      "operation": "temporary",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "create",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "provision",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "creating",
+                "secretRef": null
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "create",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "reason": "cleanup-required"
+          }
+        },
+        {
+          "event": {
+            "op": "issued",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            },
+            "returnedViewer": "v",
+            "secretRef": "private-ref"
+          },
+          "expected": {
+            "effect": "use",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "active",
+                "secretRef": "private-ref"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "use",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "use"
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "persist-revocation",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "pending-persist",
+                "secretRef": "private-ref"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "logout",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "revoking",
+                "secretRef": "private-ref"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "logout-failed",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "pending",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "pending-revoke",
+                "secretRef": "private-ref"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "create",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "reason": "cleanup-required"
+          }
+        },
+        {
+          "event": {
+            "op": "reconnect",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "logout"
+          }
+        },
+        {
+          "event": {
+            "op": "logout-ok",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "records": [],
+            "effect": "erase-secret"
+          }
+        },
+        {
+          "event": {
+            "op": "create",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "provision",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "creating",
+                "secretRef": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.temporary-wrong-viewer-and-sender",
+      "operation": "temporary",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "receiver-stable",
+            "sender": "sender-one",
+            "generation": "7",
+            "phase": "creating",
+            "secretRef": null
+          }
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "issued",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-two",
+              "generation": "7"
+            },
+            "returnedViewer": "v",
+            "secretRef": "other-ref"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-binding"
+          }
+        },
+        {
+          "event": {
+            "op": "issued",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            },
+            "returnedViewer": "wrong",
+            "secretRef": "revoke-ref"
+          },
+          "expected": {
+            "effect": "persist-revocation",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "pending-persist",
+                "secretRef": "revoke-ref"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "use",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "cleanup-required"
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "logout"
+          }
+        },
+        {
+          "event": {
+            "op": "logout-ok",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "records": [],
+            "effect": "erase-secret"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.end-before-temporary-issue-settles",
+      "operation": "temporary",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "create",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "provision"
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "await-issue",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "cancelled-creating",
+                "secretRef": null
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "create",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "reason": "cleanup-required"
+          }
+        },
+        {
+          "event": {
+            "op": "issued",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            },
+            "returnedViewer": "v",
+            "secretRef": "late-ref"
+          },
+          "expected": {
+            "effect": "persist-revocation",
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "receiver-stable",
+                "sender": "sender-one",
+                "generation": "7",
+                "phase": "pending-persist",
+                "secretRef": "late-ref"
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "logout"
+          }
+        },
+        {
+          "event": {
+            "op": "logout-ok",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "erase-secret",
+            "records": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.local-owner-reports-until-commit",
+      "operation": "owner",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          },
+          "expected": {
+            "phase": "selecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "intent": {
+              "entry": "a",
+              "ticks": "9007199254740993",
+              "paused": false,
+              "queue": [
+                "a",
+                "b"
+              ],
+              "repeat": "all",
+              "shuffle": [
+                "a",
+                "b"
+              ],
+              "audio": 2,
+              "subtitle": -1
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "connect",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "connecting",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "prepare",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "phase": "preparing",
+            "effect": "pause-local",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "report",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "phase": "preparing"
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            }
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "ready",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "ticks": "9007199254740993"
+          },
+          "expected": {
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "tv",
+              "session": "remote",
+              "generation": "2",
+              "kind": "jellyfin"
+            },
+            "phase": "active"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "sequence": "2"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-report"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-owner.crash-during-logout-retries-before-provision",
+      "operation": "temporary",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "receiver-stable",
+            "sender": "sender-one",
+            "generation": "7",
+            "phase": "revoking",
+            "secretRef": "private-ref"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "create",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "reason": "cleanup-required"
+          }
+        },
+        {
+          "event": {
+            "op": "reconnect",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "effect": "logout"
+          }
+        },
+        {
+          "event": {
+            "op": "logout-ok",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "receiver-stable",
+              "sender": "sender-one",
+              "generation": "7"
+            }
+          },
+          "expected": {
+            "records": [],
+            "effect": "erase-secret"
+          }
+        }
+      ]
+    }
+  ]
+}
