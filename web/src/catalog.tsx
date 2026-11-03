@@ -1586,7 +1586,7 @@ export function Detail({
             >
                 {pendingMessage ||
                     (savingReport
-                        ? loading
+                        ? loading || readError
                             ? "Saving progress…"
                             : "Item loaded. Saving progress…"
                         : loading

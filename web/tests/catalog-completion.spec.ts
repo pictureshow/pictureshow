@@ -123,8 +123,8 @@ test("rc26 newer authoritative detail releases Saving progress while the complet
     );
     releaseStop();
     await expect.poll(() => reads).toBe(2);
-    await expect(page.locator(".catalog-detail-status")).toContainText(
-        "Saving progress",
+    await expect(page.locator(".catalog-detail-status")).toHaveText(
+        "Saving progress…",
     );
     const evidenceDirectory = process.env.WEB_F3_EVIDENCE;
     if (evidenceDirectory) {
