@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-mode",
+  "cases": [
+    {
+      "id": "playback-mode.local-video-False",
+      "operation": "mode",
+      "state": {
+        "ownerKind": "local",
+        "media": "video",
+        "explicitAudio": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "background"
+          },
+          "expected": {
+            "effect": "pause-video"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.local-audio-True",
+      "operation": "mode",
+      "state": {
+        "ownerKind": "local",
+        "media": "audio",
+        "explicitAudio": true
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "background"
+          },
+          "expected": {
+            "effect": "keep-audio"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.local-audio-False",
+      "operation": "mode",
+      "state": {
+        "ownerKind": "local",
+        "media": "audio",
+        "explicitAudio": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "background"
+          },
+          "expected": {
+            "effect": "pause-video"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.jellyfin-video-False",
+      "operation": "mode",
+      "state": {
+        "ownerKind": "jellyfin",
+        "media": "video",
+        "explicitAudio": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "background"
+          },
+          "expected": {
+            "effect": "keep-receiver"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.cast-audio-True",
+      "operation": "mode",
+      "state": {
+        "ownerKind": "cast",
+        "media": "audio",
+        "explicitAudio": true
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "background"
+          },
+          "expected": {
+            "effect": "keep-receiver"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.attached-tv-syncplay-transport",
+      "operation": "mode",
+      "state": {
+        "ownerKind": "jellyfin",
+        "group": "g"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "transport"
+          },
+          "expected": {
+            "effect": "group-request",
+            "group": "g"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.ordinary-owner-transport",
+      "operation": "mode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "transport"
+          },
+          "expected": {
+            "effect": "owner-command"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.cast-leave-before-route",
+      "operation": "mode",
+      "state": {
+        "group": "g"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "route",
+            "route": "cast"
+          },
+          "expected": {
+            "effect": "require-leave",
+            "group": "g",
+            "requestedRoute": "cast"
+          }
+        },
+        {
+          "event": {
+            "op": "leave"
+          },
+          "expected": {
+            "effect": "leave-group",
+            "group": "g"
+          }
+        },
+        {
+          "event": {
+            "op": "left"
+          },
+          "expected": {
+            "effect": "select-route",
+            "group": null,
+            "requestedRoute": "cast"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.cast-cancel-retains-membership",
+      "operation": "mode",
+      "state": {
+        "group": "g"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "route",
+            "route": "cast"
+          },
+          "expected": {
+            "effect": "require-leave",
+            "group": "g"
+          }
+        },
+        {
+          "event": {
+            "op": "cancel"
+          },
+          "expected": {
+            "effect": "none",
+            "group": "g",
+            "requestedRoute": null
+          }
+        },
+        {
+          "event": {
+            "op": "left"
+          },
+          "expected": {
+            "effect": "none",
+            "group": "g"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.airplay-leave-before-route",
+      "operation": "mode",
+      "state": {
+        "group": "g"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "route",
+            "route": "airplay"
+          },
+          "expected": {
+            "effect": "require-leave",
+            "group": "g",
+            "requestedRoute": "airplay"
+          }
+        },
+        {
+          "event": {
+            "op": "leave"
+          },
+          "expected": {
+            "effect": "leave-group",
+            "group": "g"
+          }
+        },
+        {
+          "event": {
+            "op": "left"
+          },
+          "expected": {
+            "effect": "select-route",
+            "group": null,
+            "requestedRoute": "airplay"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.airplay-cancel-retains-membership",
+      "operation": "mode",
+      "state": {
+        "group": "g"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "route",
+            "route": "airplay"
+          },
+          "expected": {
+            "effect": "require-leave",
+            "group": "g"
+          }
+        },
+        {
+          "event": {
+            "op": "cancel"
+          },
+          "expected": {
+            "effect": "none",
+            "group": "g",
+            "requestedRoute": null
+          }
+        },
+        {
+          "event": {
+            "op": "left"
+          },
+          "expected": {
+            "effect": "none",
+            "group": "g"
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.route-without-group",
+      "operation": "mode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "route",
+            "route": "cast"
+          },
+          "expected": {
+            "effect": "select-route",
+            "group": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "playback-mode.leave-ack-after-background-event",
+      "operation": "mode",
+      "state": {
+        "group": "g"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "route",
+            "route": "airplay"
+          },
+          "expected": {
+            "group": "g",
+            "effect": "require-leave"
+          }
+        },
+        {
+          "event": {
+            "op": "leave"
+          },
+          "expected": {
+            "leaving": true,
+            "effect": "leave-group"
+          }
+        },
+        {
+          "event": {
+            "op": "background"
+          },
+          "expected": {
+            "leaving": true,
+            "group": "g",
+            "effect": "pause-video"
+          }
+        },
+        {
+          "event": {
+            "op": "left"
+          },
+          "expected": {
+            "leaving": false,
+            "group": null,
+            "effect": "select-route"
+          }
+        }
+      ]
+    }
+  ]
+}

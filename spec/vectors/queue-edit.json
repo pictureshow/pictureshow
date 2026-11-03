@@ -1,0 +1,2245 @@
+{
+  "schemaVersion": 1,
+  "suite": "queue-edit",
+  "cases": [
+    {
+      "id": "queue-edit.play-now-preserves-duplicate-media",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "copy1",
+                "media": "track",
+                "downloaded": true
+              },
+              {
+                "id": "copy2",
+                "media": "track",
+                "downloaded": true
+              }
+            ],
+            "operationId": "replace"
+          },
+          "expected": {
+            "queue": {
+              "entries": [
+                {
+                  "id": "copy1",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "copy2",
+                  "media": "track",
+                  "downloaded": true
+                }
+              ],
+              "order": [
+                "copy1",
+                "copy2"
+              ],
+              "current": "copy1",
+              "positionTicks": "0",
+              "paused": false,
+              "history": [],
+              "revision": "1"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.play-next-blocks-and-operation-dedup",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-next",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              },
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": true
+              }
+            ],
+            "operationId": "one"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "b",
+                "c"
+              ],
+              "revision": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "play-next",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              },
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": true
+              }
+            ],
+            "operationId": "one"
+          },
+          "expected": {
+            "outcome": "duplicate",
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "b",
+                "c"
+              ],
+              "revision": "1"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "play-next",
+            "revision": "1",
+            "entries": [
+              {
+                "id": "z",
+                "media": "z",
+                "downloaded": true
+              },
+              {
+                "id": "w",
+                "media": "w",
+                "downloaded": true
+              }
+            ],
+            "operationId": "two"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "z",
+                "w",
+                "x",
+                "y",
+                "b",
+                "c"
+              ],
+              "revision": "2"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.append-without-current-remains-stopped",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": null,
+        "positionTicks": "20000000",
+        "paused": true
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              },
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": true
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "x",
+                "y",
+                "a",
+                "b",
+                "c"
+              ],
+              "current": null,
+              "paused": true
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.play-next-without-current-remains-stopped",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": null,
+        "positionTicks": "20000000",
+        "paused": true
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-next",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              },
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": true
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "x",
+                "y",
+                "a",
+                "b",
+                "c"
+              ],
+              "current": null,
+              "paused": true
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.append-block",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              },
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": true
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "c",
+                "x",
+                "y"
+              ],
+              "current": "a",
+              "positionTicks": "20000000"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.remove-earlier-preserves-clock",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "remove",
+            "revision": "0",
+            "entry": "a"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "b",
+                "c"
+              ],
+              "current": "b",
+              "history": [],
+              "positionTicks": "20000000",
+              "paused": false
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.remove-current-True",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": true,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "remove",
+            "revision": "0",
+            "entry": "b"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "positionTicks": "0",
+              "paused": true,
+              "history": [
+                "a"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.remove-current-False",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "remove",
+            "revision": "0",
+            "entry": "b"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "positionTicks": "0",
+              "paused": false,
+              "history": [
+                "a"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.remove-final-selects-previous",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "c",
+        "positionTicks": "20000000",
+        "paused": false,
+        "history": [
+          "a",
+          "b"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "remove",
+            "revision": "0",
+            "entry": "c"
+          },
+          "expected": {
+            "queue": {
+              "current": "b",
+              "positionTicks": "0",
+              "paused": false,
+              "history": [
+                "a"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.remove-last-stops",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "remove",
+            "revision": "0",
+            "entry": "a"
+          },
+          "expected": {
+            "queue": {
+              "current": null,
+              "paused": true,
+              "entries": [],
+              "order": []
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.move-a",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "move",
+            "revision": "0",
+            "entry": "a",
+            "index": 2
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "b",
+                "c",
+                "a"
+              ],
+              "current": "b",
+              "positionTicks": "20000000"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.move-c",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "move",
+            "revision": "0",
+            "entry": "c",
+            "index": 0
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "c",
+                "a",
+                "b"
+              ],
+              "current": "b",
+              "positionTicks": "20000000"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.move-b",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "move",
+            "revision": "0",
+            "entry": "b",
+            "index": 0
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "b",
+                "a",
+                "c"
+              ],
+              "current": "b",
+              "positionTicks": "20000000"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.clear-upcoming-preserves-history",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "clear-upcoming",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "entries": [
+                {
+                  "id": "a",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "b",
+                  "media": "track",
+                  "downloaded": true
+                }
+              ],
+              "order": [
+                "a",
+                "b"
+              ],
+              "current": "b",
+              "history": [
+                "a"
+              ],
+              "paused": false
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.clear-all-stops",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "b",
+        "positionTicks": "20000000",
+        "paused": false,
+        "history": [
+          "a"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "clear-all",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "entries": [],
+              "order": [],
+              "current": null,
+              "history": [],
+              "paused": true,
+              "positionTicks": "0"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.stale-revision-and-generation",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false,
+        "revision": "8",
+        "generation": "3"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "clear-all",
+            "revision": "7",
+            "generation": "3"
+          },
+          "expected": {
+            "outcome": "refresh-required",
+            "queue": {
+              "revision": "8",
+              "current": "a"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "clear-all",
+            "revision": "8",
+            "generation": "2"
+          },
+          "expected": {
+            "outcome": "stale-generation",
+            "queue": {
+              "revision": "8",
+              "current": "a"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.duplicate-entry-ids-rejected",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "a",
+                "media": "track",
+                "downloaded": true
+              }
+            ]
+          },
+          "expected": {
+            "outcome": "invalid-entries",
+            "queue": {
+              "order": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              },
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              }
+            ]
+          },
+          "expected": {
+            "outcome": "invalid-entries"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.persist-before-publish-and-rollback",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "edit",
+            "edit": {
+              "op": "clear-all",
+              "revision": "0"
+            }
+          },
+          "expected": {
+            "committed": {
+              "current": "a",
+              "revision": "0"
+            },
+            "pending": {
+              "current": null,
+              "revision": "1"
+            },
+            "effect": "persist",
+            "ticket": "1"
+          }
+        },
+        {
+          "event": {
+            "op": "edit",
+            "edit": {
+              "op": "pause",
+              "revision": "0"
+            }
+          },
+          "expected": {
+            "reason": "commit-pending",
+            "committed": {
+              "current": "a"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "0"
+          },
+          "expected": {
+            "reason": "stale-ticket",
+            "committed": {
+              "current": "a"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persist-failed",
+            "ticket": "1"
+          },
+          "expected": {
+            "pending": null,
+            "committed": {
+              "current": "a",
+              "revision": "0"
+            },
+            "effect": "offer-retry"
+          }
+        },
+        {
+          "event": {
+            "op": "edit",
+            "edit": {
+              "op": "clear-all",
+              "revision": "0"
+            }
+          },
+          "expected": {
+            "ticket": "2",
+            "effect": "persist",
+            "committed": {
+              "current": "a"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "1"
+          },
+          "expected": {
+            "reason": "stale-ticket",
+            "committed": {
+              "current": "a"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "2"
+          },
+          "expected": {
+            "committed": {
+              "current": null,
+              "revision": "1"
+            },
+            "pending": null,
+            "effect": "publish"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.restore-paused-validation-and-persist",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "restore",
+            "saved": {
+              "server": "s",
+              "viewer": "v",
+              "entries": [
+                {
+                  "id": "a",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "b",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "c",
+                  "media": "c",
+                  "downloaded": true
+                }
+              ],
+              "order": [
+                "a",
+                "b",
+                "c"
+              ],
+              "current": "b",
+              "positionTicks": "9007199254740993",
+              "paused": false,
+              "history": [
+                "a"
+              ]
+            },
+            "accessible": [
+              "b",
+              "c"
+            ]
+          },
+          "expected": {
+            "effect": "persist",
+            "removed": [
+              "a"
+            ],
+            "committed": {
+              "current": "a"
+            },
+            "pending": {
+              "current": "b",
+              "history": [],
+              "paused": true,
+              "positionTicks": "9007199254740993"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "1"
+          },
+          "expected": {
+            "effect": "publish",
+            "committed": {
+              "current": "b",
+              "paused": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.offline-restore-local-validation-only",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "restore",
+            "saved": {
+              "server": "s",
+              "viewer": "v",
+              "entries": [
+                {
+                  "id": "a",
+                  "media": "a",
+                  "downloaded": false
+                },
+                {
+                  "id": "b",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "c",
+                  "media": "c",
+                  "downloaded": true
+                }
+              ],
+              "order": [
+                "a",
+                "b",
+                "c"
+              ],
+              "current": "a",
+              "positionTicks": "20000000",
+              "paused": false
+            },
+            "accessible": [
+              "a",
+              "b"
+            ],
+            "offline": true
+          },
+          "expected": {
+            "effect": "persist",
+            "removed": [
+              "a",
+              "c"
+            ],
+            "pending": {
+              "current": "b",
+              "positionTicks": "0",
+              "paused": true,
+              "order": [
+                "b"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.restore-account-partition",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "restore",
+            "saved": {
+              "server": "s",
+              "viewer": "other",
+              "entries": [
+                {
+                  "id": "a",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "b",
+                  "media": "track",
+                  "downloaded": true
+                },
+                {
+                  "id": "c",
+                  "media": "c",
+                  "downloaded": true
+                }
+              ],
+              "order": [
+                "a",
+                "b",
+                "c"
+              ],
+              "current": "a",
+              "positionTicks": "20000000",
+              "paused": false
+            },
+            "accessible": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "expected": {
+            "reason": "wrong-partition",
+            "pending": null,
+            "committed": {
+              "viewer": "v"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "partition",
+            "server": "s",
+            "viewer": "other"
+          },
+          "expected": {
+            "committed": {
+              "viewer": "other",
+              "entries": [],
+              "current": null,
+              "paused": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "0"
+          },
+          "expected": {
+            "reason": "stale-ticket",
+            "committed": {
+              "viewer": "other"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.edit-invalidates-completion-play-now",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-now",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "revision": "1",
+            "completion": "0"
+          },
+          "expected": {
+            "outcome": "duplicate-completion",
+            "queue": {
+              "completion": "1",
+              "revision": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.edit-invalidates-completion-remove",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "remove",
+            "revision": "0",
+            "entry": "a"
+          },
+          "expected": {
+            "queue": {
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "revision": "1",
+            "completion": "0"
+          },
+          "expected": {
+            "outcome": "duplicate-completion",
+            "queue": {
+              "completion": "1",
+              "revision": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.edit-invalidates-completion-previous",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "previous",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "revision": "1",
+            "completion": "0"
+          },
+          "expected": {
+            "outcome": "duplicate-completion",
+            "queue": {
+              "completion": "1",
+              "revision": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.edit-invalidates-completion-clear-all",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "clear-all",
+            "revision": "0"
+          },
+          "expected": {
+            "queue": {
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "revision": "1",
+            "completion": "0"
+          },
+          "expected": {
+            "outcome": "duplicate-completion",
+            "queue": {
+              "completion": "1",
+              "revision": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.account-switch-during-write-invalidates-ack",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "edit",
+            "edit": {
+              "op": "clear-all",
+              "revision": "0"
+            }
+          },
+          "expected": {
+            "effect": "persist",
+            "ticket": "1",
+            "pending": {
+              "viewer": "v"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "partition",
+            "server": "s",
+            "viewer": "other"
+          },
+          "expected": {
+            "ticket": "2",
+            "pending": null,
+            "committed": {
+              "viewer": "other",
+              "current": null
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "1"
+          },
+          "expected": {
+            "reason": "stale-ticket",
+            "committed": {
+              "viewer": "other",
+              "current": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.retry-persists-exact-failed-proposal",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "edit",
+            "edit": {
+              "op": "play-next",
+              "revision": "0",
+              "entries": [
+                {
+                  "id": "x",
+                  "media": "x",
+                  "downloaded": true
+                },
+                {
+                  "id": "y",
+                  "media": "y",
+                  "downloaded": true
+                }
+              ],
+              "operationId": "insert"
+            }
+          },
+          "expected": {
+            "effect": "persist",
+            "ticket": "1",
+            "committed": {
+              "order": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            "pending": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persist-failed",
+            "ticket": "1"
+          },
+          "expected": {
+            "effect": "offer-retry",
+            "pending": null,
+            "retry": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "b",
+                "c"
+              ],
+              "operations": [
+                "insert"
+              ],
+              "revision": "1"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "retry-persist"
+          },
+          "expected": {
+            "ticket": "2",
+            "effect": "persist",
+            "pending": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "b",
+                "c"
+              ],
+              "operations": [
+                "insert"
+              ],
+              "revision": "1"
+            },
+            "committed": {
+              "order": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "1"
+          },
+          "expected": {
+            "reason": "stale-ticket",
+            "committed": {
+              "order": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "ticket": "2"
+          },
+          "expected": {
+            "effect": "publish",
+            "pending": null,
+            "retry": null,
+            "committed": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "b",
+                "c"
+              ],
+              "operations": [
+                "insert"
+              ],
+              "revision": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.append-without-current-forces-stopped",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "b",
+            "media": "track",
+            "downloaded": true
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": true
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c"
+        ],
+        "current": null,
+        "positionTicks": "20000000",
+        "paused": false
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "revision": "0",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": true
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "current": null,
+              "paused": true,
+              "order": [
+                "x",
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-edit.partition-invalidates-old-edit-intent",
+      "operation": "store",
+      "state": {
+        "committed": {
+          "server": "s",
+          "viewer": "v",
+          "entries": [
+            {
+              "id": "a",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "b",
+              "media": "track",
+              "downloaded": true
+            },
+            {
+              "id": "c",
+              "media": "c",
+              "downloaded": true
+            }
+          ],
+          "order": [
+            "a",
+            "b",
+            "c"
+          ],
+          "current": "a",
+          "positionTicks": "20000000",
+          "paused": false
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "partition",
+            "server": "s",
+            "viewer": "other"
+          },
+          "expected": {
+            "committed": {
+              "viewer": "other",
+              "generation": "1",
+              "revision": "0",
+              "entries": []
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "edit",
+            "edit": {
+              "op": "append",
+              "revision": "0",
+              "entries": [
+                {
+                  "id": "private-old-viewer",
+                  "media": "private-old-viewer",
+                  "downloaded": true
+                }
+              ]
+            }
+          },
+          "expected": {
+            "reason": "stale-generation",
+            "pending": null,
+            "committed": {
+              "viewer": "other",
+              "entries": []
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "partition",
+            "server": "s",
+            "viewer": "v"
+          },
+          "expected": {
+            "committed": {
+              "viewer": "v",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "edit",
+            "edit": {
+              "op": "append",
+              "revision": "0",
+              "entries": [
+                {
+                  "id": "private-old-viewer",
+                  "media": "private-old-viewer",
+                  "downloaded": true
+                }
+              ]
+            }
+          },
+          "expected": {
+            "reason": "stale-generation",
+            "committed": {
+              "viewer": "v",
+              "entries": []
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

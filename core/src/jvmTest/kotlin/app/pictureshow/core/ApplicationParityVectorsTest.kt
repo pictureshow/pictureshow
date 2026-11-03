@@ -183,7 +183,8 @@ class ApplicationParityVectorsTest {
                         catalogArrivalUsesAnimation(
                             input.getValue("accessibilityEnabled").jsonPrimitive.booleanOrNull!!,
                             input.getValue("sourceIsPlayback").jsonPrimitive.booleanOrNull!!,
-                            input.getValue("destinationIsCatalog").jsonPrimitive.booleanOrNull!!
+                            input.getValue("destinationIsCatalog").jsonPrimitive.booleanOrNull!!,
+                            input["returning"]?.jsonPrimitive?.booleanOrNull ?: false
                         )
                     )
                     "detail-action-state" -> detailActionDescription(
@@ -293,6 +294,37 @@ class ApplicationParityVectorsTest {
                             input["heldLabelRequested"]!!.jsonPrimitive.booleanOrNull!!
                         )
                     )
+                    "detail-pending-plain-label" -> JsonPrimitive(
+                        detailPendingPlainLabel(
+                            input.getValue("target").jsonPrimitive.content,
+                            input.getValue("known").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("played").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("favorite").jsonPrimitive.booleanOrNull!!
+                        )
+                    )
+                    "detail-completion-may-apply" -> JsonPrimitive(
+                        detailCompletionMayApply(
+                            input.getValue("reportChoiceRevision").jsonPrimitive.longOrNull,
+                            input.getValue("currentChoiceRevision").jsonPrimitive.long
+                        )
+                    )
+                    "detail-pending-feedback" -> {
+                        val feedback = DetailPendingFeedback()
+                        JsonArray(
+                            input.getValue("steps").jsonArray.map { step ->
+                                val fields = step.jsonObject
+                                val cue = feedback.update(
+                                    fields.getValue("waiting").jsonPrimitive.booleanOrNull!!,
+                                    fields.getValue("graceExpired").jsonPrimitive.booleanOrNull!!,
+                                    fields["focused"]?.jsonPrimitive?.contentOrNull,
+                                    fields.getValue("resumed").jsonPrimitive.booleanOrNull!!,
+                                    fields["cancelled"]?.jsonPrimitive?.booleanOrNull ?: false
+                                )
+                                if (cue != null && (fields["submitted"]?.jsonPrimitive?.booleanOrNull ?: true)) feedback.submitted()
+                                cue?.let(::JsonPrimitive) ?: JsonNull
+                            }
+                        )
+                    }
                     "detail-ready-feedback" -> {
                         val feedback = DetailReadyFeedback()
                         JsonArray(

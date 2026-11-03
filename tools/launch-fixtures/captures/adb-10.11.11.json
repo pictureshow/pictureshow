@@ -1,0 +1,9 @@
+{
+  "version": "10.11.11",
+  "port": 18117,
+  "adbReverse": true,
+  "httpStatus": "HTTP/1.1 200 OK",
+  "observedVersion": "10.11.11",
+  "device": "dedicated Android TV API34 emulator",
+  "scope": "emulator-to-controller-to-SSH-forward-to-fixture; public discovery request only"
+}
