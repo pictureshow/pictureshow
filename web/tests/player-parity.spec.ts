@@ -722,7 +722,11 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
     page,
 }) => {
     const f = await fixture(page);
-    let completed = 0;
+    let completed = 0,
+        pageCrashed = false;
+    page.on("crash", () => {
+        pageCrashed = true;
+    });
     await page.route(
         "https://jellyfin.example/UserPlayedItems/movie?**",
         (route) => {
@@ -768,7 +772,9 @@ test("paused HLS seek to physical playlist end waits for explicit Play", async (
         0,
     );
     await page.getByRole("button", { name: "Play", exact: true }).click();
-    await expect.poll(() => completed).toBe(1);
+    await expect
+        .poll(() => ({ completed, pageCrashed }))
+        .toEqual({ completed: 1, pageCrashed: false });
     await expect(
         page.getByRole("heading", { name: "The Test Picture", exact: true }),
     ).toBeVisible();

@@ -24,6 +24,40 @@ export { playerTrackLabels } from "./player-track-labels";
 import { validSubtitleText } from "./player-subtitles";
 import type { TrackMenus } from "./player-track-menus";
 
+/** Dispose this player's MSE ownership without mutating live SourceBuffers. */
+export function disposeHlsDecoder(
+    hls: Pick<Hls, "stopLoad" | "transferMedia" | "destroy">,
+    media: HTMLMediaElement,
+    resetMedia = true,
+) {
+    const sourceChildren = Array.from(media.querySelectorAll("source"));
+    const objectUrls = new Set(
+        [media.getAttribute("src"), ...sourceChildren.map((s) => s.src)].filter(
+            (url): url is string => !!url?.startsWith("blob:"),
+        ),
+    );
+    hls.stopLoad();
+    // Transfer detaches Hls listeners/append queues without abort/remove/EOS.
+    // At unmount, DOM removal releases the complete native MSE graph without
+    // resetting a never-played final frame inside React's removal transaction.
+    hls.transferMedia();
+    try {
+        if (resetMedia) {
+            // A replacement reuses this element, so release its old resource
+            // before the next decoder attaches. Unmount needs no native reset.
+            media.removeAttribute("src");
+            for (const source of sourceChildren) source.remove();
+            media.load();
+        }
+    } finally {
+        try {
+            hls.destroy();
+        } finally {
+            for (const url of objectUrls) URL.revokeObjectURL(url);
+        }
+    }
+}
+
 type SegmentType = "Intro" | "Recap" | "Preview" | "Commercial" | "Outro";
 export type PlayerPreferences = {
     bitrateMbps?: number | null;
@@ -1113,6 +1147,15 @@ export function Player({
     }
     const physicalEndRef = useRef(physicalEnd);
     physicalEndRef.current = physicalEnd;
+    // This cleanup runs before decoder cleanup on unmount, but not on a
+    // request replacement—even if a newer request is pending while leaving.
+    const decoderUnmounting = useRef(false);
+    useLayoutEffect(() => {
+        decoderUnmounting.current = false;
+        return () => {
+            decoderUnmounting.current = true;
+        };
+    }, []);
     // Dispose the native/MSE decoder before React detaches its video node.
     // In particular, WebKit can still own a paused final-frame presentation.
     useLayoutEffect(() => {
@@ -1209,7 +1252,10 @@ export function Player({
             // target while decoding its last available frame, including a stale
             // resume position beyond the authoritative duration.
             if (!atLogicalEnd()) return logical;
-            let target = Math.max(0, Math.min(logical, end - 0.001));
+            // A packet's end is not a presentation timestamp. A 1ms inset can
+            // leave WebKit seeking forever even with HAVE_ENOUGH_DATA; keep a
+            // small frame window inside the buffer, while reports retain EOF.
+            let target = Math.max(0, Math.min(logical, end - 0.1));
             // The final encoded A/V intersection can end before the playlist's
             // declared duration. For MSE use the completed final fragment; native
             // HLS exposes no completion flag and can stay NETWORK_LOADING while
@@ -1223,10 +1269,10 @@ export function Player({
                     beginning = el.buffered.start(last);
                 // Native idle can mean partial preload, not EOF. A final
                 // frame substitution must remain within the endpoint window.
-                if (target >= tail && end - tail <= 0.5)
+                if (target >= tail - 0.1 && end - tail <= 0.5)
                     target = Math.max(
                         beginning,
-                        tail - Math.min(0.01, (tail - beginning) / 2),
+                        tail - Math.min(0.1, (tail - beginning) / 2),
                     );
             }
             return target;
@@ -1613,15 +1659,8 @@ export function Player({
             el.removeEventListener("waiting", waiting);
             el.removeEventListener("stalled", waiting);
             el.pause();
-            if (hls) {
-                // Release the native decoder's MediaSource before hls.js
-                // removes its SourceBuffers. WebKit can otherwise crash while
-                // destroying a never-played, paused final frame. Hls detects
-                // that its src was cleared and skips its duplicate media reset.
-                el.removeAttribute("src");
-                el.load();
-                hls.destroy();
-            } else {
+            if (hls) disposeHlsDecoder(hls, el, !decoderUnmounting.current);
+            else {
                 el.removeAttribute("src");
                 if (el.isConnected) el.load();
             }
