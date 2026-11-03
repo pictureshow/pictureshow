@@ -186,6 +186,16 @@ internal fun PlaybackSettingsScreen(
             Text("Audio passthrough: ${if (local.passthrough) "On" else "Off"}")
         }
         Text("This TV's audio output accepts: $acceptedAudio")
+        Button(
+            onClick = { onLocal { it.copy(conversionNotice = !it.conversionNotice) } },
+            modifier = Modifier.testTag("settings:conversion-notice").semantics {
+                toggleableState = ToggleableState(local.conversionNotice)
+                stateDescription = if (local.conversionNotice) "On" else "Off"
+            }
+        ) {
+            Text("Conversion notice: ${if (local.conversionNotice) "On" else "Off"}")
+        }
+        Text("Shows a short note when the server has to convert a video for this TV.")
         Button(onClick = {
             onLocal { it.copy(subtitleSize = nextSetting(SubtitleSize.entries, it.subtitleSize)) }
         }, modifier = Modifier.testTag("settings:size").semantics { onClick(label = "Change value", action = null) }) {

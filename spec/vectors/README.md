@@ -161,6 +161,17 @@ metadata: label that metadata separately from the actual received formats, and n
 codecs into a claim about the output. An explicit all-copy audio/video URL is remux; otherwise retain the
 server's negotiated method. These vectors do not prove real decoder speed, pitch or encoded output behavior.
 
+`conversion-notice` (PLAY-27) takes a report-enum `method`, invented playback `url`, `reasons` (array of
+TranscodeReason strings as the server sent them), the platform's `device` noun (`this TV`, `this phone`, `this
+browser`), optional Jellyfin `source` (default empty) and optional `subtitleIndex` (default -1, Off). It returns
+`title` + newline + `reason`, or the string `none` when no notice applies. Each platform appends its own one-line path
+to Playback info after the reason. The cases model observed reason sets: a browser without an HEVC path
+(video+audio codec, notice), a browser that copies video and converts audio (no notice), and a Safari remux
+(container+codec tag, no notice), plus caps, burn-in, unknown reasons and the all-copy URL. Boundary cases carry a
+`description` with the reasoning: a `VideoCodec=copy` URL means remux whatever reasons are listed, except that a
+burn-in report always means the video is re-encoded. A missing field, unknown method or misspelled operation must fail
+the runner, never pass.
+
 ## Shared control trace format (schema 1)
 
 The five control suites below execute `core/control` production reducers through `ControlVectorsTest`.

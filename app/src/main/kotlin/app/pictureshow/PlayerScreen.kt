@@ -243,6 +243,8 @@ internal fun PlayerItemScreen(
     var deferredNext by remember { mutableStateOf<MediaItem?>(null) }
     var advanceReported by remember { mutableStateOf(false) }
     var exitRequested by remember { mutableStateOf(false) }
+    var topCues by remember { mutableStateOf(false) }
+    var conversionDetailsRequested by remember { mutableStateOf(false) }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
         extraPanel = null
@@ -479,6 +481,16 @@ internal fun PlayerItemScreen(
         }
     }
     LaunchedEffect(controls) { if (controls) controlsFeedback = null }
+    // A touch on the conversion notice reveals controls first, so Playback info has a real opener to return to.
+    LaunchedEffect(conversionDetailsRequested, controls) {
+        if (conversionDetailsRequested && controls) {
+            androidx.compose.runtime.withFrameNanos { }
+            conversionDetailsRequested = false
+            if (chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching) {
+                openExtraPanel("Playback info", infoFocus)
+            }
+        }
+    }
     // Pending opens have no window to hand off. A ready panel closes through its native scope below.
     LaunchedEffect(chooserRequest, trackMenus, trackMenus.menus, state.decision != null) {
         val request = chooserRequest ?: return@LaunchedEffect
@@ -655,7 +667,36 @@ internal fun PlayerItemScreen(
                 }
             }
             val overlayTop = listOfNotNull(controlsTop.takeIf { controlsVisible }, actionsTop.takeIf { actionsVisible }).minOrNull()
-            PlayerSubtitles(player, localPreferences.appearance, overlayTop?.minus(playerTop), output.subtitleDiagnostics)
+            PlayerSubtitles(
+                player,
+                localPreferences.appearance,
+                overlayTop?.minus(playerTop),
+                output.subtitleDiagnostics,
+                onTopCues = { topCues = it }
+            )
+            // PLAY-27: top of the frame, away from bottom subtitles and controls; never takes remote focus.
+            // It yields while a top-positioned cue (signs, forced translations) is on screen.
+            PlayerConversionNotice(
+                state.decision,
+                state.subtitleIndex,
+                localPreferences,
+                allowed = !topCues &&
+                    player != null &&
+                    foreground &&
+                    !state.preparing &&
+                    error == null &&
+                    !switching &&
+                    chooser == null &&
+                    extraPanel == null &&
+                    !chaptersOpen &&
+                    !seekOpen,
+                // 48 dp is the TV overscan-safe side margin.
+                modifier = Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 36.dp)
+            ) {
+                controls = true
+                interaction++
+                conversionDetailsRequested = true
+            }
             if (switching) PlaybackStatus("Starting next episode…", Modifier.align(Alignment.Center))
             if (ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure) && !exitRequested && !switching) {
                 PlaybackStatus("Finding next episode…", Modifier.align(Alignment.Center))
@@ -961,7 +1002,8 @@ internal fun PlayerSubtitles(
     player: Player?,
     appearance: SubtitleAppearance,
     overlayTop: Int? = null,
-    diagnostics: SubtitleCueDiagnostics? = null
+    diagnostics: SubtitleCueDiagnostics? = null,
+    onTopCues: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val subtitles = remember { SubtitleView(context).apply { isFocusable = false } }
@@ -1007,21 +1049,25 @@ internal fun PlayerSubtitles(
             onDispose { manager?.removeCaptioningChangeListener(listener) }
         }
     }
+    val currentOnTopCues by rememberUpdatedState(onTopCues)
     DisposableEffect(player) {
         videoSize = player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
         cues = player?.currentCues ?: CueGroup.EMPTY_TIME_ZERO
+        currentOnTopCues(cuesNearTop(cues.cues))
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
                 videoSize = size
             }
             override fun onCues(cueGroup: CueGroup) {
                 cues = cueGroup
+                currentOnTopCues(cuesNearTop(cueGroup.cues))
             }
         }
         player?.addListener(listener)
         onDispose {
             player?.removeListener(listener)
             subtitles.setCues(emptyList())
+            currentOnTopCues(false)
         }
     }
 }
