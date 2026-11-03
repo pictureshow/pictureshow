@@ -375,18 +375,33 @@ internal fun PlayerItemScreen(
             }
             val captionLanguage = captionSubtitleLanguage(captionsEnabled, configuration, Locale.getDefault().toLanguageTag())
             val report = Any()
-            val session = PlaybackSession(
+            val localOwner = LocalVideoOwnerAdapter(
+                app.pictureshow.core.control.ViewingIdentity(
+                    account.server.id,
+                    account.user.id,
+                    clientIdentity.deviceId,
+                    java.util.UUID.randomUUID().toString(),
+                    0
+                ),
                 ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
                     catalog.completePlayback(account, item.id, report)
                 },
                 MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
+                item.id
+            )
+            val session = PlaybackSession(
+                localOwner.playbackGateway,
+                localOwner.playbackOutput,
                 reportScope,
                 Locale.getDefault().language,
                 onFinished = { catalog.refresh(item.id, report) },
                 onCompletionPending = {
                     catalog.playbackPending(item.id, report, setOfNotNull(item.seriesId, item.seasonId))
                 },
-                onCleanupDone = { reportScope.cancel() },
+                onCleanupDone = {
+                    localOwner.cleanupDone()
+                    reportScope.cancel()
+                },
                 diagnostic = PlaybackDiagnostics::write
             )
             controller = session
