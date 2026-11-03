@@ -1,0 +1,445 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-information",
+  "cases": [
+    {
+      "id": "playback-information.reason.containernotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "containernotsupported"
+      },
+      "expected": "This device cannot open the file's container. The server repackages the stream into a compatible container."
+    },
+    {
+      "id": "playback-information.reason.videocodecnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videocodecnotsupported"
+      },
+      "expected": "This device cannot decode this video format. The server converts the video. Try a version with a supported video codec."
+    },
+    {
+      "id": "playback-information.reason.audiocodecnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "audiocodecnotsupported"
+      },
+      "expected": "This device cannot decode this audio format. The server converts the audio. Choose a compatible audio track if available."
+    },
+    {
+      "id": "playback-information.reason.subtitlecodecnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "subtitlecodecnotsupported"
+      },
+      "expected": "This device cannot display this subtitle format. The server converts the subtitles or burns them into the video. Choose a text subtitle track or turn subtitles off to avoid burn-in."
+    },
+    {
+      "id": "playback-information.reason.audioisexternal",
+      "operation": "reason",
+      "input": {
+        "reason": "audioisexternal"
+      },
+      "expected": "The audio is in a separate file. The server combines it with the video."
+    },
+    {
+      "id": "playback-information.reason.secondaryaudionotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "secondaryaudionotsupported"
+      },
+      "expected": "This device cannot play the selected secondary audio directly. Choose the default audio track to try direct playback."
+    },
+    {
+      "id": "playback-information.reason.streamcountexceedslimit",
+      "operation": "reason",
+      "input": {
+        "reason": "streamcountexceedslimit"
+      },
+      "expected": "The file contains more streams than this device supports. The server selects compatible streams."
+    },
+    {
+      "id": "playback-information.reason.videoprofilenotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videoprofilenotsupported"
+      },
+      "expected": "This device does not support the video's codec profile. The server converts the video."
+    },
+    {
+      "id": "playback-information.reason.videorangetypenotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videorangetypenotsupported"
+      },
+      "expected": "This device does not support this video's HDR or color range. The server converts the video. Try an SDR version if available."
+    },
+    {
+      "id": "playback-information.reason.videocodectagnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videocodectagnotsupported"
+      },
+      "expected": "This device does not recognize the video's codec tag. The server makes a compatible stream."
+    },
+    {
+      "id": "playback-information.reason.videolevelnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videolevelnotsupported"
+      },
+      "expected": "This video exceeds the decoder's supported codec level. The server converts the video."
+    },
+    {
+      "id": "playback-information.reason.videoresolutionnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videoresolutionnotsupported"
+      },
+      "expected": "This video's resolution exceeds this device's limit. The server reduces the resolution."
+    },
+    {
+      "id": "playback-information.reason.videobitdepthnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videobitdepthnotsupported"
+      },
+      "expected": "This device cannot decode the video's bit depth. The server converts the video."
+    },
+    {
+      "id": "playback-information.reason.videoframeratenotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videoframeratenotsupported"
+      },
+      "expected": "This video's frame rate exceeds this device's limit. The server reduces the frame rate."
+    },
+    {
+      "id": "playback-information.reason.videorotationnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "videorotationnotsupported"
+      },
+      "expected": "This device cannot apply the video's rotation. The server rotates the video."
+    },
+    {
+      "id": "playback-information.reason.refframesnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "refframesnotsupported"
+      },
+      "expected": "This video needs more reference frames than the decoder supports. The server converts the video."
+    },
+    {
+      "id": "playback-information.reason.anamorphicvideonotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "anamorphicvideonotsupported"
+      },
+      "expected": "This device cannot display the video's non-square pixels correctly. The server converts the video."
+    },
+    {
+      "id": "playback-information.reason.interlacedvideonotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "interlacedvideonotsupported"
+      },
+      "expected": "This device cannot display this interlaced video directly. The server deinterlaces it."
+    },
+    {
+      "id": "playback-information.reason.audiochannelsnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "audiochannelsnotsupported"
+      },
+      "expected": "The selected audio has more channels than the current output supports. The server converts the audio. Choose a track with fewer channels or check your audio output settings."
+    },
+    {
+      "id": "playback-information.reason.audioprofilenotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "audioprofilenotsupported"
+      },
+      "expected": "This device does not support the audio's codec profile. The server converts the audio. Choose another audio track if available."
+    },
+    {
+      "id": "playback-information.reason.audiosampleratenotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "audiosampleratenotsupported"
+      },
+      "expected": "This device does not support the audio's sample rate. The server converts the audio."
+    },
+    {
+      "id": "playback-information.reason.audiobitdepthnotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "audiobitdepthnotsupported"
+      },
+      "expected": "This device does not support the audio's bit depth. The server converts the audio."
+    },
+    {
+      "id": "playback-information.reason.audiobitratenotsupported",
+      "operation": "reason",
+      "input": {
+        "reason": "audiobitratenotsupported"
+      },
+      "expected": "The audio exceeds a supported bitrate limit. The server lowers its bitrate. Choose another audio track if available."
+    },
+    {
+      "id": "playback-information.reason.unknownvideostreaminfo",
+      "operation": "reason",
+      "input": {
+        "reason": "unknownvideostreaminfo"
+      },
+      "expected": "The server could not identify the video's properties. Refresh this item's metadata on the server and try again."
+    },
+    {
+      "id": "playback-information.reason.unknownaudiostreaminfo",
+      "operation": "reason",
+      "input": {
+        "reason": "unknownaudiostreaminfo"
+      },
+      "expected": "The server could not identify the audio's properties. Refresh this item's metadata on the server and try again."
+    },
+    {
+      "id": "playback-information.reason.directplayerror",
+      "operation": "reason",
+      "input": {
+        "reason": "directplayerror"
+      },
+      "expected": "Direct playback failed. The server is providing a converted stream. Try another version or check the device's codec support."
+    },
+    {
+      "id": "playback-information.reason.quality4",
+      "operation": "reason",
+      "input": {
+        "reason": "ContainerBitrateExceedsLimit",
+        "qualityMbps": 4
+      },
+      "expected": "Quality is capped at 4 Mbps in Settings. Raise the limit to try the original quality; device or server limits may still require conversion."
+    },
+    {
+      "id": "playback-information.reason.bitrateAuto",
+      "operation": "reason",
+      "input": {
+        "reason": "VideoBitrateNotSupported"
+      },
+      "expected": "This stream exceeds a device or server bitrate limit. The server lowers its bitrate. Check the server's streaming limits."
+    },
+    {
+      "id": "playback-information.reason.unknown",
+      "operation": "reason",
+      "input": {
+        "reason": "future-url-secret"
+      },
+      "expected": "The server reported an additional conversion requirement that this client does not recognize."
+    },
+    {
+      "id": "playback-information.method.29",
+      "operation": "method",
+      "input": {
+        "method": "DirectPlay",
+        "url": "https://example.test/stream"
+      },
+      "expected": "Direct play"
+    },
+    {
+      "id": "playback-information.method.30",
+      "operation": "method",
+      "input": {
+        "method": "DirectStream",
+        "url": "https://example.test/stream"
+      },
+      "expected": "Direct stream (remux)"
+    },
+    {
+      "id": "playback-information.method.31",
+      "operation": "method",
+      "input": {
+        "method": "Transcode",
+        "url": "https://example.test/master.m3u8?VideoCodec=copy&AudioCodec=copy"
+      },
+      "expected": "Direct stream (remux)"
+    },
+    {
+      "id": "playback-information.method.32",
+      "operation": "method",
+      "input": {
+        "method": "Transcode",
+        "url": "https://example.test/master.m3u8?VideoCodec=copy&AudioCodec=aac,ac3"
+      },
+      "expected": "Transcode"
+    },
+    {
+      "id": "playback-information.subtitle.Off",
+      "operation": "subtitle",
+      "input": {
+        "source": {
+          "MediaStreams": []
+        },
+        "index": -1
+      },
+      "expected": "Off"
+    },
+    {
+      "id": "playback-information.subtitle.Notreported",
+      "operation": "subtitle",
+      "input": {
+        "source": {
+          "MediaStreams": []
+        },
+        "index": 9
+      },
+      "expected": "Not reported"
+    },
+    {
+      "id": "playback-information.subtitle.Embedded",
+      "operation": "subtitle",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2
+            }
+          ]
+        },
+        "index": 2
+      },
+      "expected": "Embedded"
+    },
+    {
+      "id": "playback-information.subtitle.External",
+      "operation": "subtitle",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "DeliveryMethod": "External"
+            }
+          ]
+        },
+        "index": 2
+      },
+      "expected": "External"
+    },
+    {
+      "id": "playback-information.subtitle.Burnedin",
+      "operation": "subtitle",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "IsExternal": true,
+              "DeliveryMethod": "Encode"
+            }
+          ]
+        },
+        "index": 2
+      },
+      "expected": "Burned in"
+    },
+    {
+      "id": "playback-information.bitrate.None",
+      "operation": "bitrate",
+      "input": {
+        "bitrate": null
+      },
+      "expected": "Not reported"
+    },
+    {
+      "id": "playback-information.bitrate.0",
+      "operation": "bitrate",
+      "input": {
+        "bitrate": 0
+      },
+      "expected": "Not reported"
+    },
+    {
+      "id": "playback-information.bitrate.128000",
+      "operation": "bitrate",
+      "input": {
+        "bitrate": 128000
+      },
+      "expected": "128 kbps"
+    },
+    {
+      "id": "playback-information.bitrate.4000000",
+      "operation": "bitrate",
+      "input": {
+        "bitrate": 4000000
+      },
+      "expected": "4.00 Mbps"
+    },
+    {
+      "id": "playback-information.bitrate.2147483647",
+      "operation": "bitrate",
+      "input": {
+        "bitrate": 2147483647
+      },
+      "expected": "2147.48 Mbps"
+    },
+    {
+      "id": "playback-information.speed.0.5False",
+      "operation": "speed",
+      "input": {
+        "speed": 0.5,
+        "encoded": false
+      },
+      "expected": "true"
+    },
+    {
+      "id": "playback-information.speed.2False",
+      "operation": "speed",
+      "input": {
+        "speed": 2,
+        "encoded": false
+      },
+      "expected": "true"
+    },
+    {
+      "id": "playback-information.speed.1True",
+      "operation": "speed",
+      "input": {
+        "speed": 1,
+        "encoded": true
+      },
+      "expected": "true"
+    },
+    {
+      "id": "playback-information.speed.1.5True",
+      "operation": "speed",
+      "input": {
+        "speed": 1.5,
+        "encoded": true
+      },
+      "expected": "false"
+    },
+    {
+      "id": "playback-information.speed.3False",
+      "operation": "speed",
+      "input": {
+        "speed": 3,
+        "encoded": false
+      },
+      "expected": "false"
+    },
+    {
+      "id": "playback-information.reason.invalidvideobitrate",
+      "operation": "reason",
+      "input": {
+        "reason": "InvalidVideoBitrate"
+      },
+      "expected": "The server reported an additional conversion requirement that this client does not recognize."
+    }
+  ],
+  "sources": [
+    "core/src/commonMain/kotlin/app/pictureshow/core/playback/PlaybackInformation.kt",
+    "app/src/test/kotlin/app/pictureshow/PlaybackSpeedTest.kt"
+  ]
+}
