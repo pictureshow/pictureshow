@@ -50,10 +50,12 @@ class DetailCompletionNoopFeedbackTest {
         val handoff = PlaybackExitHandoff({ 0L }, {})
         handoff.begin("entry")
         var writes = 0
+        var requests = 0
         compose.setContent {
             PictureshowTheme {
                 CatalogDetail(
                     state.value, {}, {}, { writes++ }, {}, {}, origin = item,
+                    onPlayedRequest = { requests++ },
                     onPendingQueueNeeded = { handoff.prepare("entry") },
                     onPendingAction = { handoff.accessibleSelect("entry", it) },
                     onPendingControlsReady = { handoff.live("entry", it) },
@@ -64,7 +66,10 @@ class DetailCompletionNoopFeedbackTest {
         compose.onNodeWithTag("detail:played-pending")
             .performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             .performSemanticsAction(SemanticsActions.OnClick) { it() }
-        compose.runOnIdle { assertEquals(0, writes) }
+        compose.runOnIdle {
+            assertEquals(0, writes)
+            assertEquals(1, requests, "The accepted choice must reach completion ownership before fresh execution")
+        }
         compose.runOnIdle {
             state.value = state.value.copy(
                 item = item.copy(userData = item.userData.copy(played = !initiallyPlayed)),

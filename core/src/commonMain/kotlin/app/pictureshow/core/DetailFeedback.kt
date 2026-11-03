@@ -98,8 +98,16 @@ fun detailRequestFeedbackIsUrgent(newlyAccepted: Boolean, requested: Boolean, av
     newlyAccepted && requested && available
 
 /** A reader's forward catalog arrival need not wait for decorative navigation motion. */
-fun catalogArrivalUsesAnimation(accessibilityEnabled: Boolean, sourceIsPlayback: Boolean, destinationIsCatalog: Boolean): Boolean =
+fun catalogArrivalUsesAnimation(
+    accessibilityEnabled: Boolean,
+    sourceIsPlayback: Boolean,
+    destinationIsCatalog: Boolean,
+    returning: Boolean = false
+): Boolean = if (returning) {
+    !(sourceIsPlayback && destinationIsCatalog)
+} else {
     !accessibilityEnabled || sourceIsPlayback || !destinationIsCatalog
+}
 
 /** Keep an initial read's static metadata from becoming the reader's replacement focus. */
 fun detailArrivalAwaitsAction(loading: Boolean, contentRevealed: Boolean, returningFromPlayback: Boolean): Boolean =
@@ -232,3 +240,35 @@ fun detailCompletionIntentRetained(reportFailed: Boolean, reportPending: Boolean
 /** No reader can receive a cue while accessibility is disabled; pending delivery is bounded. */
 fun detailRetryCueCanWait(accessibilityEnabled: Boolean, elapsedMillis: Long): Boolean =
     accessibilityEnabled && elapsedMillis < ApiTimeouts.REQUEST_MILLIS
+
+/** An accepted later played-state choice outranks automatic completion from that report. */
+fun detailCompletionMayApply(reportChoiceRevision: Long?, currentChoiceRevision: Long): Boolean =
+    reportChoiceRevision != null && reportChoiceRevision == currentChoiceRevision
+
+/** Only a control selected during the quiet grace needs an explicit pending transition. */
+class DetailPendingFeedback {
+    private var graceTarget: String? = null
+    private var submitted = false
+
+    fun update(waiting: Boolean, graceExpired: Boolean, focused: String?, resumed: Boolean, cancelled: Boolean): String? {
+        if (!waiting || !resumed || cancelled) {
+            graceTarget = null
+            submitted = false
+            return null
+        }
+        if (!graceExpired) graceTarget = focused
+        return focused?.takeIf { graceExpired && !submitted && it == graceTarget }
+    }
+
+    fun submitted() {
+        submitted = true
+    }
+}
+
+/** Retained catalog user data can name a pending toggle before its authoritative read. */
+fun detailPendingPlainLabel(target: String, known: Boolean, played: Boolean, favorite: Boolean): String = when {
+    !known -> detailHeldActionLabel(target)
+    target == "played" -> if (played) "Mark unwatched" else "Mark watched"
+    target == "favorite" -> if (favorite) "Unfavorite" else "Favorite"
+    else -> detailHeldActionLabel(target)
+}

@@ -362,7 +362,7 @@ internal fun PlayerItemScreen(
             val report = Any()
             val session = PlaybackSession(
                 ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
-                    catalog.completePlayback(account, item.id)
+                    catalog.completePlayback(account, item.id, report)
                 },
                 MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
                 reportScope,
