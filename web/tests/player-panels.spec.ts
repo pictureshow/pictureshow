@@ -345,7 +345,31 @@ test("conversion notice switch: settings row defaults On, Off is stored and supp
     await expect(toggle).toHaveAccessibleName("Conversion notice");
     await expect(toggle).toBeChecked();
     const row = page.locator(".switch-row").filter({ has: toggle });
-    await expect(row.locator(".switch-state")).toHaveText("On");
+    // One drawn switch component for every boolean setting, with no On/Off text:
+    // the thumb and role="switch" carry the state.
+    const switches = page.locator(".setting-list").getByRole("switch");
+    expect(await switches.count()).toBeGreaterThanOrEqual(3);
+    for (const s of await switches.all()) {
+        expect(await s.evaluate((e) => e.className)).toBe("switch");
+        const box = (await s.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(24);
+        expect(await s.evaluate((e) => getComputedStyle(e).appearance)).toBe(
+            "none",
+        );
+    }
+    await expect(row).not.toContainText(/\b(On|Off)\b/);
+    // The switch sits at the row's end; the label text at its start.
+    const [rowBox, switchBox] = [
+        (await row.boundingBox())!,
+        (await toggle.boundingBox())!,
+    ];
+    expect(
+        Math.abs(rowBox.x + rowBox.width - (switchBox.x + switchBox.width)),
+    ).toBeLessThanOrEqual(1);
+    const onColor = await toggle.evaluate(
+        (e) => getComputedStyle(e).backgroundColor,
+    );
     // The help text sits with its own switch and starts where the label text starts.
     const caption = row.locator(".switch-caption");
     const [toggleBox, captionBox] = [
@@ -390,7 +414,11 @@ test("conversion notice switch: settings row defaults On, Off is stored and supp
     await toggle.click();
     await expect(toggle).toHaveAccessibleName("Conversion notice");
     await expect(toggle).not.toBeChecked();
-    await expect(row.locator(".switch-state")).toHaveText("Off");
+    await expect(row).not.toContainText(/\b(On|Off)\b/);
+    // The drawn state changes with it (after its 0.15 s transition).
+    await expect
+        .poll(() => toggle.evaluate((e) => getComputedStyle(e).backgroundColor))
+        .not.toBe(onColor);
     expect(
         await page.evaluate(
             () =>
@@ -613,20 +641,47 @@ test("speed returns to 1× with a visible explanation when a replacement stream 
     const before = f.negotiations.length;
     await chooseSpanish(page);
     await expect.poll(() => f.negotiations.length).toBeGreaterThan(before);
-    const explanation =
-        "Speed returned to 1× because this stream could not keep 1.5×. Choose Speed to try again.";
+    const reason =
+        "Speed went back to 1× because this video couldn't keep up at 1.5×.";
     // Visible in the player without opening Speed.
-    await expect(page.locator(".playback-feedback")).toHaveText(explanation, {
+    const status = page.locator(".playback-feedback");
+    await expect(status).toHaveText(`${reason} Choose Speed to try again.`, {
         timeout: 20000,
     });
     await expect(speed).toHaveAccessibleName("Speed, 1×");
+    // R1: a readable card (the notice's style), centred just above the controls.
+    expect(
+        await status.evaluate((e) => getComputedStyle(e).backgroundColor),
+    ).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    const transport = page.locator(".player-controls > .transport");
+    if (await transport.isVisible()) {
+        const [card, controls] = [
+            (await status.boundingBox())!,
+            (await transport.boundingBox())!,
+        ];
+        expect(card.y + card.height).toBeLessThanOrEqual(controls.y);
+        expect(controls.y - (card.y + card.height)).toBeLessThan(40);
+        const viewport = page.viewportSize()!;
+        expect(
+            Math.abs(card.x + card.width / 2 - viewport.width / 2),
+        ).toBeLessThanOrEqual(2);
+    }
     await capture(page, "speed-reset");
+    await page.setViewportSize({ width: 1280, height: 800 });
     await speed.click();
     const dialog = page.getByRole("dialog", { name: "Speed" });
-    await expect(dialog.getByRole("status")).toHaveText(explanation);
+    await expect(dialog.getByRole("status")).toHaveText(
+        `${reason} Choose a speed to try again.`,
+    );
+    // R1: the player's copy steps aside while a panel is open.
+    await expect(status).toBeHidden();
     await expect(
         dialog.getByRole("radio", { name: "1× (normal)" }),
     ).toHaveAttribute("aria-checked", "true");
+    // R4: Done stays in view at 1280×800 with the reset message showing.
+    await expect(dialog.getByRole("button", { name: "Done" })).toBeInViewport({
+        ratio: 1,
+    });
     await capture(page, "speed-reset-panel");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Stop and go back" }).click();
@@ -664,6 +719,198 @@ test("Playback info never shows the previous stream while a new negotiation is p
     });
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("after a failed renegotiation Playback info closes and is unavailable, never stuck on Preparing; Retry brings it back", async ({
+    page,
+}) => {
+    const f = await converting(page, "VideoCodecNotSupported");
+    await play(page);
+    let failing = true;
+    const hold = gate();
+    await page.route(
+        "https://jellyfin.example/Items/movie/PlaybackInfo",
+        async (route) => {
+            if (!failing) return route.fallback();
+            await hold.promise;
+            await route.fulfill({
+                status: 500,
+                headers: jsonHeaders,
+                body: "{}",
+            });
+        },
+    );
+    await chooseSpanish(page);
+    const info = page.getByRole("button", {
+        name: "Playback info",
+        exact: true,
+    });
+    await info.click();
+    const dialog = page.getByRole("dialog", { name: "Playback info" });
+    await expect(dialog).toContainText("Preparing the new stream");
+    hold.release();
+    // The failure ends the panel (as Android hides it on error) and says what happened.
+    await expect(dialog).toBeHidden({ timeout: 30000 });
+    await expect(
+        page.getByRole("button", { name: "Retry playback" }),
+    ).toBeVisible();
+    await expect(page.locator(".playback-feedback")).not.toHaveText("");
+    await expect(info).toBeDisabled();
+    await expect(page.getByText("Preparing the new stream")).toHaveCount(0);
+    // Retry negotiates again; Playback info describes the new stream.
+    failing = false;
+    const before = f.negotiations.length;
+    await page.getByRole("button", { name: "Retry playback" }).click();
+    await expect.poll(() => f.negotiations.length).toBeGreaterThan(before);
+    await expect(info).toBeEnabled({ timeout: 20000 });
+    await info.click();
+    await expect(
+        page
+            .getByRole("region", { name: "Playback info details" })
+            .locator("> :first-child"),
+    ).toHaveText(SUMMARY, { timeout: 20000 });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("the notice follows the current decision: a renegotiation that stops converting hides it early, silently, for the rest of the viewing", async ({
+    page,
+}) => {
+    await watchAnnouncements(page);
+    const f = await converting(page, "VideoCodecNotSupported");
+    await play(page);
+    await expect(notice(page)).toBeVisible({ timeout: 10000 });
+    const shownAt = Date.now();
+    // From now on the server plays the file directly (as when burned-in subtitles
+    // are turned off): the reason the notice gives is gone.
+    // Removing the converting route leaves the fixture's direct-play answer.
+    await page.unroute("https://jellyfin.example/Items/movie/PlaybackInfo");
+    const before = f.negotiations.length;
+    await chooseSpanish(page);
+    await ready(page);
+    // Still inside the 10 s window, the notice is gone and does not come back.
+    expect(Date.now() - shownAt).toBeLessThan(9000);
+    await expect(notice(page)).toHaveCount(0);
+    await page.waitForTimeout(Math.max(0, 11000 - (Date.now() - shownAt)));
+    await expect(notice(page)).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).announced)).toHaveLength(
+        1,
+    );
+    await expect.poll(() => f.negotiations.length).toBeGreaterThan(before);
+    await page.getByRole("button", { name: "Stop and go back" }).click();
+});
+
+test("input tracking starts at the app shell: arriving by keyboard shows the keyboard line, and pointer type switches it", async ({
+    page,
+}) => {
+    await converting(page, "VideoCodecNotSupported");
+    await signIn(page);
+    // Keyboard only from the home screen into the player: no key is pressed in the player.
+    await page.locator('[data-focus="resume:movie"]').focus();
+    await page.keyboard.press("Enter");
+    const resume = page.getByRole("button", {
+        name: "Resume from 0:10",
+        exact: true,
+    });
+    await resume.focus();
+    await page.keyboard.press("Enter");
+    await ready(page);
+    const pressPlay = page
+        .getByRole("status")
+        .filter({ hasText: "Press Play" });
+    if (await pressPlay.count()) {
+        await page.getByRole("button", { name: "Play", exact: true }).focus();
+        await page.keyboard.press("Enter");
+    }
+    const line = notice(page).locator(".conversion-notice-line");
+    await expect(line).toHaveText(`${REASON} ${ACTION.keyboard}`, {
+        timeout: 10000,
+    });
+    await capture(page, "notice-keyboard");
+    // The pointerdown branch: a touch, then a mouse, each switches the line.
+    const pointer = (pointerType: string) =>
+        page.evaluate(
+            (type) =>
+                window.dispatchEvent(
+                    new PointerEvent("pointerdown", { pointerType: type }),
+                ),
+            pointerType,
+        );
+    await pointer("touch");
+    await expect(line).toHaveText(`${REASON} ${ACTION.touch}`);
+    await pointer("pen");
+    await expect(line).toHaveText(`${REASON} ${ACTION.touch}`);
+    await pointer("mouse");
+    await expect(line).toHaveText(`${REASON} ${ACTION.mouse}`);
+    // A shortcut chord is not navigation.
+    await page.keyboard.press("Control+Shift");
+    await expect(line).toHaveText(`${REASON} ${ACTION.mouse}`);
+    await capture(page, "notice-mouse-after-switch");
+});
+
+test.describe("Edge", () => {
+    test.use({
+        userAgent:
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0",
+    });
+    test("Edge viewers get Edge's own settings and steps, never the Edge remedy", async ({
+        page,
+    }) => {
+        await converting(page, "VideoCodecNotSupported");
+        await play(page);
+        await expect(notice(page)).toBeVisible({ timeout: 10000 });
+        await notice(page).click();
+        const details = page.getByRole("region", {
+            name: "Playback info details",
+        });
+        const remedies = details.getByRole("region", {
+            name: "What you can do",
+        });
+        await expect(remedies).toContainText(
+            "Edge's System and performance settings",
+        );
+        await expect(remedies).not.toContainText("Microsoft Edge");
+        await details.locator("summary").click();
+        const text = (await details.innerText()).replace(/\s+/g, " ");
+        expect(text).toContain("edge://gpu");
+        expect(text).toContain("edge://settings/system");
+        expect(text).not.toContain("chrome://");
+        expect(text).not.toMatch(/Try (Microsoft )?Edge/);
+        await capture(page, "playback-info-edge");
+        await page.keyboard.press("Escape");
+    });
+});
+
+test.describe("Chrome on Windows", () => {
+    test.use({
+        userAgent:
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    });
+    test("Chrome on Windows is told Edge plays more formats; the technical steps never repeat it", async ({
+        page,
+    }) => {
+        test.skip(
+            test.info().project.name !== "chromium",
+            "Client Hints report the real engine and OS outside Chromium",
+        );
+        await converting(page, "VideoCodecNotSupported");
+        await play(page);
+        await expect(notice(page)).toBeVisible({ timeout: 10000 });
+        await notice(page).click();
+        const details = page.getByRole("region", {
+            name: "Playback info details",
+        });
+        await expect(
+            details.getByRole("region", { name: "What you can do" }),
+        ).toContainText(
+            "Try Microsoft Edge, which plays more video formats on Windows.",
+        );
+        await details.locator("summary").click();
+        const steps = details.locator("ol");
+        await expect(steps).toContainText("chrome://gpu");
+        await expect(steps).not.toContainText("Edge");
+        await page.keyboard.press("Escape");
+    });
 });
 
 test("keyboard: Down then Playback info opens the panel the notice points to", async ({
@@ -756,6 +1003,37 @@ test("the conversion notice switch applies the next time the player opens, both 
 
 test.describe("touch", () => {
     test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+    test("phone width: every setting switch sits at its row's end, clear of its label and help text", async ({
+        page,
+    }) => {
+        await fixture(page);
+        await signIn(page);
+        await page.locator('[data-focus="home-settings"]').tap();
+        const rows = page.locator(".setting-list .switch-row");
+        expect(await rows.count()).toBeGreaterThanOrEqual(3);
+        for (const row of await rows.all()) {
+            const [r, sw, text, caption] = await Promise.all([
+                row.boundingBox(),
+                row.getByRole("switch").boundingBox(),
+                row.locator(".switch-text").boundingBox(),
+                row.locator(".switch-caption").boundingBox(),
+            ]);
+            expect(
+                Math.abs(r!.x + r!.width - (sw!.x + sw!.width)),
+            ).toBeLessThanOrEqual(1);
+            expect(text!.x + text!.width).toBeLessThanOrEqual(sw!.x);
+            expect(caption!.x + caption!.width).toBeLessThanOrEqual(
+                r!.x + r!.width,
+            );
+            expect(r!.x + r!.width).toBeLessThanOrEqual(390);
+        }
+        await page
+            .getByRole("switch", { name: "Conversion notice" })
+            .scrollIntoViewIfNeeded();
+        await capture(page, "settings-switches-390");
+        await page.getByRole("switch", { name: "Conversion notice" }).tap();
+        await capture(page, "settings-switches-390-off");
+    });
     test("tapping the notice opens Playback info, and Done closes it", async ({
         page,
     }) => {

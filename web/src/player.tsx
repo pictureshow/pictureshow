@@ -17,11 +17,12 @@ import {
 import {
     BROWSER_DEVICE,
     BROWSER_NOTICE_ACTIONS,
-    CHROMIUM_DECODE_STEPS,
+    chromiumDecodeSteps,
     browserFamily,
     conversionKind,
     conversionNotice,
     conversionRemedies,
+    osFamily,
     conversionSummary,
     cueNearTop,
     formatBitrate,
@@ -30,9 +31,8 @@ import {
     subtitleDelivery,
     transcodeReason,
     transcodeReasons,
-    type ConversionNotice,
-    type NoticeInput,
 } from "@pictureshow/core/playback-information";
+import { useLastInput } from "./last-input";
 import {
     visibilityPlay,
     WEB_FOREGROUND_REQUIRED,
@@ -127,10 +127,24 @@ function codecName(codec: string | undefined) {
                           : undefined;
     return name ? `${name} (${codec})` : codec;
 }
-const chromium = () =>
-    typeof navigator !== "undefined" &&
-    /(Chrome|Chromium|Edg)\//.test(navigator.userAgent) &&
-    !/\bOPR\//.test(navigator.userAgent);
+/** This browser and OS: Client Hints when the browser gives them, else the user agent. */
+const viewerBrowser = () => {
+    const hints = (
+        navigator as Navigator & {
+            userAgentData?: {
+                brands?: Array<{ brand: string }>;
+                platform?: string;
+            };
+        }
+    ).userAgentData;
+    return {
+        browser: browserFamily(
+            navigator.userAgent,
+            hints?.brands?.map((b) => b.brand),
+        ),
+        os: osFamily(navigator.userAgent, hints?.platform),
+    };
+};
 type Chapter = {
     StartPositionTicks?: number;
     Name?: string;
@@ -425,17 +439,12 @@ export function Player({
         [noticePhase, setNoticePhase] = useState<"waiting" | "active" | "done">(
             "waiting",
         ),
-        [shownNotice, setShownNotice] = useState<ConversionNotice>(),
         [announcement, setAnnouncement] = useState(""),
-        // The notice's action line follows the input in use: coarse pointers start on touch.
-        [noticeInput, setNoticeInput] = useState<NoticeInput>(() =>
-            typeof matchMedia === "function" &&
-            matchMedia("(pointer: coarse)").matches
-                ? "touch"
-                : "mouse",
-        ),
         [topCue, setTopCue] = useState(false),
         [noticeTop, setNoticeTop] = useState<number>();
+    // The notice's action line follows the viewer's last input, tracked app-wide
+    // from the first interaction (so the press that opened the player counts).
+    const noticeInput = useLastInput();
     const speedRef = useRef(1),
         speedNoteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
             undefined,
@@ -483,9 +492,9 @@ export function Player({
             if (previous !== 1) {
                 // Shown in the player's status line as well as the Speed panel, so a
                 // viewer who never reopens Speed still learns why the rate changed.
-                const message = `Speed returned to 1× because this stream could not keep ${rateLabel(previous)}. Choose Speed to try again.`;
-                setSpeedMessage(message);
-                setSpeedNote(message);
+                const reason = `Speed went back to 1× because this video couldn't keep up at ${rateLabel(previous)}.`;
+                setSpeedMessage(`${reason} Choose a speed to try again.`);
+                setSpeedNote(`${reason} Choose Speed to try again.`);
                 clearTimeout(speedNoteTimer.current);
                 speedNoteTimer.current = setTimeout(() => {
                     if (alive.current) setSpeedNote("");
@@ -1395,6 +1404,7 @@ export function Player({
         setDecision(undefined);
         setPlaybackReady(false);
         setReceived({});
+        setVideoSize("");
         replacing.current = true;
         const probe = (mime: string) => el.canPlayType(mime) === "probably";
         const clearWaiting = () => {
@@ -2279,7 +2289,6 @@ export function Player({
         )
             return;
         setNoticePhase("active");
-        setShownNotice(conversion);
         // Announced once per viewing; a later return from under a panel is silent.
         setAnnouncement(
             `${conversion.title}. ${conversion.reason} ${BROWSER_NOTICE_ACTIONS[noticeInput]}`,
@@ -2299,20 +2308,15 @@ export function Player({
         [],
     );
     useEffect(() => {
-        // The last input decides the notice's action line.
-        const pointer = (e: PointerEvent) =>
-            setNoticeInput(e.pointerType === "mouse" ? "mouse" : "touch");
-        const key = (e: KeyboardEvent) => {
-            if (!e.metaKey && !e.ctrlKey && !e.altKey)
-                setNoticeInput("keyboard");
-        };
-        window.addEventListener("pointerdown", pointer, true);
-        window.addEventListener("keydown", key, true);
-        return () => {
-            window.removeEventListener("pointerdown", pointer, true);
-            window.removeEventListener("keydown", key, true);
-        };
-    }, []);
+        // The notice follows the current decision while it is up: a settled decision
+        // that no longer converts for this reason (say, burn-in subtitles turned off)
+        // ends it early for this viewing. It is never announced again either way.
+        if (noticePhase === "active" && decision && !conversion) {
+            clearTimeout(noticeTimer.current);
+            setNoticePhase("done");
+            setAnnouncement("");
+        }
+    }, [noticePhase, decision, conversion?.reason]);
     useEffect(() => {
         const track = video.current?.textTracks[0];
         if (!track || !subtitleBlob) {
@@ -2334,7 +2338,8 @@ export function Player({
     }, [subtitleBlob]);
     const noticeVisible =
         noticePhase === "active" &&
-        !!shownNotice &&
+        // The current decision only; a pending negotiation has none, so it hides.
+        !!conversion &&
         !panel &&
         !pendingPanel.current &&
         seekPreview === undefined &&
@@ -2618,6 +2623,22 @@ export function Player({
     function info() {
         // Only the current decision: a pending negotiation shows no previous stream's data.
         const d = decision;
+        if (!d && error)
+            return (
+                <div
+                    className="playback-info"
+                    data-scroll
+                    data-panel-first
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Playback info details"
+                >
+                    <p className="playback-info-summary" role="status">
+                        Playback failed: {error} Choose Retry playback, or go
+                        back to details.
+                    </p>
+                </div>
+            );
         if (!d)
             return (
                 <div
@@ -2681,11 +2702,13 @@ export function Player({
             videoFormat: format === "Not reported" ? undefined : format,
             qualityMbps: preferences.bitrateMbps ?? undefined,
         });
-        const remedies = conversionRemedies(
-            kind,
-            browserFamily(navigator.userAgent),
-        );
-        const browserSteps = kind === "video" && chromium();
+        const viewer = viewerBrowser();
+        const remedies = conversionRemedies(kind, viewer.browser, viewer.os);
+        const browserSteps =
+            kind === "video" &&
+            (viewer.browser === "chrome" || viewer.browser === "edge")
+                ? chromiumDecodeSteps(viewer.browser)
+                : undefined;
         return (
             <div
                 className="playback-info"
@@ -2733,12 +2756,14 @@ export function Player({
                             {browserSteps && (
                                 <>
                                     <p>
-                                        Chrome or Edge may be able to decode it
-                                        with hardware help. Try these steps in
-                                        order:
+                                        {viewer.browser === "edge"
+                                            ? "Edge"
+                                            : "Chrome"}{" "}
+                                        may be able to decode it with hardware
+                                        help. Try these steps in order:
                                     </p>
                                     <ol>
-                                        {CHROMIUM_DECODE_STEPS.map((step) => (
+                                        {browserSteps.map((step) => (
                                             <li key={step}>{step}</li>
                                         ))}
                                     </ol>
@@ -2880,7 +2905,16 @@ export function Player({
                     />
                 )}
             </video>
-            <div className="playback-feedback" role="status">
+            <div
+                className="playback-feedback"
+                role="status"
+                // A panel owns the screen; its own status says what matters there.
+                data-covered={panel ? "" : undefined}
+                // An error or report failure sits directly above its own buttons.
+                data-anchor={
+                    error ? "error" : reportError ? "report" : undefined
+                }
+            >
                 {error ||
                     reportError ||
                     notice ||
@@ -2919,11 +2953,11 @@ export function Player({
             <div className="sr-only" aria-live="polite" aria-atomic="true">
                 {announcement}
             </div>
-            {noticeVisible && shownNotice && (
+            {noticeVisible && conversion && (
                 <div
                     className="conversion-notice"
                     role="button"
-                    aria-label={`${shownNotice.title}. ${shownNotice.reason} Opens Playback info.`}
+                    aria-label={`${conversion.title}. ${conversion.reason} Opens Playback info.`}
                     style={
                         noticeTop !== undefined ? { top: noticeTop } : undefined
                     }
@@ -2941,10 +2975,10 @@ export function Player({
                     }}
                 >
                     <p className="conversion-notice-title">
-                        {shownNotice.title}
+                        {conversion.title}
                     </p>
                     <p className="conversion-notice-line">
-                        {shownNotice.reason}{" "}
+                        {conversion.reason}{" "}
                         {BROWSER_NOTICE_ACTIONS[noticeInput]}
                     </p>
                 </div>
@@ -3150,7 +3184,11 @@ export function Player({
                         </button>
                         <button
                             onClick={(e) => openPanel("Info", e.currentTarget)}
-                            disabled={!decision && !viewing.current.decision}
+                            // Like Audio and Speed: after a failure there is no stream to describe.
+                            disabled={
+                                (!decision && !viewing.current.decision) ||
+                                !!error
+                            }
                         >
                             Playback info
                         </button>
@@ -3287,194 +3325,210 @@ export function Player({
                 }}
             >
                 <h2>{panel && panelTitle(panel)}</h2>
-                {panel === "Speed" && (
-                    <div>
-                        <div role="radiogroup" aria-label="Playback speed">
-                            {SPEEDS.map((rate) => (
+                {/* The body scrolls; the title and Done stay in view. */}
+                <div className="player-panel-body">
+                    {panel === "Speed" && (
+                        <div>
+                            <div role="radiogroup" aria-label="Playback speed">
+                                {SPEEDS.map((rate) => (
+                                    <button
+                                        key={rate}
+                                        role="radio"
+                                        aria-checked={speed === rate}
+                                        onClick={() => chooseSpeed(rate)}
+                                    >
+                                        {rate === 1
+                                            ? "1× (normal)"
+                                            : rateLabel(rate)}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="muted">
+                                Pitch is preserved. Speed applies to this video
+                                only.
+                                {decision?.method === "Transcode"
+                                    ? " The server is converting this video, so faster speeds may pause to buffer."
+                                    : ""}
+                            </p>
+                            <p role="status">{speedMessage}</p>
+                        </div>
+                    )}
+                    {panel === "Info" && info()}
+                    {panel === "Seek" ? (
+                        <div>
+                            {preview}
+                            <p>
+                                Position {clock(position)}
+                                {duration ? ` of ${clock(duration)}` : ""}
+                            </p>
+                            <div className="transport">
                                 <button
-                                    key={rate}
-                                    role="radio"
-                                    aria-checked={speed === rate}
-                                    onClick={() => chooseSpeed(rate)}
+                                    data-panel-first
+                                    onClick={() => seekStep(-10)}
                                 >
-                                    {rate === 1
-                                        ? "1× (normal)"
-                                        : rateLabel(rate)}
+                                    Back 10 seconds
                                 </button>
-                            ))}
+                                <button onClick={() => seekStep(10)}>
+                                    Forward 10 seconds
+                                </button>
+                            </div>
                         </div>
-                        <p className="muted">
-                            Pitch is preserved. Speed applies to this video
-                            only.
-                            {decision?.method === "Transcode"
-                                ? " The server is converting this video, so faster speeds may pause to buffer."
-                                : ""}
-                        </p>
-                        <p role="status">{speedMessage}</p>
-                    </div>
-                )}
-                {panel === "Info" && info()}
-                {panel === "Seek" ? (
-                    <div>
-                        {preview}
-                        <p>
-                            Position {clock(position)}
-                            {duration ? ` of ${clock(duration)}` : ""}
-                        </p>
-                        <div className="transport">
+                    ) : null}
+                    {(panel === "Audio" || panel === "Subtitles") && (
+                        <div role="radiogroup" aria-label={`${panel} tracks`}>
                             <button
-                                data-panel-first
-                                onClick={() => seekStep(-10)}
-                            >
-                                Back 10 seconds
-                            </button>
-                            <button onClick={() => seekStep(10)}>
-                                Forward 10 seconds
-                            </button>
-                        </div>
-                    </div>
-                ) : null}
-                {(panel === "Audio" || panel === "Subtitles") && (
-                    <div role="radiogroup" aria-label={`${panel} tracks`}>
-                        <button
-                            role="radio"
-                            aria-label="Off"
-                            aria-checked={
-                                panel === "Audio"
-                                    ? video.current?.muted || audioIndex === -1
-                                    : subtitleIndex === -1
-                            }
-                            onClick={() =>
-                                pickTrack(panel as "Audio" | "Subtitles", -1)
-                            }
-                        >
-                            Off
-                        </button>
-                        {(panel === "Audio" ? audio : subtitles).map((s, i) => (
-                            <button
-                                key={s.Index}
                                 role="radio"
-                                aria-label={labels[i]}
+                                aria-label="Off"
                                 aria-checked={
                                     panel === "Audio"
-                                        ? audioIndex === s.Index &&
-                                          !video.current?.muted
-                                        : subtitleIndex === s.Index
+                                        ? video.current?.muted ||
+                                          audioIndex === -1
+                                        : subtitleIndex === -1
                                 }
                                 onClick={() =>
                                     pickTrack(
                                         panel as "Audio" | "Subtitles",
-                                        s.Index,
+                                        -1,
                                     )
                                 }
                             >
-                                {labels[i]}
+                                Off
                             </button>
-                        ))}
-                    </div>
-                )}
-                {panel === "Subtitles" && (
-                    <section aria-label="Subtitle timing">
-                        <h3>Subtitle timing</h3>
-                        {burned ? (
-                            <p>
-                                These subtitles are encoded into the video.
-                                Timing and appearance cannot be changed.
-                            </p>
-                        ) : (
-                            <p>
-                                Positive delay shows captions later.{" "}
-                                {subtitleDelay === 0
-                                    ? "No delay"
-                                    : `${subtitleDelay} milliseconds`}
-                            </p>
-                        )}
-                        <div className="subtitle-delay">
-                            <button
-                                disabled={
-                                    burned ||
-                                    !textSubtitle ||
-                                    subtitleDelay <= -10000
-                                }
-                                onClick={() =>
-                                    setSubtitleDelay((v) =>
-                                        Math.max(-10000, v - 100),
-                                    )
-                                }
-                            >
-                                Earlier
-                            </button>
-                            <button
-                                disabled={burned || !textSubtitle}
-                                onClick={() => setSubtitleDelay(0)}
-                            >
-                                Reset
-                            </button>
-                            <button
-                                disabled={
-                                    burned ||
-                                    !textSubtitle ||
-                                    subtitleDelay >= 10000
-                                }
-                                onClick={() =>
-                                    setSubtitleDelay((v) =>
-                                        Math.min(10000, v + 100),
-                                    )
-                                }
-                            >
-                                Later
-                            </button>
+                            {(panel === "Audio" ? audio : subtitles).map(
+                                (s, i) => (
+                                    <button
+                                        key={s.Index}
+                                        role="radio"
+                                        aria-label={labels[i]}
+                                        aria-checked={
+                                            panel === "Audio"
+                                                ? audioIndex === s.Index &&
+                                                  !video.current?.muted
+                                                : subtitleIndex === s.Index
+                                        }
+                                        onClick={() =>
+                                            pickTrack(
+                                                panel as "Audio" | "Subtitles",
+                                                s.Index,
+                                            )
+                                        }
+                                    >
+                                        {labels[i]}
+                                    </button>
+                                ),
+                            )}
                         </div>
-                        <label className="reader-choice">
-                            <input
-                                type="checkbox"
-                                checked={reader}
-                                onChange={(e) => setReader(e.target.checked)}
-                            />
-                            Keep controls visible and require Play now for next
-                            episode
-                        </label>
-                        <p className="muted">
-                            Browsers do not expose a reliable screen-reader or
-                            system-caption preference. Enable this for manual
-                            continuation.
-                        </p>
-                    </section>
-                )}
-                {panel === "Chapters" && (
-                    <div className="chapter-list">
-                        {chapters.map((c, i) => (
-                            <button
-                                key={i}
-                                aria-current={
-                                    i === currentChapter ? "true" : undefined
-                                }
-                                onClick={() => {
-                                    seek(
-                                        Math.max(
-                                            0,
+                    )}
+                    {panel === "Subtitles" && (
+                        <section aria-label="Subtitle timing">
+                            <h3>Subtitle timing</h3>
+                            {burned ? (
+                                <p>
+                                    These subtitles are encoded into the video.
+                                    Timing and appearance cannot be changed.
+                                </p>
+                            ) : (
+                                <p>
+                                    Positive delay shows captions later.{" "}
+                                    {subtitleDelay === 0
+                                        ? "No delay"
+                                        : `${subtitleDelay} milliseconds`}
+                                </p>
+                            )}
+                            <div className="subtitle-delay">
+                                <button
+                                    disabled={
+                                        burned ||
+                                        !textSubtitle ||
+                                        subtitleDelay <= -10000
+                                    }
+                                    onClick={() =>
+                                        setSubtitleDelay((v) =>
+                                            Math.max(-10000, v - 100),
+                                        )
+                                    }
+                                >
+                                    Earlier
+                                </button>
+                                <button
+                                    disabled={burned || !textSubtitle}
+                                    onClick={() => setSubtitleDelay(0)}
+                                >
+                                    Reset
+                                </button>
+                                <button
+                                    disabled={
+                                        burned ||
+                                        !textSubtitle ||
+                                        subtitleDelay >= 10000
+                                    }
+                                    onClick={() =>
+                                        setSubtitleDelay((v) =>
+                                            Math.min(10000, v + 100),
+                                        )
+                                    }
+                                >
+                                    Later
+                                </button>
+                            </div>
+                            <label className="reader-choice">
+                                <input
+                                    type="checkbox"
+                                    checked={reader}
+                                    onChange={(e) =>
+                                        setReader(e.target.checked)
+                                    }
+                                />
+                                Keep controls visible and require Play now for
+                                next episode
+                            </label>
+                            <p className="muted">
+                                Browsers do not expose a reliable screen-reader
+                                or system-caption preference. Enable this for
+                                manual continuation.
+                            </p>
+                        </section>
+                    )}
+                    {panel === "Chapters" && (
+                        <div className="chapter-list">
+                            {chapters.map((c, i) => (
+                                <button
+                                    key={i}
+                                    aria-current={
+                                        i === currentChapter
+                                            ? "true"
+                                            : undefined
+                                    }
+                                    onClick={() => {
+                                        seek(
+                                            Math.max(
+                                                0,
+                                                (c.StartPositionTicks ?? 0) /
+                                                    1e7,
+                                            ),
+                                        );
+                                        closePanel();
+                                    }}
+                                >
+                                    {c.ImageTag && (
+                                        <MediaImage
+                                            client={client}
+                                            path={`Items/${encode(item.Id)}/Images/Chapter/${i}?tag=${encode(c.ImageTag)}&maxWidth=320`}
+                                        />
+                                    )}
+                                    <span>
+                                        {c.Name || `Chapter ${i + 1}`} ·{" "}
+                                        {clock(
                                             (c.StartPositionTicks ?? 0) / 1e7,
-                                        ),
-                                    );
-                                    closePanel();
-                                }}
-                            >
-                                {c.ImageTag && (
-                                    <MediaImage
-                                        client={client}
-                                        path={`Items/${encode(item.Id)}/Images/Chapter/${i}?tag=${encode(c.ImageTag)}&maxWidth=320`}
-                                    />
-                                )}
-                                <span>
-                                    {c.Name || `Chapter ${i + 1}`} ·{" "}
-                                    {clock((c.StartPositionTicks ?? 0) / 1e7)}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                )}
+                                        )}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 <button
-                    className="primary"
+                    className="primary player-panel-done"
                     data-panel-first
                     onClick={closePanel}
                 >

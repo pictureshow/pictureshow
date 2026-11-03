@@ -271,6 +271,8 @@ const streamKeys = new Set([
     "DeliveryMethod",
     "IsExternal",
 ]);
+/** Jellyfin SubtitleDeliveryMethod values. */
+const deliveryMethods = new Set(["Encode", "Embed", "External", "Hls", "Drop"]);
 const plainObject = (v: unknown): v is Record<string, unknown> =>
     !!v && typeof v === "object" && !Array.isArray(v);
 const nonEmptyString = (v: unknown): v is string =>
@@ -328,9 +330,9 @@ export function conversionNoticeInputProblem(input: unknown) {
                     return "a stream Codec is not a non-empty string";
                 if (
                     stream.DeliveryMethod !== undefined &&
-                    !nonEmptyString(stream.DeliveryMethod)
+                    !deliveryMethods.has(stream.DeliveryMethod as string)
                 )
-                    return "a stream DeliveryMethod is not a non-empty string";
+                    return "a stream DeliveryMethod is not Encode, Embed, External, Hls or Drop";
                 if (
                     stream.IsExternal !== undefined &&
                     typeof stream.IsExternal !== "boolean"
@@ -338,6 +340,20 @@ export function conversionNoticeInputProblem(input: unknown) {
                     return "a stream IsExternal is not a boolean";
             }
         }
+    }
+    // A selected subtitle must be a stream the case carries, or the case no longer
+    // exercises what it says; -1 (or absent) is the format's "no subtitle".
+    if (typeof input.subtitleIndex === "number" && input.subtitleIndex >= 0) {
+        const streams =
+            plainObject(input.source) &&
+            Array.isArray(input.source.MediaStreams)
+                ? (input.source.MediaStreams as Array<Record<string, unknown>>)
+                : [];
+        const matches = streams.filter(
+            (s) => s.Type === "Subtitle" && s.Index === input.subtitleIndex,
+        ).length;
+        if (matches !== 1)
+            return `subtitleIndex ${input.subtitleIndex} matches ${matches} Subtitle streams, not exactly one`;
     }
     return undefined;
 }
@@ -425,15 +441,21 @@ export function cueNearTop(line: unknown, snapToLines: unknown) {
 }
 
 /**
- * PLAY-27 web note: Chrome/Edge steps, shown before the core remedy in Playback info
- * only when this browser's own decision is the limit.
+ * PLAY-27 web note: Chrome/Edge steps, shown in Playback info's technical details only
+ * when this browser's own decision is the limit. They diagnose; the "What you can do"
+ * remedies own the advice (such as trying another browser), so no step repeats one.
  */
-export const CHROMIUM_DECODE_STEPS = [
-    "Open chrome://settings/system, turn on “Use graphics acceleration when available”, then select Relaunch.",
-    "Open chrome://gpu and look under “Video Acceleration Information” for a “Decode hevc main” (or “main 10”) row. It is missing without a GPU and driver that decode it, and over Remote Desktop or in a virtual machine.",
-    "Update the graphics driver from its vendor, or through Windows Update optional updates.",
-    "Try Microsoft Edge.",
-] as const;
+export function chromiumDecodeSteps(browser: "chrome" | "edge"): string[] {
+    const scheme = browser === "edge" ? "edge" : "chrome";
+    const relaunch = browser === "edge" ? "Restart" : "Relaunch";
+    return [
+        `Open ${scheme}://settings/system, turn on “Use graphics acceleration when available”, then select ${relaunch}.`,
+        `Open ${scheme}://gpu and look under “Video Acceleration Information” for a “Decode hevc main” (or “main 10”) row. It is missing without a GPU and driver that decode it, and over Remote Desktop or in a virtual machine.`,
+        "Update the graphics driver from its vendor, or through Windows Update optional updates.",
+    ];
+}
+/** Chrome's steps; kept for callers that predate Edge detection. */
+export const CHROMIUM_DECODE_STEPS = chromiumDecodeSteps("chrome");
 
 const lower = (codes: readonly string[]) =>
     new Set(codes.map((c) => c.toLowerCase()));
@@ -546,7 +568,15 @@ const capitalize = (text: string) =>
     text.charAt(0).toUpperCase() + text.slice(1);
 
 export type BrowserFamily = "chrome" | "edge" | "firefox" | "safari" | "other";
-export function browserFamily(userAgent: string): BrowserFamily {
+/**
+ * The browser, from Client Hints brands when the browser gives them (Edge lists
+ * "Microsoft Edge"), else from the user agent string.
+ */
+export function browserFamily(
+    userAgent: string,
+    brands?: readonly string[],
+): BrowserFamily {
+    if (brands?.some((b) => b === "Microsoft Edge")) return "edge";
     if (/\bEdg(e|A|iOS)?\//.test(userAgent)) return "edge";
     if (/(iPhone|iPad|iPod)/.test(userAgent)) return "safari";
     if (/\b(Firefox|FxiOS)\//.test(userAgent)) return "firefox";
@@ -556,12 +586,25 @@ export function browserFamily(userAgent: string): BrowserFamily {
         return "safari";
     return "other";
 }
+export type OsFamily = "windows" | "mac" | "other";
+/** The operating system, from Client Hints platform when given, else the user agent. */
+export function osFamily(userAgent: string, platform?: string): OsFamily {
+    const text = platform || userAgent;
+    if (/Windows/i.test(text)) return "windows";
+    if (
+        /(macOS|Macintosh|Mac OS X)/i.test(text) &&
+        !/(iPhone|iPad|iPod)/.test(userAgent)
+    )
+        return "mac";
+    return "other";
+}
 
 const appRemedy = "Use a Pictureshow app on your TV, phone or computer.";
 /** Plain remedies for the viewer, tailored to the browser; empty when nothing helps. */
 export function conversionRemedies(
     kind: ConversionKind,
     browser: BrowserFamily,
+    os: OsFamily = "other",
 ): string[] {
     switch (kind) {
         case "video":
@@ -569,7 +612,16 @@ export function conversionRemedies(
                 case "chrome":
                     return [
                         "Turn on “Use graphics acceleration when available” in Chrome's System settings, then relaunch Chrome.",
-                        "Try Microsoft Edge, which plays more video formats on Windows.",
+                        // Edge's extra formats (HEVC through Windows) are a Windows fact; on a Mac, Safari is the better browser.
+                        ...(os === "windows"
+                            ? [
+                                  "Try Microsoft Edge, which plays more video formats on Windows.",
+                              ]
+                            : os === "mac"
+                              ? [
+                                    "Try Safari, which plays more video formats on a Mac.",
+                                ]
+                              : []),
                         appRemedy,
                     ];
                 case "edge":

@@ -1309,9 +1309,20 @@ test("rc26 relative steps retain target after negotiation until replacement READ
         await page.locator("video").focus();
         await page.keyboard.press("ArrowRight");
         await manifest;
+        // Ticks within 1 ms (1e4 ticks): the start position is a float seconds value
+        // converted to ticks, and WebKit's clock can leave a few microseconds of
+        // rounding (once 30 ticks, 3 µs). A wrong target is off by at least the
+        // 0.8 s between presses (8e6 ticks) or a whole 10 s step (1e8), so 1 ms
+        // still fails every real error by three orders of magnitude.
+        const near = (target: number) => (ticks: number | undefined) =>
+            ticks !== undefined && Math.abs(ticks - target) <= 1e4
+                ? target
+                : ticks;
         // The decoder has the first server response but no metadata/READY acknowledgement.
         await expect
-            .poll(() => f.negotiations.at(-1)?.StartTimeTicks)
+            .poll(() =>
+                near(base + 10e7)(f.negotiations.at(-1)?.StartTimeTicks),
+            )
             .toBe(base + 10e7);
         await page.waitForTimeout(800);
         await page.keyboard.press("ArrowRight");
@@ -1319,9 +1330,10 @@ test("rc26 relative steps retain target after negotiation until replacement READ
         await page.keyboard.press("ArrowRight");
         await page.waitForTimeout(900); // preview timeout cannot erase the pending target
         release();
+        const final = Math.min(base + 30e7, 40e7);
         await expect
-            .poll(() => f.negotiations.at(-1)?.StartTimeTicks)
-            .toBe(Math.min(base + 30e7, 40e7));
+            .poll(() => near(final)(f.negotiations.at(-1)?.StartTimeTicks))
+            .toBe(final);
         try {
             await expect(
                 page.getByRole("status", { includeHidden: true }),

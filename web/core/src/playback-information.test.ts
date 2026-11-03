@@ -1,14 +1,18 @@
 /* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
     BROWSER_DEVICE,
     BROWSER_NOTICE_ACTIONS,
     browserFamily,
+    chromiumDecodeSteps,
     conversionKind,
     conversionRemedies,
     conversionSummary,
     conversionNotice,
     cueNearTop,
+    osFamily,
     runVector,
     transcodeReasons,
 } from "./playback-information";
@@ -137,6 +141,104 @@ describe("playback-information strict vector runner", () => {
             expected: "none",
         };
         expect(() => runVector(nanIndex)).toThrow(/subtitleIndex/);
+    });
+    it("a shared negative case with a bad DeliveryMethod or a missing subtitle stream fails", () => {
+        const suite = JSON.parse(
+            readFileSync(
+                fileURLToPath(
+                    new URL(
+                        "../../../spec/vectors/playback-information.json",
+                        import.meta.url,
+                    ),
+                ),
+                "utf8",
+            ),
+        );
+        const real = suite.cases.find(
+            (c: { id: string }) =>
+                c.id ===
+                "playback-information.conversion-notice.subtitle-converted-not-burned",
+        );
+        // The real case passes as written, so each change below is the only fault.
+        expect(runVector(real)).toBe(real.expected);
+        expect(real.expected).toBe("none");
+        const withStream = (patch: Record<string, unknown>) =>
+            real.input.source.MediaStreams.map((s: Record<string, unknown>) =>
+                s.Type === "Subtitle" ? { ...s, ...patch } : s,
+            );
+        for (const DeliveryMethod of ["Hl", "Encod", "encode", ""]) {
+            expect(() =>
+                runVector({
+                    ...real,
+                    input: {
+                        ...real.input,
+                        source: {
+                            MediaStreams: withStream({ DeliveryMethod }),
+                        },
+                    },
+                }),
+            ).toThrow(
+                /DeliveryMethod is not Encode, Embed, External, Hls or Drop/,
+            );
+        }
+        // subtitleIndex 4 with only stream 3: previously "Not reported", so "none" matched.
+        expect(() =>
+            runVector({ ...real, input: { ...real.input, subtitleIndex: 4 } }),
+        ).toThrow(/subtitleIndex 4 matches 0 Subtitle streams/);
+        // Index 3 pointing at a Video stream is not a subtitle either.
+        expect(() =>
+            runVector({
+                ...real,
+                input: {
+                    ...real.input,
+                    source: { MediaStreams: withStream({ Type: "Video" }) },
+                },
+            }),
+        ).toThrow(/matches 0 Subtitle streams/);
+        // Two subtitle streams with the same index are ambiguous.
+        expect(() =>
+            runVector({
+                ...real,
+                input: {
+                    ...real.input,
+                    source: {
+                        MediaStreams: [
+                            ...real.input.source.MediaStreams,
+                            { Type: "Subtitle", Index: 3, Codec: "srt" },
+                        ],
+                    },
+                },
+            }),
+        ).toThrow(/matches 2 Subtitle streams/);
+        // No source at all for a selected subtitle.
+        const { source: _s, ...noSource } = real.input;
+        expect(() => runVector({ ...real, input: noSource })).toThrow(
+            /matches 0 Subtitle streams/,
+        );
+        // -1 and absent are the format's "no subtitle" and stay valid.
+        expect(
+            runVector({ ...real, input: { ...real.input, subtitleIndex: -1 } }),
+        ).toBe("none");
+        const { subtitleIndex: _i, ...absent } = real.input;
+        expect(runVector({ ...real, input: absent })).toBe("none");
+        for (const DeliveryMethod of [
+            "Encode",
+            "Embed",
+            "External",
+            "Hls",
+            "Drop",
+        ])
+            expect(() =>
+                runVector({
+                    ...real,
+                    input: {
+                        ...real.input,
+                        source: {
+                            MediaStreams: withStream({ DeliveryMethod }),
+                        },
+                    },
+                }),
+            ).not.toThrow();
     });
     it("accepts every well-formed shape the shared vectors use", () => {
         expect(
@@ -372,5 +474,79 @@ describe("PLAY-26 web plain summary and remedies", () => {
             /Chrome or Edge/,
         );
         expect(conversionRemedies("direct", "chrome")).toEqual([]);
+    });
+    it("Client Hints brands identify Edge even when the user agent string looks like Chrome", () => {
+        const chromeLike =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+        expect(browserFamily(chromeLike)).toBe("chrome");
+        expect(
+            browserFamily(chromeLike, [
+                "Chromium",
+                "Microsoft Edge",
+                "Not?A_Brand",
+            ]),
+        ).toBe("edge");
+        expect(browserFamily(chromeLike, ["Chromium", "Google Chrome"])).toBe(
+            "chrome",
+        );
+    });
+    it.each([
+        [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0",
+            undefined,
+            "windows",
+        ],
+        [
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/141.0",
+            undefined,
+            "mac",
+        ],
+        ["Mozilla/5.0 (X11; Linux x86_64) Chrome/141.0", undefined, "other"],
+        ["Mozilla/5.0 (X11; Linux x86_64) Chrome/141.0", "Windows", "windows"],
+        [
+            "Mozilla/5.0 (iPad; CPU OS 26_0 like Mac OS X) Version/26.0 Safari/605.1.15",
+            undefined,
+            "other",
+        ],
+    ])("os family of %s (platform %s) is %s", (ua, platform, os) => {
+        expect(osFamily(ua, platform)).toBe(os);
+    });
+    it("Edge is suggested only in Chrome on Windows; Edge itself never hears it", () => {
+        const edgeLine = /Microsoft Edge/;
+        expect(
+            conversionRemedies("video", "chrome", "windows").join(" "),
+        ).toMatch(
+            /Try Microsoft Edge, which plays more video formats on Windows\./,
+        );
+        expect(
+            conversionRemedies("video", "chrome", "mac").join(" "),
+        ).not.toMatch(edgeLine);
+        expect(conversionRemedies("video", "chrome", "mac").join(" ")).toMatch(
+            /Try Safari/,
+        );
+        expect(
+            conversionRemedies("video", "chrome", "other").join(" "),
+        ).not.toMatch(edgeLine);
+        for (const os of ["windows", "mac", "other"] as const) {
+            const edge = conversionRemedies("video", "edge", os).join(" ");
+            expect(edge).not.toMatch(/Try Microsoft Edge/);
+            expect(edge).toMatch(/Edge's System and performance settings/);
+            expect(
+                conversionRemedies("video", "chrome", os).length,
+            ).toBeGreaterThanOrEqual(2);
+        }
+    });
+    it("technical steps diagnose in the viewer's own browser and never repeat a remedy", () => {
+        const chrome = chromiumDecodeSteps("chrome");
+        const edge = chromiumDecodeSteps("edge");
+        expect(chrome).toHaveLength(3);
+        expect(edge).toHaveLength(3);
+        expect(chrome.join(" ")).toMatch(/chrome:\/\/settings\/system/);
+        expect(chrome.join(" ")).toMatch(/chrome:\/\/gpu/);
+        expect(edge.join(" ")).toMatch(/edge:\/\/settings\/system/);
+        expect(edge.join(" ")).toMatch(/edge:\/\/gpu/);
+        expect(edge.join(" ")).not.toMatch(/chrome:\/\//);
+        for (const steps of [chrome, edge])
+            expect(steps.join(" ")).not.toMatch(/Try Microsoft Edge|Try Edge/i);
     });
 });

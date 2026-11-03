@@ -218,55 +218,21 @@ export function Settings({
                         ))}
                     </select>
                 </label>
-                <div className="switch-row">
-                    <label className="switch-label">
-                        <input
-                            type="checkbox"
-                            role="switch"
-                            aria-describedby="passthrough-caption"
-                            checked={value.passthrough}
-                            onChange={(e) =>
-                                patch("passthrough", e.target.checked)
-                            }
-                        />
-                        Allow audio passthrough
-                    </label>
-                    <p
-                        className="muted switch-caption"
-                        id="passthrough-caption"
-                    >
-                        This browser does not expose encoded audio passthrough
-                        or the connected speaker layout. Playback uses supported
-                        decoded audio or server conversion; this preference
-                        cannot grant a capability.
-                    </p>
-                </div>
-                <div className="switch-row">
-                    <label className="switch-label">
-                        <input
-                            type="checkbox"
-                            role="switch"
-                            data-focus="setting:conversion-notice"
-                            aria-describedby="conversion-notice-caption"
-                            checked={value.conversionNotice}
-                            onChange={(e) =>
-                                patch("conversionNotice", e.target.checked)
-                            }
-                        />
-                        Conversion notice
-                        {/* The switch itself carries the state for assistive tech. */}
-                        <span className="switch-state" aria-hidden="true">
-                            {value.conversionNotice ? "On" : "Off"}
-                        </span>
-                    </label>
-                    <p
-                        className="muted switch-caption"
-                        id="conversion-notice-caption"
-                    >
-                        Shows a short note when the server has to convert a
-                        video for this browser.
-                    </p>
-                </div>
+                <SwitchRow
+                    label="Allow audio passthrough"
+                    captionId="passthrough-caption"
+                    caption="This browser does not expose encoded audio passthrough or the connected speaker layout. Playback uses supported decoded audio or server conversion; this preference cannot grant a capability."
+                    checked={value.passthrough}
+                    onChange={(v) => patch("passthrough", v)}
+                />
+                <SwitchRow
+                    label="Conversion notice"
+                    focus="setting:conversion-notice"
+                    captionId="conversion-notice-caption"
+                    caption="Shows a short note when the server has to convert a video for this browser."
+                    checked={value.conversionNotice}
+                    onChange={(v) => patch("conversionNotice", v)}
+                />
                 <label>
                     Subtitle size
                     <select
@@ -330,22 +296,13 @@ export function Settings({
                         </select>
                     </label>
                 ))}
-                <label className="switch-label">
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        checked={value.screenReader}
-                        onChange={(e) =>
-                            patch("screenReader", e.target.checked)
-                        }
-                    />
-                    Require Play now for the next episode
-                </label>
-                <p className="muted">
-                    Recommended for screen readers. Browsers do not report
-                    whether a screen reader is enabled; manual continuation is
-                    the default.
-                </p>
+                <SwitchRow
+                    label="Require Play now for the next episode"
+                    captionId="screen-reader-caption"
+                    caption="Recommended for screen readers. Browsers do not report whether a screen reader is enabled; manual continuation is the default."
+                    checked={value.screenReader}
+                    onChange={(v) => patch("screenReader", v)}
+                />
                 <h2>Server preferences</h2>
                 {!config ? (
                     <p role="status">Loading server preferences…</p>
@@ -425,5 +382,46 @@ export function Settings({
                 </button>
             </div>
         </section>
+    );
+}
+
+/**
+ * The one on/off control for every boolean setting: a drawn switch (track and thumb)
+ * at the row's end, its label and help text at the start. The thumb carries the
+ * state, and role="switch" tells assistive tech, so no On/Off text is needed.
+ */
+function SwitchRow({
+    label,
+    caption,
+    captionId,
+    checked,
+    onChange,
+    focus,
+}: {
+    label: string;
+    caption: string;
+    captionId: string;
+    checked: boolean;
+    onChange: (value: boolean) => void;
+    focus?: string;
+}) {
+    return (
+        <div className="switch-row">
+            <label className="switch-label">
+                <span className="switch-text">{label}</span>
+                <input
+                    type="checkbox"
+                    role="switch"
+                    className="switch"
+                    data-focus={focus}
+                    aria-describedby={captionId}
+                    checked={checked}
+                    onChange={(e) => onChange(e.target.checked)}
+                />
+            </label>
+            <p className="muted switch-caption" id={captionId}>
+                {caption}
+            </p>
+        </div>
     );
 }

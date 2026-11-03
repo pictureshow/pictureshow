@@ -1284,11 +1284,32 @@ export function Detail({
                     setAttempt((value) => value + 1);
                 } catch (error) {
                     if (!alive.current) return;
-                    queue.current = [];
-                    setWriteError(errorText(error));
+                    // Like Android's consumer, a failed write does not cancel the presses
+                    // queued behind it (CAT-09: distinct requests serialize): queued
+                    // Watched/Favorite changes still run against the unchanged item.
+                    // A queued Play does not start over an unsaved change; it says so
+                    // instead of vanishing.
+                    const playQueued = queue.current.some(
+                        (p) =>
+                            p.action.kind === "play" ||
+                            p.action.kind === "restart",
+                    );
+                    queue.current = queue.current.filter(
+                        (p) =>
+                            p.action.kind !== "play" &&
+                            p.action.kind !== "restart",
+                    );
+                    requestedCue.current = undefined;
+                    setPendingMessage("");
+                    const failure =
+                        errorText(error) +
+                        (playQueued
+                            ? " Play did not start. Choose it again."
+                            : "");
+                    setWriteError(failure);
                     cancelReady();
                     cue(
-                        `Change failed. ${errorText(error)} Retry saving is available.`,
+                        `Change failed. ${failure} Retry saving is available.`,
                         "failure",
                     );
                     notify(error);

@@ -884,4 +884,124 @@ test("presses during Saving… are queued, not dropped: a different action runs 
     await page.waitForTimeout(500);
     // One favorite write (the repeat joined it) and the watched press ran after it.
     expect(writes).toEqual(["favorite POST", "watched POST"]);
+    // The "requested" status does not outlive the request.
+    await expect(page.locator(".catalog-detail-status")).toHaveCount(0);
+});
+
+/** A movie whose favorite POST waits for release, then fails or succeeds. */
+async function heldFavorite(page: Page, outcome: "fail" | "ok") {
+    const state = {
+        favorite: false,
+        played: false,
+        writes: [] as string[],
+        release: undefined as (() => void) | undefined,
+    };
+    const item = () => ({
+        ...movie(),
+        UserData: {
+            ...movie().UserData,
+            IsFavorite: state.favorite,
+            Played: state.played,
+        },
+    });
+    await start(page, async (url, method) => {
+        if (url.pathname === "/Items/movie") return { body: item() };
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        )
+            return { body: { Items: [item()] } };
+        if (url.pathname === "/UserFavoriteItems/movie") {
+            state.writes.push(`favorite ${method}`);
+            await new Promise<void>((resolve) => (state.release = resolve));
+            if (outcome === "fail") return { status: 500, body: {} };
+            state.favorite = method === "POST";
+            return {
+                body: { IsFavorite: state.favorite, Played: state.played },
+            };
+        }
+        if (url.pathname === "/UserPlayedItems/movie") {
+            state.writes.push(`watched ${method}`);
+            state.played = method === "POST";
+            return {
+                body: { IsFavorite: state.favorite, Played: state.played },
+            };
+        }
+        return {};
+    });
+    await openMovie(page);
+    return state;
+}
+
+test("a failed save still runs the change queued behind it, and a queued Play says it did not start", async ({
+    page,
+}) => {
+    // Android's consumer runs a queued mutation after a write error (CAT-09: a failed
+    // first mutation must not cancel an independent one); a queued Play does not start.
+    const state = await heldFavorite(page, "fail");
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    await page.locator('[data-focus="watched"]').click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Watched change requested",
+    );
+    state.release!();
+    await expect(
+        page.getByRole("button", { name: "Mark unwatched", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true", { timeout: 10000 });
+    expect(state.writes).toEqual(["favorite POST", "watched POST"]);
+    // The favorite stays as the server has it: not favorite.
+    await expect(
+        page.getByRole("button", { name: "Add favorite", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".catalog-detail-status")).toHaveCount(0);
+});
+
+test("a failed save with Play queued behind it reports that Play did not start, and offers Retry saving", async ({
+    page,
+}) => {
+    const state = await heldFavorite(page, "fail");
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    await page.locator('[data-focus="play"]').click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Play requested",
+    );
+    state.release!();
+    const failure = page.getByText(
+        /Change failed\..*Play did not start\. Choose it again\./,
+    );
+    await expect(failure).toBeVisible({ timeout: 10000 });
+    await expect(
+        page.getByRole("button", { name: "Retry saving" }),
+    ).toBeVisible();
+    // Still on the detail page: the player never opened over an unsaved change.
+    await expect(
+        page.getByRole("heading", { name: "A picture", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("video")).toHaveCount(0);
+    expect(state.writes).toEqual(["favorite POST"]);
+});
+
+test("leaving the item while a save is in flight drops its queued presses", async ({
+    page,
+}) => {
+    const state = await heldFavorite(page, "ok");
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    await page.locator('[data-focus="watched"]').click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Watched change requested",
+    );
+    await page.getByRole("button", { name: "← Back" }).click();
+    await expect(
+        page.getByRole("heading", { name: "A picture", exact: true }),
+    ).toHaveCount(0);
+    state.release!();
+    await page.waitForTimeout(1500);
+    // The in-flight write completes on the server; the queued press never runs.
+    expect(state.writes).toEqual(["favorite POST"]);
 });

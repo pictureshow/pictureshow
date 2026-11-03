@@ -139,17 +139,42 @@
     display: none;
 }
 
+/* Every player status message uses the conversion notice's card, so the player has
+   one floating-message style that stays readable over any frame. It sits centred
+   just above the controls (or above the caption area while they are hidden), clear
+   of the notice at the top start, and steps aside while a panel is open. */
 .player-overlay .playback-feedback {
     position: absolute;
-    top: 22%;
-    left: 8%;
-    right: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(100% - min(var(--controls-top, 100%), 82%) + 16px);
+    z-index: 3;
+    width: max-content;
+    max-width: min(560px, calc(100% - 32px));
+    box-sizing: border-box;
+    padding: 0.6rem 1rem;
+    border-radius: 1rem;
+    background: var(--color-app-playerStatus);
+    border: 1px solid var(--color-app-field);
+    color: #fff;
     text-align: center;
-    font-size: 1.05rem;
-    text-shadow: 0 2px 4px #000;
+    font-size: 16px;
+    line-height: 1.4;
     pointer-events: none;
 }
-.player-overlay .playback-feedback:empty {
+.player-overlay .playback-feedback[data-anchor="error"] {
+    bottom: calc(60% + 12px);
+}
+.player-overlay .playback-feedback[data-anchor="report"] {
+    bottom: calc(70% + 12px);
+}
+@media (min-width: 1400px) {
+    .player-overlay .playback-feedback {
+        max-width: min(760px, calc(100% - 32px));
+    }
+}
+.player-overlay .playback-feedback:empty,
+.player-overlay .playback-feedback[data-covered] {
     display: none;
 }
 .player-overlay .player-error {
@@ -201,6 +226,29 @@
     padding: 2rem;
     overflow: auto;
     overscroll-behavior: contain;
+}
+/* Done is pinned: the title and Done stay put and only the body scrolls (R4). */
+.player-overlay .player-panel[open] {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.player-overlay .player-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    /* Room for focus rings at the scroll edge. */
+    padding: 4px;
+    margin: -4px;
+}
+.player-overlay .player-panel > h2,
+.player-overlay .player-panel-done {
+    flex: none;
+}
+.player-overlay .player-panel-done {
+    margin-top: 1rem;
+    align-self: flex-start;
 }
 .player-overlay .player-panel::backdrop {
     background: #000b;

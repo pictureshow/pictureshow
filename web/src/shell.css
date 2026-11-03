@@ -66,6 +66,10 @@ button {
     display: flex;
     align-items: center;
     gap: 16px;
+    min-height: 44px;
+}
+.setting-list .switch-text {
+    flex: 1 1 auto;
 }
 /* A switch and its help text read as one group; the help aligns with the label text. */
 .setting-list .switch-row {
@@ -74,18 +78,54 @@ button {
 }
 .setting-list .switch-caption {
     margin: 0;
-    padding-left: 40px;
+    /* Clear of the switch column so help text never runs under the thumb. */
+    padding-right: 68px;
 }
-.setting-list .switch-state {
-    margin-left: auto;
-    color: var(--muted, inherit);
-    font-variant-numeric: tabular-nums;
-}
-.setting-list .switch-label input {
-    margin: 0;
+/* One drawn switch for every boolean setting: a 52×30 track with a thumb that
+   moves to the end and fills with the accent when on. The track border keeps 3:1
+   against the page when off. */
+input.switch {
+    appearance: none;
+    -webkit-appearance: none;
     flex: none;
+    box-sizing: border-box;
+    width: 52px !important;
+    height: 30px;
+    min-height: 30px !important;
+    margin: 0;
+    padding: 0;
+    border-radius: 15px;
+    border: 2px solid var(--muted);
+    background:
+        radial-gradient(circle at 13px 50%, var(--muted) 9px, transparent 10px)
+            no-repeat,
+        transparent;
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
 }
-.switch-label input {
+input.switch:checked {
+    border-color: var(--accent);
+    background:
+        radial-gradient(
+                circle at calc(100% - 13px) 50%,
+                var(--color-tv-buttonFocusedContent, #000) 9px,
+                transparent 10px
+            )
+            no-repeat,
+        var(--accent);
+}
+input.switch:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+    input.switch {
+        transition: none;
+    }
+}
+.switch-label input:not(.switch) {
     width: 24px !important;
     min-height: 24px !important;
     height: 24px;
