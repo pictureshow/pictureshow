@@ -1,0 +1,299 @@
+{
+  "license": "CC0-1.0",
+  "creator": "Legitimate LLC",
+  "description": "Original mathematical test signals and patterns dedicated to CC0. No third-party media.",
+  "gapless": {
+    "sample_rate": 48000,
+    "split_sample": 240000,
+    "reference": "reference/gapless.wav"
+  },
+  "files": [
+    {
+      "file": "music/Scope Ensemble/Two Discs/Disc 1/01 Signal.flac",
+      "sha256": "c1d78d28eff42ecf09bf36595154798494c4d0386607fe443dd9dfa8c4380541",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*460*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=12",
+        "-c:a",
+        "flac",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Signal 1-1",
+        "album": "Two Discs",
+        "artist": "Scope Ensemble",
+        "album_artist": "Scope Ensemble",
+        "disc": "1",
+        "track": "1"
+      }
+    },
+    {
+      "file": "music/Scope Ensemble/Two Discs/Disc 1/02 Signal.m4a",
+      "sha256": "71da3016f62f7135fd584dcb03ffd470e4b3d71361f459551eb9623952dcf7e0",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*490*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=12",
+        "-c:a",
+        "aac",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Signal 1-2",
+        "album": "Two Discs",
+        "artist": "Scope Ensemble",
+        "album_artist": "Scope Ensemble",
+        "disc": "1",
+        "track": "2"
+      }
+    },
+    {
+      "file": "music/Scope Ensemble/Two Discs/Disc 2/01 Signal.mp3",
+      "sha256": "d03ab39c5067defbf92a6088e0fbf63a920ac3f190f51bd9d5b3f3a5d81bb7a4",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*560*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=12",
+        "-c:a",
+        "libmp3lame",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Signal 2-1",
+        "album": "Two Discs",
+        "artist": "Scope Ensemble",
+        "album_artist": "Scope Ensemble",
+        "disc": "2",
+        "track": "1"
+      }
+    },
+    {
+      "file": "music/Scope Ensemble/Two Discs/Disc 2/02 Signal.opus",
+      "sha256": "40344bda9211262f42e4be46ddb7ce313c8b6fee14e9e5a9010e756e605273f7",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*590*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=12",
+        "-c:a",
+        "libopus",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Signal 2-2",
+        "album": "Two Discs",
+        "artist": "Scope Ensemble",
+        "album_artist": "Scope Ensemble",
+        "disc": "2",
+        "track": "2"
+      }
+    },
+    {
+      "file": "music/Various Artists/Compilation/01 Shared Title.flac",
+      "sha256": "4e6d2741b70b6cde028204222502ab83cd0f4526555031dd250e8951b89aaf89",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*440*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=15",
+        "-c:a",
+        "flac",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Shared Title",
+        "album": "Compilation",
+        "artist": "Scope Red",
+        "album_artist": "Various Artists",
+        "track": "1"
+      }
+    },
+    {
+      "file": "music/Various Artists/Compilation/02 Shared Title.flac",
+      "sha256": "6247c54c8b608a804f8e033199aae3d354acbc43dce884e982ad399fb65bd116",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*520*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=15",
+        "-c:a",
+        "flac",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Shared Title",
+        "album": "Compilation",
+        "artist": "Scope Blue",
+        "album_artist": "Various Artists",
+        "track": "1"
+      }
+    },
+    {
+      "file": "music/Various Artists/Compilation/03 Shared Title.flac",
+      "sha256": "d29a3ccb7eb786f88e2b08300345f2a4163d79d915290f5030e6d9d92dc6c757",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*600*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=15",
+        "-c:a",
+        "flac",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Shared Title",
+        "album": "Compilation",
+        "artist": "Scope Green",
+        "album_artist": "Various Artists",
+        "track": ""
+      }
+    },
+    {
+      "file": "music/Scope Ensemble/Long Seek/Long Seek.flac",
+      "sha256": "e6197181845d66305ed8c178b34415c6fb3d43898517869c0309634ea60f6954",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*240*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=180",
+        "-c:a",
+        "flac",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "Long Seek",
+        "album": "Long Seek",
+        "artist": "Scope Ensemble",
+        "track": "1"
+      }
+    },
+    {
+      "file": "reference/gapless.wav",
+      "sha256": "de061c2f389d76136aee8a6326706f68a7699cd9aded9890d110d447ac1adbee",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=997:sample_rate=48000:duration=10",
+        "-c:a",
+        "pcm_s16le"
+      ],
+      "tags": {}
+    },
+    {
+      "file": "music/Scope Ensemble/Gapless/01 Boundary.flac",
+      "sha256": "d9e9976a90a5cd5751041a3f270481ed98ffad91c70dfdbfd9efd4d0ab9ba566",
+      "parameters": [
+        "-i",
+        "${OUTPUT}/reference/gapless.wav",
+        "-af",
+        "atrim=start_sample=0:end_sample=240000,asetpts=PTS-STARTPTS",
+        "-c:a",
+        "flac"
+      ],
+      "tags": {
+        "title": "Boundary 1",
+        "album": "Gapless",
+        "artist": "Scope Ensemble",
+        "track": "1"
+      }
+    },
+    {
+      "file": "music/Scope Ensemble/Gapless/02 Boundary.flac",
+      "sha256": "d77403360d75e46fd292f993c5eb8a83dea3d602200b6bd4eb1e4db453f7aaee",
+      "parameters": [
+        "-i",
+        "${OUTPUT}/reference/gapless.wav",
+        "-af",
+        "atrim=start_sample=240000:end_sample=480000,asetpts=PTS-STARTPTS",
+        "-c:a",
+        "flac"
+      ],
+      "tags": {
+        "title": "Boundary 2",
+        "album": "Gapless",
+        "artist": "Scope Ensemble",
+        "track": "2"
+      }
+    },
+    {
+      "file": "music/Scope Ensemble/Conversion/PCM Source.wav",
+      "sha256": "2e1f3b5b69b45e3eb2aeca731a9ec3f2f8f61477057785d8f4e1683b86cf48e9",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*550*t)+0.03*sin(2*PI*(220*t+30*t*t)):s=48000:d=20",
+        "-c:a",
+        "pcm_s24le",
+        "-threads",
+        "1"
+      ],
+      "tags": {
+        "title": "PCM Source",
+        "album": "Conversion",
+        "artist": "Scope Ensemble",
+        "track": "1"
+      }
+    },
+    {
+      "file": "video/Scope Pattern/Scope Pattern.mkv",
+      "sha256": "30e86aff11ba413c477bc9ae24fc39a579b29f8957a81227db4f92d76939e376",
+      "parameters": [
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=320x180:rate=24:duration=90",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=660:sample_rate=48000:duration=90",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-threads",
+        "1",
+        "-pix_fmt",
+        "yuv420p",
+        "-g",
+        "48",
+        "-c:a",
+        "aac",
+        "-shortest"
+      ],
+      "tags": {}
+    },
+    {
+      "file": "restricted/Restricted Pattern/Restricted Pattern.mkv",
+      "sha256": "22a478f115fb9cf53f479c9a4c47ef821ab27a16339621ca19e651a093720d65",
+      "parameters": [
+        "-i",
+        "${OUTPUT}/video/Scope Pattern/Scope Pattern.mkv",
+        "-c",
+        "copy"
+      ],
+      "tags": {}
+    },
+    {
+      "file": "music/Scope Repeats.m3u",
+      "sha256": "96f06dd791a87c1fab956d1387cfae0b659b3b5663187496763d4f7d6d4f129b",
+      "parameters": [
+        "two relative references to the same generated track"
+      ],
+      "tags": {}
+    }
+  ]
+}

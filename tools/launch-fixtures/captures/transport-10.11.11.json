@@ -1,0 +1,1791 @@
+{
+  "completed": true,
+  "fixture": "original-CC0",
+  "version": "10.11.11",
+  "mode": "transport",
+  "capturedUtc": "2026-11-03T16:07:49.061924+00:00",
+  "checks": [
+    {
+      "name": "server-version",
+      "passed": true,
+      "observed": {
+        "Version": "10.11.11"
+      }
+    },
+    {
+      "name": "served-schema",
+      "passed": true,
+      "observed": {
+        "sha256": "db8b3ee6156b9ab27dc472dcf686e91d0015ca42af1f9503f4311ba92a4c9b0a"
+      }
+    },
+    {
+      "name": "hidden-hls-schema-boundary",
+      "passed": true,
+      "observed": {
+        "masterInSchema": true,
+        "cleanupInSchema": true
+      }
+    },
+    {
+      "name": "music-fixtures-scanned",
+      "passed": true,
+      "observed": {
+        "count": 11,
+        "tracks": [
+          {
+            "Id": "id-001",
+            "Name": "Shared Title",
+            "Album": "Compilation",
+            "Artists": [
+              "Scope Green"
+            ],
+            "AlbumArtist": "Various Artists",
+            "IndexNumber": null,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-002",
+            "Name": "Boundary 1",
+            "Album": "Gapless",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-003",
+            "Name": "Long Seek",
+            "Album": "Long Seek",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-004",
+            "Name": "PCM Source",
+            "Album": "Conversion",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "wav"
+          },
+          {
+            "Id": "id-005",
+            "Name": "Shared Title",
+            "Album": "Compilation",
+            "Artists": [
+              "Scope Red"
+            ],
+            "AlbumArtist": "Various Artists",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-006",
+            "Name": "Shared Title",
+            "Album": "Compilation",
+            "Artists": [
+              "Scope Blue"
+            ],
+            "AlbumArtist": "Various Artists",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-007",
+            "Name": "Boundary 2",
+            "Album": "Gapless",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 2,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-008",
+            "Name": "Signal 1-1",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": 1,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-009",
+            "Name": "Signal 1-2",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 2,
+            "ParentIndexNumber": 1,
+            "Container": "mov,mp4,m4a,3gp,3g2,mj2"
+          },
+          {
+            "Id": "id-010",
+            "Name": "Signal 2-1",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": 2,
+            "Container": "mp3"
+          },
+          {
+            "Id": "id-011",
+            "Name": "Signal 2-2",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 2,
+            "ParentIndexNumber": 2,
+            "Container": "ogg"
+          }
+        ]
+      }
+    },
+    {
+      "name": "music-disc-and-compilation-metadata",
+      "passed": true,
+      "observed": {
+        "discOrder": [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        "compilation": [
+          {
+            "Id": "id-001",
+            "Name": "Shared Title",
+            "AlbumArtist": "Various Artists",
+            "Artists": [
+              "Scope Green"
+            ],
+            "IndexNumber": null
+          },
+          {
+            "Id": "id-005",
+            "Name": "Shared Title",
+            "AlbumArtist": "Various Artists",
+            "Artists": [
+              "Scope Red"
+            ],
+            "IndexNumber": 1
+          },
+          {
+            "Id": "id-006",
+            "Name": "Shared Title",
+            "AlbumArtist": "Various Artists",
+            "Artists": [
+              "Scope Blue"
+            ],
+            "IndexNumber": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "original-download-real-decode",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 867657,
+        "sha256": "d29a3ccb7eb786f88e2b08300345f2a4163d79d915290f5030e6d9d92dc6c757",
+        "decoded": true
+      }
+    },
+    {
+      "name": "original-range",
+      "passed": true,
+      "observed": {
+        "status": 206,
+        "bytes": 1024,
+        "Content-Range": "bytes 0-1023/867657"
+      }
+    },
+    {
+      "name": "playlist-repeat-runtime-receipt",
+      "passed": true,
+      "observed": {
+        "repeatPreserved": false,
+        "distinctEntryIds": true,
+        "beforeCount": 1,
+        "afterCount": 1,
+        "entries": [
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          }
+        ]
+      }
+    },
+    {
+      "name": "denied-download",
+      "passed": true,
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "name": "denied-library-item",
+      "passed": true,
+      "observed": {
+        "status": 404
+      }
+    },
+    {
+      "name": "denied-dvr-management",
+      "passed": true,
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "name": "hls-master-0",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 737,
+        "playSessionId": "id-012",
+        "mediaSourceId": "id-013"
+      }
+    },
+    {
+      "name": "hls-segment-decode-0",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 117500,
+        "decoded": true
+      }
+    },
+    {
+      "name": "hls-master-1",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 737,
+        "playSessionId": "id-014",
+        "mediaSourceId": "id-013"
+      }
+    },
+    {
+      "name": "hls-segment-decode-1",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 117500,
+        "decoded": true
+      }
+    },
+    {
+      "name": "owned-encoding-cleanup-survivor",
+      "passed": true,
+      "observed": {
+        "cleanup": 204,
+        "otherOwnedSegment": 200,
+        "processEvidence": {
+          "baseline": [],
+          "afterEachOpen": [
+            [
+              481221
+            ],
+            [
+              481221,
+              481259
+            ]
+          ],
+          "afterFirstCleanup": [
+            481259
+          ]
+        },
+        "processInspection": "observed"
+      }
+    },
+    {
+      "name": "owned-encoding-cleanup-final",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "remainingPids": []
+      }
+    },
+    {
+      "name": "two-live-channels",
+      "passed": true,
+      "observed": {
+        "channels": [
+          {
+            "Id": "id-015",
+            "Name": "Test A",
+            "Number": "1"
+          },
+          {
+            "Id": "id-016",
+            "Name": "Test B",
+            "Number": "2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "guide-refresh-mapping",
+      "passed": true,
+      "observed": {
+        "guide": {
+          "StartDate": "2026-11-03T16:07:43.0228885Z",
+          "EndDate": "2026-11-10T16:07:43.0228885Z"
+        },
+        "programCount": 99,
+        "sample": [
+          {
+            "Name": "Scope Series",
+            "ServerId": "id-017",
+            "Id": "id-018",
+            "ChannelId": "id-015",
+            "RunTimeTicks": 4200000000,
+            "IndexNumber": 1,
+            "ParentIndexNumber": 1,
+            "Type": "Program",
+            "UserData": {
+              "PlaybackPositionTicks": 0,
+              "PlayCount": 0,
+              "IsFavorite": false,
+              "Played": false,
+              "Key": "Program-Scope SeriesScope a episode 0",
+              "ItemId": "id-018"
+            },
+            "ImageTags": {},
+            "BackdropImageTags": [],
+            "MediaType": "Unknown",
+            "EndDate": "2026-11-03T15:14:39.0000000Z",
+            "StartDate": "2026-11-03T15:07:39.0000000Z",
+            "EpisodeTitle": "Scope a episode 0",
+            "IsSeries": true
+          },
+          {
+            "Name": "Scope Series",
+            "ServerId": "id-017",
+            "Id": "id-019",
+            "ChannelId": "id-015",
+            "RunTimeTicks": 1200000000,
+            "IndexNumber": 2,
+            "ParentIndexNumber": 1,
+            "Type": "Program",
+            "UserData": {
+              "PlaybackPositionTicks": 0,
+              "PlayCount": 0,
+              "IsFavorite": false,
+              "Played": false,
+              "Key": "Program-Scope SeriesScope a episode 1",
+              "ItemId": "id-019"
+            },
+            "ImageTags": {},
+            "BackdropImageTags": [],
+            "MediaType": "Unknown",
+            "EndDate": "2026-11-03T15:16:39.0000000Z",
+            "StartDate": "2026-11-03T15:14:39.0000000Z",
+            "EpisodeTitle": "Scope a episode 1",
+            "IsSeries": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "channel-mapping-receipt",
+      "passed": true,
+      "observed": {
+        "TunerChannels": [
+          {
+            "Name": "1 Test A",
+            "ProviderChannelName": "Test A",
+            "ProviderChannelId": "id-020",
+            "Id": "id-021"
+          },
+          {
+            "Name": "2 Test B",
+            "ProviderChannelName": "Test B",
+            "ProviderChannelId": "id-022",
+            "Id": "id-023"
+          }
+        ],
+        "ProviderChannels": [
+          {
+            "Name": "Test A",
+            "Id": "id-020"
+          },
+          {
+            "Name": "Test B",
+            "Id": "id-022"
+          }
+        ],
+        "Mappings": [],
+        "ProviderName": "XmlTV"
+      }
+    },
+    {
+      "name": "live-open-json",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "requested": {
+          "ItemId": "id-015",
+          "UserId": "id-024",
+          "PlaySessionId": "id-025",
+          "MaxStreamingBitrate": 700000,
+          "MaxAudioChannels": 2,
+          "EnableDirectPlay": false,
+          "EnableDirectStream": false
+        },
+        "returnedTransportFields": {
+          "DeviceId": [
+            "id-026"
+          ],
+          "MediaSourceId": [
+            "id-027"
+          ],
+          "VideoCodec": [
+            "h264"
+          ],
+          "AudioCodec": [
+            "aac"
+          ],
+          "VideoBitrate": [
+            "508000"
+          ],
+          "AudioBitrate": [
+            "192000"
+          ],
+          "PlaySessionId": [
+            "id-025"
+          ],
+          "LiveStreamId": [
+            "id-028"
+          ]
+        },
+        "requestedSessionEchoed": true,
+        "directPlayDisabled": true,
+        "directStreamDisabled": true,
+        "response": {
+          "MediaSource": {
+            "Protocol": "Http",
+            "Id": "id-027",
+            "Type": "Default",
+            "Container": "hls",
+            "Size": 294,
+            "IsRemote": false,
+            "ReadAtNativeFramerate": false,
+            "IgnoreDts": true,
+            "IgnoreIndex": false,
+            "GenPtsInput": false,
+            "SupportsTranscoding": true,
+            "SupportsDirectStream": false,
+            "SupportsDirectPlay": false,
+            "IsInfiniteStream": true,
+            "UseMostCompatibleTranscodingProfile": true,
+            "RequiresOpening": true,
+            "RequiresClosing": true,
+            "LiveStreamId": "id-028",
+            "RequiresLooping": false,
+            "SupportsProbing": true,
+            "MediaStreams": [
+              {
+                "Codec": "h264",
+                "TimeBase": "1/90000",
+                "VideoRange": "SDR",
+                "VideoRangeType": "SDR",
+                "AudioSpatialFormat": "None",
+                "DisplayTitle": "240p H264 SDR",
+                "NalLengthSize": "0",
+                "IsInterlaced": false,
+                "BitDepth": 8,
+                "RefFrames": 1,
+                "IsDefault": false,
+                "IsForced": false,
+                "IsHearingImpaired": false,
+                "Height": 180,
+                "Width": 320,
+                "AverageFrameRate": 24,
+                "RealFrameRate": 24,
+                "ReferenceFrameRate": 24,
+                "Profile": "Constrained Baseline",
+                "Type": "Video",
+                "AspectRatio": "16:9",
+                "Index": -1,
+                "IsExternal": false,
+                "IsTextSubtitleStream": false,
+                "SupportsExternalStream": false,
+                "PixelFormat": "yuv420p",
+                "Level": 12,
+                "IsAnamorphic": false
+              },
+              {
+                "Codec": "aac",
+                "TimeBase": "1/90000",
+                "VideoRange": "Unknown",
+                "VideoRangeType": "Unknown",
+                "AudioSpatialFormat": "None",
+                "LocalizedDefault": "Default",
+                "LocalizedExternal": "External",
+                "DisplayTitle": "AAC - Mono",
+                "IsInterlaced": false,
+                "IsAVC": false,
+                "ChannelLayout": "mono",
+                "BitRate": 192000,
+                "Channels": 1,
+                "SampleRate": 48000,
+                "IsDefault": false,
+                "IsForced": false,
+                "IsHearingImpaired": false,
+                "Profile": "LC",
+                "Type": "Audio",
+                "Index": -1,
+                "IsExternal": false,
+                "IsTextSubtitleStream": false,
+                "SupportsExternalStream": false,
+                "Level": 0
+              }
+            ],
+            "MediaAttachments": [],
+            "Formats": [],
+            "Bitrate": 192000,
+            "FallbackMaxStreamingBitrate": 30000000,
+            "RequiredHttpHeaders": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            },
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "AnalyzeDurationMs": 3000,
+            "DefaultAudioStreamIndex": -1,
+            "HasSegments": false
+          }
+        }
+      }
+    },
+    {
+      "name": "live-manifest-json",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 800
+      }
+    },
+    {
+      "name": "stopped-then-close-json",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "classification": "closed",
+        "interpretation": "success; 204 alone does not prove a stream existed"
+      }
+    },
+    {
+      "name": "repeat-close-json",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "classification": "closed",
+        "observation": "server returned actual status; 404 handler also exercised by local classification cases"
+      }
+    },
+    {
+      "name": "live-open-query",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "requested": {
+          "ItemId": "id-015",
+          "UserId": "id-024",
+          "PlaySessionId": "id-029",
+          "MaxStreamingBitrate": 700000,
+          "MaxAudioChannels": 2,
+          "EnableDirectPlay": false,
+          "EnableDirectStream": false
+        },
+        "returnedTransportFields": {
+          "DeviceId": [
+            "id-026"
+          ],
+          "MediaSourceId": [
+            "id-027"
+          ],
+          "VideoCodec": [
+            "h264"
+          ],
+          "AudioCodec": [
+            "aac"
+          ],
+          "VideoBitrate": [
+            "508000"
+          ],
+          "AudioBitrate": [
+            "192000"
+          ],
+          "PlaySessionId": [
+            "id-029"
+          ],
+          "LiveStreamId": [
+            "id-028"
+          ]
+        },
+        "requestedSessionEchoed": true,
+        "directPlayDisabled": true,
+        "directStreamDisabled": true,
+        "response": {
+          "MediaSource": {
+            "Protocol": "Http",
+            "Id": "id-027",
+            "Type": "Default",
+            "Container": "hls",
+            "Size": 294,
+            "IsRemote": false,
+            "ReadAtNativeFramerate": false,
+            "IgnoreDts": true,
+            "IgnoreIndex": false,
+            "GenPtsInput": false,
+            "SupportsTranscoding": true,
+            "SupportsDirectStream": false,
+            "SupportsDirectPlay": false,
+            "IsInfiniteStream": true,
+            "UseMostCompatibleTranscodingProfile": true,
+            "RequiresOpening": true,
+            "RequiresClosing": true,
+            "LiveStreamId": "id-028",
+            "RequiresLooping": false,
+            "SupportsProbing": true,
+            "MediaStreams": [
+              {
+                "Codec": "h264",
+                "TimeBase": "1/90000",
+                "VideoRange": "SDR",
+                "VideoRangeType": "SDR",
+                "AudioSpatialFormat": "None",
+                "DisplayTitle": "240p H264 SDR",
+                "NalLengthSize": "0",
+                "IsInterlaced": false,
+                "BitDepth": 8,
+                "RefFrames": 1,
+                "IsDefault": false,
+                "IsForced": false,
+                "IsHearingImpaired": false,
+                "Height": 180,
+                "Width": 320,
+                "AverageFrameRate": 24,
+                "RealFrameRate": 24,
+                "ReferenceFrameRate": 24,
+                "Profile": "Constrained Baseline",
+                "Type": "Video",
+                "AspectRatio": "16:9",
+                "Index": -1,
+                "IsExternal": false,
+                "IsTextSubtitleStream": false,
+                "SupportsExternalStream": false,
+                "PixelFormat": "yuv420p",
+                "Level": 12,
+                "IsAnamorphic": false
+              },
+              {
+                "Codec": "aac",
+                "TimeBase": "1/90000",
+                "VideoRange": "Unknown",
+                "VideoRangeType": "Unknown",
+                "AudioSpatialFormat": "None",
+                "LocalizedDefault": "Default",
+                "LocalizedExternal": "External",
+                "DisplayTitle": "AAC - Mono",
+                "IsInterlaced": false,
+                "IsAVC": false,
+                "ChannelLayout": "mono",
+                "BitRate": 192000,
+                "Channels": 1,
+                "SampleRate": 48000,
+                "IsDefault": false,
+                "IsForced": false,
+                "IsHearingImpaired": false,
+                "Profile": "LC",
+                "Type": "Audio",
+                "Index": -1,
+                "IsExternal": false,
+                "IsTextSubtitleStream": false,
+                "SupportsExternalStream": false,
+                "Level": 0
+              }
+            ],
+            "MediaAttachments": [],
+            "Formats": [],
+            "Bitrate": 192000,
+            "FallbackMaxStreamingBitrate": 30000000,
+            "RequiredHttpHeaders": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            },
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "AnalyzeDurationMs": 3000,
+            "DefaultAudioStreamIndex": -1,
+            "HasSegments": false
+          }
+        }
+      }
+    },
+    {
+      "name": "live-manifest-query",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 800
+      }
+    },
+    {
+      "name": "stopped-then-close-query",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "classification": "closed",
+        "interpretation": "success; 204 alone does not prove a stream existed"
+      }
+    },
+    {
+      "name": "repeat-close-query",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "classification": "closed",
+        "observation": "server returned actual status; 404 handler also exercised by local classification cases"
+      }
+    },
+    {
+      "name": "session-play-query-envelope",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "event": {
+          "MessageId": "id-030",
+          "Data": {
+            "ItemIds": [
+              "id-001"
+            ],
+            "StartPositionTicks": 10000000,
+            "PlayCommand": "PlayNow",
+            "ControllingUserId": "id-024"
+          },
+          "MessageType": "Play"
+        }
+      }
+    },
+    {
+      "name": "session-pause-envelope",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "event": {
+          "MessageId": "id-031",
+          "Data": {
+            "Command": "Pause",
+            "ControllingUserId": "id-024"
+          },
+          "MessageType": "Playstate"
+        }
+      }
+    },
+    {
+      "name": "session-general-command-envelope",
+      "passed": true,
+      "observed": {
+        "status": 204,
+        "event": {
+          "MessageId": "id-032",
+          "Data": {
+            "Name": "SetVolume",
+            "ControllingUserId": "id-024",
+            "Arguments": {
+              "Volume": "35"
+            }
+          },
+          "MessageType": "GeneralCommand"
+        }
+      }
+    },
+    {
+      "name": "viewer-sessions-subscription-not-admin",
+      "passed": true,
+      "observed": {
+        "note": "ordinary viewer receives no Sessions; use authorized GET /Sessions polling"
+      }
+    },
+    {
+      "name": "admin-sessions-subscription-envelope",
+      "passed": true,
+      "observed": null
+    },
+    {
+      "name": "syncplay-none-policy",
+      "passed": true,
+      "observed": {
+        "status": 403,
+        "events": [
+          {
+            "MessageId": "id-048",
+            "Data": 60,
+            "MessageType": "ForceKeepAlive"
+          }
+        ]
+      }
+    },
+    {
+      "name": "group-get-version-boundary",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "groupInfo": {
+          "GroupId": "id-050",
+          "GroupName": "Scope transport",
+          "State": "Idle",
+          "Participants": [
+            "scope-viewer-a"
+          ],
+          "LastUpdatedAt": "2026-11-03T16:07:47.57153Z"
+        }
+      }
+    },
+    {
+      "name": "syncplay-join-only-create-denied",
+      "passed": true,
+      "observed": {
+        "status": 403,
+        "events": [
+          {
+            "MessageId": "id-053",
+            "Data": 60,
+            "MessageType": "ForceKeepAlive"
+          },
+          {
+            "MessageId": "id-030",
+            "Data": {
+              "ItemIds": [
+                "id-001"
+              ],
+              "StartPositionTicks": 10000000,
+              "PlayCommand": "PlayNow",
+              "ControllingUserId": "id-024"
+            },
+            "MessageType": "Play"
+          },
+          {
+            "MessageId": "id-031",
+            "Data": {
+              "Command": "Pause",
+              "ControllingUserId": "id-024"
+            },
+            "MessageType": "Playstate"
+          },
+          {
+            "MessageId": "id-032",
+            "Data": {
+              "Name": "SetVolume",
+              "ControllingUserId": "id-024",
+              "Arguments": {
+                "Volume": "35"
+              }
+            },
+            "MessageType": "GeneralCommand"
+          }
+        ]
+      }
+    },
+    {
+      "name": "syncplay-queue-envelope",
+      "passed": true,
+      "observed": {
+        "MessageId": "id-057",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": {
+            "Reason": "NewPlaylist",
+            "LastUpdate": "2026-11-03T16:07:48.2364298Z",
+            "Playlist": [
+              {
+                "ItemId": "id-001",
+                "PlaylistItemId": "id-058"
+              },
+              {
+                "ItemId": "id-001",
+                "PlaylistItemId": "id-059"
+              }
+            ],
+            "PlayingItemIndex": 0,
+            "StartPositionTicks": 10000000,
+            "IsPlaying": false,
+            "ShuffleMode": "Sorted",
+            "RepeatMode": "RepeatNone"
+          },
+          "Type": "PlayQueue"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "name": "syncplay-command-envelope",
+      "passed": true,
+      "observed": {
+        "MessageId": "id-062",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-058",
+          "When": "2026-11-03T16:07:49.4010406Z",
+          "PositionTicks": 10000000,
+          "Command": "Unpause",
+          "EmittedAt": "2026-11-03T16:07:48.4016379Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "name": "syncplay-second-viewer-events",
+      "passed": true,
+      "observed": {
+        "MessageId": "id-063",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-058",
+          "When": "2026-11-03T16:07:49.4010406Z",
+          "PositionTicks": 10000000,
+          "Command": "Unpause",
+          "EmittedAt": "2026-11-03T16:07:48.4016379Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "name": "clock-envelope",
+      "passed": true,
+      "observed": {
+        "RequestReceptionTime": "2026-11-03T16:07:48.4991018Z",
+        "ResponseTransmissionTime": "2026-11-03T16:07:48.4991018Z"
+      }
+    }
+  ],
+  "websocketEvents": [
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-030",
+        "Data": {
+          "ItemIds": [
+            "id-001"
+          ],
+          "StartPositionTicks": 10000000,
+          "PlayCommand": "PlayNow",
+          "ControllingUserId": "id-024"
+        },
+        "MessageType": "Play"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-031",
+        "Data": {
+          "Command": "Pause",
+          "ControllingUserId": "id-024"
+        },
+        "MessageType": "Playstate"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-032",
+        "Data": {
+          "Name": "SetVolume",
+          "ControllingUserId": "id-024",
+          "Arguments": {
+            "Volume": "35"
+          }
+        },
+        "MessageType": "GeneralCommand"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-033",
+        "Data": {
+          "UserId": "id-024",
+          "UserDataList": [
+            {
+              "PlaybackPositionTicks": 0,
+              "PlayCount": 4,
+              "IsFavorite": false,
+              "LastPlayedDate": "2026-11-03T16:07:44.1503218Z",
+              "Played": false,
+              "Key": "id-015",
+              "ItemId": "id-015"
+            },
+            {
+              "PlaybackPositionTicks": 0,
+              "PlayCount": 0,
+              "IsFavorite": false,
+              "Played": false,
+              "Key": "id-034",
+              "ItemId": "id-034"
+            }
+          ]
+        },
+        "MessageType": "UserDataChanged"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-035",
+        "Data": [
+          {
+            "PlayState": {
+              "CanSeek": false,
+              "IsPaused": false,
+              "IsMuted": false,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default"
+            },
+            "AdditionalUsers": [],
+            "Capabilities": {
+              "PlayableMediaTypes": [
+                "Video",
+                "Audio"
+              ],
+              "SupportedCommands": [
+                "SetVolume",
+                "Mute",
+                "Unmute"
+              ],
+              "SupportsMediaControl": true,
+              "SupportsPersistentIdentifier": true,
+              "DeviceProfile": {
+                "Name": "Scope H264 AAC",
+                "MaxStreamingBitrate": 1500000,
+                "MaxStaticBitrate": 8000000,
+                "MusicStreamingTranscodingBitrate": 128000,
+                "MaxStaticMusicBitrate": 8000000,
+                "DirectPlayProfiles": [],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 2,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [],
+                    "EnableAudioVbrEncoding": true
+                  },
+                  {
+                    "Container": "mp3",
+                    "Type": "Audio",
+                    "VideoCodec": "",
+                    "AudioCodec": "mp3",
+                    "Protocol": "http",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MinSegments": 0,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [],
+                "SubtitleProfiles": []
+              }
+            },
+            "PlayableMediaTypes": [
+              "Video",
+              "Audio"
+            ],
+            "Id": "id-036",
+            "UserId": "id-024",
+            "UserName": "scope-viewer-a",
+            "Client": "Pictureshow Fixture",
+            "LastActivityDate": "2026-11-03T16:07:44.5901575Z",
+            "LastPlaybackCheckIn": "2026-11-03T16:07:44.1425293Z",
+            "DeviceName": "Contract",
+            "DeviceId": "id-026",
+            "ApplicationVersion": "1",
+            "IsActive": true,
+            "SupportsMediaControl": true,
+            "SupportsRemoteControl": true,
+            "NowPlayingQueue": [],
+            "NowPlayingQueueFullItems": [],
+            "HasCustomDeviceName": false,
+            "ServerId": "id-017",
+            "SupportedCommands": [
+              "SetVolume",
+              "Mute",
+              "Unmute"
+            ]
+          }
+        ],
+        "MessageType": "Sessions"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-037",
+        "Data": [
+          {
+            "PlayState": {
+              "CanSeek": false,
+              "IsPaused": false,
+              "IsMuted": false,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default"
+            },
+            "AdditionalUsers": [],
+            "Capabilities": {
+              "PlayableMediaTypes": [
+                "Video",
+                "Audio"
+              ],
+              "SupportedCommands": [
+                "SetVolume",
+                "Mute",
+                "Unmute"
+              ],
+              "SupportsMediaControl": true,
+              "SupportsPersistentIdentifier": true,
+              "DeviceProfile": {
+                "Name": "Scope H264 AAC",
+                "MaxStreamingBitrate": 1500000,
+                "MaxStaticBitrate": 8000000,
+                "MusicStreamingTranscodingBitrate": 128000,
+                "MaxStaticMusicBitrate": 8000000,
+                "DirectPlayProfiles": [],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 2,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [],
+                    "EnableAudioVbrEncoding": true
+                  },
+                  {
+                    "Container": "mp3",
+                    "Type": "Audio",
+                    "VideoCodec": "",
+                    "AudioCodec": "mp3",
+                    "Protocol": "http",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MinSegments": 0,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [],
+                "SubtitleProfiles": []
+              }
+            },
+            "PlayableMediaTypes": [
+              "Video",
+              "Audio"
+            ],
+            "Id": "id-036",
+            "UserId": "id-024",
+            "UserName": "scope-viewer-a",
+            "Client": "Pictureshow Fixture",
+            "LastActivityDate": "2026-11-03T16:07:44.5901575Z",
+            "LastPlaybackCheckIn": "2026-11-03T16:07:44.1425293Z",
+            "DeviceName": "Contract",
+            "DeviceId": "id-026",
+            "ApplicationVersion": "1",
+            "IsActive": true,
+            "SupportsMediaControl": true,
+            "SupportsRemoteControl": true,
+            "NowPlayingQueue": [],
+            "NowPlayingQueueFullItems": [],
+            "HasCustomDeviceName": false,
+            "ServerId": "id-017",
+            "SupportedCommands": [
+              "SetVolume",
+              "Mute",
+              "Unmute"
+            ]
+          }
+        ],
+        "MessageType": "Sessions"
+      }
+    },
+    {
+      "source": "admin-envelope-only",
+      "envelope": {
+        "MessageId": "id-038",
+        "Data": [
+          {
+            "PlayState": {
+              "CanSeek": false,
+              "IsPaused": false,
+              "IsMuted": false,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default"
+            },
+            "AdditionalUsers": [],
+            "Capabilities": {
+              "PlayableMediaTypes": [
+                "Audio",
+                "Video"
+              ],
+              "SupportedCommands": [
+                "SetVolume"
+              ],
+              "SupportsMediaControl": true,
+              "SupportsPersistentIdentifier": false
+            },
+            "PlayableMediaTypes": [
+              "Audio",
+              "Video"
+            ],
+            "Id": "id-039",
+            "UserId": "id-040",
+            "UserName": "scope-viewer-b",
+            "Client": "Pictureshow Fixture",
+            "LastActivityDate": "2026-11-03T16:07:46.8754068Z",
+            "LastPlaybackCheckIn": "0001-01-01T00:00:00.0000000Z",
+            "DeviceName": "Contract",
+            "DeviceId": "id-041",
+            "ApplicationVersion": "1",
+            "IsActive": true,
+            "SupportsMediaControl": true,
+            "SupportsRemoteControl": true,
+            "NowPlayingQueue": [],
+            "NowPlayingQueueFullItems": [],
+            "HasCustomDeviceName": false,
+            "ServerId": "id-017",
+            "SupportedCommands": [
+              "SetVolume"
+            ]
+          },
+          {
+            "PlayState": {
+              "CanSeek": false,
+              "IsPaused": false,
+              "IsMuted": false,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default"
+            },
+            "AdditionalUsers": [],
+            "Capabilities": {
+              "PlayableMediaTypes": [],
+              "SupportedCommands": [],
+              "SupportsMediaControl": false,
+              "SupportsPersistentIdentifier": true
+            },
+            "PlayableMediaTypes": [],
+            "Id": "id-042",
+            "UserId": "id-043",
+            "UserName": "scope-admin",
+            "Client": "Pictureshow Fixture",
+            "LastActivityDate": "2026-11-03T16:07:46.6429464Z",
+            "LastPlaybackCheckIn": "0001-01-01T00:00:00.0000000Z",
+            "DeviceName": "Contract",
+            "DeviceId": "id-044",
+            "ApplicationVersion": "1",
+            "IsActive": true,
+            "SupportsMediaControl": false,
+            "SupportsRemoteControl": false,
+            "NowPlayingQueue": [],
+            "NowPlayingQueueFullItems": [],
+            "HasCustomDeviceName": false,
+            "ServerId": "id-017",
+            "SupportedCommands": []
+          },
+          {
+            "PlayState": {
+              "CanSeek": false,
+              "IsPaused": false,
+              "IsMuted": false,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default"
+            },
+            "AdditionalUsers": [],
+            "Capabilities": {
+              "PlayableMediaTypes": [
+                "Video",
+                "Audio"
+              ],
+              "SupportedCommands": [
+                "SetVolume",
+                "Mute",
+                "Unmute"
+              ],
+              "SupportsMediaControl": true,
+              "SupportsPersistentIdentifier": true,
+              "DeviceProfile": {
+                "Name": "Scope H264 AAC",
+                "MaxStreamingBitrate": 1500000,
+                "MaxStaticBitrate": 8000000,
+                "MusicStreamingTranscodingBitrate": 128000,
+                "MaxStaticMusicBitrate": 8000000,
+                "DirectPlayProfiles": [],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 2,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [],
+                    "EnableAudioVbrEncoding": true
+                  },
+                  {
+                    "Container": "mp3",
+                    "Type": "Audio",
+                    "VideoCodec": "",
+                    "AudioCodec": "mp3",
+                    "Protocol": "http",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MinSegments": 0,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [],
+                "SubtitleProfiles": []
+              }
+            },
+            "PlayableMediaTypes": [
+              "Video",
+              "Audio"
+            ],
+            "Id": "id-036",
+            "UserId": "id-024",
+            "UserName": "scope-viewer-a",
+            "Client": "Pictureshow Fixture",
+            "LastActivityDate": "2026-11-03T16:07:44.5901575Z",
+            "LastPlaybackCheckIn": "2026-11-03T16:07:44.1425293Z",
+            "DeviceName": "Contract",
+            "DeviceId": "id-026",
+            "ApplicationVersion": "1",
+            "IsActive": true,
+            "SupportsMediaControl": true,
+            "SupportsRemoteControl": true,
+            "NowPlayingQueue": [],
+            "NowPlayingQueueFullItems": [],
+            "HasCustomDeviceName": false,
+            "ServerId": "id-017",
+            "SupportedCommands": [
+              "SetVolume",
+              "Mute",
+              "Unmute"
+            ]
+          },
+          {
+            "PlayState": {
+              "CanSeek": false,
+              "IsPaused": false,
+              "IsMuted": false,
+              "RepeatMode": "RepeatNone",
+              "PlaybackOrder": "Default"
+            },
+            "AdditionalUsers": [],
+            "Capabilities": {
+              "PlayableMediaTypes": [],
+              "SupportedCommands": [],
+              "SupportsMediaControl": false,
+              "SupportsPersistentIdentifier": true
+            },
+            "PlayableMediaTypes": [],
+            "Id": "id-045",
+            "UserId": "id-046",
+            "UserName": "scope-restricted",
+            "Client": "Pictureshow Fixture",
+            "LastActivityDate": "2026-11-03T16:06:50.5882858Z",
+            "LastPlaybackCheckIn": "0001-01-01T00:00:00.0000000Z",
+            "DeviceName": "Contract",
+            "DeviceId": "id-047",
+            "ApplicationVersion": "1",
+            "IsActive": true,
+            "SupportsMediaControl": false,
+            "SupportsRemoteControl": false,
+            "NowPlayingQueue": [],
+            "NowPlayingQueueFullItems": [],
+            "HasCustomDeviceName": false,
+            "ServerId": "id-017",
+            "SupportedCommands": []
+          }
+        ],
+        "MessageType": "Sessions"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-049",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": {
+            "GroupId": "id-050",
+            "GroupName": "Scope transport",
+            "State": "Idle",
+            "Participants": [
+              "scope-viewer-a"
+            ],
+            "LastUpdatedAt": "2026-11-03T16:07:47.4284852Z"
+          },
+          "Type": "GroupJoined"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-051",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-052",
+          "When": "2026-11-03T16:07:47.4277229Z",
+          "PositionTicks": 0,
+          "Command": "Stop",
+          "EmittedAt": "2026-11-03T16:07:47.4376063Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-054",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": "scope-viewer-b",
+          "Type": "UserJoined"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-055",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": {
+            "GroupId": "id-050",
+            "GroupName": "Scope transport",
+            "State": "Idle",
+            "Participants": [
+              "scope-viewer-a",
+              "scope-viewer-b"
+            ],
+            "LastUpdatedAt": "2026-11-03T16:07:48.131053Z"
+          },
+          "Type": "GroupJoined"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-056",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-052",
+          "When": "2026-11-03T16:07:47.4277229Z",
+          "PositionTicks": 0,
+          "Command": "Stop",
+          "EmittedAt": "2026-11-03T16:07:48.1333826Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-057",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": {
+            "Reason": "NewPlaylist",
+            "LastUpdate": "2026-11-03T16:07:48.2364298Z",
+            "Playlist": [
+              {
+                "ItemId": "id-001",
+                "PlaylistItemId": "id-058"
+              },
+              {
+                "ItemId": "id-001",
+                "PlaylistItemId": "id-059"
+              }
+            ],
+            "PlayingItemIndex": 0,
+            "StartPositionTicks": 10000000,
+            "IsPlaying": false,
+            "ShuffleMode": "Sorted",
+            "RepeatMode": "RepeatNone"
+          },
+          "Type": "PlayQueue"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-060",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": {
+            "Reason": "NewPlaylist",
+            "LastUpdate": "2026-11-03T16:07:48.2364298Z",
+            "Playlist": [
+              {
+                "ItemId": "id-001",
+                "PlaylistItemId": "id-058"
+              },
+              {
+                "ItemId": "id-001",
+                "PlaylistItemId": "id-059"
+              }
+            ],
+            "PlayingItemIndex": 0,
+            "StartPositionTicks": 10000000,
+            "IsPlaying": false,
+            "ShuffleMode": "Sorted",
+            "RepeatMode": "RepeatNone"
+          },
+          "Type": "PlayQueue"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-061",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-058",
+          "When": "2026-11-03T16:07:48.3314164Z",
+          "PositionTicks": 10000000,
+          "Command": "Pause",
+          "EmittedAt": "2026-11-03T16:07:48.332153Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-062",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-058",
+          "When": "2026-11-03T16:07:49.4010406Z",
+          "PositionTicks": 10000000,
+          "Command": "Unpause",
+          "EmittedAt": "2026-11-03T16:07:48.4016379Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-063",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-058",
+          "When": "2026-11-03T16:07:49.4010406Z",
+          "PositionTicks": 10000000,
+          "Command": "Unpause",
+          "EmittedAt": "2026-11-03T16:07:48.4016379Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-064",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": {
+            "State": "Playing",
+            "Reason": "Ready"
+          },
+          "Type": "StateUpdate"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-065",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": {
+            "State": "Playing",
+            "Reason": "Ready"
+          },
+          "Type": "StateUpdate"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-066",
+        "Data": {
+          "GroupId": "id-050",
+          "PlaylistItemId": "id-058",
+          "When": "2026-11-03T16:07:49.4010406Z",
+          "PositionTicks": 10000000,
+          "Command": "Unpause",
+          "EmittedAt": "2026-11-03T16:07:48.481093Z"
+        },
+        "MessageType": "SyncPlayCommand"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-067",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": "scope-viewer-b",
+          "Type": "UserLeft"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-b",
+      "envelope": {
+        "MessageId": "id-068",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": "id-050",
+          "Type": "GroupLeft"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "viewer-a",
+      "envelope": {
+        "MessageId": "id-069",
+        "Data": {
+          "GroupId": "id-050",
+          "Data": "id-050",
+          "Type": "GroupLeft"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    },
+    {
+      "source": "admin-envelope-only",
+      "envelope": {
+        "MessageId": "id-070",
+        "Data": {
+          "GroupId": "id-052",
+          "Data": "",
+          "Type": "NotInGroup"
+        },
+        "MessageType": "SyncPlayGroupUpdate"
+      }
+    }
+  ],
+  "scope": "HTTP/WS/media evidence only; no renderer, casting, offline package or drift qualification"
+}

@@ -1,0 +1,11 @@
+{
+  "version": "12.4",
+  "passed": true,
+  "observed": {
+    "PlaybackPositionTicks": 0,
+    "Played": false,
+    "PlayCount": 7,
+    "IsFavorite": true
+  },
+  "scope": "own fixture viewer watch reset; original probe item data restored"
+}

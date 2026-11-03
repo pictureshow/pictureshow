@@ -1,0 +1,904 @@
+{
+  "completed": true,
+  "fixture": "original-CC0",
+  "version": "12.4",
+  "mode": "recordings",
+  "capturedUtc": "2026-11-03T16:29:13.158560+00:00",
+  "checks": [
+    {
+      "name": "server-version",
+      "passed": true,
+      "observed": {
+        "Version": "12.4.0"
+      }
+    },
+    {
+      "name": "music-fixtures-scanned",
+      "passed": true,
+      "observed": {
+        "count": 11,
+        "tracks": [
+          {
+            "Id": "id-001",
+            "Name": "Shared Title",
+            "Album": "Compilation",
+            "Artists": [
+              "Scope Green"
+            ],
+            "AlbumArtist": "Various Artists",
+            "IndexNumber": null,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-002",
+            "Name": "Boundary 1",
+            "Album": "Gapless",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-003",
+            "Name": "Long Seek",
+            "Album": "Long Seek",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-004",
+            "Name": "PCM Source",
+            "Album": "Conversion",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "wav"
+          },
+          {
+            "Id": "id-005",
+            "Name": "Shared Title",
+            "Album": "Compilation",
+            "Artists": [
+              "Scope Red"
+            ],
+            "AlbumArtist": "Various Artists",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-006",
+            "Name": "Shared Title",
+            "Album": "Compilation",
+            "Artists": [
+              "Scope Blue"
+            ],
+            "AlbumArtist": "Various Artists",
+            "IndexNumber": 1,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-007",
+            "Name": "Boundary 2",
+            "Album": "Gapless",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 2,
+            "ParentIndexNumber": null,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-008",
+            "Name": "Signal 1-1",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": 1,
+            "Container": "flac"
+          },
+          {
+            "Id": "id-009",
+            "Name": "Signal 1-2",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 2,
+            "ParentIndexNumber": 1,
+            "Container": "mov,mp4,m4a,3gp,3g2,mj2"
+          },
+          {
+            "Id": "id-010",
+            "Name": "Signal 2-1",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 1,
+            "ParentIndexNumber": 2,
+            "Container": "mp3"
+          },
+          {
+            "Id": "id-011",
+            "Name": "Signal 2-2",
+            "Album": "Two Discs",
+            "Artists": [
+              "Scope Ensemble"
+            ],
+            "AlbumArtist": "Scope Ensemble",
+            "IndexNumber": 2,
+            "ParentIndexNumber": 2,
+            "Container": "ogg"
+          }
+        ]
+      }
+    },
+    {
+      "name": "music-disc-and-compilation-metadata",
+      "passed": true,
+      "observed": {
+        "discOrder": [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        "compilation": [
+          {
+            "Id": "id-001",
+            "Name": "Shared Title",
+            "AlbumArtist": "Various Artists",
+            "Artists": [
+              "Scope Green"
+            ],
+            "IndexNumber": null
+          },
+          {
+            "Id": "id-005",
+            "Name": "Shared Title",
+            "AlbumArtist": "Various Artists",
+            "Artists": [
+              "Scope Red"
+            ],
+            "IndexNumber": 1
+          },
+          {
+            "Id": "id-006",
+            "Name": "Shared Title",
+            "AlbumArtist": "Various Artists",
+            "Artists": [
+              "Scope Blue"
+            ],
+            "IndexNumber": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "original-download-real-decode",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 867657,
+        "sha256": "d29a3ccb7eb786f88e2b08300345f2a4163d79d915290f5030e6d9d92dc6c757",
+        "decoded": true
+      }
+    },
+    {
+      "name": "original-range",
+      "passed": true,
+      "observed": {
+        "status": 206,
+        "bytes": 1024,
+        "Content-Range": "bytes 0-1023/867657"
+      }
+    },
+    {
+      "name": "playlist-repeat-runtime-receipt",
+      "passed": true,
+      "observed": {
+        "repeatPreserved": true,
+        "distinctEntryIds": false,
+        "beforeCount": 6,
+        "afterCount": 7,
+        "entries": [
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          },
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          },
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          },
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          },
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          },
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          },
+          {
+            "Id": "id-001",
+            "PlaylistItemId": "id-001",
+            "Name": "Shared Title"
+          }
+        ]
+      }
+    },
+    {
+      "name": "denied-download",
+      "passed": true,
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "name": "denied-library-item",
+      "passed": true,
+      "observed": {
+        "status": 404
+      }
+    },
+    {
+      "name": "denied-dvr-management",
+      "passed": true,
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "name": "server-internal-series-identity",
+      "passed": true,
+      "observed": {
+        "SeriesId": "id-012",
+        "note": "internal recorder identity; not exposed by Program DTO"
+      }
+    },
+    {
+      "name": "series-rule-create-cancel",
+      "passed": true,
+      "observed": {
+        "programIsSeries": true,
+        "seriesIdExposedInDto": false,
+        "remainingRules": 0
+      }
+    },
+    {
+      "name": "two-overlapping-timers-created",
+      "passed": true,
+      "observed": {
+        "timers": [
+          {
+            "Status": "New",
+            "RunTimeTicks": 1200000000,
+            "ProgramInfo": {
+              "Name": "Scope Series",
+              "ServerId": "id-013",
+              "Id": "id-014",
+              "Etag": "id-015",
+              "DateCreated": "2026-11-03T16:26:21.5454065Z",
+              "CanDelete": false,
+              "CanDownload": false,
+              "SortName": "scope series",
+              "EnableMediaSourceDisplay": true,
+              "ChannelId": "id-016",
+              "ChannelName": "Test A",
+              "Overview": "Original CC0 generated guide, tone and color test.",
+              "Taglines": [],
+              "Genres": [
+                "Series"
+              ],
+              "RunTimeTicks": 1200000000,
+              "ChannelNumber": "1",
+              "IndexNumber": 2,
+              "ParentIndexNumber": 1,
+              "RemoteTrailers": [],
+              "ProviderIds": {
+                "ProgramEtag": "xmltv-sha256-v1:3324942CADF5C64D97F9311D9A366E3547DCD449C8E4DC91DA22122AE34142AD"
+              },
+              "ParentId": "id-016",
+              "Type": "Program",
+              "People": [],
+              "Studios": [],
+              "GenreItems": [
+                {
+                  "Name": "Series",
+                  "Id": "id-017"
+                }
+              ],
+              "LocalTrailerCount": 0,
+              "SpecialFeatureCount": 0,
+              "DisplayPreferencesId": "id-018",
+              "Status": "New",
+              "Tags": [
+                "Series"
+              ],
+              "ImageTags": {},
+              "BackdropImageTags": [],
+              "Chapters": [],
+              "MediaType": "Video",
+              "EndDate": "2026-11-03T16:29:01.0000000Z",
+              "LockedFields": [],
+              "LockData": false,
+              "StartDate": "2026-11-03T16:27:01.0000000Z",
+              "EpisodeTitle": "Scope a episode 1",
+              "IsSeries": true,
+              "TimerId": "id-019"
+            },
+            "Id": "id-019",
+            "Type": "Timer",
+            "ServerId": "id-013",
+            "ExternalId": "id-020",
+            "ChannelId": "id-016",
+            "ExternalChannelId": "id-021",
+            "ChannelName": "Test A",
+            "ProgramId": "id-014",
+            "ExternalProgramId": "id-022",
+            "Name": "Scope Series",
+            "Overview": "Original CC0 generated guide, tone and color test.",
+            "StartDate": "2026-11-03T16:27:01.0000000Z",
+            "EndDate": "2026-11-03T16:29:01.0000000Z",
+            "ServiceName": "Emby",
+            "Priority": 0,
+            "PrePaddingSeconds": 0,
+            "PostPaddingSeconds": 0,
+            "IsPrePaddingRequired": false,
+            "IsPostPaddingRequired": false,
+            "KeepUntil": "UntilDeleted"
+          },
+          {
+            "Status": "New",
+            "RunTimeTicks": 1200000000,
+            "ProgramInfo": {
+              "Name": "Scope Series",
+              "ServerId": "id-013",
+              "Id": "id-023",
+              "Etag": "id-015",
+              "DateCreated": "2026-11-03T16:26:22.7920824Z",
+              "CanDelete": false,
+              "CanDownload": false,
+              "SortName": "scope series",
+              "EnableMediaSourceDisplay": true,
+              "ChannelId": "id-024",
+              "ChannelName": "Test B",
+              "Overview": "Original CC0 generated guide, tone and color test.",
+              "Taglines": [],
+              "Genres": [
+                "Series"
+              ],
+              "RunTimeTicks": 1200000000,
+              "ChannelNumber": "2",
+              "IndexNumber": 2,
+              "ParentIndexNumber": 1,
+              "RemoteTrailers": [],
+              "ProviderIds": {
+                "ProgramEtag": "xmltv-sha256-v1:CE7DF889F4D33BE2637D6B195984E4FE9D6116958BD2093911F3A8C74C70EA63"
+              },
+              "ParentId": "id-024",
+              "Type": "Program",
+              "People": [],
+              "Studios": [],
+              "GenreItems": [
+                {
+                  "Name": "Series",
+                  "Id": "id-017"
+                }
+              ],
+              "LocalTrailerCount": 0,
+              "SpecialFeatureCount": 0,
+              "DisplayPreferencesId": "id-018",
+              "Status": "New",
+              "Tags": [
+                "Series"
+              ],
+              "ImageTags": {},
+              "BackdropImageTags": [],
+              "Chapters": [],
+              "MediaType": "Video",
+              "EndDate": "2026-11-03T16:29:01.0000000Z",
+              "LockedFields": [],
+              "LockData": false,
+              "StartDate": "2026-11-03T16:27:01.0000000Z",
+              "EpisodeTitle": "Scope b episode 1",
+              "IsSeries": true,
+              "TimerId": "id-025"
+            },
+            "Id": "id-025",
+            "Type": "Timer",
+            "ServerId": "id-013",
+            "ExternalId": "id-026",
+            "ChannelId": "id-024",
+            "ExternalChannelId": "id-027",
+            "ChannelName": "Test B",
+            "ProgramId": "id-023",
+            "ExternalProgramId": "id-028",
+            "Name": "Scope Series",
+            "Overview": "Original CC0 generated guide, tone and color test.",
+            "StartDate": "2026-11-03T16:27:01.0000000Z",
+            "EndDate": "2026-11-03T16:29:01.0000000Z",
+            "ServiceName": "Emby",
+            "Priority": 0,
+            "PrePaddingSeconds": 0,
+            "PostPaddingSeconds": 0,
+            "IsPrePaddingRequired": false,
+            "IsPostPaddingRequired": false,
+            "KeepUntil": "UntilDeleted"
+          }
+        ],
+        "requestedStart": "2026-11-03T16:27:01+00:00",
+        "requestedEnd": "2026-11-03T16:29:01+00:00"
+      }
+    },
+    {
+      "name": "growing-recording-negotiation",
+      "passed": true,
+      "observed": [
+        {
+          "relativeSeconds": 23.6,
+          "status": 200,
+          "source": {
+            "MediaSources": [
+              {
+                "Protocol": "File",
+                "Id": "id-020",
+                "EncoderProtocol": "Http",
+                "Type": "Default",
+                "Container": "ts",
+                "Size": 262144,
+                "IsRemote": false,
+                "ReadAtNativeFramerate": false,
+                "IgnoreDts": true,
+                "IgnoreIndex": true,
+                "GenPtsInput": false,
+                "SupportsTranscoding": true,
+                "SupportsDirectStream": false,
+                "SupportsDirectPlay": false,
+                "IsInfiniteStream": true,
+                "UseMostCompatibleTranscodingProfile": false,
+                "RequiresOpening": false,
+                "RequiresClosing": false,
+                "BufferMs": 0,
+                "RequiresLooping": false,
+                "SupportsProbing": true,
+                "MediaStreams": [
+                  {
+                    "Codec": "h264",
+                    "TimeBase": "1/90000",
+                    "VideoRange": "SDR",
+                    "VideoRangeType": "SDR",
+                    "AudioSpatialFormat": "None",
+                    "DisplayTitle": "240p H264 SDR",
+                    "NalLengthSize": "0",
+                    "IsInterlaced": false,
+                    "BitRate": 191106,
+                    "BitDepth": 8,
+                    "RefFrames": 1,
+                    "IsDefault": false,
+                    "IsForced": false,
+                    "IsHearingImpaired": false,
+                    "IsOriginal": false,
+                    "Height": 180,
+                    "Width": 320,
+                    "AverageFrameRate": 24,
+                    "RealFrameRate": 24,
+                    "ReferenceFrameRate": 24,
+                    "Profile": "Constrained Baseline",
+                    "Type": "Video",
+                    "AspectRatio": "16:9",
+                    "Index": 0,
+                    "IsExternal": false,
+                    "IsTextSubtitleStream": false,
+                    "SupportsExternalStream": false,
+                    "PixelFormat": "yuv420p",
+                    "Level": 12,
+                    "IsAnamorphic": false
+                  },
+                  {
+                    "Codec": "aac",
+                    "TimeBase": "1/90000",
+                    "VideoRange": "Unknown",
+                    "VideoRangeType": "Unknown",
+                    "AudioSpatialFormat": "None",
+                    "LocalizedDefault": "Default",
+                    "LocalizedExternal": "External",
+                    "LocalizedOriginal": "Original",
+                    "DisplayTitle": "AAC - Mono",
+                    "IsInterlaced": false,
+                    "ChannelLayout": "mono",
+                    "BitRate": 67005,
+                    "Channels": 1,
+                    "SampleRate": 48000,
+                    "IsDefault": false,
+                    "IsForced": false,
+                    "IsHearingImpaired": false,
+                    "IsOriginal": false,
+                    "Profile": "LC",
+                    "Type": "Audio",
+                    "Index": 1,
+                    "IsExternal": false,
+                    "IsTextSubtitleStream": false,
+                    "SupportsExternalStream": false
+                  }
+                ],
+                "MediaAttachments": [],
+                "Formats": [],
+                "Bitrate": 258111,
+                "RequiredHttpHeaders": {},
+                "TranscodingSubProtocol": "hls",
+                "TranscodingContainer": "ts",
+                "AnalyzeDurationMs": 3000,
+                "DefaultAudioStreamIndex": 1,
+                "HasSegments": false
+              }
+            ],
+            "PlaySessionId": "id-029"
+          }
+        }
+      ]
+    },
+    {
+      "name": "growing-recording-observed",
+      "passed": true,
+      "observed": {
+        "note": "queried isInProgress=true; source negotiation recorded separately"
+      }
+    },
+    {
+      "name": "recording-timer-transitions",
+      "passed": true,
+      "observed": [
+        {
+          "relativeSeconds": 0.9,
+          "timers": [
+            {
+              "Id": "id-019",
+              "Status": "New",
+              "Name": "Scope Series"
+            },
+            {
+              "Id": "id-025",
+              "Status": "New",
+              "Name": "Scope Series"
+            }
+          ]
+        },
+        {
+          "relativeSeconds": 19.7,
+          "timers": [
+            {
+              "Id": "id-019",
+              "Status": "InProgress",
+              "Name": "Scope Series"
+            },
+            {
+              "Id": "id-025",
+              "Status": "InProgress",
+              "Name": "Scope Series"
+            }
+          ]
+        },
+        {
+          "relativeSeconds": 141.8,
+          "timers": []
+        }
+      ]
+    },
+    {
+      "name": "completed-recording-present",
+      "passed": true,
+      "observed": {
+        "recordings": [
+          {
+            "Name": "Scope a episode 1",
+            "ServerId": "id-013",
+            "Id": "id-030",
+            "Container": "ts",
+            "PremiereDate": "2026-11-03T00:00:00.0000000Z",
+            "ChannelId": null,
+            "RunTimeTicks": 1259893330,
+            "ProductionYear": 2026,
+            "IndexNumber": 2,
+            "ParentIndexNumber": 1,
+            "IsFolder": false,
+            "Type": "Episode",
+            "ParentBackdropItemId": "id-031",
+            "ParentBackdropImageTags": [
+              "id-032"
+            ],
+            "UserData": {
+              "PlaybackPositionTicks": 0,
+              "PlayCount": 0,
+              "IsFavorite": false,
+              "Played": false,
+              "Key": "442609001002",
+              "ItemId": "id-030"
+            },
+            "SeriesName": "Scope Series",
+            "SeriesId": "id-031",
+            "SeasonId": "id-033",
+            "PrimaryImageAspectRatio": 0.6666666666666666,
+            "SeriesPrimaryImageTag": "id-034",
+            "SeasonName": "Season 1",
+            "VideoType": "VideoFile",
+            "ImageTags": {},
+            "BackdropImageTags": [],
+            "ParentPrimaryImageItemId": "id-033",
+            "ParentPrimaryImageTag": "id-035",
+            "LocationType": "FileSystem",
+            "MediaType": "Video"
+          },
+          {
+            "Name": "Scope b episode 1",
+            "ServerId": "id-013",
+            "Id": "id-036",
+            "Container": "ts",
+            "PremiereDate": "2026-11-03T00:00:00.0000000Z",
+            "ChannelId": null,
+            "RunTimeTicks": 1259166670,
+            "ProductionYear": 2026,
+            "IndexNumber": 2,
+            "ParentIndexNumber": 1,
+            "IsFolder": false,
+            "Type": "Episode",
+            "ParentBackdropItemId": "id-031",
+            "ParentBackdropImageTags": [
+              "id-032"
+            ],
+            "UserData": {
+              "PlaybackPositionTicks": 0,
+              "PlayCount": 0,
+              "IsFavorite": false,
+              "Played": false,
+              "Key": "442609001002",
+              "ItemId": "id-036"
+            },
+            "SeriesName": "Scope Series",
+            "SeriesId": "id-031",
+            "SeasonId": "id-033",
+            "PrimaryImageAspectRatio": 0.6666666666666666,
+            "SeriesPrimaryImageTag": "id-034",
+            "SeasonName": "Season 1",
+            "VideoType": "VideoFile",
+            "ImageTags": {},
+            "BackdropImageTags": [],
+            "ParentPrimaryImageItemId": "id-033",
+            "ParentPrimaryImageTag": "id-035",
+            "LocationType": "FileSystem",
+            "MediaType": "Video"
+          }
+        ],
+        "remainingActiveTimers": [],
+        "remainingGrowingIds": [],
+        "overlapOutcome": [
+          {
+            "relativeSeconds": 0.9,
+            "timers": [
+              {
+                "Id": "id-019",
+                "Status": "New",
+                "Name": "Scope Series"
+              },
+              {
+                "Id": "id-025",
+                "Status": "New",
+                "Name": "Scope Series"
+              }
+            ]
+          },
+          {
+            "relativeSeconds": 19.7,
+            "timers": [
+              {
+                "Id": "id-019",
+                "Status": "InProgress",
+                "Name": "Scope Series"
+              },
+              {
+                "Id": "id-025",
+                "Status": "InProgress",
+                "Name": "Scope Series"
+              }
+            ]
+          },
+          {
+            "relativeSeconds": 141.8,
+            "timers": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "recording-download-decode-0",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 4053468,
+        "sha256": "fe7b3f1ab731edae60d148d4926bf74cd2969f15bdbd5c8ed307a6c15229d7c1",
+        "probe": {
+          "programs": [
+            {
+              "streams": [
+                {
+                  "codec_name": "h264"
+                },
+                {
+                  "codec_name": "aac"
+                }
+              ]
+            }
+          ],
+          "stream_groups": [],
+          "streams": [
+            {
+              "codec_name": "h264"
+            },
+            {
+              "codec_name": "aac"
+            }
+          ],
+          "format": {
+            "duration": "125.989333"
+          }
+        },
+        "decoded": true,
+        "expectedNominalSeconds": 120,
+        "acceptedHlsDurationSeconds": [
+          110,
+          150
+        ]
+      }
+    },
+    {
+      "name": "recording-resume-0",
+      "passed": true,
+      "observed": {
+        "before": {
+          "PlaybackPositionTicks": 0,
+          "PlayCount": 0,
+          "IsFavorite": false,
+          "Played": false,
+          "Key": "442609001002",
+          "ItemId": "id-030"
+        },
+        "after": {
+          "PlayedPercentage": 0.7937179888078303,
+          "PlaybackPositionTicks": 10000000,
+          "PlayCount": 0,
+          "IsFavorite": false,
+          "Played": false,
+          "Key": "442609001002",
+          "ItemId": "id-030"
+        }
+      }
+    },
+    {
+      "name": "recording-download-decode-1",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "bytes": 4132992,
+        "sha256": "7e54c3a282932528a8bcc24ecec8d3c1d30e172e83ed480262b5efd40c6d382c",
+        "probe": {
+          "programs": [
+            {
+              "streams": [
+                {
+                  "codec_name": "h264"
+                },
+                {
+                  "codec_name": "aac"
+                }
+              ]
+            }
+          ],
+          "stream_groups": [],
+          "streams": [
+            {
+              "codec_name": "h264"
+            },
+            {
+              "codec_name": "aac"
+            }
+          ],
+          "format": {
+            "duration": "125.916667"
+          }
+        },
+        "decoded": true,
+        "expectedNominalSeconds": 120,
+        "acceptedHlsDurationSeconds": [
+          110,
+          150
+        ]
+      }
+    },
+    {
+      "name": "recording-resume-1",
+      "passed": true,
+      "observed": {
+        "before": {
+          "PlaybackPositionTicks": 0,
+          "PlayCount": 0,
+          "IsFavorite": false,
+          "Played": false,
+          "Key": "442609001002",
+          "ItemId": "id-036"
+        },
+        "after": {
+          "PlayedPercentage": 0.7941760402536703,
+          "PlaybackPositionTicks": 10000000,
+          "PlayCount": 0,
+          "IsFavorite": false,
+          "Played": false,
+          "Key": "442609001002",
+          "ItemId": "id-036"
+        }
+      }
+    },
+    {
+      "name": "recording-owned-resource-cleanup",
+      "passed": true,
+      "observed": [
+        {
+          "resource": "Timers",
+          "status": 404,
+          "closed": true
+        },
+        {
+          "resource": "Timers",
+          "status": 404,
+          "closed": true
+        }
+      ]
+    }
+  ],
+  "websocketEvents": [],
+  "scope": "HTTP/WS/media evidence only; no renderer, casting, offline package or drift qualification"
+}

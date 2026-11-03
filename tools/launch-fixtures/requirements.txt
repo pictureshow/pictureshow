@@ -1,0 +1,2 @@
+# Tested WebSocket transport; HTTP and lifecycle use the Python standard library.
+websockets==13.1

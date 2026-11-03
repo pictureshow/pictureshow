@@ -1,0 +1,25 @@
+{
+  "version": "10.10.7",
+  "handshakes": [
+    {
+      "authForm": "api_key",
+      "status": 101,
+      "upgrade": "websocket",
+      "transferEncoding": null
+    },
+    {
+      "authForm": "ApiKey",
+      "status": 101,
+      "upgrade": "websocket",
+      "transferEncoding": null
+    },
+    {
+      "authForm": "header",
+      "status": 101,
+      "upgrade": "websocket",
+      "transferEncoding": null
+    }
+  ],
+  "passed": true,
+  "scope": "Raw handshake only. Native header and common ApiKey query required; legacy api_key result recorded without assuming acceptance."
+}

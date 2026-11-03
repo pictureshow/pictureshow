@@ -1,0 +1,19 @@
+{
+  "license": "CC0-1.0",
+  "fileHashesVerified": 15,
+  "audioCodecs": [
+    "aac",
+    "flac",
+    "mp3",
+    "opus",
+    "pcm_s24le"
+  ],
+  "gapless": {
+    "sampleRate": 48000,
+    "samplesPerPart": 240000,
+    "concatenatedPCMEqualsReference": true,
+    "referencePCMsha256": "11c28e8e276878b6ffef68a562eb9abd38b20e3a1558b7c77fe29a1b72f34b3b"
+  },
+  "rawPlaylistContainsRepeatedPath": true,
+  "scope": "Generated source verification; no renderer gapless claim"
+}
