@@ -1,0 +1,29 @@
+{
+  "version": "10.10.7",
+  "checks": [
+    {
+      "name": "pcm-source-forces-mp3-conversion",
+      "passed": true,
+      "observed": {
+        "status": 200,
+        "sourceCodec": "pcm_s24le",
+        "bytes": 321279,
+        "sha256": "daa87ea6582aad38977b76ca68d2f00593e8e5c536c0ae397ee4b2d3352b265d",
+        "probe": {
+          "programs": [],
+          "stream_groups": [],
+          "streams": [
+            {
+              "codec_name": "mp3"
+            }
+          ],
+          "format": {
+            "duration": "20.000000"
+          }
+        },
+        "decoded": true,
+        "scope": "finite HTTP audio bytes; independent offline playback/package qualification belongs to 84B"
+      }
+    }
+  ]
+}
