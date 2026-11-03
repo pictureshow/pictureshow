@@ -1750,14 +1750,19 @@ test("background countdown opens the next decoder while hidden without a stop la
     await expect(
         page.getByRole("heading", { name: "The Next Morning", exact: true }),
     ).toBeVisible();
-    const video = page.locator("video");
-    // Engines may still refuse or pause a new hidden media element. That is a
-    // browser-imposed stop: it must be latched (logged) and survive return.
+    const video = page.locator("video"),
+        engine = test.info().project.name;
+    // Observed per engine (Linux container, 5 runs each): Chromium and Firefox
+    // play the hidden successor; WebKit refuses its play() and the app latches
+    // browser-play-rejected (one earlier WebKit run played). The swap's own
+    // pause must never surface as a browser-pause stop in any engine.
     await expect
         .poll(
             async () =>
-                stops.some((s) => s.startsWith("browser-")) ||
-                (await video.evaluate((v: HTMLVideoElement) => !v.paused)),
+                stops.length > 0 ||
+                (await video.evaluate(
+                    (v: HTMLVideoElement) => !v.paused && v.currentTime > 0.2,
+                )),
             { timeout: 20000 },
         )
         .toBe(true);
@@ -1767,8 +1772,8 @@ test("background countdown opens the next decoder while hidden without a stop la
             (r) => r.path.endsWith("/Stopped") && r.body.ItemId === "episode",
         ),
     ).toHaveLength(1);
-    if (stops.length) {
-        expect(stops.every((s) => s.startsWith("browser-"))).toBe(true);
+    if (engine === "webkit" && stops.length) {
+        expect(stops).toEqual(["browser-play-rejected"]);
         await page.evaluate(() => {
             Object.defineProperty(document, "hidden", {
                 configurable: true,
@@ -1780,15 +1785,19 @@ test("background countdown opens the next decoder while hidden without a stop la
         expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(
             true,
         );
-    } else
+    } else {
+        expect(stops).toEqual([]);
+        const at = await video.evaluate((v: HTMLVideoElement) => v.currentTime);
         await expect
             .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
-            .toBeGreaterThan(0.2);
+            .toBeGreaterThan(at + 0.2);
+        expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(
+            false,
+        );
+    }
     test.info().annotations.push({
         type: "hidden-successor",
-        description: stops.length
-            ? "browser stop " + stops.join(",")
-            : "playing",
+        description: stops.length ? stops.join(",") : "playing",
     });
     await page.getByRole("button", { name: "Stop and go back" }).click();
 });
