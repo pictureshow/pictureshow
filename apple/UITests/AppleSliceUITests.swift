@@ -1475,10 +1475,11 @@ final class AppleSliceUITests: XCTestCase {
         XCTAssertLessThanOrEqual(abs(later - returned), 1)
         capture("F5 real demo phone remains paused after Home return")
         let native = app.descendants(matching: .any).matching(identifier: "pictureshowNativePlayer").firstMatch
-        let nativePlay = native.buttons.matching(NSPredicate(format: "label ==[c] %@", "Play")).firstMatch
-        if !nativePlay.isHittable { native.tap() }
-        XCTAssertTrue(nativePlay.waitForExistence(timeout: 5) && nativePlay.isHittable)
-        nativePlay.tap()
+        XCTAssertTrue(native.exists)
+        // On this AVKit version tapping the paused player surface itself resumes
+        // playback. Requiring a separate transient Play button would reject the
+        // successful native gesture after it has already changed the transport.
+        native.tap()
         XCTAssertTrue(waitForPlaybackClock(position, minimum: later + 2, timeout: 30, metric: "f5_foreground_deliberate_play"))
         activate(app.buttons["closePlayer"])
         XCTAssertTrue(play.waitForExistence(timeout: 20))
