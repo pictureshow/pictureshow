@@ -7,7 +7,9 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 
 /** Called after Stopped: that report may already have marked played and incremented the count. */
-internal suspend fun CatalogSession.completePlayback(account: Account, itemId: String): ClientResult<Unit> {
+internal suspend fun CatalogSession.completePlayback(account: Account, itemId: String, report: Any? = null): ClientResult<Unit> {
+    val choiceRevision = completionChoiceRevision(itemId, report)
+    if (!completionMayApply(itemId, choiceRevision)) return ClientResult.Success(Unit)
     val owner = completionIntent(itemId)
     var acknowledged = false
     try {
@@ -15,6 +17,8 @@ internal suspend fun CatalogSession.completePlayback(account: Account, itemId: S
             is ClientResult.Failure -> return result
             is ClientResult.Success -> result.value
         }
+        // A later accepted viewer choice owns this item, even before it can execute.
+        if (!completionMayApply(itemId, choiceRevision)) return ClientResult.Success(Unit)
         if (item.userData.played) {
             playbackCompleted(item)
             acknowledged = true

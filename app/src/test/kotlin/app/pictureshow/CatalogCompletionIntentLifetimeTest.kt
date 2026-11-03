@@ -52,6 +52,54 @@ class CatalogCompletionIntentLifetimeTest {
         Dispatchers.resetMain()
     }
 
+    @Test fun aViewerChoiceAcceptedDuringTheReadSupersedesAutomaticCompletion() = runTest(dispatcher) {
+        service.detail = ClientResult.Success(film)
+        val vm = CatalogDetailViewModel(account, film, session).also { store.put("detail", it) }
+        runCurrent()
+        val held = CompletableDeferred<ClientResult<MediaItem>>()
+        service.detailBlock = { held.await() }
+        session.playbackPending(film.id, "report")
+        val completion = launch { session.completePlayback(account, film.id, "report") }
+        runCurrent()
+        assertTrue(vm.state.value.item!!.userData.played, "Natural end remains presented before a viewer choice")
+        vm.playedRequested()
+        held.complete(ClientResult.Success(film))
+        runCurrent()
+        assertTrue(completion.isCompleted)
+        assertTrue(service.actions.isEmpty(), "Completion must not POST against an accepted later unwatch")
+        assertFalse(film.id in session.changes.value.completionIntents)
+        assertFalse(vm.state.value.item!!.userData.played, "Fresh unplayed data must reach the queued no-change decision")
+    }
+
+    @Test fun aChoiceAcceptedBeforeTheCompletionCheckStillOwnsTheReport() = runTest(dispatcher) {
+        service.detail = ClientResult.Success(film)
+        session.playbackPending(film.id, "report")
+        session.playedChoice(film.id)
+        session.completePlayback(account, film.id, "report")
+        assertTrue(service.actions.isEmpty(), "A fast viewer request can precede a slow Stopped acknowledgement")
+        assertFalse(film.id in session.changes.value.completionIntents)
+    }
+
+    @Test fun aLaterPlaybackReportCanCompleteAfterAnEarlierViewerChoice() = runTest(dispatcher) {
+        service.detail = ClientResult.Success(film)
+        session.playbackPending(film.id, "old")
+        session.playedChoice(film.id)
+        session.playbackPending(film.id, "new")
+        session.completePlayback(account, film.id, "old")
+        assertTrue(service.actions.isEmpty(), "The old report cannot borrow the new report baseline")
+        session.completePlayback(account, film.id, "new")
+        assertTrue(service.actions == listOf(Triple("played", film.id, true)), "Viewer precedence ends with its report, not forever")
+    }
+
+    @Test fun aFinishedReportCannotBorrowTheCurrentChoiceRevision() = runTest(dispatcher) {
+        service.detail = ClientResult.Success(film)
+        session.playbackPending(film.id, "report")
+        session.refresh(film.id, "report")
+        session.completePlayback(account, film.id, "report")
+        assertTrue(service.actions.isEmpty(), "A late callback from a retired report has no completion authority")
+        assertFalse(film.id in session.changes.value.completionIntents)
+    }
+
     @Test fun failedCompletionReadRestoresThePresentedValueEvenWhenTheRefreshAlsoFails() = runTest(dispatcher) {
         service.detail = ClientResult.Success(film)
         val vm = CatalogDetailViewModel(account, film, session).also { store.put("detail", it) }

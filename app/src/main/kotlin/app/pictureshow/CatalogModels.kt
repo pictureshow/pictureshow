@@ -45,8 +45,11 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
     private var unresolvedPlayback = emptySet<String>()
 
     private var pendingReports = emptyMap<Pair<String, Any>, Set<String>>()
+    private val playedChoiceRevisions = mutableMapOf<String, Long>()
+    private val reportChoiceRevisions = mutableMapOf<Pair<String, Any>, Long>()
 
     fun playbackPending(itemId: String, report: Any = itemId, relatedIds: Set<String> = emptySet()) {
+        reportChoiceRevisions.getOrPut(itemId to report) { playedChoiceRevisions[itemId] ?: 0L }
         val affected = relatedIds + itemId
         pendingReports = pendingReports + ((itemId to report) to affected)
         unresolvedPlayback = unresolvedPlayback + affected
@@ -54,6 +57,16 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
     }
 
     internal fun playbackUnresolved(itemId: String) = itemId in unresolvedPlayback
+
+    internal fun playedChoice(itemId: String) {
+        playedChoiceRevisions[itemId] = (playedChoiceRevisions[itemId] ?: 0L) + 1
+    }
+
+    internal fun completionChoiceRevision(itemId: String, report: Any?): Long? =
+        if (report == null) playedChoiceRevisions[itemId] ?: 0L else reportChoiceRevisions[itemId to report]
+
+    internal fun completionMayApply(itemId: String, revision: Long?): Boolean =
+        app.pictureshow.core.detailCompletionMayApply(revision, playedChoiceRevisions[itemId] ?: 0L)
 
     private val completionIntentOwners = mutableMapOf<String, Any>()
     private val activeCompletions = mutableMapOf<String, MutableSet<Any>>()
@@ -92,7 +105,10 @@ class CatalogSession(val service: CatalogService, private val accounts: AccountS
     }
 
     fun refresh(finishedPlaybackId: String? = null, report: Any? = finishedPlaybackId) {
-        if (finishedPlaybackId != null && report != null) pendingReports = pendingReports - (finishedPlaybackId to report)
+        if (finishedPlaybackId != null && report != null) {
+            pendingReports = pendingReports - (finishedPlaybackId to report)
+            reportChoiceRevisions.remove(finishedPlaybackId to report)
+        }
         val pending = pendingReports.values.flatten().toSet()
         onRefresh()
         // Publish the acknowledged completion with the refresh atomically, so retained or newly
@@ -714,6 +730,7 @@ class CatalogDetailViewModel(private val account: Account, private val original:
         }
     }
 
+    fun playedRequested() = session.playedChoice(original.id)
     fun played() = mutate(true)
     fun favorite() = mutate(false)
 
