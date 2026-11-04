@@ -424,7 +424,7 @@ test("rc28 a held keyboard press is accepted once and runs once without Ready", 
         (window as any).detailCues.map((e: any) => e.text),
     );
     expect(cues.filter((s: string) => s === "Play requested")).toHaveLength(1);
-    expect(cues).not.toContain("Ready");
+    expect(cues.filter((s: string) => s.startsWith("Ready"))).toEqual([]);
 });
 test("rc28 a failed read cues Retry once without moving heading focus; a retry owns its next cue", async ({
     page,

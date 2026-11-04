@@ -356,6 +356,9 @@ for (const file of files) {
                         });
                         break;
                     }
+                    case "detail-ready-cue":
+                        value = rc26.detailReadyCue(i.label);
+                        break;
                     case "detail-ready-feedback": {
                         const f = new rc26.DetailReadyFeedback();
                         value = i.steps.map((s: any) =>

@@ -212,7 +212,7 @@ class DetailRecoveryFollowup4Test {
             compose.onNodeWithTag("detail:play").assertIsFocused()
                 .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
                 .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
-            compose.runOnIdle { kotlin.test.assertEquals(listOf("Ready"), feedback) }
+            compose.runOnIdle { kotlin.test.assertEquals(listOf("Ready. Play"), feedback) }
             compose.runOnIdle { readerOnSelected = false }
             compose.mainClock.advanceTimeBy(150)
             compose.onNodeWithTag("detail:play").assertIsFocused()
@@ -236,7 +236,7 @@ class DetailRecoveryFollowup4Test {
                     selected &&
                     !departed
                 ) {
-                    listOf("Ready")
+                    listOf("Ready. Play")
                 } else {
                     emptyList()
                 },

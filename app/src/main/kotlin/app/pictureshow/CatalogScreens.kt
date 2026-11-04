@@ -778,6 +778,17 @@ fun CatalogDetail(
     val readiness = remember { app.pictureshow.core.DetailReadyFeedback() }
     val pendingFeedback = remember { app.pictureshow.core.DetailPendingFeedback() }
     var readyDeliveryTarget by remember { mutableStateOf<String?>(null) }
+    var readyDeliveryLabel by remember { mutableStateOf<String?>(null) }
+    // TalkBack keeps one waiting content-change utterance: a newer one replaces it. Give a
+    // pending cue queued behind arrival speech its turn before Ready can replace it.
+    var pendingCueRevision by remember { mutableIntStateOf(0) }
+    var pendingCueQueued by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingCueRevision) {
+        if (pendingCueRevision > 0) {
+            delay(app.pictureshow.core.DETAIL_READY_AFTER_PENDING_CUE_MILLIS)
+            pendingCueQueued = false
+        }
+    }
     val feedbackChannel =
         rememberDetailFeedbackChannel(playbackWaiting && pendingSemanticsRevealed && lifecycleState == Lifecycle.State.RESUMED) { target ->
             if (target == headerInputTarget) readiness.presented(target)
@@ -1335,6 +1346,8 @@ fun CatalogDetail(
                     if (label != null && feedbackChannel.send(pendingTarget, label)) {
                         pendingFeedback.submitted()
                         readiness.presented(pendingTarget)
+                        pendingCueQueued = true
+                        pendingCueRevision++
                     }
                 }
                 if (readerTarget == PlaybackReaderTarget.ACTION && detailReaderFocusMatches(focusHost, requestCueTarget)) {
@@ -1357,7 +1370,14 @@ fun CatalogDetail(
                     ) {
                         readiness.cancel()
                         readyDeliveryTarget = null
-                    } else if (feedbackChannel.send(target, "Ready")) {
+                    } else if (!pendingCueQueued &&
+                        feedbackChannel.send(
+                            target,
+                            app.pictureshow.core.detailReadyCue(
+                                readyDeliveryLabel ?: app.pictureshow.core.detailHeldActionLabel(target)
+                            )
+                        )
+                    ) {
                         readiness.submitted()
                         readyDeliveryTarget = null
                     }
@@ -1631,7 +1651,10 @@ fun CatalogDetail(
                                         readyQueuedTargets = readyQueuedTargets,
                                         requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
                                         readiness = readiness,
-                                        onReadyCue = { readyDeliveryTarget = it },
+                                        onReadyCue = { target, label ->
+                                            readyDeliveryTarget = target
+                                            readyDeliveryLabel = label
+                                        },
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
@@ -1668,7 +1691,10 @@ fun CatalogDetail(
                                         readyQueuedTargets = readyQueuedTargets,
                                         requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
                                         readiness = readiness,
-                                        onReadyCue = { readyDeliveryTarget = it },
+                                        onReadyCue = { target, label ->
+                                            readyDeliveryTarget = target
+                                            readyDeliveryLabel = label
+                                        },
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
@@ -2211,7 +2237,7 @@ private fun DetailActions(
     readyQueuedTargets: Set<String> = emptySet(),
     requestCueTarget: String? = null,
     readiness: app.pictureshow.core.DetailReadyFeedback,
-    onReadyCue: (String?) -> Unit,
+    onReadyCue: (String?, String?) -> Unit,
     readyCancelled: Boolean = false,
     fromStartFocus: FocusRequester? = null,
     blocked: Boolean = false,
@@ -2222,6 +2248,33 @@ private fun DetailActions(
     val feedbackHost = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
     var focusedTarget by remember { mutableStateOf<String?>(null) }
+    val position = playItem?.userData?.playbackPositionTicks ?: 0
+    val labels = mapOf(
+        "primary" to (pending?.playLabel ?: if (position > 0) resumeLabel(position) else "Play"),
+        "from-start" to (pending?.fromStartLabel ?: "Play from start"),
+        "played" to (
+            pending?.playedLabel ?: if (blocked) {
+                app.pictureshow.core.detailUnavailableActionLabel("played")
+            } else if ("played" in readyQueuedTargets) {
+                app.pictureshow.core.detailRequestedActionLabel("played", requestCueTarget == "played")
+            } else if (item.isWatched) {
+                "Mark unwatched"
+            } else {
+                "Mark watched"
+            }
+            ),
+        "favorite" to (
+            pending?.favoriteLabel ?: if (blocked) {
+                app.pictureshow.core.detailUnavailableActionLabel("favorite")
+            } else if ("favorite" in readyQueuedTargets) {
+                app.pictureshow.core.detailRequestedActionLabel("favorite", requestCueTarget == "favorite")
+            } else if (item.userData.isFavorite) {
+                "Unfavorite"
+            } else {
+                "Favorite"
+            }
+            )
+    )
     // Observe selection during composition: reads made only inside SideEffect do not
     // subscribe this group to the focus callback's state changes.
     val readyTarget = focusedTarget
@@ -2243,10 +2296,10 @@ private fun DetailActions(
             cancelled = readyCancelled
         )
         if (cue != null && readyTarget != null && detailReaderFocusMatches(feedbackHost, readyTarget)) {
-            onReadyCue(readyTarget)
+            onReadyCue(readyTarget, labels[readyTarget])
         } else {
             if (cue != null) readiness.cancel()
-            onReadyCue(null)
+            onReadyCue(null, null)
         }
     }
     var focused by remember { mutableStateOf(false) }
@@ -2294,34 +2347,7 @@ private fun DetailActions(
             }
         }.focusGroup()
     ) {
-        val position = playItem?.userData?.playbackPositionTicks ?: 0
         val suffix = if (pending != null) "-pending" else ""
-        val labels = mapOf(
-            "primary" to (pending?.playLabel ?: if (position > 0) resumeLabel(position) else "Play"),
-            "from-start" to (pending?.fromStartLabel ?: "Play from start"),
-            "played" to (
-                pending?.playedLabel ?: if (blocked) {
-                    app.pictureshow.core.detailUnavailableActionLabel("played")
-                } else if ("played" in readyQueuedTargets) {
-                    app.pictureshow.core.detailRequestedActionLabel("played", requestCueTarget == "played")
-                } else if (item.isWatched) {
-                    "Mark unwatched"
-                } else {
-                    "Mark watched"
-                }
-                ),
-            "favorite" to (
-                pending?.favoriteLabel ?: if (blocked) {
-                    app.pictureshow.core.detailUnavailableActionLabel("favorite")
-                } else if ("favorite" in readyQueuedTargets) {
-                    app.pictureshow.core.detailRequestedActionLabel("favorite", requestCueTarget == "favorite")
-                } else if (item.userData.isFavorite) {
-                    "Unfavorite"
-                } else {
-                    "Favorite"
-                }
-                )
-        )
 
         val requestedTargets = readyQueuedTargets + pending?.requestedTargets.orEmpty()
         val activeRequestCue = requestCueTarget?.takeIf { it in requestedTargets }

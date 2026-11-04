@@ -51,6 +51,9 @@ export type PlaybackHttpOutcome = {
         "Http" | "Timeout" | "Network" | "InvalidResponse" | "Cancelled" | null;
     elapsedMs: number;
 };
+/** It may be the only cue heard, so it names the action. */
+export const detailReadyCue = (actionLabel: string) => `Ready. ${actionLabel}`;
+
 /** Ready is a transition on the same held control, never a later focus visit. */
 export class DetailReadyFeedback {
     private wasPresented = false;

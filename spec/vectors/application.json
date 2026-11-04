@@ -3306,6 +3306,22 @@
       "expected": "Favorite"
     },
     {
+      "id": "detail.feedback.ready-cue.play",
+      "operation": "detail-ready-cue",
+      "input": {
+        "label": "Play"
+      },
+      "expected": "Ready. Play"
+    },
+    {
+      "id": "detail.feedback.ready-cue.toggle",
+      "operation": "detail-ready-cue",
+      "input": {
+        "label": "Mark watched"
+      },
+      "expected": "Ready. Mark watched"
+    },
+    {
       "id": "detail.feedback.transition.initial-ready",
       "operation": "detail-ready-feedback",
       "input": {

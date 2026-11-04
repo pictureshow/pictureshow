@@ -20,6 +20,7 @@ import {
     type Item,
     type Row,
 } from "@pictureshow/core";
+import { detailReadyCue } from "@pictureshow/core/rc26";
 import "./catalog.css";
 import {
     projectCompletion,
@@ -1135,7 +1136,14 @@ export function Detail({
             document.visibilityState === "visible"
         ) {
             heldFocus.current = undefined;
-            cue("Ready", "ready");
+            cue(
+                detailReadyCue(
+                    active?.getAttribute("aria-label") ??
+                        active?.textContent ??
+                        "",
+                ),
+                "ready",
+            );
         } else if (action !== heldFocus.current) heldFocus.current = undefined;
     }, [ready, selected, graceElapsed, readError]);
     function detailFocus(event: React.FocusEvent) {
