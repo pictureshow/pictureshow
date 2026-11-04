@@ -220,3 +220,12 @@ class RemoteControllerHostTest {
         assertNull(remoteProblem("attached"))
     }
 }
+
+/** A controller that is never attached lists and sends nothing, so it changes nothing a shell test observes. */
+internal fun inertRemoteController() = RemoteControllerHost(
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+    object : RemoteControllerGateway {
+        override suspend fun targets(account: Account): ClientResult<List<RemoteTarget>> = ClientResult.Success(emptyList())
+        override suspend fun send(account: Account, request: RemoteRequest) = 0
+    }
+) { 0L }

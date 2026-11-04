@@ -142,6 +142,7 @@ class TouchNavigationTest {
         startKoin {
             modules(
                 module {
+                    single { inertRemoteController() }
                     single { accounts }
                     single<JellyfinService> { service }
                     single<CatalogService> { catalog }
