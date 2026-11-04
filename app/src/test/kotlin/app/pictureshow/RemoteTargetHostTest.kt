@@ -293,6 +293,14 @@ class RemoteTargetHostTest {
         assertNull(remoteKeyCode("Power"))
     }
 
+    @Test fun theEndOfATitleWaitsOnlyForAQueuedTitleThatCanOpen() {
+        val queued = app.pictureshow.core.MediaItem("q", "Queued", "Movie")
+        assertEquals(false, remoteQueueHoldsEnd(null, null, false))
+        assertEquals(true, remoteQueueHoldsEnd("q", null, true))
+        assertEquals(true, remoteQueueHoldsEnd("q", queued, false))
+        assertEquals(false, remoteQueueHoldsEnd("q", null, false))
+    }
+
     @Test fun backoffIsBounded() {
         assertEquals(1_000, RemoteTargetHost.backoffMs(0))
         assertEquals(30_000, RemoteTargetHost.backoffMs(40))

@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import app.pictureshow.core.Account
+import app.pictureshow.core.MediaItem
 import app.pictureshow.core.control.QueueEntry
 import app.pictureshow.core.control.QueueEvent
 import app.pictureshow.core.control.QueueState
@@ -79,6 +80,13 @@ internal class OkHttpRemoteSocketFactory(private val client: OkHttpClient = OkHt
 }
 
 /** What a mounted player can do. Absent when nothing is playing, so a stray command has nothing to act on. */
+/**
+ * What was queued from a phone comes next, so the end of a title waits for it instead of exiting. A queued title that
+ * cannot be opened holds nothing: the title ends as it would have.
+ */
+internal fun remoteQueueHoldsEnd(upcoming: String?, resolved: MediaItem?, resolving: Boolean): Boolean =
+    upcoming != null && (resolved != null || resolving)
+
 internal interface RemotePlayerBridge {
     fun pause()
     fun unpause()

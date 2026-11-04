@@ -240,10 +240,13 @@ internal fun PlayerItemScreen(
     val remoteTarget: RemoteTargetHost = koinInject()
     // A title queued from a controller goes first. With no controller this is always null, and nothing below changes.
     var remoteNext by remember { mutableStateOf<MediaItem?>(null) }
+    var remoteNextResolving by remember { mutableStateOf(false) }
     LaunchedEffect(remoteTarget.queueRevision, catalog) {
+        remoteNextResolving = remoteTarget.upcoming != null
         remoteNext = remoteTarget.upcoming?.let { id ->
             (resolvePlaybackEntry(PlaybackEntry(id), account, catalog) as? ResolvedPlaybackEntry.Open)?.item
         }
+        remoteNextResolving = false
     }
     val nextEpisode = remoteNext ?: (nextLookup?.result as? ClientResult.Success)?.value
     var extras by remember { mutableStateOf<PlaybackExtrasClient?>(null) }
@@ -596,12 +599,21 @@ internal fun PlayerItemScreen(
         nextLookup = null
         nextLookup = EpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
     }
-    LaunchedEffect(ended, nextLookup, nextCancelled, foreground, pauseIntent) {
+    LaunchedEffect(
+        ended,
+        nextLookup,
+        nextCancelled,
+        foreground,
+        pauseIntent,
+        remoteNext,
+        remoteTarget.upcoming,
+        remoteNextResolving
+    ) {
         if (!ended || !foreground || pauseIntent) return@LaunchedEffect
         val lookup = nextLookup
         if (nextCancelled) {
             finish(reason = "natural-end")
-        } else {
+        } else if (!remoteQueueHoldsEnd(remoteTarget.upcoming, remoteNext, remoteNextResolving)) {
             when (val result = lookup?.result) {
                 is ClientResult.Failure -> if (lookup.attempt == 0) nextRetry = 1 else finish(reason = "natural-end")
                 is ClientResult.Success -> if (result.value == null) finish(reason = "natural-end")
