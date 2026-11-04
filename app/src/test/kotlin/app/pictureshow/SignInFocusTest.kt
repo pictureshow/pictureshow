@@ -136,6 +136,7 @@ class SignInFocusTest {
             modules(
                 module {
                     single { inertRemoteTarget() }
+                    single { inertPlaybackPreferences() }
                     single { accounts }
                     single<JellyfinService> { service }
                     single<CatalogService> { catalog }

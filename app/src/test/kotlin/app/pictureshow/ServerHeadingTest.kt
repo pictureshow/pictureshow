@@ -75,6 +75,7 @@ class ServerHeadingTest {
             modules(
                 module {
                     single { inertRemoteTarget() }
+                    single { inertPlaybackPreferences() }
                     single { accounts }
                     single<JellyfinService> { service }
                     single<CatalogService> { CatalogModelsTest.FakeCatalog() }
