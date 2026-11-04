@@ -50,6 +50,11 @@ class SlowServerTest {
                         "/Users/Me" -> """{"Id":"u","Name":"Viewer"}"""
                         "/Users/u" -> """{"Configuration":{}}"""
                         "/Items/i" -> """{"Id":"i","Name":"Test","Type":"Movie"}"""
+                        "/Items" -> if (it.url.parameters["ids"] == "i") {
+                            """{"Items":[{"Id":"i","Type":"Movie"}]}"""
+                        } else {
+                            """{"Items":[],"TotalRecordCount":0}"""
+                        }
                         "/Items/i/PlaybackInfo" -> """{"MediaSources":[],"PlaySessionId":"p"}"""
                         else -> """{"Items":[],"TotalRecordCount":0}"""
                     }

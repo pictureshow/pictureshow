@@ -6,6 +6,7 @@ package app.pictureshow
 import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType
 import java.util.Locale
+import java.util.regex.Pattern
 
 internal fun trackLanguage(language: String?): String? {
     if (language.isNullOrBlank() || language == "und") return null
@@ -19,10 +20,45 @@ internal fun trackLanguage(language: String?): String? {
     return language
 }
 
-/** Match a complete metadata word or phrase, so "Unforced" cannot suppress "Forced". */
-private fun String.names(value: String): Boolean = contains(
-    Regex("(?i)(?<![\\p{L}\\p{N}])(?<!\\bnon\\p{Pd})${Regex.escape(value)}(?![\\p{L}\\p{N}])")
-)
+// Keep native assertions: ICU case folding expands category sets (for example U+0345), and word
+// boundaries depend on surrounding text. Compile these fixed sets once, with full-string context.
+private val trackPhrasePrefix = Pattern.compile("(?i)(?<![\\p{L}\\p{N}])(?<!\\bnon\\p{Pd})")
+private val trackPhraseSuffix = Pattern.compile("(?i)(?![\\p{L}\\p{N}])")
+
+private fun Pattern.matchesAt(value: String, index: Int): Boolean {
+    val matcher = matcher(value)
+    return matcher.find(index) && matcher.start() == index
+}
+
+// Android ICU performs full Unicode folding (ﬁ -> fi, ß -> ss); String.ignoreCase does not.
+// Cache only the literal phrase: compiling Unicode boundary sets was the panel's hot path.
+// A fresh Matcher keeps shared Patterns thread-safe and gives boundaries in original-string offsets.
+private val trackPhrasePatterns = LinkedHashMap<String, Pattern>(32, .75f, true)
+
+private fun trackPhrasePattern(value: String): Pattern = synchronized(trackPhrasePatterns) {
+    trackPhrasePatterns[value] ?: Pattern.compile(Pattern.quote(value), Pattern.CASE_INSENSITIVE).also {
+        trackPhrasePatterns[value] = it
+        if (trackPhrasePatterns.size > 128) {
+            val eldest = trackPhrasePatterns.keys.iterator()
+            eldest.next()
+            eldest.remove()
+        }
+    }
+}
+
+/** Match a complete metadata phrase without compiling Android ICU Unicode sets for every row/badge. */
+private fun String.names(value: String): Boolean {
+    val matcher = trackPhrasePattern(value).matcher(this)
+    var from = 0
+    while (from <= length && matcher.find(from)) {
+        val start = matcher.start()
+        val end = matcher.end()
+        if (trackPhrasePrefix.matchesAt(this, start) && trackPhraseSuffix.matchesAt(this, end)) return true
+        // A rejected phrase may overlap a later valid one, as in non-Forced Forced Forced.
+        from = start + 1
+    }
+    return false
+}
 
 /**
  * A track's language names it; without one the server's title or the codec/channel description carries the label,

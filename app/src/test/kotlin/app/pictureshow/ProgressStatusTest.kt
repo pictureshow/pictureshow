@@ -8,13 +8,13 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -116,8 +116,10 @@ class ProgressStatusTest {
             compose.onNodeWithText("Loading item…").assertIsDisplayed()
             compose.onNodeWithText("Saving progress…").assertDoesNotExist()
             compose.onNodeWithTag("detail:play").assertDoesNotExist()
+            // Passive progress stays readable without queuing speech ahead of the focused
+            // request, failure or Ready state; all report/read protection checks remain.
             compose.onNodeWithText("Loading item…").assert(
-                SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
+                SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion)
             )
             compose.onNodeWithText("Loading item…").onParent().performSemanticsAction(SemanticsActions.RequestFocus) { it() }
             compose.onNodeWithText("Loading item…").onParent().assertIsFocused()
@@ -133,7 +135,11 @@ class ProgressStatusTest {
                 compose.onNodeWithText("Retry").assertIsFocused()
                 compose.onNodeWithText("Loading item…").assertDoesNotExist()
                 compose.onNodeWithText("Saving progress…").assertDoesNotExist()
-                compose.onNodeWithTag("detail:play").assertDoesNotExist()
+                // With no playable episode, the retained Play slot is hidden from reader actions.
+                // Favorite would be enabled without recovery blocking, independently of episodes/child count.
+                compose.onNodeWithTag("detail:play").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+                compose.onNodeWithTag("detail:played").assertIsNotEnabled()
+                compose.onNodeWithTag("detail:favorite").assertIsNotEnabled()
                 compose.runOnIdle {
                     fail = false
                     displayed.value.reload()

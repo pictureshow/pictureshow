@@ -291,9 +291,8 @@ class SignInAccountsTest {
         click("Use Quick Connect")
         waitForText("123456")
         compose.onNodeWithContentDescription("Quick Connect code 1 2 3 4 5 6")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
-            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
-            .onParent().assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion)).assertIsFocused()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+            .assertIsFocused()
         key(Key.DirectionDown)
         compose.onNodeWithText("Waiting for approval. Expired codes are renewed automatically.").onParent().assertIsFocused()
         assertStatus("Waiting for approval. Expired codes are renewed automatically.")
@@ -425,7 +424,7 @@ class SignInAccountsTest {
             SemanticsMatcher.expectValue(
                 SemanticsProperties.ContentDescription,
                 listOf(
-                    "Remove remembered account? This removes Viewer one on Screen room from this TV. Other accounts stay signed in. You can add it again later. Cancel"
+                    "Remove remembered account? This removes Viewer one on Screen room from this TV. Other accounts stay signed in. You can add it again later."
                 )
             )
         )
@@ -476,9 +475,8 @@ class SignInAccountsTest {
     @Test
     fun addressHasOneAccessibleLabel() {
         launch()
-        compose.onNodeWithText("Server address", useUnmergedTree = true).assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.HideFromAccessibility, Unit)
-        )
+        compose.onNodeWithText("Server address", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Server address").assertExists()
     }
 
     @Test

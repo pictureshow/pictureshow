@@ -149,6 +149,27 @@ class PlaybackSessionTest {
     }
 
     @Test
+    fun nativeTranscodeBufferingReleasesOutputAtFortyFiveSeconds() = runTest {
+        val chosen = decision(method = PlayMethod.Transcode)
+        val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(chosen)) }
+        val output = Output()
+        val session = PlaybackSession(gateway, output, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.buffering(true, chosen)
+        runCurrent()
+        advanceTimeBy(44_999)
+        runCurrent()
+        assertFalse(output.released)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(output.released)
+        assertFalse("played" in gateway.events)
+        session.close()
+        runCurrent()
+    }
+
+    @Test
     fun stopBackErrorsAndGiveUpNeverMarkPlayedAndStaleEndCannotFinishReplacement() = runTest {
         for (exit in listOf("stop", "back", "error", "give-up", "stale")) {
             val chosen = decision()
@@ -256,8 +277,8 @@ class PlaybackSessionTest {
         runCurrent()
         session.ready()
         runCurrent()
-        assertEquals(2, gateway.starts.single().audioStreamIndex)
-        assertEquals(3, gateway.starts.single().subtitleStreamIndex)
+        assertEquals(null, gateway.starts.single().audioStreamIndex)
+        assertEquals(null, gateway.starts.single().subtitleStreamIndex)
         session.select(MediaStreamType.Audio, 1)
         session.select(MediaStreamType.Subtitle, -1)
         runCurrent()
@@ -312,7 +333,7 @@ class PlaybackSessionTest {
         runCurrent()
         assertEquals(1, gateway.stops.size)
         assertEquals(1_460_000_000L, gateway.stops.single().positionTicks)
-        assertEquals(2, gateway.progresses.last().audioStreamIndex)
+        assertEquals(null, gateway.progresses.last().audioStreamIndex)
         assertEquals(3, gateway.progresses.last().subtitleStreamIndex)
         assertEquals(listOf("progress", "stop"), gateway.events.takeLast(2))
         assertTrue(gateway.encodes.isEmpty())
@@ -484,5 +505,71 @@ class PlaybackSessionTest {
         assertEquals(2, gateway.requests.last().audioStreamIndex)
         session.close()
         runCurrent()
+    }
+
+    @Test fun everyCloseMarksProgressPendingBeforeNavigationAndReportCompletion() = runTest {
+        for (failure in listOf(false, true)) {
+            val gateway = Gateway().apply { outcomes += ClientResult.Success(PlayOutcome.Play(decision())) }
+            val events = mutableListOf<String>()
+            val session = PlaybackSession(
+                gateway,
+                Output(),
+                backgroundScope,
+                "en",
+                onCompletionPending = { events += "pending" },
+                onFinished = { events += "fresh" }
+            )
+            session.start(0)
+            runCurrent()
+            session.ready()
+            runCurrent()
+            if (failure) {
+                session.failed(false)
+                runCurrent()
+            }
+            gateway.stopGate = CompletableDeferred()
+            finishPlayback(session) { events += "navigation" }
+            assertEquals(listOf("pending", "navigation"), events, "Back/system/failure close must synchronously guard stale progress")
+            gateway.stopGate!!.complete(Unit)
+            runCurrent()
+            assertEquals(listOf("pending", "navigation", "fresh"), events)
+        }
+    }
+
+    @Test fun closeBeforeSetupFinishesAlwaysReleasesItsPendingGuard() = runTest {
+        val events = mutableListOf<String>()
+        val session = PlaybackSession(
+            Gateway(),
+            Output(),
+            backgroundScope,
+            "en",
+            onCompletionPending = { events += "pending" },
+            onFinished = { events += "fresh" }
+        )
+        session.close()
+        assertEquals(listOf("pending"), events)
+        runCurrent()
+        assertEquals(listOf("pending", "fresh"), events)
+    }
+
+    @Test fun reentrantDisposalCannotArmOrFinishTheSameExitTwice() = runTest {
+        var pending = 0
+        var finished = 0
+        lateinit var session: PlaybackSession
+        session = PlaybackSession(
+            Gateway(),
+            Output(),
+            backgroundScope,
+            "en",
+            onCompletionPending = {
+                pending++
+                session.close()
+            },
+            onFinished = { finished++ }
+        )
+        session.close()
+        runCurrent()
+        assertEquals(1, pending)
+        assertEquals(1, finished)
     }
 }

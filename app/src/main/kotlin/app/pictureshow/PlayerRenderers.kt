@@ -27,7 +27,9 @@ import kotlin.math.max
 open class PictureshowRenderersFactory internal constructor(
     context: Context,
     private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
-    private val passthroughEnabled: Boolean = true
+    private val passthroughEnabled: Boolean = true,
+    private val subtitleDiagnostics: SubtitleCueDiagnostics? = null,
+    private val onEncodedAudio: (Boolean) -> Unit = {}
 ) : DefaultRenderersFactory(context) {
     init {
         setExtensionRendererMode(EXTENSION_RENDERER_MODE_ON)
@@ -84,9 +86,15 @@ open class PictureshowRenderersFactory internal constructor(
             )
         val provider = if (passthroughEnabled) routeProvider else PcmAudioOutputProvider(routeProvider)
         return DefaultAudioSink.Builder(context)
-            .setEnableFloatOutput(enableFloatOutput)
-            .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-            .setAudioOutputProvider(provider)
+            .setEnableFloatOutput(false)
+            .setEnableAudioOutputPlaybackParameters(false)
+            .setAudioOutputProvider(object : androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider(provider) {
+                override fun getAudioOutput(
+                    config: androidx.media3.exoplayer.audio.AudioOutputProvider.OutputConfig
+                ): androidx.media3.exoplayer.audio.AudioOutput = super.getAudioOutput(config).also {
+                    onEncodedAudio(!androidx.media3.common.util.Util.isEncodingLinearPcm(config.encoding))
+                }
+            })
             .build()
     }
 
@@ -98,7 +106,12 @@ open class PictureshowRenderersFactory internal constructor(
         out: ArrayList<Renderer>
     ) {
         val first = out.size
-        super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
+        val diagnostics = subtitleDiagnostics
+        if (diagnostics == null) {
+            super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
+        } else {
+            out.add(SubtitleCueRenderer(output, Handler(outputLooper), diagnostics))
+        }
         for (index in first until out.size) out[index] = SubtitleDelayRenderer(out[index], subtitleDelay)
     }
 

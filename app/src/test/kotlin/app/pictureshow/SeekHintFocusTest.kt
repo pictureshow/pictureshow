@@ -99,6 +99,12 @@ class SeekHintFocusTest {
         launch(false)
         compose.onNodeWithTag("player:surface").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeBy(500)
+            // The clock first appears with controls; wait for the screen's polled fixture total.
+            compose.onNodeWithContentDescription("Playback position").fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription].contains(" of ")
+        }
         compose.onNodeWithTag("player:surface").assertIsFocused()
         val clock = compose.onNodeWithContentDescription("Playback position").getUnclippedBoundsInRoot()
         assertTrue(hintPixels() > 20, "Surface Right seeks; the seek hint must be visible")
@@ -181,7 +187,9 @@ class SeekHintFocusTest {
         }
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()
-            output.player.value != null
+            // The manifest publishes duration asynchronously after the player itself. Compare
+            // layout only after that fixed fixture total is known, rather than racing its arrival.
+            output.player.value?.duration?.let { it != C.TIME_UNSET && it > 0 } == true
         }
         compose.waitForIdle()
     }

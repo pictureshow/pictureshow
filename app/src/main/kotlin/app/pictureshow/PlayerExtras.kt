@@ -24,9 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
@@ -113,7 +110,7 @@ internal fun SegmentControl(
 internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapter>, positionMs: Long, onSeek: (Long) -> Unit) {
     // Preserve original indexes: the image API uses the chapter's index in the server DTO.
     val current = chapters.indexOfLast { it.startMs <= positionMs }.coerceAtLeast(0)
-    val initial = remember { FocusRequester() }
+    val entry = remember { PlayerPanelEntryFocus() }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
     val accessible = rememberAccessibilityEnabled()
@@ -123,9 +120,7 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
     val focusIndex = if (initialFocusReady) current else initialCurrent
     val list = rememberLazyListState(initialFirstVisibleItemIndex = current)
     Column(
-        Modifier.background(Color(0xF510131C)).padding(32.dp)
-            .focusProperties { onEnter = { if (chapters.isNotEmpty()) initial.requestFocus() } }
-            .focusGroup()
+        Modifier.background(Color(0xF510131C)).padding(32.dp).then(with(entry) { Modifier.entry(focusIndex) })
     ) {
         Text(
             "Chapters",
@@ -150,15 +145,7 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
                         selected = index == focusIndex
                         traversalIndex =
                             if (index == focusIndex) -1f else 0f
-                    }.then(
-                        if (index ==
-                            focusIndex
-                        ) {
-                            Modifier.focusRequester(initial)
-                        } else {
-                            Modifier
-                        }
-                    ).then(
+                    }.then(with(entry) { Modifier.row(index) }).then(
                         if (!initialFocusReady && index != initialCurrent) {
                             Modifier.clearAndSetSemantics { hideFromAccessibility() }
                         } else {
@@ -182,14 +169,10 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
     }
     LaunchedEffect(windowFocused, accessible) {
         if (windowFocused) {
-            if (chapters.isNotEmpty()) {
-                list.scrollToItem(focusIndex)
-                androidx.compose.runtime.withFrameNanos { }
-                initial.requestFocus()
-            }
             if (!initialFocusReady) {
                 awaitInitialPlayerPanelFocus(host)
                 initialFocusReady = true
+                entry.allowNavigation()
             }
         }
     }

@@ -230,8 +230,14 @@ object DeviceProfileBuilder {
         video: Set<VideoCodec>,
         audio: Set<AudioCodec>
     ): List<TranscodingProfile> {
-        // H.264 first: when the server must encode, it encodes to the first codec, and H.264 is the cheapest to encode.
-        val videoOrder = listOf(VideoCodec.H264, VideoCodec.HEVC, VideoCodec.AV1, VideoCodec.VP9).filter { it in video }
+        // Prefer HEVC when one reported hardware Main decoder handles the display at ordinary video rates.
+        // Jellyfin moves HEVC behind AVC when server HEVC encoding is disabled; keep AVC in the same list.
+        val preferred = if (prefersHevcTranscode(capabilities)) {
+            listOf(VideoCodec.HEVC, VideoCodec.H264, VideoCodec.AV1, VideoCodec.VP9)
+        } else {
+            listOf(VideoCodec.H264, VideoCodec.HEVC, VideoCodec.AV1, VideoCodec.VP9)
+        }
+        val videoOrder = preferred.filter { it in video }
         val audioOrder = transcodeAudioOrder(capabilities).filter { it in audio }
         val output = capabilities.audioOutput
         val passthroughChannels = if (capabilities.settings.passthroughEnabled) {
@@ -277,12 +283,73 @@ object DeviceProfileBuilder {
         // The server preserves encoder delay in fMP4's unsigned tfdt (including AAC re-encodes), which Media3
         // rejects before decoding. TS carries wrapped 33-bit timestamps that its shared adjuster handles.
         // Offer no fMP4 fallback: the server ranks all profiles by copy compatibility, so a fallback can beat TS
-        // even when it is later in this list. H.264 is the encode target; HEVC remains eligible for video copy.
+        // even when it is later in this list. Both AVC and HEVC remain eligible for video copy.
         val tsVideo = videoOrder.filter { it in Media3Formats.hlsTsVideo }
         val tsAudio = audioOrder.filter { it in Media3Formats.hlsTsAudio }
         // Empty codec strings mean unrestricted support to the server, not an unsupported target.
         return if (tsVideo.isEmpty() || tsAudio.isEmpty()) emptyList() else listOf(hls("ts", tsVideo, tsAudio))
     }
+
+    /** Do not combine the size of one decoder with the speed or profile of another. */
+    private fun prefersHevcTranscode(capabilities: DeviceCapabilities): Boolean {
+        val display = capabilities.display
+        val targetRate = minOf(30.0, display.maxRefreshRate)
+        return capabilities.videoDecoders.any { decoder ->
+            val mainTuples = decoder.profileCapabilities.filter { it.profile.equals("Main", ignoreCase = true) && it.maxBitDepth >= 8 }
+            val main = if (decoder.profileCapabilities.isNotEmpty()) {
+                mainTuples.isNotEmpty()
+            } else {
+                decoder.profiles.any { it.equals("Main", ignoreCase = true) }
+            }
+            // The codec-wide level can belong to Main 10. Use Main's own common reported ceiling.
+            val mainLevel = if (decoder.profileCapabilities.isEmpty()) {
+                decoder.maxLevel
+            } else {
+                mainTuples.mapNotNull { it.maxLevel }.minWithOrNull(compareBy({ it.major }, { it.minor }))
+            }
+            val rate = if (display.maxWidth > FULL_HD_WIDTH || display.maxHeight > 1080) {
+                minOf(decoder.maxFrameRate, decoder.maxFrameRateAtMaxSize)
+            } else {
+                decoder.maxFrameRate
+            }
+            decoder.codec == VideoCodec.HEVC &&
+                decoder.hardware &&
+                main &&
+                decoder.maxWidth >= display.maxWidth &&
+                decoder.maxHeight >= display.maxHeight &&
+                rate >= targetRate &&
+                // Output is bounded by display refresh; a higher decoder peak must not raise level requirements.
+                hevcLevelCovers(mainLevel, display.maxWidth, display.maxHeight, minOf(rate, display.maxRefreshRate))
+        }
+    }
+
+    private fun hevcLevelCovers(level: CodecLevel?, width: Int, height: Int, rate: Double): Boolean {
+        val reported = level?.let { serverLevel(VideoCodec.HEVC, it) } ?: return false
+        val limit = hevcLevelLimits.lastOrNull { it.first <= reported } ?: return false
+        val pixels = width.toLong() * height
+        return pixels <= limit.second &&
+            pixels * rate <= limit.third &&
+            width.toLong() * width <= 8 * limit.second &&
+            height.toLong() * height <= 8 * limit.second
+    }
+
+    // H.265 Annex A picture/sample-rate limits (level_idc, MaxLumaPs, MaxLumaSr), not encoder policy.
+    // Public standard facts, cross-checked against FFmpeg's h265_profile_level.c; no implementation copied.
+    private val hevcLevelLimits = listOf(
+        Triple(30, 36_864L, 552_960L),
+        Triple(60, 122_880L, 3_686_400L),
+        Triple(63, 245_760L, 7_372_800L),
+        Triple(90, 552_960L, 16_588_800L),
+        Triple(93, 983_040L, 33_177_600L),
+        Triple(120, 2_228_224L, 66_846_720L),
+        Triple(123, 2_228_224L, 133_693_440L),
+        Triple(150, 8_912_896L, 267_386_880L),
+        Triple(153, 8_912_896L, 534_773_760L),
+        Triple(156, 8_912_896L, 1_069_547_520L),
+        Triple(180, 35_651_584L, 1_069_547_520L),
+        Triple(183, 35_651_584L, 2_139_095_040L),
+        Triple(186, 35_651_584L, 4_278_190_080L)
+    )
 
     /** The first codec is what the server encodes to; the rest are kept so matching sources are copied, not encoded. */
     private fun transcodeAudioOrder(capabilities: DeviceCapabilities): List<AudioCodec> {

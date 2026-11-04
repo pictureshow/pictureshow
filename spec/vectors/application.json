@@ -1,0 +1,6142 @@
+{
+  "schemaVersion": 1,
+  "suite": "application",
+  "cases": [
+    {
+      "id": "settings.empty.defaults",
+      "operation": "settings",
+      "input": {},
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.120",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 120
+      },
+      "expected": {
+        "bitrateMbps": 120,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 120000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.80",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 80
+      },
+      "expected": {
+        "bitrateMbps": 80,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 80000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.40",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 40
+      },
+      "expected": {
+        "bitrateMbps": 40,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 40000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.20",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 20
+      },
+      "expected": {
+        "bitrateMbps": 20,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 20000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.10",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 10
+      },
+      "expected": {
+        "bitrateMbps": 10,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 10000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.bitrate.4",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 4
+      },
+      "expected": {
+        "bitrateMbps": 4,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 4000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.0",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 0
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.-1",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": -1
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.200",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 200
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.corrupt-bitrate.5",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 5
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.invalid-enums-fall-back",
+      "operation": "settings",
+      "input": {
+        "subtitleSize": "Unknown",
+        "subtitleBackground": "unknown",
+        "segmentModes": {
+          "Intro": "wrong",
+          "Unknown": "Off"
+        }
+      },
+      "expected": {
+        "bitrateMbps": null,
+        "passthrough": true,
+        "subtitleSize": "System",
+        "subtitleBackground": "System",
+        "segmentModes": {
+          "Intro": "Ask",
+          "Outro": "Ask",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 200000000,
+        "passthroughEnabled": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.explicit-values",
+      "operation": "settings",
+      "input": {
+        "bitrateMbps": 40,
+        "passthrough": false,
+        "subtitleSize": "ExtraLarge",
+        "subtitleBackground": "Box",
+        "segmentModes": {
+          "Intro": "Automatic",
+          "Outro": "Off",
+          "Recap": "Ask"
+        }
+      },
+      "expected": {
+        "bitrateMbps": 40,
+        "passthrough": false,
+        "subtitleSize": "ExtraLarge",
+        "subtitleBackground": "Box",
+        "segmentModes": {
+          "Intro": "Automatic",
+          "Outro": "Off",
+          "Recap": "Ask",
+          "Preview": "Ask",
+          "Commercial": "Ask"
+        },
+        "maxStreamingBitrate": 40000000,
+        "passthroughEnabled": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.None",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": null
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.120",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 120
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.80",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 80
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.40",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 40
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.20",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 20
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.10",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 10
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.4",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 4
+      },
+      "expected": {
+        "valid": true
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.0",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 0
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.-1",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": -1
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.200",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 200
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "settings.validation.5",
+      "operation": "validate-bitrate",
+      "input": {
+        "bitrateMbps": 5
+      },
+      "expected": {
+        "valid": false
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackSettingsTest.kt; PlaybackSettingsModelTest.kt"
+    },
+    {
+      "id": "audio.server-wins",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": 2,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.server-language-index",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": 1,
+        "preferredLanguage": "fr",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.server-minus-one",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": -1,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.default-before-language",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.language-fallback",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng",
+            "IsDefault": false
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": false
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": false
+          }
+        ]
+      },
+      "expected": 1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.iso3-region-fallback",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "fr-CA",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng",
+            "IsDefault": false
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": false
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": false
+          }
+        ]
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.no-preference-first",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "und",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng",
+            "IsDefault": false
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": false
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": false
+          }
+        ]
+      },
+      "expected": 1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "audio.no-audio",
+      "operation": "default-stream",
+      "input": {
+        "type": "Audio",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": []
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.null-means-off",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": null,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.minus-one-off",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": -1,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": -1,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.server-forced-choice",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": 5,
+        "preferredLanguage": "fr",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 5,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "subtitle.server-no-client-override",
+      "operation": "default-stream",
+      "input": {
+        "type": "Subtitle",
+        "serverIndex": 7,
+        "preferredLanguage": "en",
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 1,
+            "Language": "eng"
+          },
+          {
+            "Type": "Audio",
+            "Index": 2,
+            "Language": "fra",
+            "IsDefault": true
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5,
+            "Language": "eng",
+            "IsDefault": true
+          }
+        ]
+      },
+      "expected": 7,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackMediaTest.kt"
+    },
+    {
+      "id": "resume.ticks-floor",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 45678,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.negative-clamped",
+      "operation": "resume-start",
+      "input": {
+        "ticks": -1000,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.start-over",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": false,
+        "explicitPositionMs": null
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.explicit-zero",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": true,
+        "explicitPositionMs": 0
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.explicit-position",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 456789000,
+        "resume": true,
+        "explicitPositionMs": 123
+      },
+      "expected": 123,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.zero",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 0,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 0,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "resume.large-safe-integer",
+      "operation": "resume-start",
+      "input": {
+        "ticks": 9007199254740000,
+        "resume": true,
+        "explicitPositionMs": null
+      },
+      "expected": 900719925474,
+      "source": "app/src/test/kotlin/app/pictureshow/PlaybackEntryTest.kt; app/src/main/kotlin/app/pictureshow/MainActivity.kt; PlayerScreen.kt"
+    },
+    {
+      "id": "segment.before",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 9999,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.start-inclusive",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 10000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": "intro",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.last-millisecond",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 19999,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": "intro",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.end-exclusive",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 20000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.off",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {
+          "Intro": "Off"
+        },
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.automatic",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {
+          "Intro": "Automatic"
+        },
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": "intro",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.overflow",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 0,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 0,
+            "EndTicks": 5153978750000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.unknown",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Unknown",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "segment.invalid-order",
+      "operation": "active-segment",
+      "input": {
+        "positionMs": 15000,
+        "modes": {},
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 0
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.credits-start",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 100000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 900000000,
+            "EndTicks": 1000000000
+          }
+        ]
+      },
+      "expected": 90000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.last-ten-seconds",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 100000,
+        "segments": [
+          {
+            "Id": "intro",
+            "Type": "Intro",
+            "StartTicks": 100000000,
+            "EndTicks": 200000000
+          }
+        ]
+      },
+      "expected": 90000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.short-video",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 8000,
+        "segments": []
+      },
+      "expected": 0,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.unknown-duration",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 0,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 900000000,
+            "EndTicks": 1000000000
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.outside-duration",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 100000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 2000000000,
+            "EndTicks": 2100000000
+          }
+        ]
+      },
+      "expected": 90000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.implausible-credits",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 7200000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 0,
+            "EndTicks": 18600000000
+          }
+        ]
+      },
+      "expected": 7190000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next.adjacent-inserted-special",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "previous",
+            "Type": "Episode"
+          },
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "special",
+            "Type": "Episode",
+            "ParentIndexNumber": 0
+          }
+        ]
+      },
+      "expected": "special",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.cross-season",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "season-two",
+            "Type": "Episode",
+            "ParentIndexNumber": 2
+          }
+        ]
+      },
+      "expected": "season-two",
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.last-episode",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "previous",
+            "Type": "Episode"
+          },
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.current-absent",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "other",
+            "Type": "Episode"
+          },
+          {
+            "Id": "later",
+            "Type": "Episode"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.non-episode-successor",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "movie",
+            "Type": "Movie"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.duplicate-current",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode",
+          "SeriesId": "series"
+        },
+        "items": [
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          },
+          {
+            "Id": "current",
+            "Type": "Episode",
+            "SeriesId": "series"
+          }
+        ]
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.movie-no-request",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "movie",
+          "Type": "Movie"
+        },
+        "items": []
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "next.no-series-no-request",
+      "operation": "next-adjacency",
+      "input": {
+        "item": {
+          "Id": "current",
+          "Type": "Episode"
+        },
+        "items": []
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/NextEpisodeAvailabilityTest.kt"
+    },
+    {
+      "id": "configuration.defaults",
+      "operation": "user-configuration",
+      "input": {
+        "fields": {},
+        "change": null
+      },
+      "expected": {
+        "audioLanguage": "",
+        "subtitleLanguage": "",
+        "subtitleMode": "Default",
+        "fields": {}
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/UserConfigurationTest.kt"
+    },
+    {
+      "id": "configuration.null-languages",
+      "operation": "user-configuration",
+      "input": {
+        "fields": {
+          "AudioLanguagePreference": null,
+          "SubtitleLanguagePreference": null,
+          "SubtitleMode": "None",
+          "Other": null
+        },
+        "change": null
+      },
+      "expected": {
+        "audioLanguage": "",
+        "subtitleLanguage": "",
+        "subtitleMode": "None",
+        "fields": {
+          "AudioLanguagePreference": null,
+          "SubtitleLanguagePreference": null,
+          "SubtitleMode": "None",
+          "Other": null
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/UserConfigurationTest.kt"
+    },
+    {
+      "id": "configuration.preserves-future-fields",
+      "operation": "user-configuration",
+      "input": {
+        "fields": {
+          "AudioLanguagePreference": "eng",
+          "Unknown": {
+            "nested": [
+              1,
+              "keep"
+            ]
+          },
+          "RememberAudioSelections": true
+        },
+        "change": {
+          "name": "AudioLanguagePreference",
+          "value": "jpn"
+        }
+      },
+      "expected": {
+        "audioLanguage": "jpn",
+        "subtitleLanguage": "",
+        "subtitleMode": "Default",
+        "fields": {
+          "AudioLanguagePreference": "jpn",
+          "Unknown": {
+            "nested": [
+              1,
+              "keep"
+            ]
+          },
+          "RememberAudioSelections": true
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/UserConfigurationTest.kt"
+    },
+    {
+      "id": "end.decoder-overrun",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 62059,
+        "durationMs": 60031
+      },
+      "expected": {
+        "bounded": 60031,
+        "completed": 60031
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.physical-before-damaged-timeline",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 60000,
+        "durationMs": 4294982295
+      },
+      "expected": {
+        "bounded": 60000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.unknown-duration",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 60000,
+        "durationMs": 0
+      },
+      "expected": {
+        "bounded": 60000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.negative-duration-sentinel",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 60000,
+        "durationMs": -1
+      },
+      "expected": {
+        "bounded": 60000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.negative-position",
+      "operation": "end-position",
+      "input": {
+        "positionMs": -1,
+        "durationMs": 60000
+      },
+      "expected": {
+        "bounded": 0,
+        "completed": 0
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.round-exactly-one-second",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 59000,
+        "durationMs": 60000
+      },
+      "expected": {
+        "bounded": 59000,
+        "completed": 60000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.do-not-round-over-one-second",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 58999,
+        "durationMs": 60000
+      },
+      "expected": {
+        "bounded": 58999,
+        "completed": 58999
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.round-at-plausible-duration-ceiling",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 86399500,
+        "durationMs": 86400000
+      },
+      "expected": {
+        "bounded": 86399500,
+        "completed": 86400000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.do-not-round-above-duration-ceiling",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 86399501,
+        "durationMs": 86400001
+      },
+      "expected": {
+        "bounded": 86399501,
+        "completed": 86399501
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "end.physical-position-before-ordinary-duration",
+      "operation": "end-position",
+      "input": {
+        "positionMs": 90000,
+        "durationMs": 120000
+      },
+      "expected": {
+        "bounded": 90000,
+        "completed": 90000
+      },
+      "source": "app/src/test/kotlin/app/pictureshow/PlayerFinalPositionTest.kt; app/src/main/kotlin/app/pictureshow/PlaybackEndPosition.kt"
+    },
+    {
+      "id": "captions.off-retains-server",
+      "operation": "caption-language",
+      "input": {
+        "enabled": false,
+        "configuration": {
+          "SubtitleMode": "Always",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.failed-config-retains-server",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": null,
+        "tvLanguage": "en"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.none-retains-server",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "None",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.none-case-insensitive",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "nOnE",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-language-before-tv",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "Default",
+          "SubtitleLanguagePreference": "fra"
+        },
+        "tvLanguage": "en-US"
+      },
+      "expected": "fra",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.tv-language-fallback",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "Smart",
+          "SubtitleLanguagePreference": ""
+        },
+        "tvLanguage": "en-US"
+      },
+      "expected": "en-US",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.onlyforced-does-not-disable-full-captions",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "OnlyForced",
+          "SubtitleLanguagePreference": "eng"
+        },
+        "tvLanguage": "fr"
+      },
+      "expected": "eng",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.blank-server-pref-uses-tv",
+      "operation": "caption-language",
+      "input": {
+        "enabled": true,
+        "configuration": {
+          "SubtitleMode": "Always",
+          "SubtitleLanguagePreference": "  "
+        },
+        "tvLanguage": "fr-CA"
+      },
+      "expected": "fr-CA",
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.full-before-forced",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "IsForced": true,
+              "IsHearingImpaired": true,
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.hearing-impaired-before-default-flag",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-default-before-default-flag",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 2,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.default-flag-before-index",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "IsDefault": true
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.lowest-index-tie-break",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 9,
+              "Language": "eng"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.no-language-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "ja"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.unknown-language-does-not-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "und"
+            }
+          ]
+        },
+        "preferredLanguage": "und"
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.regional-and-bibliographic-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "fre",
+              "IsForced": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "fra"
+            }
+          ]
+        },
+        "preferredLanguage": "fr_CA"
+      },
+      "expected": 3,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.audio-not-selected",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Index": 1,
+              "Language": "eng"
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 2,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.codec-and-delivery-server-owned",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "DeliveryMethod": "Encode",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "subrip",
+              "DeliveryMethod": "External"
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 3,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.forced-selected-when-only-match",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "IsForced": true
+            }
+          ]
+        },
+        "preferredLanguage": "en"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.blank-preference-unselected",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "  "
+      },
+      "expected": null,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.alb",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "alb"
+            }
+          ]
+        },
+        "preferredLanguage": "sqi"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.arm",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "arm"
+            }
+          ]
+        },
+        "preferredLanguage": "hye"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.baq",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "baq"
+            }
+          ]
+        },
+        "preferredLanguage": "eus"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.bur",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "bur"
+            }
+          ]
+        },
+        "preferredLanguage": "mya"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.chi",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "chi"
+            }
+          ]
+        },
+        "preferredLanguage": "zho"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.cze",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "cze"
+            }
+          ]
+        },
+        "preferredLanguage": "ces"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.dut",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "dut"
+            }
+          ]
+        },
+        "preferredLanguage": "nld"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.fre",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "fre"
+            }
+          ]
+        },
+        "preferredLanguage": "fra"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.geo",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "geo"
+            }
+          ]
+        },
+        "preferredLanguage": "kat"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.ger",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "ger"
+            }
+          ]
+        },
+        "preferredLanguage": "deu"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.gre",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "gre"
+            }
+          ]
+        },
+        "preferredLanguage": "ell"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.ice",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "ice"
+            }
+          ]
+        },
+        "preferredLanguage": "isl"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.mac",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "mac"
+            }
+          ]
+        },
+        "preferredLanguage": "mkd"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.mao",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "mao"
+            }
+          ]
+        },
+        "preferredLanguage": "mri"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.may",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "may"
+            }
+          ]
+        },
+        "preferredLanguage": "msa"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.per",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "per"
+            }
+          ]
+        },
+        "preferredLanguage": "fas"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.rum",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "rum"
+            }
+          ]
+        },
+        "preferredLanguage": "ron"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.slo",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "slo"
+            }
+          ]
+        },
+        "preferredLanguage": "slk"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.tib",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "tib"
+            }
+          ]
+        },
+        "preferredLanguage": "bod"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.alias.wel",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "wel"
+            }
+          ]
+        },
+        "preferredLanguage": "cym"
+      },
+      "expected": 4,
+      "source": "app/src/test/kotlin/app/pictureshow/CaptionSubtitlesTest.kt; core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "next.credits-at-zero",
+      "operation": "next-trigger",
+      "input": {
+        "durationMs": 60000,
+        "segments": [
+          {
+            "Id": "outro",
+            "Type": "Outro",
+            "StartTicks": 0,
+            "EndTicks": 600000000
+          }
+        ]
+      },
+      "expected": 0,
+      "source": "web/core/src/parity.test.ts; zero is a valid credits boundary"
+    },
+    {
+      "id": "detail.empty.successful-empty-season",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.empty.successful-empty-series",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Series",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.empty.dependent-failure",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": false,
+        "readFailed": true,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.pending-read",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": true,
+        "readSucceeded": false,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.refresh-with-retained-success",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": true,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.unread-container",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": false,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.has-episodes",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 1,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.has-seasons",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Series",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 1
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.movie",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Movie",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.no-item",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": null,
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": false,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.empty.failed-over-retained-success",
+      "operation": "detail-empty",
+      "input": {
+        "itemType": "Season",
+        "loading": false,
+        "readSucceeded": true,
+        "readFailed": true,
+        "episodeCount": 0,
+        "seasonCount": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.ordinary-primary",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.ordinary-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "available": true
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.ordinary-favorite",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Not favorite",
+        "available": true
+      },
+      "expected": "Not favorite"
+    },
+    {
+      "id": "detail.feedback.waiting-primary",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.waiting-start",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.request-play",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.request-start-peer",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.request-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "available": true
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.request-favorite",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Not favorite",
+        "available": true
+      },
+      "expected": "Not favorite"
+    },
+    {
+      "id": "detail.feedback.request-fresh-queue",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "available": true
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.held-request",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": false
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.held-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Watched",
+        "available": false
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.ready-primary",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.ready-start",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": null,
+        "available": true
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.ready-watched",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Unwatched",
+        "available": true
+      },
+      "expected": "Unwatched"
+    },
+    {
+      "id": "detail.feedback.ready-favorite",
+      "operation": "detail-action-state",
+      "input": {
+        "currentState": "Favorite",
+        "available": true
+      },
+      "expected": "Favorite"
+    },
+    {
+      "id": "detail.feedback.reason-refinement",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "The server has not finished loading."
+          },
+          {
+            "key": "read:1",
+            "message": "The server took too long to respond."
+          }
+        ]
+      },
+      "expected": [
+        "The server has not finished loading.",
+        "The server has not finished loading."
+      ]
+    },
+    {
+      "id": "detail.feedback.retry-new-reason",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "Timeout."
+          },
+          {
+            "key": null,
+            "message": null
+          },
+          {
+            "key": "read:2",
+            "message": "Server unavailable (503)."
+          }
+        ]
+      },
+      "expected": [
+        "Timeout.",
+        null,
+        "Server unavailable (503)."
+      ]
+    },
+    {
+      "id": "detail.feedback.new-attempt-without-loading-emission",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "Timeout."
+          },
+          {
+            "key": "read:2",
+            "message": "Server unavailable (503)."
+          }
+        ]
+      },
+      "expected": [
+        "Timeout.",
+        "Server unavailable (503)."
+      ]
+    },
+    {
+      "id": "detail.feedback.write-clear-new-error",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "write",
+            "message": "Server unavailable (503)."
+          },
+          {
+            "key": null,
+            "message": null
+          },
+          {
+            "key": "write",
+            "message": "Connection lost."
+          }
+        ]
+      },
+      "expected": [
+        "Server unavailable (503).",
+        null,
+        "Connection lost."
+      ]
+    },
+    {
+      "id": "detail.feedback.clear-late-text",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "read:1",
+            "message": "Timeout."
+          },
+          {
+            "key": null,
+            "message": "Timeout."
+          }
+        ]
+      },
+      "expected": [
+        "Timeout.",
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.coalesced-new-write-error",
+      "operation": "detail-failure-presentation",
+      "input": {
+        "steps": [
+          {
+            "key": "write:1",
+            "message": "Server unavailable (503)."
+          },
+          {
+            "key": "write:2",
+            "message": "Connection lost."
+          }
+        ]
+      },
+      "expected": [
+        "Server unavailable (503).",
+        "Connection lost."
+      ]
+    },
+    {
+      "id": "detail.feedback.priority.accepted-focused",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": true,
+        "requested": true,
+        "available": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.priority.passive-pending",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": false,
+        "requested": false,
+        "available": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.priority.rediscovered-request",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": false,
+        "requested": true,
+        "available": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.priority.settled-request",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": true,
+        "requested": false,
+        "available": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.priority.held-request",
+      "operation": "detail-request-priority",
+      "input": {
+        "newlyAccepted": true,
+        "requested": true,
+        "available": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.arrival.reader-catalog",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.arrival.reader-player-recovery",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.reader-other-destination",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.sighted-catalog",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.sighted-player-recovery",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.sighted-other-destination",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.publication.initial-read",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": true,
+        "contentRevealed": false,
+        "returningFromPlayback": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.publication.initial-ready",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": false,
+        "contentRevealed": false,
+        "returningFromPlayback": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.publication.retained-page-read",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": true,
+        "contentRevealed": true,
+        "returningFromPlayback": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.publication.playback-return-pending-actions",
+      "operation": "detail-arrival-publication",
+      "input": {
+        "loading": true,
+        "contentRevealed": false,
+        "returningFromPlayback": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.identity.read-episode",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": true,
+        "retrying": false,
+        "writeAttempt": null
+      },
+      "expected": "read"
+    },
+    {
+      "id": "detail.feedback.identity.read-wins-over-old-write",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": true,
+        "retrying": false,
+        "writeAttempt": 9
+      },
+      "expected": "read"
+    },
+    {
+      "id": "detail.feedback.identity.accepted-retry-clears",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": true,
+        "retrying": true,
+        "writeAttempt": null
+      },
+      "expected": null
+    },
+    {
+      "id": "detail.feedback.identity.new-write",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": false,
+        "retrying": false,
+        "writeAttempt": 3
+      },
+      "expected": "write:3"
+    },
+    {
+      "id": "detail.feedback.identity.settled-clears",
+      "operation": "detail-failure-key",
+      "input": {
+        "readRecovery": false,
+        "retrying": false,
+        "writeAttempt": null
+      },
+      "expected": null
+    },
+    {
+      "id": "captions.text-before-flag-default",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "subrip"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.hi-image-before-non-hi-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "subrip"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 1,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.non-forced-image-before-forced-hi-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsForced": true,
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "pgssub"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.hi-text-before-hi-default-image",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "dvdsub",
+              "IsHearingImpaired": true,
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "ass",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-text-flag-with-unknown-codec",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "future_text",
+              "IsTextSubtitleStream": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.forced-only-still-selects-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 1,
+              "Language": "eng",
+              "Codec": "pgssub",
+              "IsForced": true,
+              "IsDefault": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 2,
+              "Language": "eng",
+              "Codec": "webvtt",
+              "IsForced": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 2,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "tracks.large-panel.selected-near-end",
+      "operation": "default-stream",
+      "source": "app/src/test/kotlin/app/pictureshow/TrackPanelResponsivenessTest.kt; spec/features/player.md PLAY-08",
+      "input": {
+        "streams": [
+          {
+            "Type": "Subtitle",
+            "Index": 2
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 3
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 4
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 5
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 6
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 7
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 8
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 9
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 10
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 11
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 12
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 13
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 14
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 15
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 16
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 17
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 18
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 19
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 20
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 21
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 22
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 23
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 24
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 25
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 26
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 27
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 28
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 29
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 30
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 31
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 32
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 33
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 34
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 35
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 36
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 37
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 38
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 39
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 40
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 41
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 42
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 43
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 44
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 45
+          }
+        ],
+        "type": "Subtitle",
+        "serverIndex": 43,
+        "preferredLanguage": "en"
+      },
+      "expected": 43
+    },
+    {
+      "id": "tracks.prepared-menu.current-source-server-index",
+      "operation": "default-stream",
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/StreamDefaults.kt; app/src/test/kotlin/app/pictureshow/PlayerTrackMenuPreparationTest.kt; spec/features/player.md PLAY-08 (native preparation/lifecycle acceptance is separate)",
+      "input": {
+        "streams": [
+          {
+            "Type": "Audio",
+            "Index": 7,
+            "Language": "eng",
+            "Codec": "aac"
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 43,
+            "Language": "fra",
+            "Codec": "srt",
+            "Title": "French captions"
+          },
+          {
+            "Type": "Subtitle",
+            "Index": 73,
+            "Language": "eng",
+            "Codec": "srt",
+            "Title": "Updated English captions"
+          }
+        ],
+        "type": "Subtitle",
+        "serverIndex": 73,
+        "preferredLanguage": "en"
+      },
+      "expected": 73
+    },
+    {
+      "id": "detail.feedback.held-label.primary",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "primary"
+      },
+      "expected": "Play"
+    },
+    {
+      "id": "detail.feedback.held-label.from-start",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "from-start"
+      },
+      "expected": "Play from start"
+    },
+    {
+      "id": "detail.feedback.held-label.played",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "played"
+      },
+      "expected": "Watched"
+    },
+    {
+      "id": "detail.feedback.held-label.favorite",
+      "operation": "detail-held-label",
+      "input": {
+        "target": "favorite"
+      },
+      "expected": "Favorite"
+    },
+    {
+      "id": "detail.feedback.ready-cue.play",
+      "operation": "detail-ready-cue",
+      "input": {
+        "label": "Play"
+      },
+      "expected": "Ready. Play"
+    },
+    {
+      "id": "detail.feedback.ready-cue.toggle",
+      "operation": "detail-ready-cue",
+      "input": {
+        "label": "Mark watched"
+      },
+      "expected": "Ready. Mark watched"
+    },
+    {
+      "id": "detail.feedback.transition.initial-ready",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.selected-settle-once",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.peer-settle",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": null,
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": null,
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.new-focus-at-settle",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.inactive-settle",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": false,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.second-hold",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "played",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": true,
+            "focused": "played",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null,
+        "Ready"
+      ]
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.primary",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "primary"
+      },
+      "expected": "Play unavailable"
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.from-start",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "from-start"
+      },
+      "expected": "Start unavailable"
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.played",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "played"
+      },
+      "expected": "Watched unavailable"
+    },
+    {
+      "id": "detail.feedback.visible-unavailable.favorite",
+      "operation": "detail-unavailable-label",
+      "input": {
+        "target": "favorite"
+      },
+      "expected": "Favorite unavailable"
+    },
+    {
+      "id": "detail.read.initial-resume-and-real-returns",
+      "operation": "detail-read-lifecycle",
+      "input": {
+        "resumes": [
+          true,
+          true,
+          true
+        ]
+      },
+      "expected": [
+        false,
+        true,
+        true
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.unusable-settlement",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "favorite",
+            "resumed": true,
+            "usable": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.later-usable",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "usable": false,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "usable": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        "Ready"
+      ]
+    },
+    {
+      "id": "detail.feedback.transition.ordinary-busy",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "usable": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "usable": false,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true,
+            "usable": true,
+            "presented": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.unfocused-primary",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "failed": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.focused-primary",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": true,
+        "returningFromPlayback": false,
+        "failed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.failed-read",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "failed": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.no-actions",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": false,
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "failed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.metadata-handoff.playback-return",
+      "operation": "detail-metadata-handoff",
+      "input": {
+        "hasActions": true,
+        "handoffFinished": false,
+        "returningFromPlayback": true,
+        "failed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.ordinary-waiting",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.host-focus.ordinary-finished",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": true,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.ordinary-failed",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": true,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.no-actions",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": false,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.host-focus.playback-waiting",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": true,
+        "recoveryHandoff": false,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.host-focus.playback-failed",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": false,
+        "returningFromPlayback": true,
+        "recoveryHandoff": false,
+        "failed": true,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.host-focus.recovery-handoff",
+      "operation": "detail-host-focus-handoff",
+      "input": {
+        "handoffFinished": true,
+        "returningFromPlayback": false,
+        "recoveryHandoff": true,
+        "failed": false,
+        "ordinaryArrivalWithActions": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.arrival.completed-handoff-does-not-restart-on-lifecycle-pause",
+      "operation": "detail-arrival-pending",
+      "input": {
+        "restored": [
+          false,
+          false,
+          true,
+          false,
+          false
+        ]
+      },
+      "expected": [
+        true,
+        true,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": "detail.f3.completion-new-success",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 2,
+        "succeeded": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.completion-older-success",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 0,
+        "succeeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.completion-same-read",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 1,
+        "succeeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.completion-new-failure",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "film",
+        "read": 2,
+        "succeeded": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.completion-other-item",
+      "operation": "detail-completion-read",
+      "input": {
+        "completionItem": "film",
+        "completionRead": 1,
+        "item": "episode",
+        "read": 2,
+        "succeeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-0",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": false,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-1",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": false,
+        "canQueue": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-2",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": true,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-3",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": false,
+        "firstArrival": true,
+        "canQueue": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-4",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": false,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-5",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": false,
+        "canQueue": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-6",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": true,
+        "canQueue": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.cold-7",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": true,
+        "canQueue": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.request-primary-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "primary",
+        "newlyAccepted": false
+      },
+      "expected": "Play already requested"
+    },
+    {
+      "id": "detail.f3.request-primary-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "primary",
+        "newlyAccepted": true
+      },
+      "expected": "Play requested"
+    },
+    {
+      "id": "detail.f3.request-from-start-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "from-start",
+        "newlyAccepted": false
+      },
+      "expected": "Play from start already requested"
+    },
+    {
+      "id": "detail.f3.request-from-start-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "from-start",
+        "newlyAccepted": true
+      },
+      "expected": "Start requested"
+    },
+    {
+      "id": "detail.f3.request-played-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "played",
+        "newlyAccepted": false
+      },
+      "expected": "Watched already requested"
+    },
+    {
+      "id": "detail.f3.request-played-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "played",
+        "newlyAccepted": true
+      },
+      "expected": "Watched change requested"
+    },
+    {
+      "id": "detail.f3.request-favorite-revisit",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "favorite",
+        "newlyAccepted": false
+      },
+      "expected": "Favorite already requested"
+    },
+    {
+      "id": "detail.f3.request-favorite-accept",
+      "operation": "detail-requested-label",
+      "input": {
+        "target": "favorite",
+        "newlyAccepted": true
+      },
+      "expected": "Favorite change requested"
+    },
+    {
+      "id": "detail.f3.revision-0",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": null,
+        "current": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.revision-1",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": null,
+        "current": 9
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.revision-2",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": 0,
+        "current": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.revision-3",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": 9,
+        "current": 9
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.revision-4",
+      "operation": "catalog-refresh-revision",
+      "input": {
+        "previous": 9,
+        "current": 10
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.band-false",
+      "operation": "detail-read-band",
+      "input": {
+        "retrying": false,
+        "reason": "Server unavailable (503)."
+      },
+      "expected": "Server unavailable (503)."
+    },
+    {
+      "id": "detail.f3.band-true",
+      "operation": "detail-read-band",
+      "input": {
+        "retrying": true,
+        "reason": "Server unavailable (503)."
+      },
+      "expected": "Loading item. Please wait."
+    },
+    {
+      "id": "detail.f3.session-historical",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": false,
+        "refreshed": true,
+        "container": true,
+        "alreadyConfirmed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.session-pending-only",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": false,
+        "refreshed": false,
+        "container": true,
+        "alreadyConfirmed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.session-refresh-leaf",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": true,
+        "container": false,
+        "alreadyConfirmed": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.session-confirmed-leaf",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": true,
+        "container": false,
+        "alreadyConfirmed": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.session-container-mutation",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": false,
+        "container": true,
+        "alreadyConfirmed": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.session-leaf-mutation",
+      "operation": "detail-session-read",
+      "input": {
+        "newRevision": true,
+        "refreshed": false,
+        "container": false,
+        "alreadyConfirmed": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.failure-old-flag-pending",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": true,
+        "reason": null,
+        "mutationReady": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.failure-current-read-failure",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": true,
+        "reason": "Server unavailable (503).",
+        "mutationReady": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.failure-failed-first-read",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": false,
+        "reason": "Server unavailable (503).",
+        "mutationReady": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.failure-write-error",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": false,
+        "reason": "Write failed (503).",
+        "mutationReady": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.failure-settled",
+      "operation": "detail-read-failure",
+      "input": {
+        "readFailed": false,
+        "reason": null,
+        "mutationReady": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.pending-return-is-not-cold",
+      "operation": "detail-cold-pending",
+      "input": {
+        "loading": true,
+        "firstArrival": true,
+        "canQueue": true,
+        "returningFromPlayback": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-stays-on-action",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.request-cue-ends-on-text",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-does-not-rearm-on-action",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": false,
+        "readerLeftAction": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-inactive-on-text",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": false,
+        "readerLeftAction": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.request-cue-consumed",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": false,
+        "requested": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-applied",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": true,
+        "sameUserData": true,
+        "container": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-not-applied",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": false,
+        "sameUserData": true,
+        "container": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-changed",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": true,
+        "sameUserData": false,
+        "container": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.confirmed-leaf-container",
+      "operation": "detail-confirmed-leaf",
+      "input": {
+        "readSucceeded": true,
+        "sameUserData": true,
+        "container": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-series",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Series"
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.read-dependencies-season",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Season"
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f3.read-dependencies-movie",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Movie"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-episode",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Episode"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-boxset",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "BoxSet"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f3.read-dependencies-folder",
+      "operation": "detail-read-dependencies",
+      "input": {
+        "type": "Folder"
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.unpresented-hold",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.presented-hold",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready"
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.failed-publication",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.consumed-request",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.departed-page",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.feedback.f4.retry-period",
+      "operation": "detail-retry-description",
+      "input": {
+        "reason": "The server could not complete the request (503)."
+      },
+      "expected": "Retry. Loading failed. The server could not complete the request (503)"
+    },
+    {
+      "id": "detail.feedback.f4.retry-none",
+      "operation": "detail-retry-description",
+      "input": {
+        "reason": "Connection lost"
+      },
+      "expected": "Retry. Loading failed. Connection lost"
+    },
+    {
+      "id": "detail.feedback.f4.retry-spaces",
+      "operation": "detail-retry-description",
+      "input": {
+        "reason": "Try again.  "
+      },
+      "expected": "Retry. Loading failed. Try again"
+    },
+    {
+      "id": "detail.feedback.f4.departing-000",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": false,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-001",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": false,
+        "onlyLabelChanged": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-010",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": true,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-011",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": false,
+        "action": true,
+        "onlyLabelChanged": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-100",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": false,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-101",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": false,
+        "onlyLabelChanged": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-110",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": true,
+        "onlyLabelChanged": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.f4.departing-111",
+      "operation": "detail-quiet-departing-change",
+      "input": {
+        "handoff": true,
+        "action": true,
+        "onlyLabelChanged": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f4.request-waits-for-reader-arrival",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true,
+        "presented": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f4.request-ends-after-reader-arrival",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true,
+        "presented": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.request-consumed-before-reader-arrival",
+      "operation": "detail-request-cue-active",
+      "input": {
+        "active": true,
+        "readerLeftAction": true,
+        "presented": false,
+        "requested": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.ready.unowned-player",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.f4.ready.assigned-but-unqueried",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.f4.request.automatic-label",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": true,
+        "onlyLabelChanged": true,
+        "rediscovery": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.f4.request.explicit-cue",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": true,
+        "onlyLabelChanged": true,
+        "rediscovery": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.request.structure",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": true,
+        "onlyLabelChanged": false,
+        "rediscovery": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.request.other-node",
+      "operation": "detail-quiet-request-rediscovery",
+      "input": {
+        "action": false,
+        "onlyLabelChanged": true,
+        "rediscovery": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f4.ready.parent-query-without-label",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.observer-restart",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          },
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.new-acceptance",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          },
+          {
+            "request": 2,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        true,
+        true
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.not-focused",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": false,
+            "submitted": false
+          },
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.not-submitted",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": false
+          },
+          {
+            "request": 1,
+            "eligible": true,
+            "submitted": true
+          }
+        ]
+      },
+      "expected": [
+        true,
+        true
+      ]
+    },
+    {
+      "id": "detail.f4.request-once.cancelled",
+      "operation": "detail-request-once-feedback",
+      "input": {
+        "steps": [
+          {
+            "request": null,
+            "eligible": true,
+            "submitted": false
+          },
+          {
+            "request": 1,
+            "eligible": false,
+            "submitted": false
+          }
+        ]
+      },
+      "expected": [
+        false,
+        false
+      ]
+    },
+    {
+      "id": "detail.ready.rejected-submission-retries-once",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "submitted": false
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        "Ready",
+        null
+      ]
+    },
+    {
+      "id": "detail.ready.native-label-query-before-publication",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "nativePresented": "primary"
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null
+      ]
+    },
+    {
+      "id": "detail.ready.departure-cancels-rejected-cue",
+      "operation": "detail-ready-feedback",
+      "input": {
+        "steps": [
+          {
+            "held": true,
+            "focused": "primary",
+            "resumed": true,
+            "presented": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true,
+            "submitted": false
+          },
+          {
+            "held": false,
+            "focused": "played",
+            "resumed": true
+          },
+          {
+            "held": false,
+            "focused": "primary",
+            "resumed": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "Ready",
+        null,
+        null
+      ]
+    },
+    {
+      "id": "detail.ready.prefetch-is-not-selection",
+      "operation": "detail-held-label-presentation",
+      "input": {
+        "selectedWhileHeld": false,
+        "heldLabelRequested": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.ready.selection-before-label",
+      "operation": "detail-held-label-presentation",
+      "input": {
+        "selectedWhileHeld": true,
+        "heldLabelRequested": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.ready.selection-without-label",
+      "operation": "detail-held-label-presentation",
+      "input": {
+        "selectedWhileHeld": true,
+        "heldLabelRequested": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.departed-page-cannot-speak-on-new-action",
+      "operation": "detail-feedback-source",
+      "input": {
+        "currentPage": false,
+        "selectedAction": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.feedback.current-page-selected-action",
+      "operation": "detail-feedback-source",
+      "input": {
+        "currentPage": true,
+        "selectedAction": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.feedback.current-page-other-action",
+      "operation": "detail-feedback-source",
+      "input": {
+        "currentPage": true,
+        "selectedAction": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.pending-presentation.quiet-primary",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": false,
+        "available": true,
+        "plain": "Play",
+        "pending": "Play when ready"
+      },
+      "expected": "Play",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.quiet-toggle",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": false,
+        "available": true,
+        "plain": "Watched",
+        "pending": "Mark unwatched when ready"
+      },
+      "expected": "Watched",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.real-hold",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": true,
+        "requested": false,
+        "available": true,
+        "plain": "Play",
+        "pending": "Play when ready"
+      },
+      "expected": "Play when ready",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.accepted-during-grace",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": true,
+        "available": true,
+        "plain": "Play",
+        "pending": "Play requested"
+      },
+      "expected": "Play requested",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.pending-presentation.unavailable-during-grace",
+      "operation": "detail-pending-presentation-label",
+      "input": {
+        "held": false,
+        "requested": false,
+        "available": false,
+        "plain": "Play",
+        "pending": "Play unavailable"
+      },
+      "expected": "Play unavailable",
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.false.false",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": false,
+        "completionIntent": false
+      },
+      "expected": false,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.false.true",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": false,
+        "completionIntent": true
+      },
+      "expected": true,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.true.false",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": true,
+        "completionIntent": false
+      },
+      "expected": true,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.completion-presented-played.true.true",
+      "operation": "detail-completion-presented-played",
+      "input": {
+        "played": true,
+        "completionIntent": true
+      },
+      "expected": true,
+      "source": "CatalogDetailCompletionPresentationTest.kt; CatalogCompletionIntentWriteTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.true.true",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": true,
+        "current": true
+      },
+      "expected": "Nothing changed. This item is already watched.",
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.false.false",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": false,
+        "current": false
+      },
+      "expected": "Nothing changed. This item is already unwatched.",
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.true.false",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": true,
+        "current": false
+      },
+      "expected": null,
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.played-request-notice.false.true",
+      "operation": "detail-played-request-notice",
+      "input": {
+        "wanted": false,
+        "current": true
+      },
+      "expected": null,
+      "source": "DetailCompletionNoopFeedbackTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.owned",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": true,
+        "ownedHeader": true,
+        "sameNativeNode": true
+      },
+      "expected": true,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.old-owner",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": false,
+        "ownedHeader": true,
+        "sameNativeNode": true
+      },
+      "expected": false,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.foreign",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": true,
+        "ownedHeader": false,
+        "sameNativeNode": true
+      },
+      "expected": false,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.reader-focus-clear.reused-id",
+      "operation": "detail-reader-focus-clear",
+      "input": {
+        "currentPage": true,
+        "ownedHeader": true,
+        "sameNativeNode": false
+      },
+      "expected": false,
+      "source": "DetailReaderLifecycleTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.new-failure",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": true,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.old-reason",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 1,
+        "loading": false,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.loading",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": true,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.success",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": false,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.paused",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": true,
+        "resumed": false
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-failure-cue.no-request",
+      "operation": "detail-retry-failure-cue",
+      "input": {
+        "baseline": null,
+        "attempt": 2,
+        "loading": false,
+        "failed": true,
+        "resumed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.new-success",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": false
+      },
+      "expected": true,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.old-result",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 1,
+        "loading": false,
+        "failed": false
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.in-flight",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": true,
+        "failed": false
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.retry-attempt-succeeded.failed",
+      "operation": "detail-retry-attempt-succeeded",
+      "input": {
+        "baseline": 1,
+        "attempt": 2,
+        "loading": false,
+        "failed": true
+      },
+      "expected": false,
+      "source": "DetailRetryAwayFeedbackTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.projected-is-not-raw",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": {
+          "Played": false
+        },
+        "acknowledged": {
+          "Played": true
+        }
+      },
+      "expected": false,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.confirmed",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": {
+          "Played": true
+        },
+        "acknowledged": {
+          "Played": true
+        }
+      },
+      "expected": true,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.no-read",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": null,
+        "acknowledged": {
+          "Played": true
+        }
+      },
+      "expected": false,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail.raw-read-acknowledgement.other-field",
+      "operation": "detail-raw-read-acknowledgement",
+      "input": {
+        "raw": {
+          "Played": true,
+          "IsFavorite": false
+        },
+        "acknowledged": {
+          "Played": true,
+          "IsFavorite": true
+        }
+      },
+      "expected": false,
+      "source": "PlaybackExitHttpTest.kt; CatalogDetailCompletionPresentationTest.kt"
+    },
+    {
+      "id": "detail-pending-presentation-visible",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": true,
+        "resumed": true,
+        "published": true
+      },
+      "expected": true,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail-pending-presentation-transition",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": true,
+        "resumed": false,
+        "published": false
+      },
+      "expected": false,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail-pending-presentation-unpublished",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": true,
+        "resumed": true,
+        "published": false
+      },
+      "expected": false,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "detail-pending-presentation-settled",
+      "operation": "detail-pending-presentation-visible",
+      "input": {
+        "waiting": false,
+        "resumed": true,
+        "published": true
+      },
+      "expected": false,
+      "source": "DetailPendingPresentationTest.kt; DetailFeedback.kt"
+    },
+    {
+      "id": "captions.server-text-default-before-hi",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "Codec": "ass"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-image-default-before-text",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "Codec": "pgssub"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-forced-default-retained",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsForced": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.server-other-language-default-retained",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "ara",
+              "Codec": "ass"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.remembered-off-retained",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": -1,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": -1,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.null-default-enables-captions",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": null,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 3,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.stale-default-enables-captions",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 99,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 3,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.audio-default-is-not-subtitle",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Audio",
+              "Index": 4,
+              "Language": "eng"
+            }
+          ]
+        },
+        "preferredLanguage": "en-US"
+      },
+      "expected": 3,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "captions.valid-default-with-unknown-language",
+      "operation": "caption-index",
+      "input": {
+        "source": {
+          "DefaultSubtitleStreamIndex": 4,
+          "MediaStreams": [
+            {
+              "Type": "Subtitle",
+              "Index": 3,
+              "Language": "eng",
+              "Codec": "subrip",
+              "IsHearingImpaired": true
+            },
+            {
+              "Type": "Subtitle",
+              "Index": 4,
+              "Language": "und",
+              "Codec": "ass"
+            }
+          ]
+        },
+        "preferredLanguage": "und"
+      },
+      "expected": 4,
+      "source": "core/src/jvmMain/kotlin/app/pictureshow/core/playback/CaptionSubtitles.kt"
+    },
+    {
+      "id": "detail.completion-intent-lifetime.in-flight",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": true,
+        "rawReadSucceeded": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.completion-intent-lifetime.in-flight-raw-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": true,
+        "rawReadSucceeded": true
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.completion-intent-lifetime.failed",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": true,
+        "reportPending": true,
+        "rawReadSucceeded": false
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.completion-intent-lifetime.failed-with-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": true,
+        "reportPending": false,
+        "rawReadSucceeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.completion-intent-lifetime.acknowledged-awaiting-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": false,
+        "rawReadSucceeded": false
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.completion-intent-lifetime.settled-raw-read",
+      "operation": "detail-completion-intent-retained",
+      "input": {
+        "reportFailed": false,
+        "reportPending": false,
+        "rawReadSucceeded": true
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.retry-cue-lifetime.enabled",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 0
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.retry-cue-lifetime.disabled",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": false,
+        "elapsedMillis": 0
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.retry-cue-lifetime.before-budget",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 29999
+      },
+      "expected": true
+    },
+    {
+      "id": "detail.retry-cue-lifetime.budget",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 30000
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.retry-cue-lifetime.expired",
+      "operation": "detail-retry-cue-can-wait",
+      "input": {
+        "accessibilityEnabled": true,
+        "elapsedMillis": 30001
+      },
+      "expected": false
+    },
+    {
+      "id": "detail.f7.completion.no-choice",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": 0,
+        "currentChoiceRevision": 0
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.completion.later-choice",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": 0,
+        "currentChoiceRevision": 1
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.completion.next-report",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": 1,
+        "currentChoiceRevision": 1
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.once",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "favorite",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "primary",
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.fast-read",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": false,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": false,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.first-focus-after-grace",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": null,
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.request-cancels",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": true
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.pause-and-new-grace",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": false,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        null,
+        null,
+        "primary"
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.retry-delivery",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false,
+            "submitted": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "primary",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "primary",
+        "primary",
+        null
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.pending.lower",
+      "operation": "detail-pending-feedback",
+      "input": {
+        "steps": [
+          {
+            "waiting": true,
+            "graceExpired": false,
+            "focused": "from-start",
+            "resumed": true,
+            "cancelled": false
+          },
+          {
+            "waiting": true,
+            "graceExpired": true,
+            "focused": "from-start",
+            "resumed": true,
+            "cancelled": false
+          }
+        ]
+      },
+      "expected": [
+        null,
+        "from-start"
+      ],
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.reader",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.sighted",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.catalog",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": false,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.back.catalog.reader",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": false,
+        "destinationIsCatalog": true,
+        "returning": true
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.animation.forward.recovery",
+      "operation": "catalog-arrival-animation",
+      "input": {
+        "accessibilityEnabled": true,
+        "sourceIsPlayback": true,
+        "destinationIsCatalog": true,
+        "returning": false
+      },
+      "expected": true,
+      "source": "Leg 75 Follow-up 7; CatalogNavigation.kt"
+    },
+    {
+      "id": "detail.f7.plain.played",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "played",
+        "known": true,
+        "played": true,
+        "favorite": false
+      },
+      "expected": "Mark unwatched",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.plain.unplayed",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "played",
+        "known": true,
+        "played": false,
+        "favorite": false
+      },
+      "expected": "Mark watched",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.plain.unknown-season",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "played",
+        "known": false,
+        "played": true,
+        "favorite": false
+      },
+      "expected": "Watched",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.plain.favorite",
+      "operation": "detail-pending-plain-label",
+      "input": {
+        "target": "favorite",
+        "known": true,
+        "played": false,
+        "favorite": true
+      },
+      "expected": "Unfavorite",
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "detail.f7.completion.retired-report",
+      "operation": "detail-completion-may-apply",
+      "input": {
+        "reportChoiceRevision": null,
+        "currentChoiceRevision": 1
+      },
+      "expected": false,
+      "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    }
+  ]
+}

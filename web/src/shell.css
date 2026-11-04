@@ -1,0 +1,615 @@
+/* SPDX-License-Identifier: MPL-2.0 — Copyright (c) Legitimate LLC */
+/* Responsive shell built from the Android TV and touch design tokens. */
+:root {
+    font-family: Roboto, Arial, sans-serif;
+    font-synthesis: none;
+}
+header {
+    padding: 24px 48px;
+    gap: 24px;
+}
+.header-actions {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+}
+header button {
+    margin: 0;
+}
+.wordmark {
+    letter-spacing: 0;
+    font-size: 28px;
+    font-weight: 700;
+}
+.connection {
+    font-size: 16px;
+}
+main {
+    padding: 24px 48px 64px;
+    max-width: 1800px;
+}
+.welcome,
+.signin {
+    max-width: 720px;
+    margin: 24px auto;
+}
+.welcome h1,
+.signin h1 {
+    font-size: 36px;
+    letter-spacing: 0;
+    line-height: 1.2;
+}
+h1 {
+    letter-spacing: 0;
+    font-size: 36px;
+}
+button {
+    border-radius: 24px;
+    min-height: 48px;
+}
+.settings-page,
+.account-page,
+.information {
+    max-width: 1000px;
+    margin: 24px auto;
+}
+.setting-list {
+    max-width: 720px;
+    display: grid;
+    gap: 20px;
+}
+.setting-list label {
+    display: grid;
+    gap: 8px;
+}
+/* The whole row is the switch's label: title and help text on the left, the
+   switch at the end, and a click or tap anywhere on the row flips it. */
+.setting-list .switch-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: 44px;
+    cursor: pointer;
+}
+.setting-list .switch-copy {
+    flex: 1 1 auto;
+    display: grid;
+    gap: 4px;
+}
+.setting-list .switch-caption {
+    display: block;
+    font-weight: 400;
+    line-height: 1.4;
+}
+/* One drawn switch for every boolean setting: a 52×30 track with a thumb that
+   moves to the end and fills with the accent when on. The track border keeps 3:1
+   against the page when off. */
+input.switch {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: none;
+    box-sizing: border-box;
+    width: 52px !important;
+    height: 30px;
+    min-height: 30px !important;
+    margin: 0;
+    padding: 0;
+    border-radius: 15px;
+    border: 2px solid var(--muted);
+    background:
+        radial-gradient(circle at 13px 50%, var(--muted) 9px, transparent 10px)
+            no-repeat,
+        transparent;
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
+}
+input.switch:checked {
+    border-color: var(--accent);
+    background:
+        radial-gradient(
+                circle at calc(100% - 13px) 50%,
+                var(--color-tv-buttonFocusedContent, #000) 9px,
+                transparent 10px
+            )
+            no-repeat,
+        var(--accent);
+}
+input.switch:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+    input.switch {
+        transition: none;
+    }
+}
+fieldset {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: grid;
+    gap: 20px;
+}
+.settings-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+.account-list,
+.license-list {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 16px;
+}
+.account-list li {
+    display: flex;
+    gap: 16px;
+}
+.license-list button {
+    text-align: left;
+    white-space: normal;
+    max-width: 100%;
+}
+.license-list span {
+    display: block;
+}
+.information p,
+.information pre {
+    max-width: 90ch;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.information pre {
+    white-space: pre-wrap;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 16px;
+}
+.license-text {
+    user-select: text;
+    padding: 12px;
+}
+.information a {
+    color: var(--accent);
+}
+dialog {
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 32px;
+    max-width: min(680px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    overflow: auto;
+}
+dialog::backdrop {
+    background: #000b;
+}
+dialog h2 {
+    margin-top: 0;
+}
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+.root-navigation {
+    display: none;
+}
+a:focus-visible,
+[tabindex]:focus-visible {
+    outline: 3px solid #eaddff;
+    outline-offset: 4px;
+}
+@media (min-width: 1500px) {
+    :root {
+        font-size: 20px;
+    }
+    .app-content h1 {
+        font-size: 48px;
+    }
+    .app-content button:focus-visible {
+        transform: scale(1.04);
+        position: relative;
+        z-index: 2;
+    }
+    .settings-page,
+    .account-page,
+    .information {
+        max-width: 1300px;
+    }
+    header {
+        padding: 32px 48px;
+    }
+    .connection {
+        font-size: 20px;
+    }
+}
+@media (max-width: 1000px) {
+    header {
+        padding: 20px;
+        gap: 16px;
+    }
+    .header-actions {
+        gap: 8px;
+    }
+    main {
+        padding: 20px 20px 100px;
+    }
+    .app-content {
+        padding-left: 110px;
+    }
+    .root-navigation {
+        display: flex;
+        position: fixed;
+        left: 0;
+        top: 120px;
+        bottom: 0;
+        width: 88px;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px 4px;
+        background: var(--color-app-window);
+        z-index: 5;
+    }
+    .root-navigation button {
+        padding: 12px 4px;
+        font-size: 13px;
+        border-radius: 16px;
+        background: transparent;
+        border-color: transparent;
+    }
+    .root-navigation button[aria-current="page"] {
+        background: var(--surface);
+        color: var(--accent);
+    }
+    .information,
+    .settings-page,
+    .account-page {
+        max-width: 720px;
+    }
+    .information h1,
+    .settings-page h1,
+    .account-page h1 {
+        font-size: 32px;
+    }
+    .information pre {
+        font-size: 14px;
+    }
+}
+@media (max-width: 599px) {
+    header {
+        padding: 16px 20px;
+        min-height: 72px;
+    }
+    .wordmark {
+        font-size: 24px;
+    }
+    .header-actions,
+    .connection {
+        display: none;
+    }
+    main,
+    .app-content {
+        padding: 12px 20px 100px;
+    }
+    .topline {
+        min-height: 48px;
+    }
+    .welcome,
+    .signin {
+        margin: 12px auto;
+    }
+    .welcome h1,
+    .signin h1,
+    h1 {
+        font-size: 28px;
+    }
+    .root-navigation {
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: 0;
+        width: auto;
+        height: 80px;
+        flex-direction: row;
+        gap: 0;
+        justify-content: space-around;
+        padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+        border-top: 1px solid var(--border);
+    }
+    .root-navigation button {
+        flex: 1;
+        font-size: 14px;
+    }
+    .account-list li {
+        flex-wrap: wrap;
+    }
+    .account-list button {
+        flex: 1;
+    }
+    .settings-links {
+        display: grid;
+    }
+    .settings-links button {
+        text-align: left;
+    }
+    footer {
+        padding-bottom: 100px;
+    }
+    .information pre {
+        font-size: 13px;
+    }
+    .setting-list {
+        gap: 16px;
+    }
+}
+@media (max-height: 480px) {
+    .welcome,
+    .signin {
+        margin: 0 auto;
+    }
+    h1,
+    .welcome h1,
+    .signin h1 {
+        font-size: 24px;
+        margin: 8px 0;
+    }
+    header {
+        padding: 10px 20px;
+    }
+    .root-navigation {
+        display: none;
+    }
+    main {
+        padding-bottom: 24px;
+    }
+    .topline {
+        min-height: 40px;
+    }
+    form {
+        margin-top: 12px;
+        gap: 8px;
+    }
+}
+.information pre,
+.license-text {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 180px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .app-content button:focus-visible {
+        transform: none;
+    }
+}
+/* Keep authentication compact enough for keyboard and on-screen keyboards. */
+.signin form {
+    margin-top: 20px;
+    gap: 10px;
+}
+.signin form > label:not(:first-child) {
+    margin-top: 10px;
+}
+.password-field {
+    position: relative;
+}
+.password-field input {
+    padding-right: 100px;
+}
+.password-field button {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    bottom: 4px;
+    min-height: 40px;
+    padding: 4px 16px;
+    background: transparent;
+    border-color: transparent;
+    color: var(--accent);
+}
+.signin .actions {
+    margin-top: 12px;
+}
+.signin h2 {
+    margin: 20px 0 12px;
+}
+.account-list button:first-child {
+    min-width: 220px;
+}
+@media (min-width: 600px) and (max-width: 1499px) {
+    .app-content {
+        padding-left: 120px;
+    }
+    .root-navigation {
+        display: flex;
+        position: fixed;
+        left: 0;
+        top: 112px;
+        bottom: 0;
+        width: 96px;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px 4px;
+        background: var(--color-app-window);
+        z-index: 5;
+    }
+    .root-navigation button {
+        padding: 16px 4px;
+        font-size: 14px;
+        border-radius: 20px;
+        background: transparent;
+        border-color: transparent;
+    }
+    .root-navigation button[aria-current="page"] {
+        background: var(--surface);
+        color: var(--accent);
+    }
+}
+@media (min-width: 1500px) {
+    .keyhint,
+    footer,
+    .muted,
+    .eyebrow,
+    label {
+        font-size: 24px;
+    }
+    .welcome,
+    .signin {
+        max-width: 800px;
+    }
+    .signin h1 {
+        margin: 16px 0;
+    }
+    .signin input {
+        padding: 12px 16px;
+    }
+    .signin button {
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+    .root-navigation {
+        display: none;
+    }
+    .app-content {
+        padding: 24px 48px 64px;
+    }
+    .app-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--color-app-window);
+        padding: 48px;
+    }
+    html {
+        scroll-padding: 200px 48px 48px;
+    }
+    button,
+    input,
+    select,
+    [tabindex] {
+        scroll-margin: 8px;
+    }
+    .header-actions button,
+    .connection {
+        font-size: 24px;
+    }
+    .header-actions button {
+        min-height: 56px;
+    }
+    .catalog-home-heading nav {
+        display: none;
+    }
+    button:focus {
+        outline: 4px solid var(--focus-tv-fieldRingColor);
+        outline-offset: 4px;
+        box-shadow: 0 0 0 8px var(--color-app-window);
+        background: var(--color-tv-buttonFocused);
+        color: var(--color-tv-buttonFocusedContent);
+    }
+    .header-actions [aria-current="page"]:not(:focus) {
+        border-color: var(--color-app-accent);
+        background: var(--color-app-field);
+        color: var(--color-app-accent);
+    }
+}
+@media (max-width: 599px) {
+    .account-list li,
+    .account-page .actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+    .account-list button {
+        width: 100%;
+        min-width: 0;
+    }
+    .signin .code {
+        font-size: 40px;
+    }
+}
+
+.navigation-icon {
+    display: block;
+    width: 24px;
+    height: 24px;
+    margin: 0 auto 4px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+@media (max-width: 1499px) {
+    .header-actions,
+    .keyhint {
+        display: none;
+    }
+    .topline:not(:has(button)) {
+        display: none;
+    }
+}
+
+@media (min-width: 1500px) {
+    .app-content,
+    .welcome,
+    .signin {
+        font-size: 24px;
+    }
+    .switch-row .switch-text {
+        font-size: 24px;
+    }
+    .switch-row {
+        min-height: 48px;
+    }
+    .app-content button:focus,
+    .welcome button:focus,
+    .signin button:focus,
+    .header-actions button:focus {
+        outline: 4px solid var(--focus-tv-fieldRingColor);
+        outline-offset: 4px;
+        box-shadow: 0 0 0 8px var(--color-app-window);
+        background: var(--color-tv-buttonFocused);
+        color: var(--color-tv-buttonFocusedContent);
+    }
+}
+.root-navigation .navigation-icon {
+    width: 48px;
+    height: 32px;
+    padding: 4px 12px;
+    border-radius: 16px;
+}
+.root-navigation [aria-current="page"] .navigation-icon {
+    background: var(--color-touch-secondaryContainer);
+    color: var(--color-touch-onSecondaryContainer);
+}
+@media (max-width: 599px) {
+    .root-navigation button[aria-current="page"] {
+        background: transparent;
+    }
+    footer {
+        display: none;
+    }
+}
+
+.root-navigation button[aria-current="page"] {
+    background: transparent;
+}
+.root-navigation button:hover:not([aria-current="page"]) {
+    background: transparent;
+}
+@media (min-width: 1500px) {
+    .header-actions [aria-current="page"]:not(:focus) {
+        background: var(--color-touch-secondaryContainer);
+        color: var(--color-touch-onSecondaryContainer);
+        border-color: var(--color-app-accent);
+    }
+}

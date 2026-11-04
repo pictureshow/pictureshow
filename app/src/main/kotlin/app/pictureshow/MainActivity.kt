@@ -1,5 +1,6 @@
 package app.pictureshow
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -32,8 +33,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -50,6 +53,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -67,6 +71,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -86,6 +91,8 @@ import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -93,12 +100,38 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 class MainActivity : ComponentActivity() {
+    internal val playbackExitHandoff = PlaybackExitHandoff()
+
+    // Activity's framework callback is inherited through the restricted AndroidX core base.
+    @SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            playbackExitHandoff.input(event.keyCode)
+        }
+        if (event.action == android.view.KeyEvent.ACTION_DOWN || event.action == android.view.KeyEvent.ACTION_UP) {
+            val copy = android.view.KeyEvent(event)
+            if (playbackExitHandoff.defer(copy.keyCode, copy.action == android.view.KeyEvent.ACTION_DOWN, copy.repeatCount) {
+                    dispatchKeyEvent(copy)
+                }
+            ) {
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     private var playbackEntry by mutableStateOf<ParsedPlaybackEntry?>(null)
     private var searchEntry by mutableStateOf<String?>(null)
     private var entrySequence by mutableStateOf(0L)
+    private val remoteTarget: RemoteTargetHost by lazy { org.koin.core.context.GlobalContext.get().get() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.DEBUG) {
+            detailTimingSink = { phase, fields ->
+                PlaybackDiagnostics.write("detail-timing phase=$phase uptime=${android.os.SystemClock.uptimeMillis()} $fields")
+            }
+        }
         if (savedInstanceState == null) {
             acceptPlaybackIntent(intent)
         } else {
@@ -151,6 +184,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         lifecycleScope.launch { (application as PictureshowApplication).supporter.refresh() }
+        remoteTarget.setForeground(true)
+    }
+
+    override fun onStop() {
+        // No background receiver: a TV that is asleep or left this app is simply not a target.
+        remoteTarget.setForeground(false)
+        super.onStop()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -190,9 +230,20 @@ class MainActivity : ComponentActivity() {
 internal fun itemRoute(item: MediaItem) = "item?item=${Uri.encode(Json.encodeToString(item))}"
 
 private fun playerRoute(item: MediaItem, resume: Boolean) =
-    playerRoute(item, if (resume) item.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000 else 0)
+    playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
 
 internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
+
+/** Pictureshow's own navigation only: these keys go to this activity, never to the system. */
+internal fun remoteKeyCode(name: String): Int? = when (name) {
+    "MoveUp" -> android.view.KeyEvent.KEYCODE_DPAD_UP
+    "MoveDown" -> android.view.KeyEvent.KEYCODE_DPAD_DOWN
+    "MoveLeft" -> android.view.KeyEvent.KEYCODE_DPAD_LEFT
+    "MoveRight" -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+    "Select" -> android.view.KeyEvent.KEYCODE_DPAD_CENTER
+    "Back" -> android.view.KeyEvent.KEYCODE_BACK
+    else -> null
+}
 
 internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlaybackEntry.Open) {
     nav.navigate("home") {
@@ -284,7 +335,8 @@ internal fun Pictureshow(
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
-    val exitPlayback = rememberPlaybackExit(nav)
+    val exitHandoff = (LocalActivity.current as? MainActivity)?.playbackExitHandoff
+    val exitPlayback = rememberPlaybackExit(nav, exitHandoff)
     val backStackEntry by nav.currentBackStackEntryAsState()
     var searchKeyboardRequest by remember { mutableStateOf(0) }
     val context = LocalContext.current
@@ -356,9 +408,65 @@ internal fun Pictureshow(
         if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
         consumeSearchEntry()
     }
+    val remoteTarget: RemoteTargetHost = koinInject()
+    val playbackPreferences: PlaybackPreferencesStore = koinInject()
+    val remotePolicy by remember(playbackPreferences) {
+        playbackPreferences.values.map<PlaybackPreferences, String?> { it.remoteReceiver }
+    }.collectAsStateWithLifecycle(null)
+    LaunchedEffect(state.snapshot.currentAccount, remotePolicy) {
+        remotePolicy?.let { remoteTarget.bind(state.snapshot.currentAccount, it) }
+    }
+    val remoteAccount by rememberUpdatedState(state.snapshot.currentAccount)
+    val remoteCatalog by rememberUpdatedState(catalog)
+    LaunchedEffect(remoteTarget) {
+        launch {
+            remoteTarget.opens.collect { effect ->
+                val account = remoteAccount?.takeUnless { it.expired }
+                val item = effect.items.getOrNull(effect.index ?: 0)
+                val resolved = if (account != null && item != null) {
+                    resolvePlaybackEntry(PlaybackEntry(item, effect.ticks?.div(10_000)), account, remoteCatalog)
+                } else {
+                    ResolvedPlaybackEntry.Unavailable
+                }
+                val open = resolved as? ResolvedPlaybackEntry.Open
+                if (remoteTarget.resolved(effect.generation, open != null)) {
+                    navigatePlaybackEntry(nav, requireNotNull(open))
+                } else if (open == null) {
+                    Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        remoteTarget.navigation.collect { name ->
+            val code = remoteKeyCode(name)
+            if (code != null) {
+                val activity = context as? android.app.Activity
+                activity?.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+                activity?.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+            } else if (name == "GoHome" && remoteAccount?.expired == false) {
+                nav.navigate("home") {
+                    popUpTo(nav.graph.id) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
+    val accessibleNavigation = rememberAccessibilityEnabled()
     NavHost(
         navController = nav,
         startDestination = "waiting",
+        enterTransition = {
+            catalogEnterTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route)
+        },
+        exitTransition = {
+            catalogExitTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route)
+        },
+        // Returning from the player must not spend the focus budget in a decorative fade.
+        popEnterTransition = {
+            catalogEnterTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route, returning = true)
+        },
+        popExitTransition = {
+            catalogExitTransition(accessibleNavigation, initialState.destination.route, targetState.destination.route, returning = true)
+        },
         modifier = Modifier.fillMaxSize().catalogSearchKey(
             enabled = state.snapshot.currentAccount?.expired == false && isCatalogSearchRoute(backStackEntry?.destination?.route),
             onSearch = {
@@ -510,7 +618,7 @@ internal fun Pictureshow(
                                 enabled = !screen.busy,
                                 modifier = Modifier.semantics {
                                     contentDescription =
-                                        "$question $description Other accounts stay signed in. You can add it again later. Cancel"
+                                        "$question $description Other accounts stay signed in. You can add it again later."
                                 }
                             ) { cancelRemoval() }
                             Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
@@ -675,20 +783,7 @@ internal fun Pictureshow(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
                         "and enter this code"
                 )
-                screen.code?.let { code ->
-                    val focus = remember { FocusRequester() }
-                    Box(Modifier.focusRequester(focus).readableFocus()) {
-                        Text(
-                            code,
-                            style = MaterialTheme.typography.displayLarge,
-                            modifier = Modifier.semantics {
-                                contentDescription = "Quick Connect code ${code.toList().joinToString(" ")}"
-                                liveRegion = LiveRegionMode.Polite
-                            }
-                        )
-                    }
-                    LaunchedEffect(code) { focus.requestFocus() }
-                }
+                screen.code?.let { code -> QuickConnectCode(code) }
                 if (screen.renewed) StatusLine("The previous code is no longer valid. Enter this new code.")
                 if (screen.busy) {
                     StatusLine("Getting a code…")
@@ -719,7 +814,7 @@ internal fun Pictureshow(
                     onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
                     onSignOut = profile::signOut,
                     onSearch = { nav.navigate(searchRoute()) },
-                    onResume = vm::reload,
+                    onResume = vm::resumed,
                     onSettings = { nav.navigate("settings") }
                 )
             }
@@ -776,6 +871,11 @@ internal fun Pictureshow(
                 LaunchedEffect(entry) {
                     vm.initialize(entry.savedStateHandle, entry.arguments?.getString("query").orEmpty())
                 }
+                // Search is the only field a controller can type into; sign-in and Quick Connect never register.
+                DisposableEffect(vm) {
+                    remoteTarget.setSearchField { vm.query(it, immediate = true) }
+                    onDispose { remoteTarget.setSearchField(null) }
+                }
                 SearchScreen(
                     screen, account, entry.arguments?.getBoolean("keyboard") ?: true,
                     vm::query, vm::submit, { vm.query(it, immediate = true) }, vm::clearRecent, vm::retry,
@@ -826,7 +926,7 @@ internal fun Pictureshow(
                     val screen by vm.state.collectAsStateWithLifecycle()
                     LaunchedEffect(entry) {
                         entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                            vm.reload()
+                            vm.resumed()
                             awaitCancellation()
                         }
                     }
@@ -837,7 +937,17 @@ internal fun Pictureshow(
                         vm::played,
                         vm::favorite,
                         vm::reload,
-                        onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) }
+                        onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) },
+                        onFocusRestored = { target, focused -> exitHandoff?.finish(entry.id, target, focused) },
+                        onPendingAction = { action -> exitHandoff?.accessibleSelect(entry.id, action) ?: false },
+                        onPendingFocus = { exitHandoff?.accessibleFocus(entry.id) },
+                        onPendingQueueNeeded = {
+                            if (nav.currentBackStackEntry?.id == entry.id) exitHandoff?.prepare(entry.id)
+                        },
+                        onPendingControlsReady = { exitHandoff?.live(entry.id, it) },
+                        onPendingQueueExpired = { exitHandoff?.expired(entry.id) == true },
+                        onPlayedRequest = vm::playedRequested,
+                        origin = item
                     )
                 }
             }
@@ -913,7 +1023,56 @@ private fun Message(message: String?) {
 }
 
 @Composable
-internal fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface) {
+internal fun QuickConnectCode(code: String, announce: ((String) -> Unit)? = null) {
+    val accessible = rememberAccessibilityEnabled()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val host = LocalView.current
+    val announcer by rememberUpdatedState(announce)
+    val focus = remember { FocusRequester() }
+    var canFocus by remember { mutableStateOf(false) }
+    var published by remember { mutableStateOf(false) }
+    var ready by remember { mutableStateOf(false) }
+    val label = "Quick Connect code ${code.toList().joinToString(" ")}"
+    Text(
+        code,
+        style = MaterialTheme.typography.displayLarge,
+        modifier = Modifier.focusRequester(focus).focusProperties { this.canFocus = canFocus && !accessible }.then(
+            if (published) Modifier else Modifier.clearAndSetSemantics { hideFromAccessibility() }
+        ).readableFocus().semantics { contentDescription = label }
+    )
+    LaunchedEffect(lifecycle) {
+        do {
+            published = false
+            lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+            canFocus = true
+            withFrameNanos { }
+            // With a screen reader, retain its existing target and announce separately.
+            // A programmatic input-focus event can arrive late and repeat that speech.
+            // Without a reader, give the remote its normal code target while hidden.
+            if (!accessible) focus.requestFocus()
+            published = true
+            repeat(2) { withFrameNanos { } }
+        } while (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        ready = true
+    }
+    LaunchedEffect(label, ready, lifecycle) {
+        if (ready) {
+            lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+            val deliver = announcer
+            if (deliver != null) {
+                deliver(label)
+            } else {
+                // A bounded announcement handles arrival and renewal without moving either
+                // cursor. Live-region delivery is unreliable for this focused TV code label.
+                @Suppress("DEPRECATION")
+                host.announceForAccessibility(label)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun StatusLine(message: String, color: Color = MaterialTheme.colorScheme.onSurface, announce: Boolean = true) {
     val restoring = LocalRestoringConfirmationFocus.current
     // Focus changes must not look like content updates to a live region. Keep the text on
     // its own semantics node; the focusable container reads its non-actionable child.
@@ -924,7 +1083,11 @@ internal fun StatusLine(message: String, color: Color = MaterialTheme.colorSchem
             if (restoring) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
         ).readableFocus().padding(12.dp)
     ) {
-        Text(message, color = color, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Text(
+            message,
+            color = color,
+            modifier = if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier
+        )
     }
 }
 
@@ -946,10 +1109,10 @@ internal fun RemoteField(
     val navigation = remember { RemoteFieldNavigation() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // The field supplies this label in both traversal directions. A second accessible
-        // text node makes TV TalkBack stop on it only when approaching from below.
-        Text(label, modifier = Modifier.semantics { hideFromAccessibility() })
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // The field supplies this label in both traversal directions. Clear the caption
+        // text too: TalkBack counts hidden text when deciding whether a group is a stop.
+        Text(label, modifier = Modifier.clearAndSetSemantics {})
         BasicTextField(
             value = value,
             onValueChange = onValue,

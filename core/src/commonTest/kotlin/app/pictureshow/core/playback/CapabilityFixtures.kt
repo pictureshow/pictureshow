@@ -6,7 +6,7 @@ package app.pictureshow.core.playback
  */
 object CapabilityFixtures {
     /**
-     * A 1080p60 projector: 4K-capable hardware decoders for H.264, HEVC and VP9, a Dolby Vision decoder but a display
+     * A 1080p60 projector: 4K-capable hardware decoders for H.264, HEVC and VP9, no Dolby Vision decoder and a display
      * that reports HDR10 and HLG only, no AV1, built-in speaker (stereo PCM, no passthrough).
      * Levels follow from the decoders' blocks-per-second limits (H.264 972000 = level 5.1, HEVC 1944000 = 4K60 level 5.1).
      */
@@ -30,7 +30,7 @@ object CapabilityFixtures {
                 maxHeight = 2160,
                 maxFrameRate = 60.0,
                 maxBitDepth = 10,
-                hdrFormats = setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.DOLBY_VISION)
+                hdrFormats = setOf(HdrFormat.HDR10, HdrFormat.HLG)
             ),
             VideoDecoder(
                 codec = VideoCodec.VP9,
@@ -160,11 +160,235 @@ object CapabilityFixtures {
         settings = PlaybackSettings(maxStreamingBitrate = 120_000_000, passthroughEnabled = true)
     )
 
+    /** Reported Android 11 decoder/display limits, captured 2026-10-23; no playback benchmark implied.
+     * The simpler projector fixture above is retained for focused tests. This snapshot includes profile tuples,
+     * duplicate software decoders and the connected route, so PlaybackInfo probes exercise the real builder path.
+     */
+    val reportedProjector = projector.copy(
+        name = "Reported 1080p HDR projector",
+        videoDecoders = listOf(
+            VideoDecoder(
+                codec = VideoCodec.H264,
+                profiles = setOf("Baseline", "Constrained Baseline", "Main", "High"),
+                maxLevel = CodecLevel(5, 1),
+                maxWidth = 3840,
+                maxHeight = 2160,
+                maxFrameRate = 119.11764705882354,
+                maxFrameRateAtMaxSize = 30.0,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = true
+            ),
+            VideoDecoder(
+                codec = VideoCodec.HEVC,
+                profiles = setOf("Main", "Main 10"),
+                maxLevel = CodecLevel(5, 1),
+                maxWidth = 3840,
+                maxHeight = 2160,
+                maxFrameRate = 238.23529411764707,
+                maxFrameRateAtMaxSize = 60.0,
+                maxBitDepth = 10,
+                hdrFormats = setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS),
+                hardware = true,
+                profileCapabilities = listOf(
+                    VideoProfileCapability("Main", CodecLevel(5, 1), 8),
+                    VideoProfileCapability("Main 10", CodecLevel(5, 1), 10, setOf(HdrFormat.HDR10, HdrFormat.HLG)),
+                    VideoProfileCapability("Main 10", CodecLevel(5, 1), 10, setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS))
+                )
+            ),
+            VideoDecoder(
+                codec = VideoCodec.MPEG2,
+                profiles = setOf(),
+                maxWidth = 1920,
+                maxHeight = 1088,
+                maxFrameRate = 60.0,
+                maxFrameRateAtMaxSize = 60.0,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = true
+            ),
+            VideoDecoder(
+                codec = VideoCodec.MPEG4,
+                profiles = setOf(),
+                maxWidth = 896,
+                maxHeight = 448,
+                maxFrameRate = 60.0,
+                maxFrameRateAtMaxSize = 60.0,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = true
+            ),
+            VideoDecoder(
+                codec = VideoCodec.VP8,
+                profiles = setOf(),
+                maxWidth = 2048,
+                maxHeight = 1008,
+                maxFrameRate = 66.13756613756614,
+                maxFrameRateAtMaxSize = 62.00396825396825,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = true
+            ),
+            VideoDecoder(
+                codec = VideoCodec.VP9,
+                profiles = setOf("Profile 0", "Profile 2"),
+                maxWidth = 3840,
+                maxHeight = 2160,
+                maxFrameRate = 238.23529411764707,
+                maxFrameRateAtMaxSize = 60.0,
+                maxBitDepth = 10,
+                hdrFormats = setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS),
+                profileCapabilities = listOf(
+                    VideoProfileCapability("Profile 0", null, 8),
+                    VideoProfileCapability("Profile 2", null, 10, setOf(HdrFormat.HDR10, HdrFormat.HLG)),
+                    VideoProfileCapability("Profile 2", null, 10, setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS))
+                ),
+                hardware = true
+            ),
+            VideoDecoder(
+                codec = VideoCodec.VC1,
+                profiles = setOf(),
+                maxWidth = 1920,
+                maxHeight = 1088,
+                maxFrameRate = 960.0,
+                maxFrameRateAtMaxSize = 960.0,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = true
+            ),
+            VideoDecoder(
+                codec = VideoCodec.HEVC,
+                profiles = setOf("Main"),
+                maxLevel = CodecLevel(5, 2),
+                maxWidth = 2048,
+                maxHeight = 2048,
+                maxFrameRate = 15.170370370370371,
+                maxFrameRateAtMaxSize = 7.5,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.HEVC,
+                profiles = setOf("Main"),
+                maxLevel = CodecLevel(5, 2),
+                maxWidth = 2048,
+                maxHeight = 2048,
+                maxFrameRate = 15.170370370370371,
+                maxFrameRateAtMaxSize = 7.5,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.MPEG4,
+                profiles = setOf(),
+                maxWidth = 352,
+                maxHeight = 288,
+                maxFrameRate = 30.0,
+                maxFrameRateAtMaxSize = 30.0,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.MPEG4,
+                profiles = setOf(),
+                maxWidth = 352,
+                maxHeight = 288,
+                maxFrameRate = 30.0,
+                maxFrameRateAtMaxSize = 30.0,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.VP8,
+                profiles = setOf(),
+                maxWidth = 2048,
+                maxHeight = 1024,
+                maxFrameRate = 130.20833333333334,
+                maxFrameRateAtMaxSize = 122.0703125,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.VP8,
+                profiles = setOf(),
+                maxWidth = 2048,
+                maxHeight = 1024,
+                maxFrameRate = 130.20833333333334,
+                maxFrameRateAtMaxSize = 122.0703125,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.VP9,
+                profiles = setOf("Profile 0", "Profile 2"),
+                maxWidth = 1280,
+                maxHeight = 720,
+                maxFrameRate = 30.0,
+                maxFrameRateAtMaxSize = 30.0,
+                maxBitDepth = 10,
+                hdrFormats = setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS),
+                profileCapabilities = listOf(
+                    VideoProfileCapability("Profile 0", null, 8),
+                    VideoProfileCapability("Profile 2", null, 10, setOf(HdrFormat.HDR10, HdrFormat.HLG)),
+                    VideoProfileCapability("Profile 2", null, 10, setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS))
+                ),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.VP9,
+                profiles = setOf("Profile 0", "Profile 2"),
+                maxWidth = 1280,
+                maxHeight = 720,
+                maxFrameRate = 30.0,
+                maxFrameRateAtMaxSize = 30.0,
+                maxBitDepth = 10,
+                hdrFormats = setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS),
+                profileCapabilities = listOf(
+                    VideoProfileCapability("Profile 0", null, 8),
+                    VideoProfileCapability("Profile 2", null, 10, setOf(HdrFormat.HDR10, HdrFormat.HLG)),
+                    VideoProfileCapability("Profile 2", null, 10, setOf(HdrFormat.HDR10, HdrFormat.HLG, HdrFormat.HDR10_PLUS))
+                ),
+                hardware = false
+            ),
+            VideoDecoder(
+                codec = VideoCodec.H264,
+                profiles = setOf("Constrained Baseline", "Baseline", "Main", "High"),
+                maxLevel = CodecLevel(5, 2),
+                maxWidth = 2048,
+                maxHeight = 1008,
+                maxFrameRate = 64.76190476190476,
+                maxFrameRateAtMaxSize = 60.714285714285715,
+                maxBitDepth = 8,
+                hdrFormats = emptySet(),
+                hardware = false
+            )
+        ),
+        display = DisplayCapabilities(1920, 1080, 60.000003814697266, setOf(HdrFormat.HDR10, HdrFormat.HLG)),
+        audioOutput = AudioOutput(
+            2,
+            setOf(
+                PassthroughEncoding.AC3,
+                PassthroughEncoding.EAC3,
+                PassthroughEncoding.EAC3_JOC,
+                PassthroughEncoding.DTS,
+                PassthroughEncoding.DTS_HD
+            )
+        ),
+        settings = PlaybackSettings(passthroughEnabled = true)
+    )
+
     private fun softwareDecoder(codec: VideoCodec, size: Int) =
         VideoDecoder(codec, profiles = setOf("Main"), maxWidth = size, maxHeight = size, maxFrameRate = 30.0, hardware = false)
 
     val all: Map<String, DeviceCapabilities> = linkedMapOf(
         "projector" to projector,
+        "reported-projector" to reportedProjector,
         "basic-stick" to basicStick,
         "dolby-vision-streamer" to dolbyVisionStreamer
     )

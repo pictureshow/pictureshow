@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.view.View
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.node.RootForTest
@@ -12,18 +13,29 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Call at the navigation host, so removing the player cannot cancel its bounded exit observation. */
 @Composable
-internal fun rememberPlaybackExit(nav: NavHostController): () -> Unit {
+internal fun rememberPlaybackExit(nav: NavHostController, handoff: PlaybackExitHandoff? = null): () -> Unit {
     val scope = rememberCoroutineScope()
     val host = LocalView.current
-    return remember<() -> Unit>(nav, scope, host) {
+    DisposableEffect(nav, handoff) {
+        val listener = NavController.OnDestinationChangedListener { controller, _, _ ->
+            handoff?.destinationChanged(controller.currentBackStackEntry?.id)
+        }
+        nav.addOnDestinationChangedListener(listener)
+        onDispose { nav.removeOnDestinationChangedListener(listener) }
+    }
+    return remember<() -> Unit>(nav, scope, host, handoff) {
         {
             nav.popBackStack()
+            nav.currentBackStackEntry?.takeIf { it.destination.route?.substringBefore('?') == "item" }?.let {
+                handoff?.begin(it.id)
+            }
             scope.launch { reportPlaybackExitDestination(nav, host) }
         }
     }

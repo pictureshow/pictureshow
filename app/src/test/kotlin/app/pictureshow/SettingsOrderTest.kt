@@ -35,7 +35,8 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class SettingsOrderTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val viewerSettings = listOf("settings:bitrate", "settings:passthrough", "settings:size", "settings:background") +
+    private val viewerSettings = listOf("settings:bitrate", "settings:passthrough", "settings:conversion-notice") +
+        listOf("settings:size", "settings:background") +
         SegmentType.entries.filter { it != SegmentType.Unknown }.map { "settings:segment:$it" } +
         listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode")
 

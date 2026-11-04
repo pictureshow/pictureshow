@@ -1,0 +1,1132 @@
+{
+  "schemaVersion": 1,
+  "suite": "reference",
+  "sources": [
+    "core/src/commonTest/kotlin/app/pictureshow/core/playback/PlayDecisionTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/playback/PlaybackClientTest.kt",
+    "core/src/commonTest/kotlin/app/pictureshow/core/playback/PlaybackJsonTest.kt"
+  ],
+  "context": {
+    "server": {
+      "id": "server",
+      "name": "Fixture server",
+      "url": "https://media.example.test/jellyfin",
+      "version": "12.0.0"
+    },
+    "identity": {
+      "deviceName": "Fixture TV",
+      "deviceId": "install",
+      "version": "0.1.0"
+    },
+    "account": {
+      "userId": "viewer",
+      "token": "fixture-token",
+      "deviceId": "account-device"
+    }
+  },
+  "cases": [
+    {
+      "id": "decision-direct",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "method": "DirectPlay",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/Videos/film/stream?static=true&mediaSourceId=source&playSessionId=session",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": "session",
+        "transcodeReasons": []
+      }
+    },
+    {
+      "id": "decision-remux-label-static-reference",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsDirectStream": true,
+              "TranscodingUrl": "/ignored"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "method": "DirectStream",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/Videos/film/stream?static=true&mediaSourceId=source&playSessionId=session",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": "session",
+        "transcodeReasons": []
+      }
+    },
+    {
+      "id": "decision-transcode",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "TranscodingUrl": "/videos/film/master.m3u8?VideoCodec=h264&ApiKey=fixture-token&TranscodeReasons=VideoCodecNotSupported%2CAudioChannelsNotSupported"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "method": "Transcode",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/videos/film/master.m3u8?VideoCodec=h264&TranscodeReasons=VideoCodecNotSupported%2CAudioChannelsNotSupported",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": "session",
+        "transcodeReasons": [
+          "VideoCodecNotSupported",
+          "AudioChannelsNotSupported"
+        ]
+      }
+    },
+    {
+      "id": "decision-first-playable-not-global-best",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "broken"
+            },
+            {
+              "Id": "source",
+              "TranscodingUrl": "/v/master.m3u8"
+            },
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "method": "Transcode",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/v/master.m3u8",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": "session",
+        "transcodeReasons": []
+      }
+    },
+    {
+      "id": "decision-explicit-version",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "first",
+              "TranscodingUrl": "/v/master.m3u8"
+            },
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true
+            }
+          ],
+          "PlaySessionId": "session"
+        },
+        "mediaSourceId": "source"
+      },
+      "expected": {
+        "method": "DirectPlay",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/Videos/film/stream?static=true&mediaSourceId=source&playSessionId=session",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": "session",
+        "transcodeReasons": []
+      }
+    },
+    {
+      "id": "decision-refused",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true
+            }
+          ],
+          "PlaySessionId": "session",
+          "ErrorCode": "NotAllowed"
+        }
+      },
+      "expected": {
+        "unplayable": "SERVER_REFUSED"
+      }
+    },
+    {
+      "id": "decision-missing-version",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true
+            }
+          ],
+          "PlaySessionId": "session"
+        },
+        "mediaSourceId": "missing"
+      },
+      "expected": {
+        "unplayable": "SOURCE_NOT_FOUND"
+      }
+    },
+    {
+      "id": "decision-no-source",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "unplayable": "NO_COMPATIBLE_SOURCE"
+      }
+    },
+    {
+      "id": "decision-blank-transcode",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "TranscodingUrl": " "
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "unplayable": "NO_COMPATIBLE_SOURCE"
+      }
+    },
+    {
+      "id": "decision-chosen-unplayable",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "no"
+            },
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true
+            }
+          ],
+          "PlaySessionId": "session"
+        },
+        "mediaSourceId": "no"
+      },
+      "expected": {
+        "unplayable": "NO_COMPATIBLE_SOURCE"
+      }
+    },
+    {
+      "id": "decision-unsafe-10",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "TranscodingUrl": "https://other.example.test/x"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "unplayable": "UNSAFE_STREAM_URL"
+      }
+    },
+    {
+      "id": "decision-unsafe-11",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "TranscodingUrl": "//other.example.test/x"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "unplayable": "UNSAFE_STREAM_URL"
+      }
+    },
+    {
+      "id": "decision-unsafe-12",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "TranscodingUrl": "http://media.example.test/x"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "unplayable": "UNSAFE_STREAM_URL"
+      }
+    },
+    {
+      "id": "decision-unsafe-13",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "TranscodingUrl": "https://media.example.test:444/x"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "unplayable": "UNSAFE_STREAM_URL"
+      }
+    },
+    {
+      "id": "decision-unsafe-14",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "TranscodingUrl": "file:///x"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "unplayable": "UNSAFE_STREAM_URL"
+      }
+    },
+    {
+      "id": "decision-headers-filter",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true,
+              "RequiredHttpHeaders": {
+                "Authorization": "bad",
+                "authorization": "bad",
+                "api_key": "fixture",
+                "X-Emby-Token": "fixture",
+                "X-Test": "required",
+                "Empty": null
+              }
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "method": "DirectPlay",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/Videos/film/stream?static=true&mediaSourceId=source&playSessionId=session",
+        "headers": {
+          "X-Test": "required",
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": "session",
+        "transcodeReasons": []
+      }
+    },
+    {
+      "id": "decision-encode-ids",
+      "operation": "decision",
+      "input": {
+        "itemId": "a b/c",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true,
+              "ETag": "a b"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "method": "DirectPlay",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/Videos/a%20b%2Fc/stream?static=true&mediaSourceId=source&playSessionId=session&tag=a%20b",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": "session",
+        "transcodeReasons": []
+      }
+    },
+    {
+      "id": "decision-null-session",
+      "operation": "decision",
+      "input": {
+        "itemId": "film",
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsDirectPlay": true
+            }
+          ],
+          "PlaySessionId": null
+        }
+      },
+      "expected": {
+        "method": "DirectPlay",
+        "mediaSourceId": "source",
+        "url": "https://media.example.test/jellyfin/Videos/film/stream?static=true&mediaSourceId=source",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+        },
+        "playSessionId": null,
+        "transcodeReasons": []
+      }
+    },
+    {
+      "id": "report-zero",
+      "operation": "reports",
+      "input": {
+        "method": "DirectPlay",
+        "positionMs": 0,
+        "paused": false,
+        "audioStreamIndex": null,
+        "subtitleStreamIndex": null,
+        "canSeek": true,
+        "failed": false
+      },
+      "expected": {
+        "progress": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": 0,
+          "PlayMethod": "DirectPlay",
+          "IsPaused": false,
+          "IsMuted": false,
+          "CanSeek": true,
+          "RepeatMode": "RepeatNone",
+          "PlaybackOrder": "Default"
+        },
+        "stopped": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": 0,
+          "Failed": false
+        }
+      }
+    },
+    {
+      "id": "report-paused-track-switch",
+      "operation": "reports",
+      "input": {
+        "method": "Transcode",
+        "positionMs": 90123,
+        "paused": true,
+        "audioStreamIndex": 2,
+        "subtitleStreamIndex": -1,
+        "canSeek": false,
+        "failed": false
+      },
+      "expected": {
+        "progress": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": 901230000,
+          "PlayMethod": "Transcode",
+          "IsPaused": true,
+          "IsMuted": false,
+          "CanSeek": false,
+          "RepeatMode": "RepeatNone",
+          "PlaybackOrder": "Default",
+          "AudioStreamIndex": 2,
+          "SubtitleStreamIndex": -1
+        },
+        "stopped": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": 901230000,
+          "Failed": false
+        }
+      }
+    },
+    {
+      "id": "report-failed-stop",
+      "operation": "reports",
+      "input": {
+        "method": "DirectStream",
+        "positionMs": 42,
+        "paused": false,
+        "audioStreamIndex": 0,
+        "subtitleStreamIndex": 4,
+        "canSeek": true,
+        "failed": true
+      },
+      "expected": {
+        "progress": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": 420000,
+          "PlayMethod": "DirectStream",
+          "IsPaused": false,
+          "IsMuted": false,
+          "CanSeek": true,
+          "RepeatMode": "RepeatNone",
+          "PlaybackOrder": "Default",
+          "AudioStreamIndex": 0,
+          "SubtitleStreamIndex": 4
+        },
+        "stopped": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": 420000,
+          "Failed": true
+        }
+      }
+    },
+    {
+      "id": "report-negative-protocol-not-clamped",
+      "operation": "reports",
+      "input": {
+        "method": "DirectPlay",
+        "positionMs": -1,
+        "paused": false,
+        "audioStreamIndex": null,
+        "subtitleStreamIndex": null,
+        "canSeek": true,
+        "failed": false
+      },
+      "expected": {
+        "progress": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": -10000,
+          "PlayMethod": "DirectPlay",
+          "IsPaused": false,
+          "IsMuted": false,
+          "CanSeek": true,
+          "RepeatMode": "RepeatNone",
+          "PlaybackOrder": "Default"
+        },
+        "stopped": {
+          "ItemId": "film",
+          "MediaSourceId": "source",
+          "PlaySessionId": "session",
+          "LiveStreamId": "live",
+          "PositionTicks": -10000,
+          "Failed": false
+        }
+      }
+    },
+    {
+      "id": "ticks-0",
+      "operation": "ticks",
+      "input": {
+        "nanoseconds": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "ticks-99",
+      "operation": "ticks",
+      "input": {
+        "nanoseconds": 99
+      },
+      "expected": 0
+    },
+    {
+      "id": "ticks-100",
+      "operation": "ticks",
+      "input": {
+        "nanoseconds": 100
+      },
+      "expected": 1
+    },
+    {
+      "id": "ticks-123456789",
+      "operation": "ticks",
+      "input": {
+        "nanoseconds": 123456789
+      },
+      "expected": 1234567
+    },
+    {
+      "id": "ticks--123456789",
+      "operation": "ticks",
+      "input": {
+        "nanoseconds": -123456789
+      },
+      "expected": -1234567
+    },
+    {
+      "id": "ticks-browser-reopen-boundary",
+      "operation": "ticks",
+      "input": {
+        "nanoseconds": 20118449000
+      },
+      "expected": 201184490
+    },
+    {
+      "id": "external-subtitle-loading-1-False-0",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 1,
+        "fullTimeline": false,
+        "serverStartMs": 0
+      },
+      "expected": {
+        "retryDelayMs": 1000,
+        "sourceOffsetMs": 0
+      }
+    },
+    {
+      "id": "external-subtitle-loading-4-False-120000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 4,
+        "fullTimeline": false,
+        "serverStartMs": 120000
+      },
+      "expected": {
+        "retryDelayMs": 4000,
+        "sourceOffsetMs": 0
+      }
+    },
+    {
+      "id": "external-subtitle-loading-10-True-126000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 10,
+        "fullTimeline": true,
+        "serverStartMs": 126000
+      },
+      "expected": {
+        "retryDelayMs": 10000,
+        "sourceOffsetMs": 126000
+      }
+    },
+    {
+      "id": "external-subtitle-loading-25-True-242000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 25,
+        "fullTimeline": true,
+        "serverStartMs": 242000
+      },
+      "expected": {
+        "retryDelayMs": 10000,
+        "sourceOffsetMs": 242000
+      }
+    },
+    {
+      "id": "external-subtitle-loading-2147483647-False-242000",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 2147483647,
+        "fullTimeline": false,
+        "serverStartMs": 242000
+      },
+      "expected": {
+        "retryDelayMs": 10000,
+        "sourceOffsetMs": 0
+      }
+    },
+    {
+      "id": "external-subtitle-loading-0-True-10000000123",
+      "operation": "external-subtitle-loading",
+      "input": {
+        "errorCount": 0,
+        "fullTimeline": true,
+        "serverStartMs": 10000000123
+      },
+      "expected": {
+        "retryDelayMs": 1000,
+        "sourceOffsetMs": 10000000123
+      }
+    },
+    {
+      "id": "subtitle-selection.external-to-external",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": true
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.burned-in-to-text",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": false,
+        "nextLocal": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.text-to-burned-in",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.audio-transcode",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": false,
+        "currentLocal": true,
+        "nextLocal": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.direct-audio",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": false,
+        "subtitle": false,
+        "currentLocal": false,
+        "nextLocal": false
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "subtitle-selection.unavailable-text",
+      "operation": "subtitle-selection-local",
+      "input": {
+        "transcoding": true,
+        "subtitle": true,
+        "currentLocal": true,
+        "nextLocal": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/playback/ExternalSubtitleLoading.kt"
+    },
+    {
+      "id": "report-track-automatic-caption",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-automatic-off",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": -1,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-automatic-audio-fallback",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 2,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-viewer-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": true
+      },
+      "expected": 3
+    },
+    {
+      "id": "report-track-viewer-off",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": -1,
+        "chosenByViewer": true
+      },
+      "expected": -1
+    },
+    {
+      "id": "report-track-viewer-same-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 3,
+        "chosenByViewer": true
+      },
+      "expected": 3
+    },
+    {
+      "id": "report-track-carried-automatic-index",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": 5,
+        "chosenByViewer": false
+      },
+      "expected": null
+    },
+    {
+      "id": "report-track-viewer-no-track",
+      "operation": "report-track-index",
+      "input": {
+        "selectedIndex": null,
+        "chosenByViewer": true
+      },
+      "expected": null
+    },
+    {
+      "id": "track-selection-audio-same",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 1,
+        "pickedIndex": 1
+      },
+      "expected": true
+    },
+    {
+      "id": "track-selection-subtitle-same",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 3,
+        "pickedIndex": 3
+      },
+      "expected": true
+    },
+    {
+      "id": "track-selection-off-same",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": -1,
+        "pickedIndex": -1
+      },
+      "expected": true
+    },
+    {
+      "id": "track-selection-changed-track",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 3,
+        "pickedIndex": 4
+      },
+      "expected": false
+    },
+    {
+      "id": "track-selection-queued-previous-track",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": 4,
+        "pickedIndex": 3
+      },
+      "expected": false
+    },
+    {
+      "id": "track-selection-off-to-track",
+      "operation": "track-selection-unchanged",
+      "input": {
+        "currentIndex": -1,
+        "pickedIndex": 3
+      },
+      "expected": false
+    },
+    {
+      "id": "report-fields-automatic-start",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "start",
+        "positionTicks": 901230000,
+        "audio": null,
+        "subtitle": null,
+        "audioViewer": false,
+        "subtitleViewer": false
+      },
+      "expected": "kind=start positionMs=90123 audio=omitted subtitle=omitted audioOrigin=automatic subtitleOrigin=automatic"
+    },
+    {
+      "id": "report-fields-viewer-subtitle-progress",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "progress",
+        "positionTicks": 901230000,
+        "audio": null,
+        "subtitle": 4,
+        "audioViewer": false,
+        "subtitleViewer": true
+      },
+      "expected": "kind=progress positionMs=90123 audio=omitted subtitle=4 audioOrigin=automatic subtitleOrigin=viewer"
+    },
+    {
+      "id": "report-fields-viewer-off-progress",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "progress",
+        "positionTicks": 901230000,
+        "audio": 2,
+        "subtitle": -1,
+        "audioViewer": true,
+        "subtitleViewer": true
+      },
+      "expected": "kind=progress positionMs=90123 audio=2 subtitle=-1 audioOrigin=viewer subtitleOrigin=viewer"
+    },
+    {
+      "id": "report-fields-viewer-stop-omits-indices",
+      "operation": "playback-report-fields",
+      "input": {
+        "kind": "stop",
+        "positionTicks": 901230000,
+        "audio": 2,
+        "subtitle": 4,
+        "audioViewer": true,
+        "subtitleViewer": true
+      },
+      "expected": "kind=stop positionMs=90123 audio=omitted subtitle=omitted audioOrigin=viewer subtitleOrigin=viewer"
+    },
+    {
+      "id": "seek-step-first",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 79965,
+        "pendingMs": null,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 89965
+    },
+    {
+      "id": "seek-step-handoff",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 80000,
+        "pendingMs": 90000,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 100000
+    },
+    {
+      "id": "seek-step-third",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 90000,
+        "pendingMs": 100000,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 110000
+    },
+    {
+      "id": "seek-step-mixed-left",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 80000,
+        "pendingMs": 110000,
+        "deltaMs": -10000,
+        "durationMs": 180000
+      },
+      "expected": 100000
+    },
+    {
+      "id": "seek-step-held-right",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 80000,
+        "pendingMs": 100000,
+        "deltaMs": 30000,
+        "durationMs": 180000
+      },
+      "expected": 130000
+    },
+    {
+      "id": "seek-step-clamp-zero",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 1000,
+        "pendingMs": 1000,
+        "deltaMs": -30000,
+        "durationMs": 180000
+      },
+      "expected": 0
+    },
+    {
+      "id": "seek-step-clamp-end",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 175000,
+        "pendingMs": 175000,
+        "deltaMs": 30000,
+        "durationMs": 180000
+      },
+      "expected": 180000
+    },
+    {
+      "id": "seek-step-ready-clock",
+      "operation": "seek-step",
+      "input": {
+        "positionMs": 112000,
+        "pendingMs": null,
+        "deltaMs": 10000,
+        "durationMs": 180000
+      },
+      "expected": 122000
+    },
+    {
+      "id": "visibility-native-foreground",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": true,
+        "foreground": true,
+        "pauseLatched": false
+      },
+      "expected": true
+    },
+    {
+      "id": "visibility-native-stopped",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": true,
+        "foreground": false,
+        "pauseLatched": false
+      },
+      "expected": false
+    },
+    {
+      "id": "visibility-returned-latched",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": true,
+        "foreground": true,
+        "pauseLatched": true
+      },
+      "expected": false
+    },
+    {
+      "id": "visibility-paused-request",
+      "operation": "visibility-play",
+      "input": {
+        "requested": false,
+        "foregroundRequired": true,
+        "foreground": true,
+        "pauseLatched": false
+      },
+      "expected": false
+    },
+    {
+      "id": "visibility-web-background",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": false,
+        "foreground": false,
+        "pauseLatched": false
+      },
+      "expected": true
+    },
+    {
+      "id": "visibility-web-paused",
+      "operation": "visibility-play",
+      "input": {
+        "requested": true,
+        "foregroundRequired": false,
+        "foreground": false,
+        "pauseLatched": true
+      },
+      "expected": false
+    }
+  ]
+}

@@ -12,10 +12,13 @@ import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackClient
+import app.pictureshow.core.playback.PlaybackHttpOutcome
 import app.pictureshow.core.playback.PlaybackProgressInfo
+import app.pictureshow.core.playback.PlaybackReportFailure
 import app.pictureshow.core.playback.PlaybackReports
 import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PlaybackStopInfo
+import app.pictureshow.core.playback.SeekSteps
 import app.pictureshow.core.playback.TranscodeSeek
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
@@ -33,9 +36,23 @@ internal interface PlaybackGateway {
     suspend fun start(info: PlaybackProgressInfo): ClientResult<Unit>
     suspend fun progress(info: PlaybackProgressInfo): ClientResult<Unit>
     suspend fun stopped(info: PlaybackStopInfo): ClientResult<Unit>
+
+    // Test/offline gateways can retain the simple ports. The server overrides these to report the
+    // exact HTTP status and fixed transport outcome from the request that carried this snapshot.
+    suspend fun start(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit): ClientResult<Unit> =
+        start(info).also { observe(it.reportOutcome()) }
+    suspend fun progress(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit): ClientResult<Unit> =
+        progress(info).also { observe(it.reportOutcome()) }
+    suspend fun stopped(info: PlaybackStopInfo, observe: (PlaybackHttpOutcome) -> Unit): ClientResult<Unit> =
+        stopped(info).also { observe(it.reportOutcome()) }
     suspend fun stopEncoding(sessionId: String): ClientResult<Unit>
     suspend fun played(): ClientResult<Unit> = ClientResult.Success(Unit)
 }
+
+private fun ClientResult<Unit>.reportOutcome() = PlaybackHttpOutcome(
+    null,
+    if (this is ClientResult.Failure) PlaybackReportFailure.Network else null
+)
 
 internal class ServerPlaybackGateway(
     private val client: PlaybackClient,
@@ -54,6 +71,7 @@ internal class ServerPlaybackGateway(
         val index = captionSubtitleIndex(decision.mediaSource, captionLanguage) ?: return prepared
         if (index == decision.mediaSource.defaultSubtitleStreamIndex) return prepared
         val sourceId = decision.mediaSourceId?.takeIf(String::isNotBlank) ?: return prepared
+        // Only fill an unusable/missing server selection; a valid track or remembered Off wins.
         // Never open the first URL. A fresh PlaybackInfo with the source and track pinned lets the server
         // negotiate extraction, remuxing or burn-in, just as it does for an explicit track choice.
         return client.prepare(account, itemId, snapshot, request.copy(mediaSourceId = sourceId, subtitleStreamIndex = index))
@@ -61,6 +79,12 @@ internal class ServerPlaybackGateway(
     override suspend fun start(info: PlaybackProgressInfo) = client.reportStart(account, info)
     override suspend fun progress(info: PlaybackProgressInfo) = client.reportProgress(account, info)
     override suspend fun stopped(info: PlaybackStopInfo) = client.reportStopped(account, info)
+    override suspend fun start(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit) =
+        client.reportStart(account, info, observe)
+    override suspend fun progress(info: PlaybackProgressInfo, observe: (PlaybackHttpOutcome) -> Unit) =
+        client.reportProgress(account, info, observe)
+    override suspend fun stopped(info: PlaybackStopInfo, observe: (PlaybackHttpOutcome) -> Unit) =
+        client.reportStopped(account, info, observe)
     override suspend fun stopEncoding(sessionId: String) = client.stopEncoding(account, sessionId)
     override suspend fun played() = markPlayed()
 }
@@ -76,6 +100,9 @@ internal interface PlaybackOutput {
 
     /** Return false if the chosen server stream cannot be switched in this media source. */
     fun select(type: MediaStreamType, index: Int): Boolean
+
+    /** Record a viewer choice without changing the player or its selected loaders. */
+    fun reselect(type: MediaStreamType, index: Int) = Unit
     fun beginSeek() = Unit
     fun pause()
     fun release()
@@ -88,7 +115,8 @@ internal data class PlaybackState(
     val reportError: String? = null,
     val bufferingSlow: Boolean = false,
     val audioIndex: Int = -1,
-    val subtitleIndex: Int = -1
+    val subtitleIndex: Int = -1,
+    val seekTargetMs: Long? = null
 )
 
 /** Used on the player thread: network transitions are serialized; buffering feedback has its own deadline. */
@@ -111,6 +139,12 @@ internal class PlaybackSession(
     private var requested = PlaybackRequest()
     private var ready = false
     private var started = false
+    private var reportSequence = 0L
+
+    // These belong to the viewing, not a prepared stream. An index carried through a seek,
+    // route change or fallback is still automatic until the viewer chooses that track type.
+    private var audioChosenByViewer = false
+    private var subtitleChosenByViewer = false
 
     // Retain the viewing even if replacement negotiation fails after retiring its old stream.
     private var reportingDecision: PlayDecision? = null
@@ -163,12 +197,16 @@ internal class PlaybackSession(
             return@enqueue
         }
         ready = true
-        mutable.value = mutable.value.copy(preparing = false, reportError = null)
+        mutable.value = mutable.value.copy(
+            preparing = false,
+            reportError = null,
+            seekTargetMs = mutable.value.seekTargetMs.takeUnless { it == target && pendingSeek == null }
+        )
         if (started) {
-            gateway.progress(progressInfo())
+            reportProgress()
         } else {
             started = true
-            gateway.start(progressInfo())
+            reportProgress(start = true)
         }
         ticker?.cancel()
         ticker = owner.launch {
@@ -226,8 +264,23 @@ internal class PlaybackSession(
 
     fun progress(source: PlayDecision? = decision) = enqueue {
         if (source === decision && ready && pendingSeek == null && !seeking && mutable.value.error == null) {
-            gateway.progress(progressInfo())
+            reportProgress()
         }
+    }
+
+    /** Relative remote input belongs to the viewing, even while Compose still holds a retiring player. */
+    fun stepSeek(deltaMs: Long): Long? {
+        val current = decision ?: seekSource ?: return null
+        if (!TranscodeSeek.required(current)) return null
+        val target = SeekSteps.target(
+            output.position().milliseconds,
+            mutable.value.seekTargetMs,
+            deltaMs,
+            requireNotNull(current.mediaSource.runTimeTicks) / 10_000
+        )
+        if (!seek(target, current)) return null
+        trace("seek-step", "deltaMs=$deltaMs targetMs=$target")
+        return target
     }
 
     /** Coalesce held/rapid remote steps before stopping the old encode and negotiating the final target. */
@@ -250,6 +303,7 @@ internal class PlaybackSession(
         }
         pendingSeek = positionMs.coerceIn(0, requireNotNull(source.mediaSource.runTimeTicks) / 10_000)
         seekSource = source
+        mutable.value = mutable.value.copy(seekTargetMs = pendingSeek)
         output.beginSeek()
         buffering(true, source)
         if (seeking) return true
@@ -291,7 +345,21 @@ internal class PlaybackSession(
         if (mutable.value.error != null) return@enqueue
         if (type !in listOf(MediaStreamType.Audio, MediaStreamType.Subtitle)) return@enqueue
         val current = decision ?: return@enqueue
+        if (type == MediaStreamType.Audio) audioChosenByViewer = true else subtitleChosenByViewer = true
         capture()
+        val activeIndex = if (type == MediaStreamType.Audio) mutable.value.audioIndex else mutable.value.subtitleIndex
+        // Compare inside the command queue, after any preceding preparation/selection completed.
+        // Keep audio recovery policy and optional subtitle retry state intact for this same track.
+        if (app.pictureshow.core.playback.TrackSelection.unchanged(activeIndex, index)) {
+            output.reselect(type, index)
+            trace(
+                "track-reselect",
+                "type=${if (type == MediaStreamType.Audio) "audio" else "subtitle"} " +
+                    "stream=${if (index < 0) "off" else index} ready=$ready positionMs=${lastPosition.milliseconds}"
+            )
+            if (ready) reportProgress()
+            return@enqueue
+        }
         val nextAudio = if (type == MediaStreamType.Audio) index else mutable.value.audioIndex
         val nextSubtitle = if (type == MediaStreamType.Subtitle) index else mutable.value.subtitleIndex
         val leavingAudioRecovery = type == MediaStreamType.Audio && index != mutable.value.audioIndex && audioRecoveryRequest != null
@@ -301,10 +369,20 @@ internal class PlaybackSession(
             audioRecoveryRequest = null
             audioRecoveryStage = 0
         }
-        if (!leavingAudioRecovery && current.method != PlayMethod.Transcode && output.select(type, index)) {
+        fun localSubtitle(chosen: Int): Boolean = chosen < 0 ||
+            current.mediaSource.mediaStreams.any {
+                it.index == chosen && PlaybackMedia.sideloadedSubtitle(it)
+            }
+        val local = app.pictureshow.core.playback.ExternalSubtitleLoading.canSelectLocally(
+            current.method == PlayMethod.Transcode,
+            type == MediaStreamType.Subtitle,
+            localSubtitle(mutable.value.subtitleIndex),
+            localSubtitle(nextSubtitle)
+        )
+        if (!leavingAudioRecovery && local && output.select(type, index)) {
             mutable.value = mutable.value.copy(audioIndex = nextAudio, subtitleIndex = nextSubtitle)
             requested = requested.copy(audioStreamIndex = nextAudio, subtitleStreamIndex = nextSubtitle)
-            if (ready) gateway.progress(progressInfo())
+            if (ready) reportProgress()
         } else {
             // An unsupported in-player audio choice also uses the server. Keep the original
             // policy so the next working track can return to direct playback without an error.
@@ -491,9 +569,12 @@ internal class PlaybackSession(
     fun closeForNext(shouldAdvance: () -> Boolean, afterFinished: () -> Unit) {
         if (closing) return
         val completing = !ending && !endReported && started && mutable.value.error == null && shouldAdvance()
-        if (completing) onCompletionPending()
-        trace("close", "positionMs=${output.position().milliseconds} ending=$ending")
         closing = true
+        // Every final report can change resume/watch state, even Back, system Stop,
+        // setup failure and disposal. Arm synchronously before navigation can expose detail.
+        // EOS already armed this report and may have finished it before close.
+        if (!ending && !endReported) onCompletionPending()
+        trace("close", "positionMs=${output.position().milliseconds} ending=$ending")
         seekTimer?.cancel()
         val finalSeekTarget = pendingSeek
         pendingSeek = null
@@ -610,13 +691,57 @@ internal class PlaybackSession(
         diagnostic(PlaybackDiagnostics.line(decision ?: reportingDecision, event, fields))
     }
 
+    private suspend fun reportProgress(start: Boolean = false): ClientResult<Unit> {
+        val info = progressInfo()
+        val observe =
+            reportDiagnostic(
+                if (start) "start" else "progress",
+                info.positionTicks,
+                info.audioStreamIndex,
+                info.subtitleStreamIndex,
+                info.isPaused
+            )
+        return if (start) gateway.start(info, observe) else gateway.progress(info, observe)
+    }
+
+    /** Capture the same immutable fields/provenance as the body, before suspending in HTTP. */
+    private fun reportDiagnostic(
+        kind: String,
+        positionTicks: Long,
+        audio: Int?,
+        subtitle: Int?,
+        paused: Boolean? = null
+    ): (PlaybackHttpOutcome) -> Unit {
+        val current = decision ?: reportingDecision
+        val sequence = ++reportSequence
+        val fields = "seq=$sequence " + app.pictureshow.core.playback.PlaybackReportFields.describe(
+            kind,
+            positionTicks,
+            audio,
+            subtitle,
+            audioChosenByViewer,
+            subtitleChosenByViewer
+        )
+        val sent = kotlin.time.TimeSource.Monotonic.markNow()
+        return { outcome ->
+            diagnostic(
+                PlaybackDiagnostics.line(
+                    current,
+                    "report",
+                    "$fields status=${outcome.status ?: "none"} " +
+                        "failure=${outcome.failure?.name?.lowercase() ?: "none"} elapsedMs=${sent.elapsedNow().inWholeMilliseconds} paused=${paused ?: "omitted"}"
+                )
+            )
+        }
+    }
+
     private fun progressInfo(): PlaybackProgressInfo {
         capture()
         return PlaybackReports(requireNotNull(decision)).progress(
             lastPosition.milliseconds.milliseconds,
             lastPosition.paused,
-            mutable.value.audioIndex,
-            mutable.value.subtitleIndex
+            app.pictureshow.core.playback.TrackSelectionReporting.index(mutable.value.audioIndex, audioChosenByViewer),
+            app.pictureshow.core.playback.TrackSelectionReporting.index(mutable.value.subtitleIndex, subtitleChosenByViewer)
         )
     }
 
@@ -636,7 +761,7 @@ internal class PlaybackSession(
         ticker?.cancel()
         val current = decision ?: reportingDecision ?: return false
         if (releaseOutput) output.release()
-        if (ready) gateway.progress(progressInfo())
+        if (ready) reportProgress()
         val stopped = reportStopped(PlaybackReports(current).stopped(lastPosition.milliseconds.milliseconds, failed))
         // Retired encodes already have their two scoped DELETEs scheduled.
         if (decision?.method == PlayMethod.Transcode) current.playSessionId?.let { stopEncoding(it) }
@@ -665,8 +790,8 @@ internal class PlaybackSession(
      * final stop report is the one that keeps the viewer's place, so it gets one retry before it is surfaced.
      */
     private suspend fun reportStopped(info: PlaybackStopInfo): Boolean {
-        var result = gateway.stopped(info)
-        if (result is ClientResult.Failure) result = gateway.stopped(info)
+        var result = gateway.stopped(info, reportDiagnostic("stop", info.positionTicks, null, null))
+        if (result is ClientResult.Failure) result = gateway.stopped(info, reportDiagnostic("stop", info.positionTicks, null, null))
         if (result is ClientResult.Failure) mutable.value = mutable.value.copy(reportError = result.error.message)
         return result is ClientResult.Success
     }

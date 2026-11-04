@@ -8,6 +8,7 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -30,6 +31,89 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class PositionReadTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    /** rc30: "1:43 of 9:56", then "1:44 of 9:56" seconds later, once the seek's preview expired on the focused control. */
+    @Test fun aSeekIsCapturedOnceWhetherItsPreviewExpiresOrItFinishes() {
+        val preview = mutableStateOf<Long?>(null)
+        val target = mutableStateOf<Long?>(null)
+        val position = mutableLongStateOf(90_000)
+        val paused = mutableStateOf(false)
+        var spoken = -1L
+        compose.setContent {
+            spoken = rememberAnnouncedPosition(
+                paused.value,
+                preview.value ?: target.value,
+                596_000,
+                false,
+                position.longValue
+            )
+        }
+        compose.runOnIdle { assertEquals(90_000, spoken) }
+        compose.runOnIdle { position.longValue = 100_000 }
+        compose.runOnIdle { assertEquals(90_000, spoken, "The clock moving is not news") }
+        compose.runOnIdle {
+            preview.value = 103_000
+            position.longValue = 103_000
+        }
+        compose.runOnIdle { assertEquals(103_000, spoken, "A seek is read") }
+        compose.runOnIdle {
+            target.value = 103_000
+            position.longValue = 104_000
+        }
+        compose.runOnIdle { assertEquals(103_000, spoken) }
+        compose.runOnIdle { target.value = null }
+        compose.runOnIdle { assertEquals(103_000, spoken, "The player finishing the seek is not a second read") }
+        compose.runOnIdle { preview.value = null }
+        compose.runOnIdle { assertEquals(103_000, spoken, "The preview expiring is not a second read") }
+        compose.runOnIdle { position.longValue = 105_000 }
+        compose.runOnIdle { paused.value = true }
+        compose.runOnIdle { assertEquals(105_000, spoken, "Pausing still captures the position") }
+    }
+
+    @Test fun aSecondSeekAHeldRepeatAndTheSameTargetAgainAreEachRead() {
+        val preview = mutableStateOf<Long?>(null)
+        val target = mutableStateOf<Long?>(null)
+        val position = mutableLongStateOf(90_000)
+        val paused = mutableStateOf(false)
+        var spoken = -1L
+        compose.setContent {
+            spoken = rememberAnnouncedPosition(
+                paused.value,
+                preview.value ?: target.value,
+                596_000,
+                false,
+                position.longValue
+            )
+        }
+        fun seekTo(ms: Long) {
+            compose.runOnIdle {
+                preview.value = ms
+                position.longValue = ms
+            }
+            compose.runOnIdle { assertEquals(ms, spoken, "Seek to $ms") }
+        }
+        seekTo(103_000)
+        compose.runOnIdle {
+            preview.value = null
+            position.longValue = 110_000
+        }
+        compose.runOnIdle { assertEquals(103_000, spoken) }
+        seekTo(113_000)
+        // A held key: the server's target stays on the first step while the preview moves on.
+        compose.runOnIdle { target.value = 113_000 }
+        seekTo(123_000)
+        seekTo(133_000)
+        compose.runOnIdle { assertEquals(133_000, spoken) }
+        compose.runOnIdle {
+            target.value = null
+            preview.value = null
+            position.longValue = 140_000
+        }
+        compose.runOnIdle { assertEquals(133_000, spoken, "The held seek settling is not another read") }
+        compose.runOnIdle { paused.value = true }
+        compose.runOnIdle { assertEquals(140_000, spoken) }
+        seekTo(133_000)
+    }
 
     @Test fun backAtTheStartGivesFeedbackEvenWhenThePositionDoesNotChange() {
         val speech = mutableListOf<String>()

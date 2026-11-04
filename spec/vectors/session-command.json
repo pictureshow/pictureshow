@@ -1,0 +1,2116 @@
+{
+  "schemaVersion": 1,
+  "suite": "session-command",
+  "cases": [
+    {
+      "id": "session-command.desired-pause-idempotent",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "pending": {
+              "id": "1",
+              "paused": true,
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "pause"
+          },
+          "expected": {
+            "pending": {
+              "id": "2",
+              "paused": true,
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "100000000",
+            "entry": "a",
+            "paused": true
+          },
+          "expected": {
+            "pending": {
+              "id": "2",
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "http",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "100000000",
+            "entry": "a",
+            "paused": true
+          },
+          "expected": {
+            "pending": {
+              "result": "confirmed"
+            },
+            "observed": {
+              "paused": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "3",
+            "value": "play"
+          },
+          "expected": {
+            "pending": {
+              "paused": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.relative-seeks-use-pending-target",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-relative",
+            "entry": "30000000"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "130000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "seek-relative",
+            "entry": "30000000"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "160000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "3",
+            "value": "seek-relative",
+            "entry": "-40000000"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "120000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "4",
+            "value": "seek-relative",
+            "entry": "-9223372036854775808"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "0"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.exact-beyond-number-range-and-saturation",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "9007199254740993"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "9007199254740993"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "9007199254740993",
+            "paused": false,
+            "entry": "a"
+          },
+          "expected": {
+            "pending": {
+              "result": "confirmed"
+            },
+            "observed": {
+              "ticks": "9007199254740993"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "seek-relative",
+            "entry": "9223372036854775807"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "9223372036854775807"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-3",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "NaN"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-4",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "Infinity"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-5",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "1.2"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-6",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "1e3"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-7",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "+1"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-8",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "01"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-9",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "-0"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-10",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "9223372036854775808"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-11",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "-9223372036854775809"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-12",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": ""
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.invalid-ticks-13",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "-1"
+          },
+          "expected": {
+            "rejection": "invalid-ticks",
+            "pending": null,
+            "sequence": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.bounds",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "120000000"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-absolute",
+            "entry": "500000000"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "120000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "seek-relative",
+            "entry": "-900000000"
+          },
+          "expected": {
+            "pending": {
+              "ticks": "0"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.timeout-no-automatic-replay",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "10",
+            "value": "play"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "timeout",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "5009"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            },
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "timeout",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "5010"
+          },
+          "expected": {
+            "pending": {
+              "result": "unknown"
+            },
+            "effect": "refresh"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "5011",
+            "value": "100000000",
+            "paused": false,
+            "entry": "a"
+          },
+          "expected": {
+            "pending": {
+              "result": "unknown"
+            },
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "value": "100000000",
+            "entry": "a",
+            "paused": false,
+            "capabilities": [
+              "pause"
+            ]
+          },
+          "expected": {
+            "pending": {
+              "result": "unknown"
+            },
+            "fresh": true,
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "nowMs": "6000",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "pending": {
+              "result": "sent",
+              "paused": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.observation-deadline-is-authoritative",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "pause"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "5000",
+            "value": "100000000",
+            "paused": true
+          },
+          "expected": {
+            "pending": {
+              "result": "unknown"
+            },
+            "effect": "refresh"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.denial-removes-rights",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "pause"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "denied",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "authorized": false,
+            "capabilities": [],
+            "pending": {
+              "result": "rejected"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "play"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "denied"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.capability-removal",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "refresh",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "value": "100",
+            "capabilities": [
+              "pause"
+            ]
+          },
+          "expected": {
+            "capabilities": [
+              "pause"
+            ],
+            "fresh": true
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-relative",
+            "entry": "10"
+          },
+          "expected": {
+            "rejection": "unsupported",
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "tracks"
+          },
+          "expected": {
+            "rejection": "unsupported",
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.disconnect-expires-queued-mutations",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "disconnect",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "fresh": false,
+            "pending": {
+              "result": "unknown"
+            },
+            "effect": "refresh"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "refresh-required"
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "value": "200",
+            "paused": false,
+            "capabilities": [
+              "play",
+              "pause"
+            ]
+          },
+          "expected": {
+            "fresh": true,
+            "effect": "none",
+            "pending": {
+              "result": "unknown"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "stale-command"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.stale-server",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "other",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play"
+          },
+          "expected": {
+            "rejection": "stale-owner",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.stale-viewer",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "other",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play"
+          },
+          "expected": {
+            "rejection": "stale-owner",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.stale-session",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "other",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play"
+          },
+          "expected": {
+            "rejection": "stale-owner",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.stale-device",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "other",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play"
+          },
+          "expected": {
+            "rejection": "stale-owner",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.stale-generation",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "9",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play"
+          },
+          "expected": {
+            "rejection": "stale-owner",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.toggle-not-supported",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "toggle"
+          },
+          "expected": {
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.seek-pause-seek-retains-pending-target",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "seek-relative",
+            "entry": "30000000"
+          },
+          "expected": {
+            "seekTarget": "130000000"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "pause"
+          },
+          "expected": {
+            "seekTarget": "130000000",
+            "pending": {
+              "paused": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "3",
+            "value": "seek-relative",
+            "entry": "20000000"
+          },
+          "expected": {
+            "seekTarget": "150000000",
+            "pending": {
+              "ticks": "150000000"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.stop-needs-stopped-observation",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "stop"
+          },
+          "expected": {
+            "pending": {
+              "stopped": true,
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "100000000",
+            "entry": "a",
+            "paused": true
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "100000000",
+            "entry": "a",
+            "paused": true,
+            "stopped": true
+          },
+          "expected": {
+            "pending": {
+              "result": "confirmed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.no-false-confirmation-tracks",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807",
+        "capabilities": [
+          "tracks"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "tracks"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "unsupported",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.no-false-confirmation-volume",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807",
+        "capabilities": [
+          "volume"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "volume"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "unsupported",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.no-false-confirmation-queue",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807",
+        "capabilities": [
+          "queue"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "queue"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "unsupported",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.no-false-confirmation-navigate",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807",
+        "capabilities": [
+          "navigate"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "navigate"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "unsupported",
+            "pending": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.play-now-needs-entry",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807",
+        "capabilities": [
+          "play-now"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "value": "play-now"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "missing-entry"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "value": "play-now",
+            "entry": "b"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "pending": {
+              "entry": "b",
+              "paused": false,
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "entry": "a",
+            "paused": false,
+            "value": "100000000"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "2",
+            "entry": "b",
+            "paused": false,
+            "value": "0"
+          },
+          "expected": {
+            "pending": {
+              "result": "confirmed"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

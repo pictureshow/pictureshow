@@ -56,6 +56,10 @@ class PlaybackExitHttpTest {
     fun ordinaryStopStillReturnsWhileItsReportIsPending() = exitScenario(natural = false)
 
     @Test
+    fun backReturnKeepsItsResumeGuardUntilTheSavedPositionHasBeenRead() =
+        exitScenario(natural = false, retainedDetails = true, holdAfterStop = true)
+
+    @Test
     fun backDuringPendingNextEpisodeCompletionExitsPromptlyWithoutStartingNext() = exitScenario(natural = true, closingForNext = true)
 
     @Test
@@ -85,7 +89,8 @@ class PlaybackExitHttpTest {
         stopMarksPlayed: Boolean = false,
         failReports: Boolean = false,
         reopenAfterCompletion: Boolean = false,
-        unrelatedRefresh: Boolean = false
+        unrelatedRefresh: Boolean = false,
+        holdAfterStop: Boolean = false
     ) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val stop = CompletableDeferred<Unit>()
@@ -93,6 +98,7 @@ class PlaybackExitHttpTest {
         val detailReads = CompletableDeferred<Unit>()
         var holdDetails = false
         var serverPlayed = false
+        var serverPosition = 0L
         var stopAcknowledged = false
         var exits = 0
         var exitRequested = false
@@ -121,7 +127,8 @@ class PlaybackExitHttpTest {
                             stop.await()
                             stopAcknowledged = true
                             serverPlayed = stopMarksPlayed
-                            if (failReports) holdDetails = true
+                            serverPosition = if (natural) 0 else 600_000_000L
+                            if (failReports || holdAfterStop) holdDetails = true
                             respond("", if (failReports) HttpStatusCode.ServiceUnavailable else HttpStatusCode.NoContent)
                         }
                         "/UserPlayedItems/film" -> {
@@ -135,7 +142,8 @@ class PlaybackExitHttpTest {
                         }
                         "/Items/film", "/Items" -> {
                             if (holdDetails) detailReads.await()
-                            val data = """{"Id":"film","Type":"Movie","UserData":{"Played":$serverPlayed,"PlaybackPositionTicks":0}}"""
+                            val data = """{"Id":"film","Type":"Movie",
+                                "UserData":{"Played":$serverPlayed,"PlaybackPositionTicks":$serverPosition}}"""
                             respond(
                                 if (path == "/Items") """{"Items":[$data]}""" else data,
                                 headers = headersOf(HttpHeaders.ContentType, "application/json")
@@ -196,7 +204,7 @@ class PlaybackExitHttpTest {
             finishPlayback(session, onExit)
             runCurrent()
             assertEquals(1, exits, "Exit must not wait for a blocked server report")
-            assertEquals(natural, assertNotNull(details).state.value.playbackPending)
+            assertTrue(assertNotNull(details).state.value.playbackPending, "Every final report must protect resume state")
             if (natural) assertFalse(assertNotNull(details).state.value.item!!.userData.played)
             if (unrelatedRefresh) {
                 catalog.refresh("other")
@@ -225,8 +233,12 @@ class PlaybackExitHttpTest {
             assertEquals(1, exits)
             assertEquals(0, nextEpisodes)
             assertEquals(natural && !failReports, assertNotNull(details).state.value.item!!.userData.played)
-            assertEquals(failReports, assertNotNull(details).state.value.playbackPending)
-            if (natural) assertTrue(assertNotNull(details).state.value.loading, "The fresh detail response is still blocked")
+            assertEquals(failReports || holdAfterStop, assertNotNull(details).state.value.playbackPending)
+            if (natural ||
+                holdAfterStop
+            ) {
+                assertTrue(assertNotNull(details).state.value.loading, "The fresh detail response is still blocked")
+            }
             if (reopenAfterCompletion) {
                 details = newDetails()
                 // Read synchronously: neither the collector nor the held HTTP item read has run.
@@ -243,6 +255,7 @@ class PlaybackExitHttpTest {
             assertEquals(natural && !failReports, assertNotNull(details).state.value.item!!.userData.played)
             assertFalse(assertNotNull(details).state.value.playbackPending)
             assertFalse(assertNotNull(details).state.value.loading)
+            if (holdAfterStop) assertEquals(600_000_000L, assertNotNull(details).state.value.item!!.userData.playbackPositionTicks)
             assertEquals(if (natural && !stopMarksPlayed && !failReports) 1 else 0, calls.count { it == "/UserPlayedItems/film" })
             assertEquals(if (failReports) 2 else 1, calls.count { it == "/Sessions/Playing/Stopped" })
         } finally {

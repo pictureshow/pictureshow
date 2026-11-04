@@ -11,13 +11,19 @@ import android.view.Window
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -31,14 +37,27 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -48,19 +67,24 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.requestFocus
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import kotlin.coroutines.resume
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -119,7 +143,9 @@ internal class PlayerPanelScope(private val requestClose: (() -> Unit, () -> Uni
 internal fun PlayerSeekHost(open: Boolean, player: @Composable () -> Unit, seek: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().then(if (open) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier)) { player() }
-        if (open) seek()
+        // A sibling modal owns the whole hit-test surface, including outside its sheet.
+        // Child gestures consume their taps first; uncovered taps stop at this shield.
+        if (open) Box(Modifier.fillMaxSize().playerTouchClick { }) { seek() }
     }
 }
 
@@ -134,6 +160,13 @@ internal fun PlayerPanel(
     content: @Composable PlayerPanelScope.() -> Unit
 ) {
     val activityHost = LocalView.current
+    val layoutReceipt = remember(title, inActivityWindow) { booleanArrayOf(false) }
+    val firstLayout = Modifier.onGloballyPositioned {
+        if (!layoutReceipt[0]) {
+            layoutReceipt[0] = true
+            PlaybackDiagnostics.write("panel-open title=$title inActivityWindow=$inActivityWindow")
+        }
+    }
     var closingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val panelScope = remember {
         PlayerPanelScope { before, after ->
@@ -153,11 +186,13 @@ internal fun PlayerPanel(
                 it()
             }
         }
+        val paneHost = LocalView.current
         PlayerPanelContent(
             title,
             scrollable,
-            Modifier.focusProperties { onExit = { cancelFocusChange() } }.focusGroup(),
-            announcePane = false
+            firstLayout.focusProperties { onExit = { cancelFocusChange() } }.focusGroup(),
+            announcePane = title != "Seek",
+            paneTitleText = remember(paneHost, title) { nextInWindowPaneTitle(paneHost, title) }
         ) { panelScope.content() }
         return
     }
@@ -196,33 +231,49 @@ internal fun PlayerPanel(
                 }
             }
         }
-        PlayerPanelContent(title, scrollable) { panelScope.content() }
+        PlayerPanelContent(title, scrollable, firstLayout) { panelScope.content() }
     }
 }
 
 @Composable
-private fun PlayerPanelContent(
+internal fun PlayerPanelContent(
     title: String,
     scrollable: Boolean,
     modifier: Modifier = Modifier,
     announcePane: Boolean = true,
+    paneTitleText: String = title,
     content: @Composable () -> Unit
 ) {
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val information = title == "Playback info"
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
         Column(
-            Modifier.widthIn(min = 400.dp, max = 680.dp).fillMaxSize(.85f).testTag("player:panel")
+            Modifier.widthIn(max = 680.dp).fillMaxSize(.85f).testTag("player:panel")
                 .then(
                     if (scrollable) {
                         Modifier.background(
-                            Color(0xF510131C)
-                        ).verticalScroll(rememberScrollState()).padding(32.dp)
+                            if (information) Color(0xFF10131C) else Color(0xF510131C)
+                        ).onPreviewKeyEvent { event ->
+                            val key = event.nativeKeyEvent
+                            if (information && key.keyCode in listOf(KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_UP)) {
+                                if (key.action == KeyEvent.ACTION_DOWN) {
+                                    scope.launch {
+                                        scroll.scrollBy(if (key.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 180f else -180f)
+                                    }
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }.verticalScroll(scroll).padding(32.dp)
                     } else {
                         Modifier
                     }
                 )
                 .semantics {
                     isTraversalGroup = true
-                    if (announcePane) paneTitle = title
+                    if (announcePane) paneTitle = paneTitleText
                     testTagsAsResourceId = true
                 },
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -235,15 +286,86 @@ internal class PanelMediaKeyCallback(private val original: Window.Callback) : Wi
         PlaybackMediaSession.dispatchKeyEvent(event) || original.dispatchKeyEvent(event)
 }
 
+/**
+ * Own the selected arrival row before a key can reach the panel. Android can immediately re-enter
+ * during a forced owner-focus clear, followed by another parent request while the group is already
+ * active; that second request skips onEnter. Keep only the preferred row eligible during entry.
+ * User input opens all rows synchronously, before key search, pointer handling or accessibility
+ * focus actions. Window/a11y acknowledgment only opens eligibility; it never requests focus later.
+ */
+internal class PlayerPanelEntryFocus {
+    private val rows = linkedMapOf<Int, FocusRequester>()
+    private var focusedIndex: Int? = null
+    private var initialIndex: Int? = null
+    private var entered = false
+    private var entryPending = true
+
+    @Composable
+    fun Modifier.row(index: Int): Modifier {
+        val requester = remember(index) { FocusRequester() }
+        DisposableEffect(index, requester) {
+            rows[index] = requester
+            onDispose { if (rows[index] === requester) rows.remove(index) }
+        }
+        return this.focusProperties { canFocus = !entryPending || index == preferredIndex() }
+            .focusRequester(requester).onFocusChanged {
+                if (it.isFocused) {
+                    focusedIndex = index
+                    entered = true
+                }
+            }.semantics {
+                requestFocus {
+                    allowNavigation()
+                    requester.requestFocus()
+                }
+            }
+    }
+
+    private fun preferredIndex(): Int? = focusedIndex?.takeIf(rows::containsKey)
+        // Do not latch another row while the selected row is still joining the first layout.
+        ?: initialIndex?.takeIf { !entered || rows.containsKey(it) }
+        ?: rows.keys.firstOrNull()
+
+    fun requestInitial(index: Int?) {
+        index?.let(rows::get)?.requestFocus()
+    }
+
+    fun allowNavigation() {
+        entryPending = false
+    }
+
+    fun Modifier.entry(initialIndex: Int?): Modifier {
+        this@PlayerPanelEntryFocus.initialIndex = initialIndex
+        return this.onPreviewKeyEvent {
+            allowNavigation()
+            false
+        }.pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    if (awaitPointerEvent(PointerEventPass.Initial).type == PointerEventType.Press) allowNavigation()
+                }
+            }
+        }.focusProperties {
+            onEnter = { preferredIndex()?.let(rows::get)?.requestFocus() }
+        }.onFocusChanged {
+            if (!it.hasFocus) entryPending = true
+        }.focusGroup().onGloballyPositioned { if (!entered) requestInitial(initialIndex) }
+    }
+}
+
 @Composable
 internal fun TrackChoices(
     choices: List<Pair<Int, String>>,
     selectedIndex: Int?,
     onSelect: (Int) -> Unit,
     title: String? = null,
+    touchEnabled: Boolean = false,
+    rowDescription: (Int, String) -> String? = { _, _ -> null },
     footer: (@Composable () -> Unit)? = null
 ) {
-    val first = remember { FocusRequester() }
+    val entry = remember { PlayerPanelEntryFocus() }
+    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    val speedRowHeight = if (windowWidth >= 600.dp) 40.dp else 48.dp
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
     val accessible = rememberAccessibilityEnabled()
@@ -254,12 +376,16 @@ internal fun TrackChoices(
     // Keep the selected row composed even in a long list. Other targets join the
     // accessibility tree once the screen reader has acknowledged this initial target.
     Column(
-        (if (title != null) Modifier.background(Color(0xF510131C)).padding(32.dp) else Modifier)
-            // Redirect the window's first input-focus entry too: TV TalkBack may follow
-            // that native event before the post-window coroutine can request the row.
-            .focusProperties { onEnter = { if (initialIndex != null) first.requestFocus() } }
-            .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        (
+            if (title != null) {
+                (if (touchEnabled) Modifier.fillMaxWidth() else Modifier)
+                    .background(if (touchEnabled) Color(0xFF10131C) else Color(0xF510131C)).padding(32.dp)
+            } else {
+                Modifier
+            }
+            )
+            .then(with(entry) { Modifier.entry(initialIndex) }),
+        verticalArrangement = Arrangement.spacedBy(if (touchEnabled) 8.dp else 12.dp)
     ) {
         if (title !=
             null
@@ -272,22 +398,61 @@ internal fun TrackChoices(
                 modifier = Modifier.clearAndSetSemantics { hideFromAccessibility() }
             )
         }
+        if (touchEnabled && footer != null) {
+            Column(
+                modifier = if (!initialFocusReady) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) { footer() }
+        }
         LazyColumn(
             state = list,
-            modifier = Modifier.semantics {
+            modifier = (
+                if (touchEnabled) {
+                    Modifier.weight(1f).fillMaxWidth().drawWithContent {
+                        drawContent()
+                        val fade = 24.dp.toPx().coerceAtMost(size.height / 2)
+                        val surface = Color(0xFF10131C)
+                        if (list.canScrollBackward) {
+                            drawRect(
+                                Brush.verticalGradient(listOf(surface, Color.Transparent), endY = fade),
+                                size = Size(size.width, fade)
+                            )
+                        }
+                        if (list.canScrollForward) {
+                            drawRect(
+                                Brush.verticalGradient(listOf(Color.Transparent, surface), startY = size.height - fade, endY = size.height),
+                                topLeft = Offset(0f, size.height - fade),
+                                size = Size(size.width, fade)
+                            )
+                        }
+                    }
+                } else {
+                    Modifier
+                }
+                ).semantics {
                 isTraversalGroup = true
                 traversalIndex = 0f
             },
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(if (touchEnabled) 4.dp else 12.dp)
         ) {
             itemsIndexed(choices, key = { _, choice -> choice.first }) { _, (index, label) ->
                 Button(
-                    scale = playerButtonScale(),
+                    scale = if (touchEnabled) ButtonDefaults.scale(focusedScale = 1f) else playerButtonScale(),
                     onClick = { onSelect(index) },
-                    modifier = Modifier.testTag("track:$index").semantics {
+                    modifier = (
+                        if (touchEnabled) {
+                            Modifier.fillMaxWidth().height(speedRowHeight).playerTouchClick {
+                                onSelect(index)
+                            }
+                        } else {
+                            Modifier
+                        }
+                        ).testTag("track:$index").semantics {
                         selected = index == selectedIndex
                         traversalIndex = if (index == initialIndex) -1f else 0f
-                    }.then(if (index == initialIndex) Modifier.focusRequester(first) else Modifier)
+                        // A row may be the panel's only focus stop; it then carries what the footer explains.
+                        rowDescription(index, label)?.let { contentDescription = it }
+                    }.then(with(entry) { Modifier.row(index) })
                         .then(
                             if (!initialFocusReady && index != initialIndex) {
                                 Modifier.clearAndSetSemantics { hideFromAccessibility() }
@@ -296,14 +461,28 @@ internal fun TrackChoices(
                             }
                         )
                 ) {
-                    // Retain the visual selected suffix, with selection spoken by the node state once.
-                    Text(
-                        if (index == selectedIndex) "$label · selected" else label,
-                        modifier = Modifier.clearAndSetSemantics { contentDescription = label }
-                    )
+                    if (touchEnabled) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(label, fontWeight = if (index == selectedIndex) FontWeight.SemiBold else FontWeight.Normal)
+                            val marker = LocalContentColor.current
+                            Canvas(Modifier.size(24.dp).clearAndSetSemantics { }) {
+                                drawCircle(marker, radius = 10.dp.toPx(), style = Stroke(2.dp.toPx()))
+                                if (index == selectedIndex) drawCircle(marker, radius = 5.dp.toPx())
+                            }
+                        }
+                    } else {
+                        Text(
+                            if (index == selectedIndex) "$label · selected" else label,
+                            modifier = Modifier.clearAndSetSemantics { contentDescription = label }
+                        )
+                    }
                 }
             }
-            if (footer != null) {
+            if (footer != null && !touchEnabled) {
                 item {
                     Column(
                         modifier = if (!initialFocusReady) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier,
@@ -313,16 +492,12 @@ internal fun TrackChoices(
             }
         }
     }
-    LaunchedEffect(initialIndex, windowFocused, accessible) {
+    LaunchedEffect(windowFocused, accessible) {
         if (windowFocused) {
-            if (initialIndex != null) {
-                list.scrollToItem(initialOffset)
-                androidx.compose.runtime.withFrameNanos { }
-                first.requestFocus()
-            }
             if (!initialFocusReady) {
                 awaitInitialPlayerPanelFocus(host)
                 initialFocusReady = true
+                entry.allowNavigation()
             }
         }
     }

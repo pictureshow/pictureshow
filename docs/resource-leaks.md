@@ -123,3 +123,29 @@ eight visible frames. FDs received directly through Binder are not recorded unti
 such as `dup` occurs. A creation stack identifies an allocation site; it does not establish the current
 retainer or whether a cache is bounded. Force-stop the app after the probe to remove the hook, then
 restart for ordinary measurements. Keep raw dumps private.
+
+## Playback looper lifetime on Android 11
+
+A healthy playback thread is retained for later players. Android 11's Choreographer owns a
+thread-local DisplayEventReceiver; Media3's video renderer uses it for VSync sampling. Ending a
+thread after every viewing finalizes another receiver and emits a `dispose` warning even though
+the finalizer frees it. Keeping the thread alive reuses that receiver. This is a lifetime change;
+the detector and framework finalizers remain enabled.
+
+The release fence returns a thread to its application-owned cache only after a separate handler's
+sentinel runs behind Media3's actual release message. A 500 ms Media3 release timeout or the
+five-second prepare bound does not make that thread reusable. Replacements get another thread
+while release is unfinished; decoder prepare still waits for the existing completion/bound rules.
+At most two healthy idle threads are cached, covering the usual active/replacement handoff.
+Permanently stuck releases can require additional isolated threads to keep replacements available;
+there is no absolute creation cap under unlimited stalls. Excess idle threads are stopped when
+they finish, and construction failures discard their thread. Replacing the application owner
+stops its cached threads and lets outstanding retirements finish before stopping theirs.
+
+This depends on Media3 1.11.1's [supplied-looper ownership](https://github.com/androidx/media/blob/1.11.1/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/PlaybackLooperProvider.java#L53-L63),
+[release cleanup](https://github.com/androidx/media/blob/1.11.1/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/ExoPlayerImplInternal.java#L2053-L2070),
+and [VSync callback removal](https://github.com/androidx/media/blob/1.11.1/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/VideoFrameReleaseHelper.java#L477-L492).
+Recheck these when upgrading Media3. A supplied looper is not quit by the player; per-player
+handler work, renderer state, display listeners and frame callbacks are cleaned up at release.
+Do not clear the whole shared looper queue or call Android's hidden Choreographer teardown API.
+The PGS `end` and window-insets SurfaceControl `release` paths are independent of this cache.

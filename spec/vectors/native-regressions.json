@@ -1,0 +1,2285 @@
+{
+  "schemaVersion": 1,
+  "suite": "reference",
+  "sources": [
+    "core/src/commonMain/kotlin/app/pictureshow/core/playback/PlaybackClient.kt",
+    "core/src/commonMain/kotlin/app/pictureshow/core/CatalogModels.kt",
+    "core/src/commonMain/kotlin/app/pictureshow/core/UserConfiguration.kt"
+  ],
+  "context": {
+    "server": {
+      "id": "server",
+      "name": "Fixture server",
+      "url": "https://media.example.test/jellyfin",
+      "version": "12.0.0"
+    },
+    "identity": {
+      "deviceName": "Fixture TV",
+      "deviceId": "install",
+      "version": "0.1.0"
+    },
+    "account": {
+      "userId": "viewer",
+      "token": "fixture-token",
+      "deviceId": "account-device"
+    }
+  },
+  "cases": [
+    {
+      "id": "native.source-binding.off",
+      "operation": "http",
+      "input": {
+        "action": "prepare",
+        "itemId": "film",
+        "capabilities": {
+          "name": "Basic fixture",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            }
+          ],
+          "display": {
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        },
+        "startMs": 120000,
+        "subtitleStreamIndex": -1,
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "MediaSources": [
+                {
+                  "Id": "source",
+                  "SupportsTranscoding": true,
+                  "DefaultSubtitleStreamIndex": 0,
+                  "TranscodingUrl": "/Videos/film/master.m3u8?MediaSourceId=source&SubtitleStreamIndex=0&SubtitleMethod=Encode",
+                  "MediaStreams": [
+                    {
+                      "Type": "Subtitle",
+                      "Index": 0,
+                      "Codec": "srt"
+                    },
+                    {
+                      "Type": "Subtitle",
+                      "Index": 1,
+                      "Codec": "pgssub",
+                      "DeliveryMethod": "Encode"
+                    }
+                  ]
+                }
+              ],
+              "PlaySessionId": "discovery-session"
+            }
+          },
+          {
+            "status": 200,
+            "body": {
+              "MediaSources": [
+                {
+                  "Id": "source",
+                  "SupportsTranscoding": true,
+                  "DefaultSubtitleStreamIndex": -1,
+                  "TranscodingUrl": "/Videos/film/master.m3u8?MediaSourceId=source&SubtitleStreamIndex=-1&SubtitleMethod=External",
+                  "MediaStreams": [
+                    {
+                      "Type": "Subtitle",
+                      "Index": 0,
+                      "Codec": "srt"
+                    },
+                    {
+                      "Type": "Subtitle",
+                      "Index": 1,
+                      "Codec": "pgssub",
+                      "DeliveryMethod": "Encode"
+                    }
+                  ],
+                  "SupportsDirectPlay": true
+                }
+              ],
+              "PlaySessionId": "bound-session"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/Items/film/PlaybackInfo",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "UserId": "viewer",
+              "MaxStreamingBitrate": 200000000,
+              "StartTimeTicks": 1200000000,
+              "DeviceProfile": {
+                "Name": "Basic fixture",
+                "MaxStreamingBitrate": 200000000,
+                "MaxStaticBitrate": 200000000,
+                "DirectPlayProfiles": [
+                  {
+                    "Container": "mkv",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "mp4,m4v,mov",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "ts,mpegts",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "avi",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "flv",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  }
+                ],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      }
+                    ],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [
+                  {
+                    "Type": "Video",
+                    "Conditions": [
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoProfile",
+                        "Value": "high",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoLevel",
+                        "Value": "42",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoBitDepth",
+                        "Value": "8",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoFramerate",
+                        "Value": "60",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoRangeType",
+                        "Value": "SDR",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "h264"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "aac"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+                  }
+                ],
+                "SubtitleProfiles": [
+                  {
+                    "Format": "subrip",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "webm"
+                  },
+                  {
+                    "Format": "mov_text",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "ts,mpegts"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "subrip",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "vtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Encode"
+                  }
+                ]
+              },
+              "EnableDirectPlay": true,
+              "EnableDirectStream": true,
+              "EnableTranscoding": true,
+              "AllowVideoStreamCopy": true,
+              "AllowAudioStreamCopy": true,
+              "AutoOpenLiveStream": false,
+              "AlwaysBurnInSubtitleWhenTranscoding": false,
+              "SubtitleStreamIndex": -1
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/jellyfin/Items/film/PlaybackInfo",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "UserId": "viewer",
+              "MaxStreamingBitrate": 200000000,
+              "StartTimeTicks": 1200000000,
+              "DeviceProfile": {
+                "Name": "Basic fixture",
+                "MaxStreamingBitrate": 200000000,
+                "MaxStaticBitrate": 200000000,
+                "DirectPlayProfiles": [
+                  {
+                    "Container": "mkv",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "mp4,m4v,mov",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "ts,mpegts",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "avi",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "flv",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  }
+                ],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      }
+                    ],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [
+                  {
+                    "Type": "Video",
+                    "Conditions": [
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoProfile",
+                        "Value": "high",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoLevel",
+                        "Value": "42",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoBitDepth",
+                        "Value": "8",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoFramerate",
+                        "Value": "60",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoRangeType",
+                        "Value": "SDR",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "h264"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "aac"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+                  }
+                ],
+                "SubtitleProfiles": [
+                  {
+                    "Format": "subrip",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "webm"
+                  },
+                  {
+                    "Format": "mov_text",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "ts,mpegts"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "subrip",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "vtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Encode"
+                  }
+                ]
+              },
+              "EnableDirectPlay": true,
+              "EnableDirectStream": true,
+              "EnableTranscoding": true,
+              "AllowVideoStreamCopy": true,
+              "AllowAudioStreamCopy": true,
+              "AutoOpenLiveStream": false,
+              "AlwaysBurnInSubtitleWhenTranscoding": false,
+              "SubtitleStreamIndex": -1,
+              "MediaSourceId": "source"
+            }
+          }
+        ],
+        "result": {
+          "kind": "success",
+          "outcome": {
+            "method": "DirectPlay",
+            "mediaSourceId": "source",
+            "url": "https://media.example.test/jellyfin/Videos/film/stream?static=true&mediaSourceId=source&playSessionId=bound-session",
+            "headers": {
+              "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+            },
+            "playSessionId": "bound-session",
+            "transcodeReasons": []
+          }
+        }
+      }
+    },
+    {
+      "id": "native.source-binding.burn-in",
+      "operation": "http",
+      "input": {
+        "action": "prepare",
+        "itemId": "film",
+        "capabilities": {
+          "name": "Basic fixture",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            }
+          ],
+          "display": {
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        },
+        "startMs": 120000,
+        "subtitleStreamIndex": 1,
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "MediaSources": [
+                {
+                  "Id": "source",
+                  "SupportsTranscoding": true,
+                  "DefaultSubtitleStreamIndex": 0,
+                  "TranscodingUrl": "/Videos/film/master.m3u8?MediaSourceId=source&SubtitleStreamIndex=0&SubtitleMethod=Encode",
+                  "MediaStreams": [
+                    {
+                      "Type": "Subtitle",
+                      "Index": 0,
+                      "Codec": "srt"
+                    },
+                    {
+                      "Type": "Subtitle",
+                      "Index": 1,
+                      "Codec": "pgssub",
+                      "DeliveryMethod": "Encode"
+                    }
+                  ]
+                }
+              ],
+              "PlaySessionId": "discovery-session"
+            }
+          },
+          {
+            "status": 200,
+            "body": {
+              "MediaSources": [
+                {
+                  "Id": "source",
+                  "SupportsTranscoding": true,
+                  "DefaultSubtitleStreamIndex": 1,
+                  "TranscodingUrl": "/Videos/film/master.m3u8?MediaSourceId=source&SubtitleStreamIndex=1&SubtitleMethod=Encode",
+                  "MediaStreams": [
+                    {
+                      "Type": "Subtitle",
+                      "Index": 0,
+                      "Codec": "srt"
+                    },
+                    {
+                      "Type": "Subtitle",
+                      "Index": 1,
+                      "Codec": "pgssub",
+                      "DeliveryMethod": "Encode"
+                    }
+                  ]
+                }
+              ],
+              "PlaySessionId": "bound-session"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/Items/film/PlaybackInfo",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "UserId": "viewer",
+              "MaxStreamingBitrate": 200000000,
+              "StartTimeTicks": 1200000000,
+              "DeviceProfile": {
+                "Name": "Basic fixture",
+                "MaxStreamingBitrate": 200000000,
+                "MaxStaticBitrate": 200000000,
+                "DirectPlayProfiles": [
+                  {
+                    "Container": "mkv",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "mp4,m4v,mov",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "ts,mpegts",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "avi",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "flv",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  }
+                ],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      }
+                    ],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [
+                  {
+                    "Type": "Video",
+                    "Conditions": [
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoProfile",
+                        "Value": "high",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoLevel",
+                        "Value": "42",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoBitDepth",
+                        "Value": "8",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoFramerate",
+                        "Value": "60",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoRangeType",
+                        "Value": "SDR",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "h264"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "aac"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+                  }
+                ],
+                "SubtitleProfiles": [
+                  {
+                    "Format": "subrip",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "webm"
+                  },
+                  {
+                    "Format": "mov_text",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "ts,mpegts"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "subrip",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "vtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Encode"
+                  }
+                ]
+              },
+              "EnableDirectPlay": true,
+              "EnableDirectStream": true,
+              "EnableTranscoding": true,
+              "AllowVideoStreamCopy": true,
+              "AllowAudioStreamCopy": true,
+              "AutoOpenLiveStream": false,
+              "AlwaysBurnInSubtitleWhenTranscoding": false,
+              "SubtitleStreamIndex": 1
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/jellyfin/Items/film/PlaybackInfo",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "UserId": "viewer",
+              "MaxStreamingBitrate": 200000000,
+              "StartTimeTicks": 1200000000,
+              "DeviceProfile": {
+                "Name": "Basic fixture",
+                "MaxStreamingBitrate": 200000000,
+                "MaxStaticBitrate": 200000000,
+                "DirectPlayProfiles": [
+                  {
+                    "Container": "mkv",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "mp4,m4v,mov",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "ts,mpegts",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "avi",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "flv",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  }
+                ],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      }
+                    ],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [
+                  {
+                    "Type": "Video",
+                    "Conditions": [
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoProfile",
+                        "Value": "high",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoLevel",
+                        "Value": "42",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoBitDepth",
+                        "Value": "8",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoFramerate",
+                        "Value": "60",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoRangeType",
+                        "Value": "SDR",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "h264"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "aac"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+                  }
+                ],
+                "SubtitleProfiles": [
+                  {
+                    "Format": "subrip",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "webm"
+                  },
+                  {
+                    "Format": "mov_text",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "ts,mpegts"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "subrip",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "vtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Encode"
+                  }
+                ]
+              },
+              "EnableDirectPlay": true,
+              "EnableDirectStream": true,
+              "EnableTranscoding": true,
+              "AllowVideoStreamCopy": true,
+              "AllowAudioStreamCopy": true,
+              "AutoOpenLiveStream": false,
+              "AlwaysBurnInSubtitleWhenTranscoding": false,
+              "SubtitleStreamIndex": 1,
+              "MediaSourceId": "source"
+            }
+          }
+        ],
+        "result": {
+          "kind": "success",
+          "outcome": {
+            "method": "Transcode",
+            "mediaSourceId": "source",
+            "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&SubtitleStreamIndex=1&SubtitleMethod=Encode",
+            "headers": {
+              "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+            },
+            "playSessionId": "bound-session",
+            "transcodeReasons": []
+          }
+        }
+      }
+    },
+    {
+      "id": "native.home.partial-latest-failure",
+      "operation": "homeRows",
+      "input": {
+        "views": [
+          {
+            "Id": "movies",
+            "Name": "Movies",
+            "Type": "CollectionFolder",
+            "CollectionType": "movies"
+          },
+          {
+            "Id": "shows",
+            "Name": "Shows",
+            "Type": "CollectionFolder",
+            "CollectionType": "tvshows"
+          }
+        ],
+        "resume": [
+          {
+            "Id": "resume",
+            "Type": "Movie"
+          }
+        ],
+        "nextUp": [],
+        "latest": {
+          "movies": [],
+          "shows": [
+            {
+              "Id": "new-episode",
+              "Type": "Episode"
+            }
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "resume",
+          "title": "Continue watching",
+          "items": [
+            "resume"
+          ],
+          "library": false,
+          "wide": true
+        },
+        {
+          "key": "libraries",
+          "title": "Libraries",
+          "items": [
+            "movies",
+            "shows"
+          ],
+          "library": true,
+          "wide": false
+        },
+        {
+          "key": "latest:shows",
+          "title": "Latest in Shows",
+          "items": [
+            "new-episode"
+          ],
+          "library": false,
+          "wide": false
+        }
+      ]
+    },
+    {
+      "id": "native.home.views-fail-retains-resume",
+      "operation": "homeRows",
+      "input": {
+        "views": [],
+        "resume": [
+          {
+            "Id": "resume",
+            "Type": "Movie"
+          }
+        ],
+        "nextUp": [
+          {
+            "Id": "next",
+            "Type": "Episode"
+          }
+        ],
+        "latest": {}
+      },
+      "expected": [
+        {
+          "key": "resume",
+          "title": "Continue watching",
+          "items": [
+            "resume"
+          ],
+          "library": false,
+          "wide": true
+        },
+        {
+          "key": "nextup",
+          "title": "Next up",
+          "items": [
+            "next"
+          ],
+          "library": false,
+          "wide": true
+        }
+      ]
+    },
+    {
+      "id": "native.timeline.hls-track-switch-absolute",
+      "operation": "timelineThroughTrackSwitch",
+      "input": {
+        "itemId": "film",
+        "startMs": 120000,
+        "positionsMs": [
+          120000,
+          124560,
+          125000
+        ],
+        "responses": [
+          {
+            "MediaSources": [
+              {
+                "Id": "source",
+                "TranscodingUrl": "/Videos/film/master.m3u8?StartTimeTicks=1200000000"
+              }
+            ],
+            "PlaySessionId": "one"
+          },
+          {
+            "MediaSources": [
+              {
+                "Id": "source",
+                "TranscodingUrl": "/Videos/film/master.m3u8?StartTimeTicks=1245600000&SubtitleStreamIndex=1&SubtitleMethod=Encode"
+              }
+            ],
+            "PlaySessionId": "two"
+          }
+        ]
+      },
+      "expected": {
+        "initialSeekMs": [
+          120000,
+          124560
+        ],
+        "positionTicks": [
+          1200000000,
+          1245600000,
+          1250000000
+        ],
+        "sessions": [
+          "one",
+          "two"
+        ]
+      }
+    },
+    {
+      "id": "native.settings.http.configuration",
+      "operation": "http",
+      "input": {
+        "action": "configuration",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Configuration": {
+                "AudioLanguagePreference": "fra",
+                "Future": {
+                  "preserve": true
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Users/viewer",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "success",
+          "configuration": {
+            "AudioLanguagePreference": "fra",
+            "Future": {
+              "preserve": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "native.settings.http.saveConfiguration",
+      "operation": "http",
+      "input": {
+        "action": "saveConfiguration",
+        "responses": [
+          {
+            "status": 200,
+            "body": {}
+          }
+        ],
+        "fields": {
+          "AudioLanguagePreference": "fra",
+          "Future": {
+            "preserve": true
+          }
+        }
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/Users/Configuration",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "AudioLanguagePreference": "fra",
+              "Future": {
+                "preserve": true
+              }
+            }
+          }
+        ],
+        "result": {
+          "kind": "success"
+        }
+      }
+    },
+    {
+      "id": "native.catalog.forbidden-retains-sign-in",
+      "operation": "http",
+      "input": {
+        "action": "catalog.views",
+        "parentId": "library",
+        "seriesId": "series",
+        "seasonId": "season",
+        "responses": [
+          {
+            "status": 403,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/UserViews",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "fields": [
+                "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "SERVER"
+        }
+      }
+    },
+    {
+      "id": "native.negotiation.forbidden-retains-sign-in",
+      "operation": "http",
+      "input": {
+        "capabilities": {
+          "name": "Basic fixture",
+          "videoDecoders": [
+            {
+              "codec": "H264",
+              "profiles": [
+                "High"
+              ],
+              "maxLevel": {
+                "major": 4,
+                "minor": 2
+              },
+              "maxWidth": 1920,
+              "maxHeight": 1080,
+              "maxFrameRate": 60.0
+            }
+          ],
+          "display": {
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "maxRefreshRate": 60.0
+          },
+          "audioDecoders": [
+            {
+              "codec": "AAC",
+              "maxChannels": 8
+            }
+          ],
+          "audioOutput": {
+            "pcmChannels": 2
+          }
+        },
+        "action": "prepare",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 403,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/jellyfin/Items/film/PlaybackInfo",
+            "query": {},
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": {
+              "UserId": "viewer",
+              "MaxStreamingBitrate": 200000000,
+              "StartTimeTicks": 0,
+              "DeviceProfile": {
+                "Name": "Basic fixture",
+                "MaxStreamingBitrate": 200000000,
+                "MaxStaticBitrate": 200000000,
+                "DirectPlayProfiles": [
+                  {
+                    "Container": "mkv",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "mp4,m4v,mov",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "ts,mpegts",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "avi",
+                    "AudioCodec": "aac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  },
+                  {
+                    "Container": "flv",
+                    "AudioCodec": "aac",
+                    "VideoCodec": "h264",
+                    "Type": "Video"
+                  }
+                ],
+                "TranscodingProfiles": [
+                  {
+                    "Container": "ts",
+                    "Type": "Video",
+                    "VideoCodec": "h264",
+                    "AudioCodec": "aac",
+                    "Protocol": "hls",
+                    "EstimateContentLength": false,
+                    "EnableMpegtsM2TsMode": false,
+                    "TranscodeSeekInfo": "Auto",
+                    "CopyTimestamps": false,
+                    "Context": "Streaming",
+                    "EnableSubtitlesInManifest": false,
+                    "MaxAudioChannels": "2",
+                    "MinSegments": 1,
+                    "SegmentLength": 0,
+                    "BreakOnNonKeyFrames": false,
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      }
+                    ],
+                    "EnableAudioVbrEncoding": true
+                  }
+                ],
+                "ContainerProfiles": [],
+                "CodecProfiles": [
+                  {
+                    "Type": "Video",
+                    "Conditions": [
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoProfile",
+                        "Value": "high",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoLevel",
+                        "Value": "42",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoBitDepth",
+                        "Value": "8",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoFramerate",
+                        "Value": "60",
+                        "IsRequired": false
+                      },
+                      {
+                        "Condition": "EqualsAny",
+                        "Property": "VideoRangeType",
+                        "Value": "SDR",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "h264"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "aac"
+                  },
+                  {
+                    "Type": "VideoAudio",
+                    "Conditions": [
+                      {
+                        "Condition": "LessThanEqual",
+                        "Property": "AudioChannels",
+                        "Value": "8",
+                        "IsRequired": false
+                      }
+                    ],
+                    "ApplyConditions": [],
+                    "Codec": "pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_f32le,pcm_u8"
+                  }
+                ],
+                "SubtitleProfiles": [
+                  {
+                    "Format": "subrip",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "mkv"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "webm"
+                  },
+                  {
+                    "Format": "mov_text",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Embed",
+                    "Container": "mp4,m4v,mov"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Embed",
+                    "Container": "ts,mpegts"
+                  },
+                  {
+                    "Format": "srt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "subrip",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ass",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ssa",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "vtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "webvtt",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "ttml",
+                    "Method": "External"
+                  },
+                  {
+                    "Format": "pgssub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvdsub",
+                    "Method": "Encode"
+                  },
+                  {
+                    "Format": "dvbsub",
+                    "Method": "Encode"
+                  }
+                ]
+              },
+              "EnableDirectPlay": true,
+              "EnableDirectStream": true,
+              "EnableTranscoding": true,
+              "AllowVideoStreamCopy": true,
+              "AllowAudioStreamCopy": true,
+              "AutoOpenLiveStream": false,
+              "AlwaysBurnInSubtitleWhenTranscoding": false
+            }
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "SERVER"
+        }
+      }
+    },
+    {
+      "id": "native.catalog.projection-503.movie",
+      "operation": "http",
+      "input": {
+        "action": "catalog.item",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Id": "film",
+              "Type": "Movie",
+              "UserData": {
+                "PlaybackPositionTicks": 0
+              }
+            }
+          },
+          {
+            "status": 503,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "ids": [
+                "film"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "SERVER"
+        }
+      }
+    },
+    {
+      "id": "native.catalog.projection-503.episode",
+      "operation": "http",
+      "input": {
+        "action": "catalog.item",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Id": "film",
+              "Type": "Episode",
+              "UserData": {
+                "PlaybackPositionTicks": 0
+              }
+            }
+          },
+          {
+            "status": 503,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "ids": [
+                "film"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "SERVER"
+        }
+      }
+    },
+    {
+      "id": "native.catalog.projection-503.video",
+      "operation": "http",
+      "input": {
+        "action": "catalog.item",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Id": "film",
+              "Type": "Video",
+              "UserData": {
+                "PlaybackPositionTicks": 0
+              }
+            }
+          },
+          {
+            "status": 503,
+            "body": {}
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "ids": [
+                "film"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "SERVER"
+        }
+      }
+    },
+    {
+      "id": "native.catalog.projection-missing.empty",
+      "operation": "http",
+      "input": {
+        "action": "catalog.item",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Id": "film",
+              "Type": "Movie",
+              "UserData": {
+                "PlaybackPositionTicks": 0
+              }
+            }
+          },
+          {
+            "status": 200,
+            "body": {
+              "Items": []
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "ids": [
+                "film"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "INVALID_RESPONSE"
+        }
+      }
+    },
+    {
+      "id": "native.catalog.projection-missing.different-id",
+      "operation": "http",
+      "input": {
+        "action": "catalog.item",
+        "itemId": "film",
+        "responses": [
+          {
+            "status": 200,
+            "body": {
+              "Id": "film",
+              "Type": "Movie",
+              "UserData": {
+                "PlaybackPositionTicks": 0
+              }
+            }
+          },
+          {
+            "status": 200,
+            "body": {
+              "Items": [
+                {
+                  "Id": "other",
+                  "UserData": {
+                    "PlaybackPositionTicks": 9999999999
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expected": {
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items/film",
+            "query": {
+              "userId": [
+                "viewer"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          },
+          {
+            "method": "GET",
+            "path": "/jellyfin/Items",
+            "query": {
+              "userId": [
+                "viewer"
+              ],
+              "ids": [
+                "film"
+              ]
+            },
+            "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",
+            "body": null
+          }
+        ],
+        "result": {
+          "kind": "failure",
+          "errorKind": "INVALID_RESPONSE"
+        }
+      }
+    }
+  ]
+}

@@ -405,4 +405,42 @@ class PlayerPanelAccessibilityTest {
         assertEquals("A Film", movie.title.toString())
         assertEquals("Movie", movie.artist.toString())
     }
+
+    @Test fun encodedAudioSpeedLimitIsPartOfThePanelsOnlyReaderStop() {
+        val limited = PlaybackSpeedState(encodedAudio = true, message = app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO)
+        compose.setContent { PictureshowTheme { SpeedChoices(limited, transcode = false) {} } }
+        // 1× is the only speed offered, so a D-pad reader never reaches the footer; the row says why.
+        compose.onNodeWithTag("track:125", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("track:100").assertIsSelected().assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ContentDescription,
+                listOf("1×. ${app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO}")
+            )
+        )
+    }
+
+    @Test fun theSelectedSpeedRowFollowsTheOutputWhileThePanelIsOpen() {
+        val limited = PlaybackSpeedState(encodedAudio = true, message = app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO)
+        var speed by androidx.compose.runtime.mutableStateOf(PlaybackSpeedState())
+        compose.setContent { PictureshowTheme { SpeedChoices(speed, transcode = false) {} } }
+        compose.onNodeWithTag("track:100").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        // The output switches to passthrough audio with the panel still open.
+        compose.runOnIdle { speed = limited }
+        compose.onNodeWithTag("track:100").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ContentDescription,
+                listOf("1×. ${app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO}")
+            )
+        )
+        compose.runOnIdle { speed = PlaybackSpeedState() }
+        compose.onNodeWithTag("track:100").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+    }
+
+    @Test fun anUnlimitedSpeedRowKeepsItsPlainLabel() {
+        compose.setContent { PictureshowTheme { SpeedChoices(PlaybackSpeedState(), transcode = false) {} } }
+        compose.onNodeWithTag("track:100").assertIsSelected()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        compose.onNodeWithTag("track:125", useUnmergedTree = true)
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+    }
 }

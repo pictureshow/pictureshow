@@ -19,7 +19,7 @@ import app.pictureshow.core.playback.PlayDecision
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Application-thread ownership, with volatile timestamps published by the retiring playback thread. */
+/** Main-thread player ownership, synchronized reusable threads and volatile retirement timestamps. */
 internal object PlaybackReleaseFence {
     // Below the viewing's 10s buffering recovery deadline. No playback/application thread waits
     // for this bound: only prepare is deferred. A stuck vendor release is explicitly diagnosed.
@@ -33,6 +33,7 @@ internal object PlaybackReleaseFence {
         if (owner?.get() !== application) {
             // Android has one Application per process. Test hosts replace its loopers too;
             // never synchronously drain work from a previous lifecycle on the new one.
+            state?.close()
             owner = WeakReference(application)
             state = State()
         }
@@ -46,6 +47,35 @@ internal object PlaybackReleaseFence {
         val releaseHandler = HandlerCompat.createAsync(Looper.getMainLooper())
         val outstanding = mutableListOf<Retirement>()
         var previous: Retirement? = null
+        private val idleThreads = ArrayDeque<HandlerThread>()
+        private var closed = false
+
+        @Synchronized
+        fun acquireThread(): HandlerThread = if (idleThreads.isEmpty()) {
+            HandlerThread("Pictureshow:Playback", Process.THREAD_PRIORITY_AUDIO).apply { start() }
+        } else {
+            idleThreads.removeLast()
+        }
+
+        @Synchronized
+        fun recycleThread(thread: HandlerThread) {
+            // Two idle threads cover the active/replacement handoff. A timed-out retirement
+            // stays occupied until its sentinel actually runs; the 5s bound never recycles it.
+            // Additional stuck releases may require additional threads to keep playback available.
+            if (closed || idleThreads.size >= 2 || !thread.isAlive) {
+                thread.quit()
+            } else {
+                idleThreads.addLast(thread)
+            }
+        }
+
+        @Synchronized
+        fun close() {
+            closed = true
+            idleThreads.forEach { it.quit() }
+            idleThreads.clear()
+            // Queued retirements still finish on their original loopers, then discard them.
+        }
     }
 
     class Playback internal constructor(
@@ -53,8 +83,9 @@ internal object PlaybackReleaseFence {
         private val predecessor: Retirement?,
         private val dependencies: List<Retirement>
     ) {
-        private val thread = HandlerThread("Pictureshow:Playback", Process.THREAD_PRIORITY_AUDIO).apply { start() }
+        private val thread = scope.acquireThread()
         val looper: Looper = thread.looper
+        private var retired = false
         private var waitMs = 0L
         private var boundReached = false
 
@@ -63,6 +94,10 @@ internal object PlaybackReleaseFence {
             dependencies.any { it.finishedMs == null } || (predecessor != null && predecessor.finishedMs == null)
 
         fun abortConstruction() {
+            check(Looper.myLooper() == Looper.getMainLooper())
+            if (retired) return
+            retired = true
+            // Builder failure can leave partially initialized handlers. Never cache that queue.
             thread.quit()
         }
 
@@ -98,6 +133,8 @@ internal object PlaybackReleaseFence {
 
         fun release(player: ExoPlayer, decision: PlayDecision) {
             check(Looper.myLooper() == Looper.getMainLooper())
+            if (retired) return
+            retired = true
             val retirement = Retirement(scope, decision)
             scope.previous = retirement
             scope.outstanding += retirement
@@ -118,8 +155,7 @@ internal object PlaybackReleaseFence {
                     retirement.blockedMs = requireNotNull(retirement.returnedMs) - callStart
                     // A separate Handler survives Media3 clearing its own handler's callbacks.
                     Handler(looper).post {
-                        retirement.finished()
-                        thread.quit()
+                        retirement.finished { scope.recycleThread(thread) }
                     }
                     retirement.scheduleBound()
                 }
@@ -159,8 +195,11 @@ internal object PlaybackReleaseFence {
             scope.handler.postDelayed(bound, (RELEASE_BOUND_MS - (SystemClock.elapsedRealtime() - startedMs)).coerceAtLeast(0))
         }
 
-        fun finished() {
+        fun finished(recycleThread: () -> Unit) {
             finishedMs = SystemClock.elapsedRealtime()
+            // Return/discard directly from the sentinel: an old test-host main queue may
+            // already be gone. Cache operations synchronize with acquire/owner close.
+            recycleThread()
             scope.handler.post {
                 scope.handler.removeCallbacks(bound)
                 if (!report(bound = false)) {

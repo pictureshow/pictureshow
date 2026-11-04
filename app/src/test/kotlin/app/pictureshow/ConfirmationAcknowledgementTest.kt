@@ -185,7 +185,7 @@ class ConfirmationAcknowledgementTest {
             "This removes Viewer B on Fixture server from this TV."
         }
         compose.onNodeWithText("Cancel").assertContentDescriptionEquals(
-            "$question $description Other accounts stay signed in. You can add it again later. Cancel"
+            "$question $description Other accounts stay signed in. You can add it again later."
         )
         assertOtherActionsHidden("Cancel")
         hidden(question, true)

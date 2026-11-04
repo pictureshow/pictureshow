@@ -18,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -84,18 +85,214 @@ class PlaybackSessionRebufferTest {
     }
 
     @Test
-    fun initialPreparationRemainsBuffering() {
+    fun initialPreparationWithPlayIntentKeepsOneLegacyPlayingStateIntoPlayback() {
+        val player = StatePlayer(Player.STATE_BUFFERING)
+        val handle = open(player)
+        val states = mutableListOf<Int>()
+        handle.session.player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                states += playbackState
+            }
+        })
+        try {
+            // The card posted at session start must not be cancelled for BUFFERING and posted again as audio
+            // starts: TalkBack holds that second announcement until audio stops, then speaks it over the detail page.
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            assertEquals(0f, legacy(handle).playbackSpeed)
+            val position = legacy(handle).position
+            idle(29_000)
+            player.invalidateForTest()
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            assertEquals(position, legacy(handle).position)
+            player.change(Player.STATE_READY)
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            assertEquals(1f, legacy(handle).playbackSpeed)
+            assertEquals(emptyList(), states)
+        } finally {
+            handle.close()
+            player.release()
+            idle()
+        }
+    }
+
+    @Test
+    fun initialPreparationBeyondThirtySecondsIsRealBufferingAndDoesNotRearm() {
         val player = StatePlayer(Player.STATE_BUFFERING)
         val handle = open(player)
         try {
+            idle(29_999)
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            idle(1)
             assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
-            idle(6_000)
+            handle.session.player.pause()
+            idle()
+            handle.session.player.play()
+            idle()
             assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
         } finally {
             handle.close()
             player.release()
             idle()
         }
+    }
+
+    @Test
+    fun aPausedOpeningOwesItsFirstPlayThePreparationGraceAcrossDecoderReplacement() {
+        // Review fix round 1: the replacement used to drop the pending grace, so Play exposed real BUFFERING.
+        for ((initial, replace) in listOf(
+            Player.STATE_BUFFERING to true,
+            Player.STATE_IDLE to true,
+            Player.STATE_BUFFERING to false
+        )) {
+            val player = StatePlayer(initial, playWhenReady = false)
+            val handle = open(player)
+            val replacement = StatePlayer(Player.STATE_BUFFERING, playWhenReady = false)
+            try {
+                if (initial == Player.STATE_IDLE) player.change(Player.STATE_BUFFERING)
+                assertEquals(PlaybackStateCompat.STATE_PAUSED, legacy(handle).state)
+                if (replace) {
+                    handle.replacePlayer(replacement)
+                    idle()
+                }
+                handle.session.player.play()
+                idle()
+                assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state, "initial=$initial replace=$replace")
+                assertEquals(0f, legacy(handle).playbackSpeed)
+                (if (replace) replacement else player).change(Player.STATE_READY)
+                assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+                assertEquals(1f, legacy(handle).playbackSpeed)
+            } finally {
+                handle.close()
+                player.release()
+                replacement.release()
+                idle()
+            }
+        }
+    }
+
+    @Test
+    fun replacementAfterThePreparationGraceStartedKeepsItsAbsoluteDeadline() {
+        val player = StatePlayer(Player.STATE_BUFFERING)
+        val handle = open(player)
+        val replacement = StatePlayer(Player.STATE_BUFFERING)
+        try {
+            idle(20_000)
+            handle.replacePlayer(replacement)
+            idle()
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            idle(9_999)
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            idle(1)
+            assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
+        } finally {
+            handle.close()
+            player.release()
+            replacement.release()
+            idle()
+        }
+    }
+
+    @Test
+    fun externalPauseDuringPreparationIsPromptlyPausedWithAFrozenPositionAndPlayKeepsTheSameDeadline() {
+        val player = StatePlayer(Player.STATE_BUFFERING)
+        val handle = open(player)
+        val future = androidx.media3.session.MediaController.Builder(RuntimeEnvironment.getApplication(), handle.session.token)
+            .buildAsync()
+        idle()
+        val controller = future.get(2, TimeUnit.SECONDS)
+        try {
+            idle(10_000)
+            val position = legacy(handle).position
+            controller.pause()
+            idle()
+            assertEquals(PlaybackStateCompat.STATE_PAUSED, legacy(handle).state)
+            assertEquals(0f, legacy(handle).playbackSpeed)
+            assertFalse(controller.playWhenReady)
+            idle(5_000)
+            assertEquals(position, legacy(handle).position)
+            assertEquals(position, controller.currentPosition)
+            // Play inside the first preparation resumes its window instead of exposing BUFFERING or starting a new one.
+            controller.play()
+            idle()
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            assertEquals(0f, legacy(handle).playbackSpeed)
+            idle(14_999)
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            idle(1)
+            assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
+        } finally {
+            controller.release()
+            handle.close()
+            player.release()
+            idle()
+        }
+    }
+
+    @Test
+    fun anErrorDuringPreparationGraceBypassesPlayingAndDoesNotRearm() {
+        val player = StatePlayer(Player.STATE_BUFFERING)
+        val handle = open(player)
+        try {
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            player.fail()
+            assertEquals(PlaybackStateCompat.STATE_ERROR, legacy(handle).state)
+            player.recover(Player.STATE_BUFFERING)
+            assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
+        } finally {
+            handle.close()
+            player.release()
+            idle()
+        }
+    }
+
+    @Test
+    fun anExpiredPreparationIsNotRearmedByReplacementOrALaterPlay() {
+        val player = StatePlayer(Player.STATE_BUFFERING)
+        val handle = open(player)
+        val replacement = StatePlayer(Player.STATE_BUFFERING)
+        try {
+            idle(30_000)
+            assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
+            handle.replacePlayer(replacement)
+            idle()
+            assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
+            handle.session.player.pause()
+            idle()
+            handle.session.player.play()
+            idle()
+            assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
+        } finally {
+            handle.close()
+            player.release()
+            replacement.release()
+            idle()
+        }
+    }
+
+    @Test
+    fun detachRemovesAPendingDeadlineCallback() {
+        for (byReplacement in listOf(true, false)) {
+            val player = StatePlayer(Player.STATE_BUFFERING)
+            val handle = open(player)
+            val replacement = StatePlayer()
+            try {
+                val wrapper = handle.session.player
+                assertTrue(pendingExpiry(wrapper), "The preparation deadline is scheduled")
+                if (byReplacement) handle.replacePlayer(replacement) else handle.close()
+                idle()
+                assertFalse(pendingExpiry(wrapper), "byReplacement=$byReplacement")
+            } finally {
+                handle.close()
+                player.release()
+                replacement.release()
+                idle()
+            }
+        }
+    }
+
+    private fun pendingExpiry(wrapper: Player): Boolean {
+        fun field(name: String) = wrapper.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(wrapper)
+        return (field("handler") as android.os.Handler).hasCallbacks(field("expiry") as Runnable)
     }
 
     @Test
@@ -300,7 +497,8 @@ class PlaybackSessionRebufferTest {
         shadowOf(Looper.getMainLooper()).idleFor(ms, TimeUnit.MILLISECONDS)
     }
 
-    private class StatePlayer(initial: Int = Player.STATE_READY) : SimpleBasePlayer(Looper.getMainLooper()) {
+    private class StatePlayer(initial: Int = Player.STATE_READY, playWhenReady: Boolean = true) :
+        SimpleBasePlayer(Looper.getMainLooper()) {
         var releases = 0
         private var state = State.Builder()
             .setAvailableCommands(
@@ -323,7 +521,7 @@ class PlaybackSessionRebufferTest {
                 )
             )
             .setPlaybackState(initial)
-            .setPlayWhenReady(true, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+            .setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setContentPositionMs(12_000)
             .build()
         override fun getState(): State = state
@@ -344,6 +542,11 @@ class PlaybackSessionRebufferTest {
         fun fail() {
             state = state.buildUpon().setPlaybackState(Player.STATE_IDLE)
                 .setPlayerError(PlaybackException("Example failure", null, PlaybackException.ERROR_CODE_IO_UNSPECIFIED)).build()
+            invalidateState()
+            idle()
+        }
+        fun recover(playbackState: Int) {
+            state = state.buildUpon().setPlayerError(null).setPlaybackState(playbackState).build()
             invalidateState()
             idle()
         }

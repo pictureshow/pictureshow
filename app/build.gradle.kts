@@ -19,8 +19,8 @@ android {
         applicationId = "app.pictureshow"
         minSdk = 23
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.3.0-rc12"
+        versionCode = 32
+        versionName = "0.3.0-rc30"
     }
     buildTypes {
         getByName("release") {
@@ -104,6 +104,7 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
+    implementation(libs.profileinstaller)
     coreLibraryDesugaring(libs.desugar)
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.compose.ui.test)

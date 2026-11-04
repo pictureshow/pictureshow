@@ -10,18 +10,26 @@ import android.content.Context
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.lifecycle.Lifecycle
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
@@ -41,6 +49,7 @@ import io.ktor.http.headersOf
 import java.io.InterruptedIOException
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Rule
@@ -62,6 +71,7 @@ class PlayerBackFeedbackTest {
     private lateinit var output: Media3PlaybackOutput
     private lateinit var http: HttpClient
     private var exits = 0
+    private val playbackRequested = CompletableDeferred<Unit>()
 
     @After fun cleanup() {
         compose.runOnIdle { if (::output.isInitialized) output.release() }
@@ -97,7 +107,88 @@ class PlayerBackFeedbackTest {
         }
     }
 
-    private fun launch(accessible: Boolean) {
+    @Test fun backCancelsAPreDecisionTrackOpenWithoutALateWindow() {
+        verifyPendingOpenCancellation(stopActivity = false)
+    }
+
+    @Test fun stoppingCancelsAPreDecisionTrackOpenWithoutALateWindow() {
+        verifyPendingOpenCancellation(stopActivity = true)
+    }
+
+    @Test fun aPreDecisionTrackOpenUsesTheFirstSourceWhenItsMetadataArrives() = verifyPreDecisionTrackOpen(true)
+
+    @Test fun aPreDecisionTrackOpenAlsoUsesAPlayableSourceWithoutAnId() = verifyPreDecisionTrackOpen(false)
+
+    private fun verifyPreDecisionTrackOpen(sourceWithId: Boolean) {
+        val decision = CompletableDeferred<Unit>()
+        try {
+            launch(true, decision, sourceWithId)
+            compose.onNodeWithText("Subtitles").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+            compose.onNodeWithText("Subtitles").assertIsFocused()
+            compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+            compose.waitUntil(5_000) {
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                compose.onAllNodesWithText("Subtitles").fetchSemanticsNodes().isEmpty()
+            }
+            compose.onNodeWithTag("player:panel").assertDoesNotExist()
+            decision.complete(Unit)
+            compose.waitUntil(10_000) {
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                output.player.value != null
+            }
+            if (!sourceWithId) println("nullable-source-player-ready")
+            compose.waitUntil(10_000) {
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                compose.onAllNodesWithTag("track:73").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithTag("player:panel").assertIsDisplayed()
+            compose.onNodeWithTag("track:73").assertIsDisplayed()
+            compose.onNodeWithTag("track:73").assertIsFocused()
+            assertEquals(0, exits)
+        } finally {
+            decision.complete(Unit)
+        }
+    }
+
+    private fun verifyPendingOpenCancellation(stopActivity: Boolean) {
+        val decision = CompletableDeferred<Unit>()
+        try {
+            launch(true, decision)
+            compose.onNodeWithText("Subtitles").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+            compose.onNodeWithText("Subtitles").assertIsFocused()
+            compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+            compose.waitUntil(5_000) {
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                compose.onAllNodesWithText("Subtitles").fetchSemanticsNodes().isEmpty()
+            }
+            compose.onNodeWithText("Subtitles").assertDoesNotExist()
+            compose.onNodeWithTag("player:panel").assertDoesNotExist()
+            if (stopActivity) {
+                compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+                compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+            } else {
+                compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+            }
+            compose.waitUntil(5_000) {
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                compose.onAllNodesWithText("Subtitles").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Subtitles").assertIsDisplayed()
+            decision.complete(Unit)
+            compose.waitUntil(10_000) {
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                output.player.value != null
+            }
+            compose.waitForIdle()
+            compose.onNodeWithTag("player:panel").assertDoesNotExist()
+            compose.onNodeWithText("Subtitles").assertIsDisplayed()
+            assertEquals(0, exits)
+        } finally {
+            decision.complete(Unit)
+        }
+    }
+
+    private fun launch(accessible: Boolean, pendingDecision: CompletableDeferred<Unit>? = null, sourceWithId: Boolean = true) {
         val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "fake")
         val item = MediaItem("episode", "An episode", "Episode", seriesId = "series")
         val store = object : DataStore<Preferences> {
@@ -105,16 +196,22 @@ class PlayerBackFeedbackTest {
             override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
                 transform(data.value).also { data.value = it }
         }
+        val sourceIdField = if (sourceWithId) "\"Id\":\"source\"," else ""
         http = HttpClient(MockEngine) {
             engine {
                 addHandler { request ->
+                    if (request.url.encodedPath.endsWith("/PlaybackInfo")) {
+                        playbackRequested.complete(Unit)
+                        pendingDecision?.await()
+                    }
                     val json = when {
                         request.url.encodedPath.endsWith(
                             "/PlaybackInfo"
                         ) ->
-                            """{"PlaySessionId":"viewing","MediaSources":[{"Id":"source","RunTimeTicks":600000000,
-                                "SupportsTranscoding":true,"TranscodingContainer":"ts","TranscodingSubProtocol":"hls",
-                                "TranscodingUrl":"/Videos/episode/master.m3u8","MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"}]}]}"""
+                            """{"PlaySessionId":"viewing","MediaSources":[{$sourceIdField"RunTimeTicks":600000000,
+                                "SupportsTranscoding":true,"DefaultSubtitleStreamIndex":73,"TranscodingContainer":"ts","TranscodingSubProtocol":"hls",
+                                "TranscodingUrl":"/Videos/episode/master.m3u8","MediaStreams":[{"Type":"Video","Index":0,"Codec":"h264"},
+                                {"Type":"Subtitle","Index":73,"Language":"en","Codec":"srt","Title":"Source track"}]}]}"""
                         request.url.encodedPath.endsWith(
                             "/Episodes"
                         ) ->
@@ -149,7 +246,7 @@ class PlayerBackFeedbackTest {
         compose.setContent { PictureshowTheme { PlayerItemScreen(account, item, 0, catalog, {}, { exits++ }, providedOutput = output) } }
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()
-            output.player.value != null
+            if (pendingDecision == null) output.player.value != null else playbackRequested.isCompleted
         }
         compose.waitForIdle()
     }

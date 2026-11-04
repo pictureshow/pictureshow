@@ -1,0 +1,1360 @@
+{
+  "schemaVersion": 1,
+  "suite": "recovery",
+  "context": {
+    "server": {
+      "id": "server",
+      "name": "Parity",
+      "url": "https://media.example.test/jellyfin",
+      "version": "12.0.0"
+    },
+    "account": {
+      "userId": "viewer",
+      "token": "fixture-token",
+      "deviceId": "account-device"
+    },
+    "identity": {
+      "deviceName": "Recovery TV",
+      "deviceId": "device",
+      "version": "0.1.0"
+    },
+    "capabilities": {
+      "name": "Recovery fixture",
+      "videoDecoders": [
+        {
+          "codec": "H264",
+          "profiles": [
+            "High"
+          ],
+          "maxWidth": 1920,
+          "maxHeight": 1080,
+          "maxFrameRate": 60.0
+        }
+      ],
+      "display": {
+        "maxWidth": 1920,
+        "maxHeight": 1080,
+        "maxRefreshRate": 60.0
+      },
+      "audioDecoders": [
+        {
+          "codec": "AAC",
+          "maxChannels": 2
+        }
+      ],
+      "audioOutput": {
+        "pcmChannels": 2
+      },
+      "settings": {
+        "maxStreamingBitrate": 4000000
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "recovery.seek.reduced-rate",
+      "operation": "seek-required",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": true,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.copied-video",
+      "operation": "seek-required",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=copy&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.explicit-rate-precedes-max",
+      "operation": "seek-required",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000&Framerate=60",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.average-rate-fallback",
+      "operation": "seek-required",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "AverageFrameRate": 59.94
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": true,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.live-excluded",
+      "operation": "seek-required",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ],
+            "LiveStreamId": "live"
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.equal-rate-excluded",
+      "operation": "seek-required",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=60&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.only-master-endpoint",
+      "operation": "seek-required",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/stream.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.start-tail-clamp",
+      "operation": "seek-start",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "targetMs": 59900
+      },
+      "expected": 55000,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.start-negative-clamp",
+      "operation": "seek-start",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "targetMs": -1
+      },
+      "expected": 0,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.url-copied-surround",
+      "operation": "seek-url",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000&AllowAudioStreamCopy=true&SubtitleStreamIndex=3&SubtitleMethod=External",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "startMs": 12345
+      },
+      "expected": {
+        "scheme": "https",
+        "host": "media.example.test",
+        "port": 443,
+        "path": "/jellyfin/Videos/film/stream.ts",
+        "query": {
+          "MediaSourceId": [
+            "source"
+          ],
+          "PlaySessionId": [
+            "session"
+          ],
+          "VideoCodec": [
+            "h264"
+          ],
+          "AudioCodec": [
+            "aac"
+          ],
+          "MaxFramerate": [
+            "30"
+          ],
+          "MaxAudioChannels": [
+            "6"
+          ],
+          "AudioStreamIndex": [
+            "1"
+          ],
+          "VideoBitrate": [
+            "8000000"
+          ],
+          "AllowAudioStreamCopy": [
+            "true"
+          ],
+          "SubtitleStreamIndex": [
+            "3"
+          ],
+          "StartTimeTicks": [
+            "123450000"
+          ],
+          "Static": [
+            "false"
+          ],
+          "CopyTimestamps": [
+            "false"
+          ],
+          "SubtitleMethod": [
+            "External"
+          ]
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/CopiedAudioTranscodeTest.kt"
+    },
+    {
+      "id": "recovery.seek.url-replaces-case-variants-strips-tokens",
+      "operation": "seek-url",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000&allowaudiostreamcopy=FALSE&starttimeticks=999&Static=true&copytimestamps=true&ApiKey=fixture-old&api_key=fixture-old2&SubtitleMethod=External",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "startMs": 20000
+      },
+      "expected": {
+        "scheme": "https",
+        "host": "media.example.test",
+        "port": 443,
+        "path": "/jellyfin/Videos/film/stream.ts",
+        "query": {
+          "MediaSourceId": [
+            "source"
+          ],
+          "PlaySessionId": [
+            "session"
+          ],
+          "VideoCodec": [
+            "h264"
+          ],
+          "AudioCodec": [
+            "aac"
+          ],
+          "MaxFramerate": [
+            "30"
+          ],
+          "MaxAudioChannels": [
+            "6"
+          ],
+          "AudioStreamIndex": [
+            "1"
+          ],
+          "VideoBitrate": [
+            "8000000"
+          ],
+          "StartTimeTicks": [
+            "200000000"
+          ],
+          "Static": [
+            "false"
+          ],
+          "CopyTimestamps": [
+            "false"
+          ],
+          "AllowAudioStreamCopy": [
+            "false"
+          ],
+          "SubtitleMethod": [
+            "External"
+          ]
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.seek.url-silent-default-subtitles",
+      "operation": "seek-url",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "RealFrameRate": 60.0
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "startMs": -50
+      },
+      "expected": {
+        "scheme": "https",
+        "host": "media.example.test",
+        "port": 443,
+        "path": "/jellyfin/Videos/film/stream.ts",
+        "query": {
+          "MediaSourceId": [
+            "source"
+          ],
+          "PlaySessionId": [
+            "session"
+          ],
+          "VideoCodec": [
+            "h264"
+          ],
+          "AudioCodec": [
+            "aac"
+          ],
+          "MaxFramerate": [
+            "30"
+          ],
+          "MaxAudioChannels": [
+            "6"
+          ],
+          "AudioStreamIndex": [
+            "1"
+          ],
+          "VideoBitrate": [
+            "8000000"
+          ],
+          "StartTimeTicks": [
+            "0"
+          ],
+          "Static": [
+            "false"
+          ],
+          "CopyTimestamps": [
+            "false"
+          ],
+          "AllowAudioStreamCopy": [
+            "false"
+          ],
+          "SubtitleMethod": [
+            "External"
+          ]
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekTest.kt"
+    },
+    {
+      "id": "recovery.audio.selected-index-before-default",
+      "operation": "audio-encodes",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "pcm_s16le",
+                "Channels": 2
+              },
+              {
+                "Type": "Audio",
+                "Index": 2,
+                "Codec": "aac",
+                "Channels": 2
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=2&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekAudioEligibilityTest.kt"
+    },
+    {
+      "id": "recovery.audio.channel-reason-survives-rewrite",
+      "operation": "audio-encodes",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": [
+            "AudioChannelsNotSupported"
+          ]
+        }
+      },
+      "expected": true,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekAudioEligibilityTest.kt"
+    },
+    {
+      "id": "recovery.audio.explicit-copy-before-channel-reason",
+      "operation": "audio-encodes",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=copy&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": [
+            "AudioChannelsNotSupported"
+          ]
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekAudioEligibilityTest.kt"
+    },
+    {
+      "id": "recovery.audio.codec-channel-cap-precedes-generic",
+      "operation": "audio-encodes",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=2&AudioStreamIndex=1&VideoBitrate=8000000&aac-audiochannels=8",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekAudioEligibilityTest.kt"
+    },
+    {
+      "id": "recovery.audio.unknown-selected-index",
+      "operation": "audio-encodes",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=99&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": false,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekAudioEligibilityTest.kt"
+    },
+    {
+      "id": "recovery.audio.no-tracks-no-tradeoff",
+      "operation": "audio-encodes",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": []
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        }
+      },
+      "expected": true,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/TranscodeSeekAudioEligibilityTest.kt"
+    },
+    {
+      "id": "recovery.preserve-video.replace-duplicate-codecs",
+      "operation": "preserve-video",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000&videocodec=hevc&AllowVideoStreamCopy=false&allowvideostreamcopy=false&SubtitleStreamIndex=4&SubtitleMethod=External",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "subtitleStreamIndex": 4
+      },
+      "expected": {
+        "method": "Transcode",
+        "mediaSourceId": "source",
+        "playSessionId": "session",
+        "headers": {
+          "Authorization": "fixture-header-only"
+        },
+        "transcodeReasons": [],
+        "url": {
+          "scheme": "https",
+          "host": "media.example.test",
+          "port": 443,
+          "path": "/jellyfin/Videos/film/master.m3u8",
+          "query": {
+            "MediaSourceId": [
+              "source"
+            ],
+            "PlaySessionId": [
+              "session"
+            ],
+            "AudioCodec": [
+              "aac"
+            ],
+            "MaxFramerate": [
+              "30"
+            ],
+            "MaxAudioChannels": [
+              "6"
+            ],
+            "AudioStreamIndex": [
+              "1"
+            ],
+            "VideoBitrate": [
+              "8000000"
+            ],
+            "SubtitleStreamIndex": [
+              "4"
+            ],
+            "SubtitleMethod": [
+              "External"
+            ],
+            "VideoCodec": [
+              "copy"
+            ],
+            "AllowVideoStreamCopy": [
+              "true"
+            ]
+          }
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/AudioRecoveryRequestTest.kt"
+    },
+    {
+      "id": "recovery.preserve-video.selected-burn-in-rejected",
+      "operation": "preserve-video",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Subtitle",
+                "Index": 4,
+                "Codec": "pgssub",
+                "DeliveryMethod": "Encode"
+              }
+            ],
+            "DefaultSubtitleStreamIndex": 4
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000&SubtitleStreamIndex=4&SubtitleMethod=Encode",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "subtitleStreamIndex": 4
+      },
+      "expected": {
+        "unplayable": "NO_COMPATIBLE_SOURCE"
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/AudioRecoveryRequestTest.kt"
+    },
+    {
+      "id": "recovery.preserve-video.explicit-off-beats-stale-encode",
+      "operation": "preserve-video",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Subtitle",
+                "Index": 4,
+                "Codec": "pgssub",
+                "DeliveryMethod": "Encode"
+              }
+            ],
+            "DefaultSubtitleStreamIndex": 4
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000&SubtitleStreamIndex=4&SubtitleMethod=Encode",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "subtitleStreamIndex": -1
+      },
+      "expected": {
+        "method": "Transcode",
+        "mediaSourceId": "source",
+        "playSessionId": "session",
+        "headers": {
+          "Authorization": "fixture-header-only"
+        },
+        "transcodeReasons": [],
+        "url": {
+          "scheme": "https",
+          "host": "media.example.test",
+          "port": 443,
+          "path": "/jellyfin/Videos/film/master.m3u8",
+          "query": {
+            "MediaSourceId": [
+              "source"
+            ],
+            "PlaySessionId": [
+              "session"
+            ],
+            "AudioCodec": [
+              "aac"
+            ],
+            "MaxFramerate": [
+              "30"
+            ],
+            "MaxAudioChannels": [
+              "6"
+            ],
+            "AudioStreamIndex": [
+              "1"
+            ],
+            "VideoBitrate": [
+              "8000000"
+            ],
+            "SubtitleStreamIndex": [
+              "4"
+            ],
+            "SubtitleMethod": [
+              "Encode"
+            ],
+            "VideoCodec": [
+              "copy"
+            ],
+            "AllowVideoStreamCopy": [
+              "true"
+            ]
+          }
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/AudioRecoveryRequestTest.kt"
+    },
+    {
+      "id": "recovery.preserve-video.server-default-url-burn-in-rejected",
+      "operation": "preserve-video",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Subtitle",
+                "Index": 4,
+                "Codec": "subrip",
+                "DeliveryMethod": "External"
+              }
+            ],
+            "DefaultSubtitleStreamIndex": 4
+          },
+          "method": "Transcode",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000&SubtitleMethod=Encode",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "subtitleStreamIndex": null
+      },
+      "expected": {
+        "unplayable": "NO_COMPATIBLE_SOURCE"
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/AudioRecoveryRequestTest.kt"
+    },
+    {
+      "id": "recovery.preserve-video.direct-unchanged",
+      "operation": "preserve-video",
+      "input": {
+        "decision": {
+          "itemId": "film",
+          "source": {
+            "Id": "source",
+            "RunTimeTicks": 600000000,
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts",
+            "DefaultAudioStreamIndex": 1,
+            "MediaStreams": [
+              {
+                "Type": "Video",
+                "Index": 0,
+                "Codec": "av1",
+                "RealFrameRate": 60.0
+              },
+              {
+                "Type": "Audio",
+                "Index": 1,
+                "Codec": "aac",
+                "Channels": 6
+              }
+            ]
+          },
+          "method": "DirectPlay",
+          "url": "https://media.example.test/jellyfin/Videos/film/master.m3u8?MediaSourceId=source&PlaySessionId=session&VideoCodec=h264&AudioCodec=aac&MaxFramerate=30&MaxAudioChannels=6&AudioStreamIndex=1&VideoBitrate=8000000",
+          "headers": {
+            "Authorization": "fixture-header-only"
+          },
+          "playSessionId": "session",
+          "transcodeReasons": []
+        },
+        "subtitleStreamIndex": 4
+      },
+      "expected": {
+        "method": "DirectPlay",
+        "mediaSourceId": "source",
+        "playSessionId": "session",
+        "headers": {
+          "Authorization": "fixture-header-only"
+        },
+        "transcodeReasons": [],
+        "url": {
+          "scheme": "https",
+          "host": "media.example.test",
+          "port": 443,
+          "path": "/jellyfin/Videos/film/master.m3u8",
+          "query": {
+            "MediaSourceId": [
+              "source"
+            ],
+            "PlaySessionId": [
+              "session"
+            ],
+            "VideoCodec": [
+              "h264"
+            ],
+            "AudioCodec": [
+              "aac"
+            ],
+            "MaxFramerate": [
+              "30"
+            ],
+            "MaxAudioChannels": [
+              "6"
+            ],
+            "AudioStreamIndex": [
+              "1"
+            ],
+            "VideoBitrate": [
+              "8000000"
+            ]
+          }
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/AudioRecoveryRequestTest.kt"
+    },
+    {
+      "id": "recovery.prepare.actual-audio-only-recovery",
+      "operation": "prepare-preserve-video",
+      "input": {
+        "request": {
+          "startMs": 90123,
+          "mediaSourceId": "source",
+          "audioStreamIndex": 2,
+          "subtitleStreamIndex": 4,
+          "enableDirectPlay": false,
+          "enableDirectStream": false,
+          "allowVideoStreamCopy": true,
+          "allowAudioStreamCopy": false,
+          "requireVideoStreamCopy": true
+        },
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsTranscoding": true,
+              "TranscodingUrl": "/Videos/film/master.m3u8?VideoCodec=h264,hevc&AudioCodec=aac&AudioStreamIndex=2&AllowAudioStreamCopy=false&SubtitleStreamIndex=4&SubtitleMethod=External",
+              "MediaStreams": [
+                {
+                  "Type": "Subtitle",
+                  "Index": 4,
+                  "Codec": "subrip",
+                  "DeliveryMethod": "External"
+                }
+              ],
+              "TranscodingSubProtocol": "hls",
+              "TranscodingContainer": "ts"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "request": {
+          "UserId": "viewer",
+          "MaxStreamingBitrate": 4000000,
+          "StartTimeTicks": 901230000,
+          "MediaSourceId": "source",
+          "AudioStreamIndex": 2,
+          "SubtitleStreamIndex": 4,
+          "EnableDirectPlay": false,
+          "EnableDirectStream": false,
+          "AllowVideoStreamCopy": true,
+          "AllowAudioStreamCopy": false
+        },
+        "outcome": {
+          "method": "Transcode",
+          "mediaSourceId": "source",
+          "playSessionId": "session",
+          "headers": {
+            "Authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Recovery%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\""
+          },
+          "transcodeReasons": [],
+          "url": {
+            "scheme": "https",
+            "host": "media.example.test",
+            "port": 443,
+            "path": "/jellyfin/Videos/film/master.m3u8",
+            "query": {
+              "AudioCodec": [
+                "aac"
+              ],
+              "AudioStreamIndex": [
+                "2"
+              ],
+              "AllowAudioStreamCopy": [
+                "false"
+              ],
+              "SubtitleStreamIndex": [
+                "4"
+              ],
+              "SubtitleMethod": [
+                "External"
+              ],
+              "VideoCodec": [
+                "copy"
+              ],
+              "AllowVideoStreamCopy": [
+                "true"
+              ]
+            }
+          }
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/AudioRecoveryRequestTest.kt"
+    },
+    {
+      "id": "recovery.prepare.actual-burn-in-rejection",
+      "operation": "prepare-preserve-video",
+      "input": {
+        "request": {
+          "startMs": 90123,
+          "mediaSourceId": "source",
+          "audioStreamIndex": 2,
+          "subtitleStreamIndex": 4,
+          "enableDirectPlay": false,
+          "enableDirectStream": false,
+          "allowVideoStreamCopy": true,
+          "allowAudioStreamCopy": false,
+          "requireVideoStreamCopy": true
+        },
+        "response": {
+          "MediaSources": [
+            {
+              "Id": "source",
+              "SupportsTranscoding": true,
+              "TranscodingUrl": "/Videos/film/master.m3u8?VideoCodec=h264,hevc&AudioCodec=aac&AudioStreamIndex=2&AllowAudioStreamCopy=false&SubtitleStreamIndex=4&SubtitleMethod=Encode",
+              "MediaStreams": [
+                {
+                  "Type": "Subtitle",
+                  "Index": 4,
+                  "Codec": "pgssub",
+                  "DeliveryMethod": "Encode"
+                }
+              ],
+              "TranscodingSubProtocol": "hls",
+              "TranscodingContainer": "ts"
+            }
+          ],
+          "PlaySessionId": "session"
+        }
+      },
+      "expected": {
+        "request": {
+          "UserId": "viewer",
+          "MaxStreamingBitrate": 4000000,
+          "StartTimeTicks": 901230000,
+          "MediaSourceId": "source",
+          "AudioStreamIndex": 2,
+          "SubtitleStreamIndex": 4,
+          "EnableDirectPlay": false,
+          "EnableDirectStream": false,
+          "AllowVideoStreamCopy": true,
+          "AllowAudioStreamCopy": false
+        },
+        "outcome": {
+          "unplayable": "NO_COMPATIBLE_SOURCE"
+        }
+      },
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/playback/AudioRecoveryRequestTest.kt"
+    }
+  ]
+}

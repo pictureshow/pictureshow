@@ -34,10 +34,19 @@ internal class Media3PlaybackOutput(
     private val server: Server,
     private val title: String? = null,
     private val upstream: androidx.media3.datasource.DataSource.Factory? = null,
-    private val renderersFactory: RenderersFactory? = null
+    private val renderersFactory: RenderersFactory? = null,
+    private val subtitleDelay: SubtitleDelay = SubtitleDelay()
 ) : PlaybackOutput {
+    private val viewingSpeed = ViewingPlaybackSpeed()
+    val speed = viewingSpeed.state
+    fun setSpeed(value: Float) {
+        viewingSpeed.select(value, mutablePlayer.value)
+        PlaybackDiagnostics.write("speed requested=$value effective=${speed.value.speed} pitch=1.0 positionMs=${position().milliseconds}")
+    }
     private val mutablePlayer = MutableStateFlow<Player?>(null)
     val player = mutablePlayer.asStateFlow()
+    var subtitleDiagnostics: SubtitleCueDiagnostics? = null
+        private set
     var onReady: (PlayDecision, PlaybackPosition, Long) -> Unit = { _, _, _ -> }
     var onBuffering: (Boolean, PlayDecision) -> Unit = { _, _ -> }
     var onProgress: (PlayDecision) -> Unit = {}
@@ -47,17 +56,47 @@ internal class Media3PlaybackOutput(
     var onStop: () -> Unit = {}
     private val fdDiagnostics = PlaybackFdDiagnostics()
     private var activePlayer: ExoPlayer? = null
+    private var loadDiagnostics: PlaybackLoadDiagnostics? = null
+    private val loadHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val loadSummary = object : Runnable {
+        override fun run() {
+            loadDiagnostics?.summary()
+            if (loadDiagnostics != null) loadHandler.postDelayed(this, 10_000)
+        }
+    }
     private var playback: PlaybackReleaseFence.Playback? = null
     private var reopenState: ReopeningPlayer? = null
     var onSeek: (Long, PlayDecision) -> Boolean = { _, _ -> false }
     private var current: PlayDecision? = null
     private var saved = PlaybackPosition(0, false)
+    private val mutableForeground = MutableStateFlow(true)
+    val foreground = mutableForeground.asStateFlow()
+    private val mutablePauseIntent = MutableStateFlow(false)
+    val pauseIntent = mutablePauseIntent.asStateFlow()
+
+    var stopGeneration: Long = 0
+        private set
+
+    /** Stop belongs to the viewing, including opens that have not published a player yet. */
+    fun setForeground(value: Boolean) {
+        if (!value && mutableForeground.value) stopGeneration++
+        mutableForeground.value = value
+        if (!value) pause()
+        val snapshot = position()
+        PlaybackDiagnostics.write("lifecycle foreground=$value paused=${snapshot.paused} positionMs=${snapshot.milliseconds}")
+    }
+
+    private fun playIntent(requested: Boolean): Boolean {
+        if (requested && !mutableForeground.value) return false
+        if (requested) mutablePauseIntent.value = false
+        return requested
+    }
     private var completedPosition: PlaybackPosition? = null
     private var audio = -1
     private var subtitle = -1
     private var listener: Player.Listener? = null
     private var mediaSession: PlaybackMediaSession.Handle? = null
-    private val subtitleDelay = SubtitleDelay()
+    private var subtitleServerStartMs = 0L
     private var physicalEnd: PhysicalPlaybackEnd? = null
     var passthroughEnabled: Boolean = true
     val subtitleDelayMs: Int get() = subtitleDelay.milliseconds
@@ -73,14 +112,20 @@ internal class Media3PlaybackOutput(
         }
     }
 
-    override fun position(): PlaybackPosition = completedPosition ?: mutablePlayer.value?.let(::boundedPlaybackPosition) ?: saved
+    override fun position(): PlaybackPosition {
+        val snapshot = completedPosition ?: mutablePlayer.value?.let(::boundedPlaybackPosition) ?: saved
+        return if (mutablePauseIntent.value || !mutableForeground.value) snapshot.copy(paused = true) else snapshot
+    }
 
     override fun open(decision: PlayDecision, positionMs: Long, audioIndex: Int, subtitleIndex: Int, paused: Boolean) {
         releasePlayer(closeSession = false)
         current = decision
+        val captions = SubtitleCueDiagnostics(decision)
+        subtitleDiagnostics = captions
+        captions.selected(subtitleIndex, paused, positionMs)
         audio = audioIndex
         subtitle = subtitleIndex
-        saved = PlaybackPosition(positionMs, paused)
+        saved = PlaybackPosition(positionMs, paused || mutablePauseIntent.value || !mutableForeground.value)
         completedPosition = null
         val selector = PictureshowTrackSelector(context, decision.method == PlayMethod.Transcode)
         selector.parameters = selector.buildUponParameters()
@@ -88,7 +133,9 @@ internal class Media3PlaybackOutput(
             .setPreferredTextLanguage(Locale.getDefault().language)
             .setSelectUndeterminedTextLanguage(false)
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, audio < 0)
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitle < 0)
+            // Publish track groups before selecting the exact server index. Otherwise Media3's
+            // language default can briefly start an unselected external subtitle request.
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
         val serverSeek = TranscodeSeek.required(decision)
         val videoClock = serverSeek && !TranscodeSeek.audioAlreadyEncodes(decision)
@@ -144,7 +191,16 @@ internal class Media3PlaybackOutput(
             null
         }
         physicalEnd = detector
-        val dataSources = PlaybackMedia.dataSourceFactory(server, decision, upstream ?: PlaybackMedia.httpFactory(server, decision))
+        val loads = PlaybackLoadDiagnostics()
+        loadDiagnostics = loads
+        val sourceData = PlaybackMedia.dataSourceFactory(
+            server,
+            decision,
+            upstream ?: PlaybackMedia.httpFactory(server, decision, nativeHlsMedia = false)
+        )
+        val dataSources = androidx.media3.datasource.DataSource.Factory {
+            sourceData.createDataSource().also { it.addTransferListener(loads) }
+        }
         val extractors = if (videoClock) {
             VideoClockExtractorsFactory { PlaybackDiagnostics.write(decision, "video-clock", it) }
         } else {
@@ -152,12 +208,30 @@ internal class Media3PlaybackOutput(
         }
         val sourceFactory = DefaultMediaSourceFactory(context, extractors)
             .setDataSourceFactory(detector?.sourceFactory(dataSources) ?: dataSources)
-        val baseRenderers = renderersFactory ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled)
+        val baseRenderers =
+            renderersFactory ?: PictureshowRenderersFactory(context, subtitleDelay, passthroughEnabled, captions) { encoded ->
+                loadHandler.post {
+                    if (current === decision) viewingSpeed.audioOutput(encoded, mutablePlayer.value)
+                }
+            }
         val renderers = RenderersFactory { handler, video, audio, text, metadata ->
             val created = baseRenderers.createRenderers(handler, video, audio, text, metadata)
             videoRenderers = created.filterIsInstance<EndVideoRenderer>()
             val monitored = VideoEndDiagnostics { logVideo("audio-drained-video-pending") }.wrap(created)
-            detector?.wrap(monitored, handler) ?: monitored
+            val final = detector?.wrap(monitored, handler) ?: monitored
+            final.map { renderer ->
+                if (renderer.trackType == C.TRACK_TYPE_TEXT) {
+                    OptionalSubtitleRenderer(renderer) {
+                        val av = final.filter {
+                            it.trackType in listOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO) &&
+                                it.state != androidx.media3.exoplayer.Renderer.STATE_DISABLED
+                        }
+                        av.isNotEmpty() && av.all { it.isEnded }
+                    }
+                } else {
+                    renderer
+                }
+            }.toTypedArray()
         }
         val playbackThread = PlaybackReleaseFence.playback(context)
         playback = playbackThread
@@ -177,17 +251,12 @@ internal class Media3PlaybackOutput(
             throw failure
         }
         activePlayer = next
-        subtitleDelay.sourceStartMs = if (serverSeek &&
-            decision.mediaSource.mediaStreams.any {
-                it.type == MediaStreamType.Subtitle && it.index == subtitleIndex && PlaybackMedia.subtitleUsesFullTimeline(server, it)
-            }
-        ) {
-            startMs
-        } else {
-            0
-        }
+        subtitleServerStartMs = if (serverSeek) startMs else 0
+        updateSubtitleOffset(subtitleIndex)
         next.setAudioAttributes(AudioAttributes.DEFAULT, true)
         next.setHandleAudioBecomingNoisy(true)
+        next.addAnalyticsListener(loads)
+        loadHandler.postDelayed(loadSummary, 10_000)
         next.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
             private var firstVideoDecoder = true
             override fun onVideoDecoderInitialized(
@@ -235,8 +304,10 @@ internal class Media3PlaybackOutput(
                 }
             }
         })
+        // Set decoder parameters before the stateful wrappers can snapshot an empty, idle player.
+        viewingSpeed.apply(next)
         val gated = ReleaseGatedPlayer(next)
-        val managed = ReopeningPlayer(gated)
+        val managed = ReopeningPlayer(gated, ::playIntent)
         reopenState = managed
         val exposed = if (serverSeek) {
             TranscodeSeekPlayer(managed, positionMs, requireNotNull(decision.mediaSource.runTimeTicks) / 10_000) { target ->
@@ -248,6 +319,10 @@ internal class Media3PlaybackOutput(
         var initialReady = false
         var initialTargetMs = positionMs
         listener = object : Player.Listener {
+            override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
+                if (activePlayer === next) viewingSpeed.observed(playbackParameters)
+            }
+
             override fun onRenderedFirstFrame() {
                 if (BuildConfig.DEBUG && activePlayer === next) {
                     Log.d(
@@ -279,7 +354,7 @@ internal class Media3PlaybackOutput(
                     PlaybackDiagnostics.write(
                         decision,
                         "ready",
-                        "requestedMs=$readyTargetMs appliedMs=${readyPosition.milliseconds} seekable=${next.isCurrentMediaItemSeekable} durationMs=${exposed.duration}"
+                        "requestedMs=$readyTargetMs appliedMs=${readyPosition.milliseconds} paused=${readyPosition.paused} foreground=${mutableForeground.value} seekable=${next.isCurrentMediaItemSeekable} durationMs=${exposed.duration}"
                     )
                     if (!initialReady) {
                         initialReady = true
@@ -293,6 +368,15 @@ internal class Media3PlaybackOutput(
                     onReady(decision, readyPosition, readyTargetMs)
                 }
                 if (playbackState == Player.STATE_ENDED) endSignal.ended()
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (activePlayer === next) {
+                    PlaybackDiagnostics.write(
+                        decision,
+                        "play-state",
+                        "playing=$isPlaying paused=${position().paused} foreground=${mutableForeground.value} positionMs=${position().milliseconds}"
+                    )
+                }
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (activePlayer === next) {
@@ -316,13 +400,14 @@ internal class Media3PlaybackOutput(
             }
             override fun onTracksChanged(tracks: Tracks) {
                 if (activePlayer === next) {
-                    if (decision.method != PlayMethod.Transcode) select(MediaStreamType.Audio, audio)
+                    captions.tracks(decision.mediaSource.mediaStreams, tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT })
+                    if (decision.method != PlayMethod.Transcode) selectTrack(MediaStreamType.Audio, audio, false)
                     val selected = decision.mediaSource.mediaStreams.firstOrNull {
                         it.index == subtitle &&
                             it.type == MediaStreamType.Subtitle
                     }
                     if (selected?.deliveryMethod != app.pictureshow.core.playback.SubtitleDeliveryMethod.Encode) {
-                        select(MediaStreamType.Subtitle, subtitle)
+                        selectTrack(MediaStreamType.Subtitle, subtitle, false)
                     }
                 }
             }
@@ -360,16 +445,35 @@ internal class Media3PlaybackOutput(
             }
         }.also(exposed::addListener)
         mutablePlayer.value = exposed
-        val clipped = if (serverSeek && positionMs > startMs) {
-            media.buildUpon().setClippingConfiguration(
-                androidx.media3.common.MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(positionMs - startMs).setAllowUnseekableMedia(true).build()
-            ).build()
+        if (decision.method == PlayMethod.Transcode &&
+            !serverSeek &&
+            androidx.media3.common.util.Util.inferContentTypeForUriAndMimeType(
+                requireNotNull(media.localConfiguration).uri,
+                media.localConfiguration?.mimeType
+            ) == C.CONTENT_TYPE_HLS
+        ) {
+            val segmentData = PlaybackMedia.dataSourceFactory(server, decision, upstream ?: PlaybackMedia.httpFactory(server, decision))
+            val segments = androidx.media3.datasource.DataSource.Factory {
+                segmentData.createDataSource().also { it.addTransferListener(loads) }
+            }
+            val hls = HlsPreparationSource.create(media, dataSources, segments, captions::loaded) { requestedUs, prepareUs ->
+                PlaybackDiagnostics.write(decision, "hls-bootstrap", "requestedUs=$requestedUs prepareUs=$prepareUs")
+            }
+            next.setMediaSource(hls, positionMs)
         } else {
-            media
+            val unclipped = media.buildUpon().setSubtitleConfigurations(emptyList()).build()
+            val primary = sourceFactory.createMediaSource(unclipped)
+            val merged = IndependentSubtitleSource.merge(primary, media, dataSources, captions::loaded)
+            val source = if (serverSeek && positionMs > startMs) {
+                androidx.media3.exoplayer.source.ClippingMediaSource.Builder(merged)
+                    .setStartPositionMs(positionMs - startMs).setAllowUnseekableMedia(true).build()
+            } else {
+                merged
+            }
+            next.setMediaSource(source, if (serverSeek) 0 else positionMs)
         }
-        next.setMediaItem(clipped, if (serverSeek) 0 else positionMs)
-        next.playWhenReady = !paused
+        next.playWhenReady =
+            app.pictureshow.core.playback.PlaybackVisibility.playWhenReady(!paused, true, mutableForeground.value, mutablePauseIntent.value)
         // Publish a prepared replacement: IDLE would advertise no media to external controllers.
         gated.hold()
         playbackThread.prepare {
@@ -383,13 +487,21 @@ internal class Media3PlaybackOutput(
         }
     }
 
-    override fun select(type: MediaStreamType, index: Int): Boolean {
+    override fun reselect(type: MediaStreamType, index: Int) {
+        if (type == MediaStreamType.Subtitle) {
+            val snapshot = position()
+            subtitleDiagnostics?.selected(index, snapshot.paused, snapshot.milliseconds)
+        }
+    }
+
+    override fun select(type: MediaStreamType, index: Int): Boolean = selectTrack(type, index, true)
+
+    private fun selectTrack(type: MediaStreamType, index: Int, choice: Boolean): Boolean {
         val active = activePlayer ?: return false
         val trackType = if (type == MediaStreamType.Audio) C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
         val parameters = active.trackSelectionParameters.buildUpon()
-        if (index < 0) {
-            val next = parameters.setTrackTypeDisabled(trackType, true).clearOverridesOfType(trackType).build()
-            if (next != active.trackSelectionParameters) active.trackSelectionParameters = next
+        val next = if (index < 0) {
+            parameters.setTrackTypeDisabled(trackType, true).clearOverridesOfType(trackType).build()
         } else {
             val stream = current?.mediaSource?.mediaStreams?.firstOrNull { it.type == type && it.index == index } ?: return false
             val chosen = PlaybackTracks.find(
@@ -398,12 +510,31 @@ internal class Media3PlaybackOutput(
                 active.currentTracks.groups.filter { it.type == trackType }
             ) ?: return false
             if (!chosen.first.isTrackSupported(chosen.second, false)) return false
-            val next = parameters.setTrackTypeDisabled(trackType, false)
+            parameters.setTrackTypeDisabled(trackType, false)
                 .setOverrideForType(TrackSelectionOverride(chosen.first.mediaTrackGroup, chosen.second)).build()
-            if (next != active.trackSelectionParameters) active.trackSelectionParameters = next
         }
-        if (type == MediaStreamType.Audio) audio = index else subtitle = index
+        if (type == MediaStreamType.Audio) {
+            audio = index
+        } else {
+            subtitle = index
+            if (choice) subtitleDiagnostics?.selected(index, !active.playWhenReady, position().milliseconds)
+            // The playback thread may reset the text renderer as soon as this command is posted.
+            // Publish its new clock first, or a full-file -> rebased switch can reset at the old
+            // full-file time and discard every newly selected cue as preceding the reset.
+            updateSubtitleOffset(index)
+        }
+        if (next != active.trackSelectionParameters) active.trackSelectionParameters = next
         return true
+    }
+
+    private fun updateSubtitleOffset(index: Int) {
+        val stream = current?.mediaSource?.mediaStreams?.firstOrNull {
+            it.type == MediaStreamType.Subtitle && it.index == index
+        }
+        subtitleDelay.sourceStartMs = app.pictureshow.core.playback.ExternalSubtitleLoading.sourceOffsetMs(
+            stream != null && PlaybackMedia.subtitleUsesFullTimeline(server, stream),
+            subtitleServerStartMs
+        )
     }
 
     /** Snapshot before EOS releases the decoder; both the UI and Stop use this same final clock. */
@@ -421,7 +552,11 @@ internal class Media3PlaybackOutput(
     }
 
     override fun pause() {
+        mutablePauseIntent.value = true
+        saved = saved.copy(paused = true)
+        completedPosition = completedPosition?.copy(paused = true)
         mutablePlayer.value?.pause()
+        activePlayer?.pause()
     }
 
     override fun beginSeek() {
@@ -433,6 +568,9 @@ internal class Media3PlaybackOutput(
     override fun release() = releasePlayer(closeSession = true)
 
     private fun releasePlayer(closeSession: Boolean) {
+        loadHandler.removeCallbacks(loadSummary)
+        loadDiagnostics?.summary(final = true)
+        loadDiagnostics = null
         physicalEnd?.invalidate()
         physicalEnd = null
         val active = activePlayer

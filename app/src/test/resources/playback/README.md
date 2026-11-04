@@ -17,3 +17,16 @@ ffmpeg -f lavfi -i anullsrc=cl=5.1:r=48000 -t 1 -c:a libfdk_aac -b:a 320k -map_m
 ```
 
 Both 5.1 encoders produce the same two-byte AudioSpecificConfig (`11b0`) when extracted from ADTS. Stereo produces `1190`.
+
+`embedded-text.mp4` remuxes the original generated H.264/AAC test pattern above and an original
+SubRip cue (0–3 s, “Embedded caption”) to MP4 with `mov_text`. Generated with FFmpeg `-c:v copy
+-c:a copy -c:s mov_text -movflags +faststart`. It covers native container text selection after
+external subtitle preparation was isolated; no household media is included.
+
+`server-seek.ts` is an original six-second 64×64 H.264/AAC stereo test pattern. It provides
+real samples beyond the server-seek fixture's two-second residual clipping point (the short
+preroll fixture ends before that point). Generated with FFmpeg:
+
+```sh
+ffmpeg -f lavfi -i testsrc2=size=64x64:rate=30 -f lavfi -i anullsrc=r=48000:cl=stereo -t 6 -c:v libx264 -preset ultrafast -threads 1 -g 60 -c:a aac -b:a 64k -map_metadata -1 -f mpegts server-seek.ts
+```

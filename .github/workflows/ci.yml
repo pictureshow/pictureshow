@@ -20,9 +20,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - run: ./gradlew check assembleDebug
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: always()
         with:
           name: unit-test-reports
+          retention-days: 5
           path: |
             **/build/test-results/**
             **/build/reports/tests/**

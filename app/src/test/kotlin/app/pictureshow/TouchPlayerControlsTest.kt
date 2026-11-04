@@ -189,7 +189,7 @@ class TouchPlayerControlsTest {
         compose.runOnIdle {
             host.position = 50_000
             host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
-            host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
+            host.nextLookup = TouchEpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
         }
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()

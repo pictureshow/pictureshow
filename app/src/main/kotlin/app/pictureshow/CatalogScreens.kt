@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -70,23 +72,28 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.state.ToggleableState
@@ -573,12 +580,12 @@ fun CatalogGrid(
     val firstSort = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
+    // Grid headings/card focus provide context. A navigation destination is not a pane:
+    // late pane events from this departing grid would speak its title over detail focus.
     Column(
         modifier = Modifier.fillMaxSize().background(
             CatalogBackground
-        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup().semantics {
-            if (restored) paneTitle = state.parent.name
-        },
+        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CatalogHeading(state.parent.name)
@@ -684,7 +691,7 @@ fun CatalogGrid(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun CatalogDetail(
     state: CatalogDetailState,
@@ -693,35 +700,729 @@ fun CatalogDetail(
     onPlayed: () -> Unit,
     onFavorite: () -> Unit,
     onRetry: () -> Unit,
-    onPlay: (MediaItem, Boolean) -> Unit = { _, _ -> }
+    onPlay: (MediaItem, Boolean) -> Unit = { _, _ -> },
+    onFocusRestored: (String, Boolean) -> Unit = { _, _ -> },
+    onPendingAction: ((() -> Unit) -> Boolean)? = null,
+    onPendingFocus: () -> Unit = {},
+    origin: MediaItem? = null,
+    onPendingControlsReady: (Boolean) -> Unit = {},
+    onPendingQueueNeeded: () -> Unit = {},
+    onPendingQueueExpired: (() -> Boolean)? = null,
+    onPlayedRequest: () -> Unit = {}
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    DisposableEffect(Unit) {
+        detailTiming("composition-first")
+        onDispose { }
+    }
+    val reportFocus by rememberUpdatedState(onFocusRestored)
+    val focusHost = LocalView.current
     val list = rememberLazyListState()
     val initial = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     var selectedSection by rememberSaveable { mutableStateOf("header") }
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
+    var arrivalPending by remember { mutableStateOf(true) }
+    var playbackReturn by remember { mutableStateOf(state.playbackPending) }
+    var playbackLayout by rememberSaveable { mutableStateOf(state.playbackPending) }
+    var playbackHeader by remember { mutableStateOf<MediaItem?>(null) }
+    var pendingFailed by remember { mutableStateOf(false) }
+    var commandNotice by remember { mutableStateOf<String?>(null) }
+    var pendingExpired by remember { mutableStateOf(false) }
+    var expiryReported by remember { mutableStateOf(false) }
+    var recoveryMessage by remember { mutableStateOf<String?>(null) }
+    var retryWorking by remember { mutableStateOf(false) }
+    var retryCueBaseline by remember { mutableStateOf<Long?>(null) }
+    var recoveryFocusOwned by remember { mutableStateOf(false) }
+    var recoveryTarget by remember { mutableStateOf<String?>(null) }
+    var recoveryTargetInputRevision by remember { mutableIntStateOf(-1) }
+    var retryFocused by remember { mutableStateOf(false) }
+    var recoverySelectKey by remember { mutableStateOf<Key?>(null) }
+    var mutationDataReady by remember {
+        mutableStateOf(!state.loading && !state.playbackPending && state.error == null && state.item != null)
+    }
+    // Report acknowledgement can precede this model's authoritative read. Keep its
+    // existing header live until loading and item readiness agree on the fresh state.
+    val coldWaiting = app.pictureshow.core.detailNeedsPendingControls(
+        state.loading,
+        arrivalPending,
+        onPendingAction != null,
+        playbackReturn || state.playbackPending
+    )
+    val playbackWaiting = state.playbackPending ||
+        coldWaiting ||
+        (playbackReturn && state.error == null && state.loading)
     var semanticsRevealed by remember { mutableStateOf(false) }
+    var pendingSemanticsRevealed by remember { mutableStateOf(false) }
+    val pendingPresentationVisible = app.pictureshow.core.detailPendingPresentationVisible(
+        playbackWaiting,
+        lifecycleState == Lifecycle.State.RESUMED,
+        pendingSemanticsRevealed
+    )
+    var presentHeldLabels by remember(pendingPresentationVisible) { mutableStateOf(false) }
+    LaunchedEffect(pendingPresentationVisible) {
+        if (pendingPresentationVisible) {
+            delay(app.pictureshow.core.DETAIL_PENDING_LABEL_GRACE_MILLIS)
+            presentHeldLabels = true
+        }
+    }
+    var pendingFocusRestored by remember { mutableStateOf(false) }
     val pendingFocus = remember { FocusRequester() }
+    val playedFocus = remember { FocusRequester() }
+    val favoriteFocus = remember { FocusRequester() }
+    val fromStartFocus = remember { FocusRequester() }
+    var pendingHeaderTarget by remember { mutableStateOf("primary") }
+    var headerInputTarget by remember { mutableStateOf<String?>(null) }
+    var pendingViewerMoved by remember { mutableStateOf(false) }
+    val readiness = remember { app.pictureshow.core.DetailReadyFeedback() }
+    val pendingFeedback = remember { app.pictureshow.core.DetailPendingFeedback() }
+    var readyDeliveryTarget by remember { mutableStateOf<String?>(null) }
+    var readyDeliveryLabel by remember { mutableStateOf<String?>(null) }
+    // TalkBack keeps one waiting content-change utterance: a newer one replaces it. Give a
+    // pending cue queued behind arrival speech its turn before Ready can replace it.
+    var pendingCueRevision by remember { mutableIntStateOf(0) }
+    var pendingCueQueued by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingCueRevision) {
+        if (pendingCueRevision > 0) {
+            delay(app.pictureshow.core.DETAIL_READY_AFTER_PENDING_CUE_MILLIS)
+            pendingCueQueued = false
+        }
+    }
+    val feedbackChannel =
+        rememberDetailFeedbackChannel(playbackWaiting && pendingSemanticsRevealed && lifecycleState == Lifecycle.State.RESUMED) { target ->
+            if (target == headerInputTarget) readiness.presented(target)
+        }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        retryCueBaseline = null
+        feedbackChannel.clearReaderFocus()
+    }
+    val readerMovement = remember { PlaybackReaderMovement() }
+    val reportLive by rememberUpdatedState(onPendingControlsReady)
+    DisposableEffect(Unit) {
+        onDispose {
+            reportLive(false)
+            recoverySelectKey = null
+        }
+    }
+    // A failed authoritative read (unlike a failed write) cannot expose stale commands.
+    // The action budget ends in this same recovery state, before the transport timer fires.
+    val readFailure = app.pictureshow.core.detailReadHasFailure(state.readFailed, state.error, mutationDataReady)
+    val readSettled = !state.loading &&
+        state.error == null &&
+        !state.readFailed &&
+        (!state.playbackPending || state.readSucceeded)
+    // Derive settlement in this composition: an effect with the previous recovery value
+    // must not re-arm pendingFailed after the successful read's SideEffect clears it.
+    val recoveryActive = !readSettled && (recoveryMessage != null || readFailure || (pendingExpired && playbackWaiting))
+    // A second refresh may start while focus is being acknowledged. Retain the
+    // same recovery node until that read settles too; readiness still uses the model.
+    val recoveryHandoff = !recoveryActive && recoveryFocusOwned && state.error == null && !state.readFailed
+    val showRecovery = recoveryActive || recoveryHandoff
+    DetailFeedbackEvents(recoveryActive && !retryFocused && lifecycleState == Lifecycle.State.RESUMED)
+    val pendingControlsLive = !recoveryActive &&
+        playbackWaiting &&
+        lifecycleState == Lifecycle.State.RESUMED &&
+        pendingSemanticsRevealed &&
+        pendingFocusRestored &&
+        headerInputTarget != null &&
+        state.error == null
+    SideEffect {
+        arrivalPending = app.pictureshow.core.detailArrivalStillPending(arrivalPending, restored)
+        if (!showRecovery) retryFocused = false
+        if (readFailure && state.error != null) recoveryMessage = state.error
+        if (readSettled) {
+            if (pendingExpired && recoveryMessage != null) commandNotice = null
+            recoveryMessage = null
+            pendingExpired = false
+            pendingFailed = false
+        }
+        // A write error can be retried against the last fresh item; a failed playback
+        // reload cannot. Loading invalidates this marker until an error-free read lands.
+        if (state.loading || playbackWaiting || state.readFailed) {
+            mutationDataReady = false
+        } else if (state.error == null && state.item != null) {
+            mutationDataReady = true
+            if (commandNotice == "Changes will be available when loading finishes.") commandNotice = null
+        }
+        if (state.playbackPending && state.error == null && !pendingFailed) playbackReturn = true
+        if (playbackWaiting) {
+            playbackLayout = true
+            if (!coldWaiting && playbackHeader == null) playbackHeader = state.item ?: origin
+        }
+        if (playbackWaiting && !recoveryActive && !pendingFailed && state.error == null && lifecycleState == Lifecycle.State.RESUMED) {
+            onPendingQueueNeeded()
+        }
+        reportLive(pendingControlsLive)
+    }
+    val cueAccessibility = focusHost.context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+        as android.view.accessibility.AccessibilityManager
+    DisposableEffect(cueAccessibility) {
+        val listener = android.view.accessibility.AccessibilityManager.AccessibilityStateChangeListener { enabled ->
+            if (!enabled) {
+                readiness.cancel()
+                readyDeliveryTarget = null
+            }
+        }
+        cueAccessibility.addAccessibilityStateChangeListener(listener)
+        onDispose { cueAccessibility.removeAccessibilityStateChangeListener(listener) }
+    }
+    val reportPendingFocus by rememberUpdatedState(onPendingFocus)
     var focusInputRevision by remember { mutableIntStateOf(0) }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
     var rowSelections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
-    val item = state.item.takeUnless { state.playbackPending }
-    val playItem = when (item?.type) {
-        "Series" -> state.nextUp.firstOrNull() ?: state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
-        "Season" -> state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
-        "Movie", "Episode", "Video" -> item
-        else -> null
+    val item = state.item ?: origin.takeIf { playbackWaiting || recoveryActive }
+    // Route cards can have less metadata than the authoritative item. During a return,
+    // keep the published presentation; only fresh command data may change underneath it.
+    val headerItem = playbackHeader ?: item
+    val playItem = if (playbackWaiting) {
+        null
+    } else {
+        when (item?.type) {
+            "Series" -> state.nextUp.firstOrNull() ?: state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
+            "Season" -> state.episodes.firstOrNull { !it.userData.played } ?: state.episodes.firstOrNull()
+            "Movie", "Episode", "Video" -> item
+            else -> null
+        }
+    }
+    // A new returning model deliberately clears stale data. The route still identifies its
+    // capabilities; queued actions below continue to require the authoritative fresh state.
+    val pendingItem = state.item ?: origin
+    val pendingCanPlay = when (pendingItem?.type) {
+        "Movie", "Episode", "Video" -> true
+        "Series" -> state.nextUp.isNotEmpty() || state.episodes.isNotEmpty() || pendingItem?.isEmptyContainer == false
+        "Season" -> state.episodes.isNotEmpty() || pendingItem?.isEmptyContainer == false
+        else -> false
+    }
+    val latestPlaybackReady by rememberUpdatedState(!recoveryActive && !state.loading && !playbackWaiting && state.error == null)
+    val latestPlayItem by rememberUpdatedState(playItem)
+    val latestOnPlay by rememberUpdatedState(onPlay)
+    val latestItem by rememberUpdatedState(state.item)
+    val latestBusy by rememberUpdatedState(state.busy)
+    val latestOnPlayed by rememberUpdatedState(onPlayed)
+    val reportPlayedRequest by rememberUpdatedState(onPlayedRequest)
+    val latestOnFavorite by rememberUpdatedState(onFavorite)
+    val queuePendingAction by rememberUpdatedState(onPendingAction)
+    // The handoff releases intents in order. Mutations can remain busy across frames;
+    // serialize them here so a following intent cannot be silently dropped by the VM.
+    // This composition owns the consumer, so navigation cancels any work not yet started.
+    var commandGeneration by remember { mutableIntStateOf(0) }
+    var readyQueuedTargets by remember { mutableStateOf(emptySet<String>()) }
+    var requestCueTarget by remember { mutableStateOf<String?>(null) }
+    var requestCueVersion by remember { mutableStateOf(0L) }
+    val requestFeedback = remember { app.pictureshow.core.DetailRequestFeedback() }
+    val freshCommands = remember { kotlinx.coroutines.channels.Channel<DetailCommand>(32) }
+    val latestError by rememberUpdatedState(state.error)
+    val latestLifecycle by rememberUpdatedState(lifecycleState)
+    val latestMutationReady by rememberUpdatedState(
+        !recoveryActive && !state.readFailed && mutationDataReady && !state.loading && !playbackWaiting && state.item != null
+    )
+    LaunchedEffect(Unit) {
+        for ((generation, mutationTarget, command) in freshCommands) {
+            androidx.compose.runtime.snapshotFlow {
+                generation != commandGeneration ||
+                    (latestError != null && (mutationTarget == null || !latestMutationReady)) ||
+                    (
+                        (if (mutationTarget != null) latestMutationReady else latestPlaybackReady) &&
+                            !latestBusy &&
+                            latestLifecycle == Lifecycle.State.RESUMED
+                        )
+            }.first { it }
+            if (generation == commandGeneration) {
+                if (latestError == null || (mutationTarget != null && latestMutationReady)) {
+                    command()
+                } else {
+                    commandNotice = "The request could not be saved. Reload the item and try again."
+                }
+                mutationTarget?.let { readyQueuedTargets = readyQueuedTargets - it }
+            }
+            // Give optimistic busy/loading state a composition before taking another command.
+            repeat(2) { withFrameNanos { } }
+        }
+    }
+    var waitHadRequest by remember { mutableStateOf(false) }
+    val rawRecoveryReason = (state.error ?: recoveryMessage ?: "The server has not finished loading. Retry to reload the item.") +
+        if (waitHadRequest && pendingExpired) " The previous request expired and will not run." else ""
+    var previousFailure by remember { mutableStateOf<app.pictureshow.core.DetailFailurePresentation?>(null) }
+    val failureKey = app.pictureshow.core.detailFailureKey(
+        readRecovery = recoveryActive,
+        retrying = retryWorking,
+        writeAttempt = state.writeAttempt.takeIf { !showRecovery && state.error != null }
+    )
+    val presentedFailure = app.pictureshow.core.presentDetailFailure(
+        previousFailure,
+        failureKey,
+        if (showRecovery) rawRecoveryReason else state.error
+    )
+    SideEffect { previousFailure = presentedFailure }
+    val recoveryReason = presentedFailure?.message ?: rawRecoveryReason
+    SideEffect {
+        if (app.pictureshow.core.detailRetryAttemptSucceeded(
+                retryCueBaseline,
+                state.readAttempt,
+                state.loading,
+                readFailure || state.error != null
+            )
+        ) {
+            retryCueBaseline = null
+        }
+    }
+    val writeFailure = presentedFailure?.message?.takeIf { failureKey?.startsWith("write:") == true }
+    fun requestReadRetry() {
+        if (!retryWorking && !recoveryHandoff) {
+            previousFailure = null
+            retryCueBaseline = state.readAttempt
+            retryWorking = true
+            onRetry()
+        }
+    }
+    LaunchedEffect(retryCueBaseline, state.readAttempt, state.loading, readFailure, recoveryReason, lifecycleState) {
+        if (app.pictureshow.core.detailRetryFailureNeedsCue(
+                retryCueBaseline,
+                state.readAttempt,
+                state.loading,
+                readFailure,
+                lifecycleState == Lifecycle.State.RESUMED
+            )
+        ) {
+            val baseline = retryCueBaseline
+            val started = android.os.SystemClock.uptimeMillis()
+            val reason = recoveryReason.trim().trimEnd('.')
+            try {
+                while (app.pictureshow.core.detailRetryCueCanWait(
+                        feedbackChannel.accessibilityEnabled,
+                        android.os.SystemClock.uptimeMillis() - started
+                    )
+                ) {
+                    if (feedbackChannel.sendReadFailure("Loading failed. $reason. Retry is available.")) break
+                    delay(50)
+                }
+            } finally {
+                // Timeout, disabled accessibility and cancellation also end this Retry episode.
+                if (retryCueBaseline == baseline) retryCueBaseline = null
+            }
+        }
+    }
+    fun queueFresh(target: String, command: () -> Unit): Boolean {
+        val generation = commandGeneration
+        val accepted = !pendingExpired &&
+            !expiryReported &&
+            queuePendingAction?.invoke {
+                if (generation == commandGeneration && freshCommands.trySend(DetailCommand(generation, null, command)).isFailure) {
+                    commandNotice = "The request could not be saved. Try again."
+                }
+            } == true
+        if (accepted) {
+            waitHadRequest = true
+            requestCueVersion++
+            requestCueTarget = target
+        }
+        if (!accepted) {
+            commandNotice = "The request expired. Try again when the item loads."
+            pendingExpired = true
+        }
+        return accepted
+    }
+
+    // Returning controls keep focus while an accepted mutation is busy. A fresh press
+    // joins the same ordered consumer with the desired state its current label offers.
+    fun queueReadyMutation(watched: Boolean) {
+        if (!mutationDataReady) {
+            commandNotice = if (state.error != null) {
+                "Reload the item before changing it."
+            } else {
+                "Changes will be available when loading finishes."
+            }
+            return
+        }
+        val offered = state.item ?: return
+        val target = if (watched) "played" else "favorite"
+        if (target in readyQueuedTargets) return
+        val desired = if (watched) !offered.isWatched else !offered.userData.isFavorite
+        val generation = commandGeneration
+        val command: () -> Unit = {
+            val fresh = latestItem
+            if (fresh != null) {
+                if (watched && !fresh.isEmptyContainer) {
+                    val notice = app.pictureshow.core.detailPlayedRequestNotice(desired, fresh.isWatched)
+                    if (notice == null) latestOnPlayed() else commandNotice = notice
+                }
+                if (!watched && fresh.userData.isFavorite != desired) latestOnFavorite()
+            }
+        }
+        if (freshCommands.trySend(DetailCommand(generation, target, command)).isFailure) {
+            commandNotice = "The request could not be saved. Try again."
+        } else {
+            readyQueuedTargets = readyQueuedTargets + target
+            if (watched) reportPlayedRequest()
+            if (latestBusy) {
+                requestCueVersion++
+                requestCueTarget = target
+            }
+            commandNotice = null
+        }
+    }
+    var playQueued by remember { mutableStateOf<String?>(null) }
+    var pendingQueuedTargets by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(playbackWaiting) {
+        if (playbackWaiting) {
+            commandGeneration++
+            readyQueuedTargets = emptySet()
+            waitHadRequest = false
+            commandNotice = null
+            pendingExpired = false
+            expiryReported = false
+            if (!pendingFailed && !coldWaiting) playbackReturn = true
+            pendingSemanticsRevealed = false
+            readerMovement.reset()
+            pendingFocusRestored = false
+            pendingHeaderTarget = "primary"
+            pendingViewerMoved = false
+        } else {
+            playQueued = null
+            pendingQueuedTargets = emptySet()
+        }
+    }
+    val latestHasRequest by rememberUpdatedState(waitHadRequest)
+    fun expirePending() {
+        // Invalidate even commands already handed to this composition's ready-state gate.
+        // Standalone consumers without an owner getter use the same local request budget.
+        commandGeneration++
+        readyQueuedTargets = emptySet()
+        expiryReported = true
+        playQueued = null
+        pendingQueuedTargets = emptySet()
+        pendingExpired = true
+        recoveryMessage = "The server has not finished loading. Retry to reload the item."
+        commandNotice = if (latestHasRequest) {
+            "The request expired. Try again when the item loads."
+        } else {
+            "Actions will be available when the item loads."
+        }
+    }
+    SideEffect {
+        if (playbackWaiting && !expiryReported && onPendingQueueExpired?.invoke() == true) expirePending()
+    }
+    LaunchedEffect(playbackWaiting) {
+        if (playbackWaiting) {
+            delay(app.pictureshow.core.ApiTimeouts.REQUEST_MILLIS)
+            // A destination may become RESUMED after composition. Its owner is the
+            // deadline authority; do not label still-acceptable actions unavailable.
+            while (latestError == null) {
+                val expired = onPendingQueueExpired?.invoke() ?: true
+                if (expired) {
+                    if (!expiryReported) expirePending()
+                    break
+                }
+                delay(250)
+            }
+        }
+    }
+    LaunchedEffect(state.loading, state.error, state.readAttempt) {
+        if (!state.loading || state.error != null) retryWorking = false
+    }
+    LaunchedEffect(commandNotice) {
+        if (commandNotice != null) {
+            delay(6_000)
+            commandNotice = null
+        }
+    }
+    LaunchedEffect(state.error) {
+        if (state.error == null &&
+            commandNotice in setOf(
+                "The request could not be saved. Reload the item and try again.",
+                "Reload the item before changing it."
+            )
+        ) {
+            commandNotice = null
+        }
+    }
+    fun pendingTarget(target: String) {
+        if (BuildConfig.DEBUG) PlaybackDiagnostics.write("detail-pending-focus target=$target")
+        pendingHeaderTarget = target
+        if (target != "primary") {
+            pendingViewerMoved = true
+            reportPendingFocus()
+        }
+    }
+    val pendingEnabled =
+        !recoveryActive && playbackWaiting && !pendingFailed && state.error == null && pendingCanPlay && queuePendingAction != null
+    val pendingActions = if (pendingEnabled) {
+        PendingDetailActions(
+            available = !pendingExpired && !expiryReported,
+            requestedTargets = pendingQueuedTargets + if (playQueued != null) setOf("primary", "from-start") else emptySet(),
+            playLabel = when {
+                pendingExpired || expiryReported -> app.pictureshow.core.detailUnavailableActionLabel("primary")
+                playQueued == "resume" -> app.pictureshow.core.detailRequestedActionLabel("primary", requestCueTarget == "primary")
+                playQueued == "start" -> "Start already requested"
+                else -> "Play when ready"
+            },
+            fromStartLabel = when {
+                pendingExpired || expiryReported -> app.pictureshow.core.detailUnavailableActionLabel("from-start")
+                playQueued == "start" -> app.pictureshow.core.detailRequestedActionLabel("from-start", requestCueTarget == "from-start")
+                playQueued == "resume" -> "Play already requested"
+                else -> "Play from start when ready"
+            },
+            playedLabel = if (pendingExpired || expiryReported) {
+                app.pictureshow.core.detailUnavailableActionLabel("played")
+            } else if ("played" in pendingQueuedTargets) {
+                app.pictureshow.core.detailRequestedActionLabel("played", requestCueTarget == "played")
+            } else if (pendingItem?.isWatched == true) {
+                "Mark unwatched when ready"
+            } else {
+                "Mark watched when ready"
+            },
+            favoriteLabel = if (pendingExpired || expiryReported) {
+                app.pictureshow.core.detailUnavailableActionLabel("favorite")
+            } else if ("favorite" in pendingQueuedTargets) {
+                app.pictureshow.core.detailRequestedActionLabel("favorite", requestCueTarget == "favorite")
+            } else if (pendingItem?.userData?.isFavorite == true) {
+                "Unfavorite when ready"
+            } else {
+                "Favorite when ready"
+            },
+            onPlay = {
+                pendingViewerMoved = true
+                if (playQueued == null) {
+                    val accepted = queueFresh("primary") {
+                        if (latestPlaybackReady) {
+                            val fresh = latestPlayItem
+                            if (fresh != null) {
+                                latestOnPlay(fresh, fresh.userData.playbackPositionTicks > 0)
+                            } else {
+                                commandNotice = "No playable episodes are available."
+                            }
+                        }
+                    }
+                    if (accepted) playQueued = "resume"
+                }
+            },
+            onFromStart = {
+                pendingViewerMoved = true
+                if (playQueued == null) {
+                    val accepted = queueFresh("from-start") {
+                        val fresh = latestPlayItem
+                        if (latestPlaybackReady && fresh != null) {
+                            latestOnPlay(fresh, false)
+                        } else if (latestPlaybackReady) {
+                            commandNotice = "No playable episodes are available."
+                        }
+                    }
+                    if (accepted) playQueued = "start"
+                }
+            },
+            onPlayed = {
+                pendingViewerMoved = true
+                if ("played" !in pendingQueuedTargets) {
+                    val wanted = pendingItem?.isWatched != true
+                    if (queueFresh("played") {
+                            val fresh = latestItem
+                            if (latestPlaybackReady &&
+                                !latestBusy &&
+                                fresh != null &&
+                                !fresh.isEmptyContainer
+                            ) {
+                                val notice = app.pictureshow.core.detailPlayedRequestNotice(wanted, fresh.isWatched)
+                                if (notice == null) latestOnPlayed() else commandNotice = notice
+                            }
+                        }
+                    ) {
+                        pendingQueuedTargets = pendingQueuedTargets + "played"
+                        reportPlayedRequest()
+                    }
+                }
+            },
+            onFavorite = {
+                pendingViewerMoved = true
+                if ("favorite" !in pendingQueuedTargets) {
+                    val wanted = pendingItem?.userData?.isFavorite != true
+                    if (queueFresh("favorite") {
+                            val fresh = latestItem
+                            if (latestPlaybackReady &&
+                                !latestBusy &&
+                                fresh != null &&
+                                fresh.userData.isFavorite != wanted
+                            ) {
+                                latestOnFavorite()
+                            }
+                        }
+                    ) {
+                        pendingQueuedTargets = pendingQueuedTargets + "favorite"
+                    }
+                }
+            }
+        ).let { actions ->
+            fun label(target: String, pending: String) = app.pictureshow.core.detailPendingPresentationLabel(
+                presentHeldLabels,
+                target in actions.requestedTargets,
+                actions.available,
+                app.pictureshow.core.detailPendingPlainLabel(
+                    target,
+                    state.item != null,
+                    pendingItem?.isWatched == true,
+                    pendingItem?.userData?.isFavorite == true
+                ),
+                pending
+            )
+            actions.copy(
+                playLabel = label("primary", actions.playLabel),
+                fromStartLabel = label("from-start", actions.fromStartLabel),
+                playedLabel = label("played", actions.playedLabel),
+                favoriteLabel = label("favorite", actions.favoriteLabel)
+            )
+        }
+    } else {
+        null
+    }
+    val requestedCueTargets = readyQueuedTargets + pendingActions?.requestedTargets.orEmpty()
+    val cueRequested = requestCueTarget?.let { it in requestedCueTargets } == true
+    SideEffect {
+        // Consumption ends this acceptance episode even when input and reader focus stay put.
+        if (!app.pictureshow.core.detailRequestCueRemainsActive(requestCueTarget != null, false, cueRequested)) {
+            requestCueTarget = null
+        }
+    }
+    fun headerFocus(target: String, focused: Boolean) {
+        if (!focused && requestCueTarget == target) requestCueTarget = null
+        if (focused) {
+            headerInputTarget = target
+            pendingFeedback.update(
+                playbackWaiting,
+                presentHeldLabels,
+                target,
+                lifecycleState == Lifecycle.State.RESUMED && cueAccessibility.isEnabled,
+                recoveryActive || state.error != null || waitHadRequest
+            )
+            if (playbackWaiting) pendingTarget(target)
+        } else if (headerInputTarget == target) {
+            headerInputTarget = null
+        }
+    }
+    val latestPendingActions by rememberUpdatedState(pendingActions)
+    val latestHeldLabels by rememberUpdatedState(presentHeldLabels)
+    // Reader navigation can select static text without changing Compose input focus.
+    LaunchedEffect(playbackWaiting, pendingSemanticsRevealed, lifecycleState, requestCueTarget, requestCueVersion, readyDeliveryTarget) {
+        val accessibility = focusHost.context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+            as android.view.accessibility.AccessibilityManager
+        val observingPendingFocus = playbackWaiting && pendingSemanticsRevealed
+        pendingFeedback.update(
+            observingPendingFocus,
+            latestHeldLabels,
+            headerInputTarget,
+            lifecycleState == Lifecycle.State.RESUMED && accessibility.isEnabled,
+            latestError != null || waitHadRequest
+        )
+        if ((observingPendingFocus || requestCueTarget != null || readyDeliveryTarget != null) &&
+            lifecycleState == Lifecycle.State.RESUMED &&
+            accessibility.isEnabled
+        ) {
+            val started = android.os.SystemClock.uptimeMillis()
+            var requestPresented = false
+            while (android.os.SystemClock.uptimeMillis() - started < app.pictureshow.core.ApiTimeouts.REQUEST_MILLIS &&
+                (observingPendingFocus || requestCueTarget != null || readyDeliveryTarget != null) &&
+                accessibility.isEnabled
+            ) {
+                val readerTarget = playbackReaderTarget(focusHost)
+                val pendingTarget = pendingFeedback.update(
+                    observingPendingFocus,
+                    latestHeldLabels,
+                    headerInputTarget,
+                    true,
+                    latestError != null ||
+                        waitHadRequest ||
+                        readerTarget != PlaybackReaderTarget.ACTION ||
+                        !detailReaderFocusMatches(focusHost, headerInputTarget)
+                )
+                if (pendingTarget != null) {
+                    val actions = latestPendingActions
+                    val label = when (pendingTarget) {
+                        "primary" -> actions?.playLabel
+                        "from-start" -> actions?.fromStartLabel
+                        "played" -> actions?.playedLabel
+                        else -> actions?.favoriteLabel
+                    }
+                    if (label != null && feedbackChannel.send(pendingTarget, label)) {
+                        pendingFeedback.submitted()
+                        readiness.presented(pendingTarget)
+                        pendingCueQueued = true
+                        pendingCueRevision++
+                    }
+                }
+                if (readerTarget == PlaybackReaderTarget.ACTION && detailReaderFocusMatches(focusHost, requestCueTarget)) {
+                    requestPresented = true
+                    val target = requestCueTarget
+                    if (target != null &&
+                        latestError == null &&
+                        requestFeedback.shouldSend(requestCueVersion, true) &&
+                        feedbackChannel.send(target, app.pictureshow.core.detailRequestedActionLabel(target, true))
+                    ) {
+                        requestFeedback.submitted(requestCueVersion)
+                    }
+                }
+                readyDeliveryTarget?.let { target ->
+                    if (headerInputTarget != target ||
+                        latestError != null ||
+                        waitHadRequest ||
+                        readyQueuedTargets.isNotEmpty() ||
+                        !detailReaderFocusMatches(focusHost, target)
+                    ) {
+                        readiness.cancel()
+                        readyDeliveryTarget = null
+                    } else if (!pendingCueQueued &&
+                        feedbackChannel.send(
+                            target,
+                            app.pictureshow.core.detailReadyCue(
+                                readyDeliveryLabel ?: app.pictureshow.core.detailHeldActionLabel(target)
+                            )
+                        )
+                    ) {
+                        readiness.submitted()
+                        readyDeliveryTarget = null
+                    }
+                }
+                if (!app.pictureshow.core.detailRequestCueRemainsActive(
+                        requestCueTarget != null,
+                        (
+                            readerTarget in setOf(PlaybackReaderTarget.TEXT, PlaybackReaderTarget.OTHER_ACTION) ||
+                                (readerTarget == PlaybackReaderTarget.ACTION && !detailReaderFocusMatches(focusHost, requestCueTarget))
+                            ),
+                        presented = requestPresented
+                    )
+                ) {
+                    requestCueTarget = null
+                }
+                if (observingPendingFocus &&
+                    (
+                        readerTarget in setOf(PlaybackReaderTarget.TEXT, PlaybackReaderTarget.OTHER_ACTION) ||
+                            (readerTarget == PlaybackReaderTarget.ACTION && !detailReaderFocusMatches(focusHost, headerInputTarget))
+                        )
+                ) {
+                    readiness.cancel()
+                }
+                if (observingPendingFocus && readerMovement.observe(readerTarget)) {
+                    pendingViewerMoved = true
+                    reportPendingFocus()
+                }
+                delay(50)
+            }
+        }
     }
     val focusManager = LocalFocusManager.current
     val hasActions = item?.type in listOf("Movie", "Episode", "Video", "Series", "Season")
+    // Removing pending shelves can send a final focus callback from their previous
+    // composition. Judge it against current readiness, not that disposed row's state.
+    val trackSelection by rememberUpdatedState(!state.loading && !playbackWaiting && restored)
     val sections = buildList {
-        if (item?.type == "Series" && state.nextUp.isNotEmpty()) add("next" to state.nextUp)
-        if (item?.type == "Series" && state.seasons.isNotEmpty()) add("seasons" to state.seasons)
-        if (item?.type in listOf("Series", "Season") && state.episodes.isNotEmpty()) add("episodes" to state.episodes)
+        if (!playbackWaiting && item?.type == "Series" && state.nextUp.isNotEmpty()) add("next" to state.nextUp)
+        if (!playbackWaiting && item?.type == "Series" && state.seasons.isNotEmpty()) add("seasons" to state.seasons)
+        if (!playbackWaiting &&
+            item?.type in listOf("Series", "Season") &&
+            state.episodes.isNotEmpty()
+        ) {
+            add("episodes" to state.episodes)
+        }
     }
     val rowStates = mutableMapOf<String, LazyListState>()
     sections.forEach { (section, _) -> key(section) { rowStates[section] = rememberLazyListState() } }
@@ -761,6 +1462,22 @@ fun CatalogDetail(
                 }
         }
     }
+    val arrivalMetadataHidden = app.pictureshow.core.detailMetadataAwaitsHandoff(
+        hasActions,
+        restored || pendingFocusRestored || !arrivalPending,
+        playbackReturn || state.playbackPending,
+        recoveryActive || state.error != null || state.readFailed
+    )
+    val arrivalMetadataSemantics = if (arrivalMetadataHidden) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+    PlaybackExitFocusEvents(
+        app.pictureshow.core.detailSuppressesEmptyHostFocus(
+            hasActions && arrivalPending,
+            restored,
+            playbackReturn || playbackWaiting,
+            recoveryHandoff,
+            recoveryActive || state.error != null
+        )
+    )
     CompositionLocalProvider(LocalBringIntoViewSpec provides detailBringIntoView) {
         if (!restored) {
             // Hold input away from hidden semantics. focusTarget adds no accessibility node.
@@ -774,168 +1491,566 @@ fun CatalogDetail(
                 }.focusTarget()
             )
         }
-        LazyColumn(
-            state = list,
-            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail")
-                // A returning page must expose its restored input target before TalkBack can
-                // choose a heading or overview as a replacement for the departing player.
-                .then(
-                    if (lifecycleState != Lifecycle.State.RESUMED || (playItem != null && !semanticsRevealed && state.error == null)) {
-                        Modifier.clearAndSetSemantics { hideFromAccessibility() }
-                    } else {
-                        Modifier
-                    }
-                ).accessibilityGroup().onPreviewKeyEvent {
-                    if (it.type == KeyEventType.KeyDown) {
-                        focusInputRevision++
-                        // A viewer's first move owns focus even during the brief visible handoff.
-                        if (semanticsRevealed) restored = true
-                    }
-                    if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && !state.loading && playItem != null) {
-                        if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
-                            onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
-                        }
-                        true
-                    } else if (it.type == KeyEventType.KeyDown && it.key in listOf(Key.DirectionUp, Key.DirectionDown) && hasActions) {
-                        val index = sections.indexOfFirst { section -> section.first == selectedSection }
-                        val target = index + if (it.key == Key.DirectionUp) -1 else 1
-                        if (headerFocused &&
-                            focusManager.moveFocus(if (it.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = list,
+                modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").semantics { testTagsAsResourceId = true }
+                    // A returning page must expose its restored input target before TalkBack can
+                    // choose a heading or overview as a replacement for the departing player.
+                    .then(
+                        if (lifecycleState != Lifecycle.State.RESUMED ||
+                            (
+                                !recoveryActive &&
+                                    state.error == null &&
+                                    (
+                                        app.pictureshow.core.detailArrivalAwaitsAction(
+                                            state.loading,
+                                            semanticsRevealed || pendingSemanticsRevealed,
+                                            playbackWaiting
+                                        ) ||
+                                            (playItem != null && !semanticsRevealed && !pendingSemanticsRevealed) ||
+                                            (pendingEnabled && !pendingSemanticsRevealed)
+                                        )
+                                )
                         ) {
+                            Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                        } else {
+                            Modifier
+                        }
+                    ).accessibilityGroup().onPreviewKeyEvent {
+                        if (it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) {
+                            // Own the complete Select gesture that started on Retry. Moving
+                            // input focus must not deliver its repeats/UP to the fresh Play.
+                            if (it.type == KeyEventType.KeyDown &&
+                                it.nativeKeyEvent.repeatCount == 0 &&
+                                !(retryFocused && showRecovery)
+                            ) {
+                                recoverySelectKey = null
+                            }
+                            if ((retryFocused && showRecovery) || recoverySelectKey == it.key) {
+                                if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0 && recoverySelectKey == null) {
+                                    recoverySelectKey = it.key
+                                    requestReadRetry()
+                                } else if (it.type == KeyEventType.KeyUp && recoverySelectKey == it.key) {
+                                    recoverySelectKey = null
+                                }
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        if (it.type == KeyEventType.KeyDown) {
+                            focusInputRevision++
+                            if (!playbackWaiting) commandNotice = null
+                            if (playbackWaiting &&
+                                it.key in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight)
+                            ) {
+                                pendingViewerMoved = true
+                            }
+                            // A viewer's first move owns focus even during the brief visible handoff.
+                            if (semanticsRevealed) restored = true
+                        }
+                        if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) && pendingActions != null) {
+                            if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) pendingActions.onPlay()
                             true
-                        } else if (target < sections.size) {
-                            moveSection(target)
+                        } else if (it.key in listOf(Key.MediaPlay, Key.MediaPlayPause) &&
+                            !recoveryActive &&
+                            state.error == null &&
+                            !state.loading &&
+                            playItem != null
+                        ) {
+                            if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
+                                onPlay(playItem, playItem.userData.playbackPositionTicks > 0)
+                            }
                             true
+                        } else if (it.type == KeyEventType.KeyDown &&
+                            it.key in listOf(Key.DirectionUp, Key.DirectionDown) &&
+                            hasActions &&
+                            !playbackWaiting &&
+                            !recoveryActive
+                        ) {
+                            val index = sections.indexOfFirst { section -> section.first == selectedSection }
+                            val target = index + if (it.key == Key.DirectionUp) -1 else 1
+                            if (headerFocused &&
+                                focusManager.moveFocus(if (it.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                            ) {
+                                true
+                            } else if (target < sections.size) {
+                                moveSection(target)
+                                true
+                            } else {
+                                false
+                            }
                         } else {
                             false
                         }
-                    } else {
-                        false
-                    }
-                },
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item(key = "body") {
-                Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (state.playbackPending) {
-                        if (state.error == null) {
-                            StatusLine(if (state.playbackReportFinished) "Loading item…" else "Saving progress…")
-                        }
-                    } else if (state.loading && item == null) {
-                        Text("Loading item…")
-                    }
-                    CatalogError(state.error, onRetry, Modifier.focusRequester(retry))
-                    if (item != null) {
-                        val backdrop = if (item.backdropImageTags.isNotEmpty() || item.parentBackdropImageTags.isNotEmpty()) {
-                            item.copy(imageTags = emptyMap())
-                        } else {
-                            item
-                        }
-                        CatalogArtwork(
-                            backdrop,
-                            state.account,
-                            wide = true,
-                            modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
-                            alignment = BiasAlignment(0f, -.5f)
-                        )
-                        CatalogHeading(item.name)
-                        if (item.type == "Episode") {
-                            Text(listOfNotNull(item.seriesName, episodeLabel(item).takeIf { it.isNotBlank() }).joinToString(" · "))
-                        }
-                        val metadata = listOfNotNull(
-                            item.productionYear?.toString(),
-                            item.officialRating,
-                            item.communityRating?.let(::communityRatingLabel),
-                            item.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
-                        )
-                        if (metadata.isNotEmpty()) Text(metadata.joinToString(" · "), color = CatalogMuted)
-                        val container = item.type in listOf("Series", "Season")
-                        if (hasActions && container) {
-                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) {
-                                if (!state.loading &&
-                                    restored
+                    },
+                contentPadding = PaddingValues(horizontal = 48.dp, vertical = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                item(key = "body") {
+                    Box(Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            if (!playbackWaiting && state.loading && item == null) Text("Loading item…")
+                            if (item != null && headerItem != null) {
+                                val backdrop = if (headerItem.backdropImageTags.isNotEmpty() ||
+                                    headerItem.parentBackdropImageTags.isNotEmpty()
                                 ) {
-                                    selectedSection = "header"
+                                    headerItem.copy(imageTags = emptyMap())
+                                } else {
+                                    headerItem
+                                }
+                                CatalogArtwork(
+                                    backdrop,
+                                    state.account,
+                                    wide = true,
+                                    modifier = Modifier.fillMaxWidth().height(220.dp).testTag("detail:hero"),
+                                    alignment = BiasAlignment(0f, -.5f)
+                                )
+                                CatalogHeading(headerItem.name, modifier = arrivalMetadataSemantics.testTag("detail:title"))
+                                if (headerItem.type == "Episode") {
+                                    Text(
+                                        listOfNotNull(
+                                            headerItem.seriesName,
+                                            episodeLabel(headerItem).takeIf {
+                                                it.isNotBlank()
+                                            }
+                                        ).joinToString(" · "),
+                                        modifier = arrivalMetadataSemantics
+                                    )
+                                }
+                                val metadata = listOfNotNull(
+                                    headerItem.productionYear?.toString(),
+                                    headerItem.officialRating,
+                                    headerItem.communityRating?.let(::communityRatingLabel),
+                                    headerItem.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)
+                                )
+                                if (metadata.isNotEmpty()) {
+                                    Text(
+                                        metadata.joinToString(" · "),
+                                        color = CatalogMuted,
+                                        modifier = arrivalMetadataSemantics
+                                    )
+                                }
+                                val container = item.type in listOf("Series", "Season")
+                                if (hasActions && container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
+                                    DetailActions(
+                                        if (recoveryActive) headerItem else item, playItem, state.busy, initial,
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(true) }
+                                        } else {
+                                            onPlayed
+                                        },
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(false) }
+                                        } else {
+                                            onFavorite
+                                        },
+                                        onPlay,
+                                        playedFocus, favoriteFocus, pendingActions, ::headerFocus,
+                                        stableLayout =
+                                        playbackLayout || playbackWaiting,
+                                        readyQueuedTargets = readyQueuedTargets,
+                                        requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
+                                        readiness = readiness,
+                                        onReadyCue = { target, label ->
+                                            readyDeliveryTarget = target
+                                            readyDeliveryLabel = label
+                                        },
+                                        readyCancelled =
+                                        state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
+                                        fromStartFocus = fromStartFocus,
+                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null)
+                                    ) {
+                                        if (trackSelection) selectedSection = "header"
+                                    }
+                                }
+                                headerItem.overview?.takeIf(String::isNotBlank)?.let { Text(it, modifier = arrivalMetadataSemantics) }
+                                if (headerItem.genres.isNotEmpty()) {
+                                    Text(
+                                        headerItem.genres.joinToString(" · "),
+                                        color = CatalogMuted,
+                                        modifier = arrivalMetadataSemantics
+                                    )
+                                }
+                                if (hasActions && !container && (!playbackWaiting || pendingEnabled || recoveryActive || recoveryHandoff)) {
+                                    DetailActions(
+                                        if (recoveryActive) headerItem else item, playItem, state.busy, initial,
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(true) }
+                                        } else {
+                                            onPlayed
+                                        },
+                                        if (playbackLayout) {
+                                            { queueReadyMutation(false) }
+                                        } else {
+                                            onFavorite
+                                        },
+                                        onPlay,
+                                        playedFocus, favoriteFocus, pendingActions, ::headerFocus,
+                                        stableLayout =
+                                        playbackLayout || playbackWaiting,
+                                        readyQueuedTargets = readyQueuedTargets,
+                                        requestCueTarget = requestCueTarget.takeIf { it == headerInputTarget },
+                                        readiness = readiness,
+                                        onReadyCue = { target, label ->
+                                            readyDeliveryTarget = target
+                                            readyDeliveryLabel = label
+                                        },
+                                        readyCancelled =
+                                        state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
+                                        fromStartFocus = fromStartFocus,
+                                        blocked = recoveryActive || (playbackWaiting && pendingActions == null)
+                                    ) {
+                                        if (trackSelection) selectedSection = "header"
+                                    }
+                                }
+                                // Add authoritative metadata below the published header instead of
+                                // inserting lines above its focused buttons or reader text nodes.
+                                if (!playbackWaiting && playbackHeader != null) {
+                                    val additions = buildList {
+                                        if (item.name != headerItem.name) add(item.name)
+                                        if (item.productionYear != headerItem.productionYear) {
+                                            item.productionYear?.let { add(it.toString()) }
+                                        }
+                                        if (item.officialRating != headerItem.officialRating) item.officialRating?.let { add(it) }
+                                        if (item.communityRating != headerItem.communityRating) {
+                                            item.communityRating?.let { add(communityRatingLabel(it)) }
+                                        }
+                                        if (item.runTimeTicks != headerItem.runTimeTicks) {
+                                            item.runTimeTicks?.let(::runtimeLabel)?.takeIf(String::isNotBlank)?.let { add(it) }
+                                        }
+                                        if (item.overview != headerItem.overview) {
+                                            item.overview?.takeIf(String::isNotBlank)?.let { add(it) }
+                                        }
+                                        if (item.genres != headerItem.genres && item.genres.isNotEmpty()) {
+                                            add(item.genres.joinToString(" · "))
+                                        }
+                                    }
+                                    if (additions.isNotEmpty()) {
+                                        Text(
+                                            "More details",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.semantics { heading() }
+                                        )
+                                        additions.forEach { Text(it) }
+                                    }
+                                }
+                                if (state.loading &&
+                                    !playbackWaiting
+                                ) {
+                                    Text(
+                                        if (item.type in
+                                            listOf("Series", "Season")
+                                        ) {
+                                            "Loading episodes…"
+                                        } else {
+                                            "Loading item…"
+                                        }
+                                    )
                                 }
                             }
                         }
-                        item.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
-                        if (item.genres.isNotEmpty()) Text(item.genres.joinToString(" · "), color = CatalogMuted)
-                        if (hasActions && !container) {
-                            DetailActions(item, playItem, state.busy, initial, onPlayed, onFavorite, onPlay) {
-                                if (!state.loading &&
-                                    restored
-                                ) {
-                                    selectedSection = "header"
+                        // An overlay has no layout footprint: status publication, changed wording and
+                        // removal cannot move the hero or the reader's selected action underneath it.
+                        if (showRecovery) {
+                            Column(
+                                Modifier.align(Alignment.TopEnd).width(420.dp).background(CatalogBackground).padding(12.dp)
+                                    .accessibilityGroup(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                if (showRecovery) {
+                                    Button(
+                                        onClick = ::requestReadRetry,
+                                        modifier = Modifier.width(200.dp).heightIn(min = 72.dp).focusRequester(retry)
+                                            .testTag("detail:retry").onFocusChanged { retryFocused = it.isFocused }
+                                            .detailFocusDiagnostic("retry").semantics {
+                                                // TalkBack TV speaks state before the button label. Lead with
+                                                // Retry so a long reason cannot defer the usable action cue.
+                                                // Focus/state events suffice; a live region queues duplicate
+                                                // loading cues behind which a fresh-action announcement waits.
+                                                stateDescription = if (retryWorking || recoveryHandoff) {
+                                                    "Loading item. Please wait."
+                                                } else {
+                                                    app.pictureshow.core.detailRetryDescription(recoveryReason)
+                                                }
+                                            }
+                                    ) { Text(if (retryWorking || recoveryHandoff) "Retrying…" else "Retry") }
+                                    Text(
+                                        app.pictureshow.core.detailReadBandText(retryWorking || recoveryHandoff, recoveryReason),
+                                        color = Color(0xFFFFCCB8),
+                                        modifier = Modifier.testTag("detail:read-error")
+                                    )
+                                }
+                            }
+                        } else if (commandNotice != null || (playbackWaiting && state.error == null)) {
+                            val status = commandNotice ?: when {
+                                state.readSucceeded && !state.loading && state.playbackPending && !state.playbackReportFinished ->
+                                    "Item loaded. Saving progress…"
+                                !state.playbackPending || state.playbackReportFinished -> "Loading item…"
+                                else -> "Saving progress…"
+                            }
+                            Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
+                                if (commandNotice == null) {
+                                    // Passive phases remain readable, without queuing speech ahead
+                                    // of the focused request, failure or Ready state.
+                                    // Before the read succeeds, preserve the existing hidden status;
+                                    // after it succeeds, retain its readable focus surface and geometry.
+                                    if (pendingEnabled && !state.readSucceeded) {
+                                        Text(status, modifier = Modifier.clearAndSetSemantics {})
+                                    } else {
+                                        StatusLine(status, announce = false)
+                                    }
+                                } else {
+                                    StatusLine(status)
                                 }
                             }
                         }
-                        if (state.loading) Text("Loading episodes…")
                     }
                 }
-            }
-            sections.forEach { (section, items) ->
-                item(key = section) {
-                    DetailRow(
-                        title = when (section) {
-                            "next" -> "Next up"
-                            "seasons" -> "Seasons"
-                            else -> "Episodes"
-                        },
-                        section = section,
-                        items = items,
-                        account = state.account,
-                        onOpen = if (section == "seasons") onSeason else onOpen,
-                        wide = section != "seasons",
-                        selectedId = if (section == "seasons") state.selectedSeasonId else null,
-                        onFocusRested = if (section == "seasons") {
-                            { season -> if (!state.loading && restored) onSeason(season) }
-                        } else {
-                            null
-                        },
-                        rowState = rowStates.getValue(section),
-                        requests = requests,
-                        onFocus = { focused ->
-                            if (!state.loading && restored) {
-                                selectedSection = section
-                                selectedId = focused.id
-                                rowSelections = rowSelections + (section to focused.id)
+                sections.forEach { (section, items) ->
+                    item(key = section) {
+                        DetailRow(
+                            title = when (section) {
+                                "next" -> "Next up"
+                                "seasons" -> "Seasons"
+                                else -> "Episodes"
+                            },
+                            section = section,
+                            items = items,
+                            account = state.account,
+                            onOpen = if (section == "seasons") onSeason else onOpen,
+                            wide = section != "seasons",
+                            selectedId = if (section == "seasons") state.selectedSeasonId else null,
+                            onFocusRested = if (section == "seasons") {
+                                { season -> if (trackSelection) onSeason(season) }
+                            } else {
+                                null
+                            },
+                            rowState = rowStates.getValue(section),
+                            requests = requests,
+                            onFocus = { focused ->
+                                if (trackSelection) {
+                                    selectedSection = section
+                                    selectedId = focused.id
+                                    rowSelections = rowSelections + (section to focused.id)
+                                }
                             }
+                        )
+                    }
+                }
+                if (app.pictureshow.core.showDetailEmptyState(
+                        item?.type,
+                        state.loading,
+                        state.readSucceeded,
+                        state.readFailed,
+                        state.episodes.size,
+                        state.seasons.size
+                    )
+                ) {
+                    item(key = "empty") { Text("No episodes are available.") }
+                }
+            }
+            if (writeFailure != null) {
+                Column(
+                    Modifier.align(Alignment.TopEnd).padding(horizontal = 48.dp, vertical = 32.dp)
+                        .width(420.dp).background(CatalogBackground).padding(12.dp)
+                        .then(
+                            if (lifecycleState != Lifecycle.State.RESUMED) {
+                                Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                            } else {
+                                Modifier
+                            }
+                        ).accessibilityGroup(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // This one failure event reaches the reader even when a lower action owns
+                    // focus. Keep the visible reason and spoken reason on the same stable node.
+                    Text(
+                        "Change failed. $writeFailure",
+                        color = Color(0xFFFFCCB8),
+                        modifier = Modifier.testTag("detail:write-error").semantics {
+                            contentDescription = "Change failed. $writeFailure Retry is available."
+                            liveRegion = LiveRegionMode.Assertive
                         }
                     )
+                    Button(onClick = onRetry, modifier = Modifier.focusRequester(retry).testTag("detail:write-retry")) { Text("Retry") }
                 }
-            }
-            if (item?.type in listOf("Series", "Season") && !state.loading && state.episodes.isEmpty() && state.seasons.isEmpty()) {
-                item(key = "empty") { Text("No episodes are available.") }
             }
         }
     }
     LaunchedEffect(
         lifecycleState,
         state.loading,
-        state.playbackPending,
+        state.readSucceeded,
+        semanticsRevealed,
+        pendingSemanticsRevealed,
+        pendingFocusRestored,
+        restored
+    ) {
+        val fields = "loading=${state.loading} succeeded=${state.readSucceeded} revealed=$semanticsRevealed " +
+            "pendingRevealed=$pendingSemanticsRevealed pendingFocused=$pendingFocusRestored restored=$restored " +
+            "metadataHidden=$arrivalMetadataHidden lifecycle=$lifecycleState"
+        // Release builds have no timing sink; the device timeline reads this one line per change
+        // (debug builds get the same line, so it is not also sent to the sink).
+        PlaybackDiagnostics.write("detail-handoff phase=publication uptime=${android.os.SystemClock.uptimeMillis()} $fields")
+    }
+    LaunchedEffect(
+        lifecycleState,
+        state.loading,
+        playbackWaiting,
+        pendingCanPlay,
+        pendingEnabled,
+        onPendingAction != null,
         item?.id,
         state.error,
+        recoveryActive,
         sections.map {
             it.first to
                 it.second.map(MediaItem::id)
         }
     ) {
+        PlaybackDiagnostics.write(
+            "detail-handoff phase=restore-start uptime=${android.os.SystemClock.uptimeMillis()} " +
+                "lifecycle=$lifecycleState loading=${state.loading} waiting=$playbackWaiting " +
+                "pendingPublished=$pendingSemanticsRevealed focused=${headerInputTarget != null}"
+        )
         // Navigation composes the returning page before its transition has finished. A focus
         // event then is hidden from TalkBack, which falls back to the heading/overview instead.
         if (lifecycleState != Lifecycle.State.RESUMED) {
             restored = false
             semanticsRevealed = false
+            pendingSemanticsRevealed = false
+            readerMovement.reset()
+            pendingFocusRestored = false
+            recoverySelectKey = null
             return@LaunchedEffect
         }
-        if (state.playbackPending) {
+        if (recoveryActive) {
+            recoveryTarget = null
+            selectedSection = "header"
+            commandGeneration++
+            readyQueuedTargets = emptySet()
+            pendingFailed = true
+            pendingSemanticsRevealed = false
+            readerMovement.reset()
+            pendingFocusRestored = false
+            playbackReturn = false
+            semanticsRevealed = true
+            restored = false
+            list.scrollToItem(0)
+            repeat(2) { withFrameNanos { } }
+            restored = retry.requestFocus()
+            recoveryFocusOwned = restored
+            reportFocus("retry", restored)
+            return@LaunchedEffect
+        }
+        if (recoveryFocusOwned) {
+            pendingFailed = false
+            if (state.error == null && !state.readFailed) {
+                // Clearing the error publishes pending controls in the next composition.
+                // Do not focus the temporary disabled fallback underneath their slot.
+                if (playbackWaiting && pendingCanPlay && queuePendingAction != null && !pendingEnabled) return@LaunchedEffect
+                // Retry remains a real visible target while the fresh actions publish.
+                // Do not park focus or scroll back to a previously selected shelf here.
+                semanticsRevealed = true
+                // A successful read can publish guarded pending controls before reporting
+                // finishes. Reveal that same target before the reader acknowledges focus.
+                if (pendingEnabled) pendingSemanticsRevealed = true
+                restored = true
+                fun freshControlHasFocus() = !retryFocused &&
+                    (headerInputTarget != null || playbackContentFocused(focusHost) == true)
+                if (!readSettled && !freshControlHasFocus()) {
+                    // A viewer can leave Retry after this second read has begun.
+                    // Observe that choice without waiting for another model emission.
+                    snapshotFlow { freshControlHasFocus() }.first { it }
+                }
+                repeat(2) { withFrameNanos { } }
+                val freshControlFocused = freshControlHasFocus()
+                if (!readSettled && !freshControlFocused) return@LaunchedEffect
+                val targetAlreadyOwned = recoveryTarget != null && recoveryTargetInputRevision == focusInputRevision && freshControlFocused
+                val viewerChoseControl = freshControlFocused && !targetAlreadyOwned
+                val focused = freshControlFocused || runCatching { initial.requestFocus() }.getOrDefault(false)
+                if (focused) {
+                    if (!freshControlFocused) {
+                        selectedSection = "header"
+                        recoveryTarget = when {
+                            playItem != null || pendingEnabled -> "primary"
+                            item?.isEmptyContainer == true -> "favorite"
+                            else -> "played"
+                        }
+                        recoveryTargetInputRevision = focusInputRevision
+                    }
+                    // Input focus must leave Retry even if the reader selected text:
+                    // the error text disappears with this overlay. Static text alone
+                    // cannot acknowledge that the new action has become selectable.
+                    repeat(2) { withFrameNanos { } }
+                    awaitPlaybackReaderInputFocus(focusHost)
+                    recoveryFocusOwned = false
+                    pendingFocusRestored = playbackWaiting
+                    restored = true
+                    playbackReturn = false
+                    pendingHeaderTarget = "primary"
+                    pendingViewerMoved = false
+                    reportFocus(
+                        if (viewerChoseControl ||
+                            recoveryTargetInputRevision != focusInputRevision
+                        ) {
+                            "viewer"
+                        } else {
+                            recoveryTarget ?: "viewer"
+                        },
+                        true
+                    )
+                    recoveryTarget = null
+                    return@LaunchedEffect
+                }
+            }
+            // A detached target or an intervening write error must release the overlay
+            // and use the normal restore in this same effect; no key change is needed.
+            recoveryFocusOwned = false
+            recoveryTarget = null
+            restored = false
+        }
+        if (playbackWaiting) {
             restored = false
             semanticsRevealed = false
             if (state.error != null) {
+                playbackReturn = false
+                pendingFailed = true
+                pendingSemanticsRevealed = false
+                readerMovement.reset()
+                pendingFocusRestored = false
                 list.scrollToItem(0)
                 withFrameNanos { }
-                retry.requestFocus()
+                val focused = retry.requestFocus()
+                reportFocus("retry", focused)
+            } else if (pendingEnabled) {
+                if (!pendingFocusRestored) {
+                    list.scrollToItem(0)
+                    if (!pendingSemanticsRevealed) {
+                        withFrameNanos { }
+                        // An already-focused hidden control emits no new Focused change on publish.
+                        // Use the same unfocused publication sequence as the fresh return below.
+                        pendingFocus.requestFocus()
+                        pendingSemanticsRevealed = true
+                        PlaybackDiagnostics.write("detail-handoff phase=pending-publish uptime=${android.os.SystemClock.uptimeMillis()}")
+                    }
+                    // A loading-phase update can cancel this effect between publication and focus.
+                    repeat(2) { withFrameNanos { } }
+                    PlaybackDiagnostics.write("detail-handoff phase=pending-request uptime=${android.os.SystemClock.uptimeMillis()}")
+                    pendingFocusRestored = when (pendingHeaderTarget) {
+                        "played" -> playedFocus
+                        "favorite" -> favoriteFocus
+                        "from-start" -> fromStartFocus
+                        else -> initial
+                    }.requestFocus()
+                    PlaybackDiagnostics.write(
+                        "detail-handoff phase=pending-result uptime=${android.os.SystemClock.uptimeMillis()} focused=$pendingFocusRestored"
+                    )
+                }
+            } else {
+                pendingSemanticsRevealed = false
+                readerMovement.reset()
+                pendingFocusRestored = false
             }
             return@LaunchedEffect
         }
@@ -944,11 +2059,52 @@ fun CatalogDetail(
             semanticsRevealed = false
         }
         if (!state.loading && !restored) {
+            val readerMovedToText = pendingSemanticsRevealed && readerMovement.observe(playbackReaderTarget(focusHost))
+            if (readerMovedToText) {
+                pendingViewerMoved = true
+                reportPendingFocus()
+            }
+            val headerValid = when (headerInputTarget) {
+                "primary", "from-start" -> playItem != null
+                "played" -> (playbackLayout || !state.busy) && item?.isEmptyContainer == false
+                "favorite" -> (playbackLayout || !state.busy) && item != null
+                else -> false
+            }
+            if (state.error == null &&
+                pendingSemanticsRevealed &&
+                pendingFocusRestored &&
+                headerValid &&
+                (selectedSection == "header" || pendingViewerMoved)
+            ) {
+                // These are the same text/actions, already published and focused. Clearing
+                // and refocusing would override a reader's Up move onto the static metadata.
+                semanticsRevealed = true
+                restored = true
+                playbackReturn = false
+                if (pendingFailed) commandNotice = null
+                pendingExpired = false
+                pendingFailed = false
+                pendingSemanticsRevealed = false
+                readerMovement.reset()
+                pendingFocusRestored = false
+                val target = if (readerMovedToText) "viewer" else headerInputTarget ?: "none"
+                selectedSection = "header"
+                pendingHeaderTarget = "primary"
+                pendingViewerMoved = false
+                reportFocus(target, true)
+                return@LaunchedEffect
+            }
+            pendingSemanticsRevealed = false
+            readerMovement.reset()
+            pendingFocusRestored = false
             val inputBeforeRestore = focusInputRevision
             withFrameNanos { }
             pendingFocus.requestFocus()
             val savedSectionIndex = sections.indexOfFirst { it.first == selectedSection }
-            val sectionIndex = if (savedSectionIndex >= 0) {
+            val sectionIndex = if (pendingViewerMoved || pendingHeaderTarget != "primary") {
+                // The viewer explicitly chose a header action while the saved shelf was hidden.
+                -1
+            } else if (savedSectionIndex >= 0) {
                 savedSectionIndex
             } else if (selectedSection == "header") {
                 -1
@@ -959,6 +2115,7 @@ fun CatalogDetail(
             var target: FocusRequester? = null
             var targetSection: String? = null
             var targetId: String? = null
+            var headerTarget: String? = null
             if (sectionIndex >= 0) {
                 val (section, items) = sections[sectionIndex]
                 val savedId = if (savedSectionIndex < 0 && section == "seasons") state.selectedSeasonId else selectedId
@@ -971,20 +2128,53 @@ fun CatalogDetail(
                 targetId = items[itemIndex].id
             } else if (hasActions || state.error != null) {
                 list.scrollToItem(0)
-                target = if (state.error != null) retry else initial
+                target = when {
+                    state.error != null -> retry
+                    pendingHeaderTarget == "from-start" && playItem != null -> {
+                        headerTarget = "from-start"
+                        fromStartFocus
+                    }
+                    pendingHeaderTarget == "played" && (playbackLayout || !state.busy) && item?.isEmptyContainer == false -> {
+                        headerTarget = "played"
+                        playedFocus
+                    }
+                    pendingHeaderTarget == "favorite" && (playbackLayout || !state.busy) -> {
+                        headerTarget = "favorite"
+                        favoriteFocus
+                    }
+                    else -> initial
+                }
             }
             // Publish the target unfocused before requesting it. Focusing a hidden/new node
             // produces no Focused property change for Compose's accessibility delegate. Clearing
             // owner focus cannot help on TV: View.clearFocus synchronously refocuses the first item.
             semanticsRevealed = true
+            detailTiming("focus-publish")
+            PlaybackDiagnostics.write("detail-handoff phase=fresh-publish uptime=${android.os.SystemClock.uptimeMillis()}")
             repeat(2) { withFrameNanos { } }
+            detailTiming("focus-request")
+            PlaybackDiagnostics.write("detail-handoff phase=fresh-request uptime=${android.os.SystemClock.uptimeMillis()}")
+            var handoffTarget = "viewer"
+            var handoffFocused = playbackContentFocused(focusHost) == true
             if (focusInputRevision == inputBeforeRestore) {
+                handoffTarget = targetSection ?: headerTarget ?: if (state.error != null) {
+                    "retry"
+                } else if (target != null) {
+                    when {
+                        playItem != null -> "primary"
+                        item?.isEmptyContainer == true -> "favorite"
+                        else -> "played"
+                    }
+                } else {
+                    "none"
+                }
                 val key = targetKey
                 val focused = if (key != null) {
                     requestAttached(requests, key) { focusInputRevision == inputBeforeRestore }
                 } else {
                     target?.requestFocus() ?: false
                 }
+                handoffFocused = focused
                 if (focused) {
                     selectedSection = targetSection ?: "header"
                     targetId?.let {
@@ -996,9 +2186,38 @@ fun CatalogDetail(
             // Failure must still reveal the page and re-enable ordinary selection tracking.
             // Removing the temporary target also prevents an invisible input-focus trap.
             restored = true
+            playbackReturn = false
+            if (state.error == null) {
+                if (pendingFailed) commandNotice = null
+                pendingExpired = false
+                pendingFailed = false
+            }
+            // This choice belongs to this pending return, not later lifecycle/shelf restores.
+            pendingHeaderTarget = "primary"
+            pendingViewerMoved = false
+            reportFocus(handoffTarget, handoffFocused)
         }
     }
 }
+
+private fun Modifier.detailFocusDiagnostic(target: String): Modifier = onFocusChanged {
+    if (BuildConfig.DEBUG && it.isFocused) PlaybackDiagnostics.write("detail-focus target=$target")
+}
+
+private data class DetailCommand(val generation: Int, val mutationTarget: String?, val action: () -> Unit)
+
+private data class PendingDetailActions(
+    val available: Boolean,
+    val requestedTargets: Set<String>,
+    val playLabel: String,
+    val fromStartLabel: String,
+    val playedLabel: String,
+    val favoriteLabel: String,
+    val onPlay: () -> Unit,
+    val onFromStart: () -> Unit,
+    val onPlayed: () -> Unit,
+    val onFavorite: () -> Unit
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1010,13 +2229,100 @@ private fun DetailActions(
     onPlayed: () -> Unit,
     onFavorite: () -> Unit,
     onPlay: (MediaItem, Boolean) -> Unit,
+    playedFocus: FocusRequester? = null,
+    favoriteFocus: FocusRequester? = null,
+    pending: PendingDetailActions? = null,
+    onHeaderFocus: (String, Boolean) -> Unit = { _, _ -> },
+    stableLayout: Boolean = false,
+    readyQueuedTargets: Set<String> = emptySet(),
+    requestCueTarget: String? = null,
+    readiness: app.pictureshow.core.DetailReadyFeedback,
+    onReadyCue: (String?, String?) -> Unit,
+    readyCancelled: Boolean = false,
+    fromStartFocus: FocusRequester? = null,
+    blocked: Boolean = false,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
+    val feedbackHost = LocalView.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value
+    var focusedTarget by remember { mutableStateOf<String?>(null) }
+    val position = playItem?.userData?.playbackPositionTicks ?: 0
+    val labels = mapOf(
+        "primary" to (pending?.playLabel ?: if (position > 0) resumeLabel(position) else "Play"),
+        "from-start" to (pending?.fromStartLabel ?: "Play from start"),
+        "played" to (
+            pending?.playedLabel ?: if (blocked) {
+                app.pictureshow.core.detailUnavailableActionLabel("played")
+            } else if ("played" in readyQueuedTargets) {
+                app.pictureshow.core.detailRequestedActionLabel("played", requestCueTarget == "played")
+            } else if (item.isWatched) {
+                "Mark unwatched"
+            } else {
+                "Mark watched"
+            }
+            ),
+        "favorite" to (
+            pending?.favoriteLabel ?: if (blocked) {
+                app.pictureshow.core.detailUnavailableActionLabel("favorite")
+            } else if ("favorite" in readyQueuedTargets) {
+                app.pictureshow.core.detailRequestedActionLabel("favorite", requestCueTarget == "favorite")
+            } else if (item.userData.isFavorite) {
+                "Unfavorite"
+            } else {
+                "Favorite"
+            }
+            )
+    )
+    // Observe selection during composition: reads made only inside SideEffect do not
+    // subscribe this group to the focus callback's state changes.
+    val readyTarget = focusedTarget
+    val readyUsable = when (readyTarget) {
+        "primary", "from-start" -> playItem != null
+        "played" -> !item.isEmptyContainer && (stableLayout || !busy)
+        "favorite" -> stableLayout || !busy
+        else -> false
+    }
+    val accessibility = feedbackHost.context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+        as android.view.accessibility.AccessibilityManager
+    SideEffect {
+        val active = lifecycle == Lifecycle.State.RESUMED && accessibility.isEnabled
+        val cue = readiness.update(
+            blocked || pending != null,
+            readyTarget,
+            active,
+            readyUsable,
+            cancelled = readyCancelled
+        )
+        if (cue != null && readyTarget != null && detailReaderFocusMatches(feedbackHost, readyTarget)) {
+            onReadyCue(readyTarget, labels[readyTarget])
+        } else {
+            if (cue != null) readiness.cancel()
+            onReadyCue(null, null)
+        }
+    }
     var focused by remember { mutableStateOf(false) }
     var scrolling by remember { mutableStateOf<Job?>(null) }
     val focusMargin = with(LocalDensity.current) { 8.dp.toPx() }
+    val childBringIntoViews = remember {
+        listOf("primary", "played", "favorite", "from-start").associateWith { BringIntoViewRequester() }
+    }
+    val focusedChildren = remember { mutableSetOf<String>() }
+    val firstLayoutRecorded = remember { booleanArrayOf(false) }
+    fun revealFocusedBounds(coordinates: LayoutCoordinates, requester: BringIntoViewRequester) {
+        if (scrolling?.isActive == true) return
+        val top = coordinates.positionInRoot().y
+        val bottom = top + coordinates.size.height
+        val viewport = coordinates.findRootCoordinates().size.height
+        if (top < focusMargin || bottom > viewport - focusMargin) {
+            scrolling = scope.launch {
+                requester.bringIntoView(
+                    Rect(-focusMargin, -focusMargin, coordinates.size.width + focusMargin, coordinates.size.height + focusMargin)
+                )
+            }
+        }
+    }
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1024,20 +2330,15 @@ private fun DetailActions(
             focused = it.hasFocus
             if (it.hasFocus) onFocus()
         }.onGloballyPositioned { coordinates ->
-            // Metadata can arrive after focus, moving the same action below the viewport without
-            // another focus event. Recheck its un-clipped position after layout in that case.
-            if (focused && scrolling?.isActive != true) {
-                val top = coordinates.positionInRoot().y
-                val bottom = top + coordinates.size.height
-                val viewport = coordinates.findRootCoordinates().size.height
-                if (top < focusMargin || bottom > viewport - focusMargin) {
-                    scrolling = scope.launch {
-                        bringIntoView.bringIntoView(
-                            Rect(-focusMargin, -focusMargin, coordinates.size.width + focusMargin, coordinates.size.height + focusMargin)
-                        )
-                    }
-                }
+            if (!firstLayoutRecorded[0]) {
+                firstLayoutRecorded[0] = true
+                detailTiming("actions-first-layout")
             }
+            // Ordinary headers may gain metadata after focus. Returning headers freeze it and
+            // reserve slots, so check their focused child instead: an unfocused second row must
+            // not scroll an already-visible primary upward. Child checks also cover later errors
+            // or label wrapping that move the focused button without another focus event.
+            if (!stableLayout && focused) revealFocusedBounds(coordinates, bringIntoView)
         }.focusProperties {
             // Let the parent route a shelf exit to its remembered card, after spatial navigation
             // has exhausted the wrapped action rows. Programmatic requests remain unrestricted.
@@ -1046,50 +2347,216 @@ private fun DetailActions(
             }
         }.focusGroup()
     ) {
-        val position = playItem?.userData?.playbackPositionTicks ?: 0
-        Button(
-            onClick = { playItem?.let { onPlay(it, position > 0) } },
-            enabled = playItem != null,
-            modifier = (if (playItem != null) Modifier.focusRequester(initial) else Modifier).testTag("detail:play")
+        val suffix = if (pending != null) "-pending" else ""
+
+        val requestedTargets = readyQueuedTargets + pending?.requestedTargets.orEmpty()
+        val activeRequestCue = requestCueTarget?.takeIf { it in requestedTargets }
+
+        // The parent supplies the plain action name and native disabled property.
+        // Keep this wording visible without also merging it into TalkBack's label.
+        fun labelSemantics(target: String): Modifier =
+            if (blocked || pending?.available == false || target in requestedTargets) Modifier.clearAndSetSemantics {} else Modifier
+
+        fun actionModifier(target: String, tag: String, click: () -> Unit): Modifier {
+            val childBringIntoView = childBringIntoViews.getValue(target)
+            return Modifier
                 .then(
-                    if (playItem == null &&
-                        item.type in listOf("Series", "Season")
-                    ) {
-                        Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                    if (stableLayout) {
+                        Modifier.bringIntoViewRequester(childBringIntoView).onGloballyPositioned { coordinates ->
+                            if (target in focusedChildren) revealFocusedBounds(coordinates, childBringIntoView)
+                        }.width(
+                            if (target in
+                                listOf("primary", "from-start")
+                            ) {
+                                200.dp
+                            } else {
+                                260.dp
+                            }
+                        ).heightIn(min = 72.dp)
                     } else {
                         Modifier
                     }
                 )
-        ) { Text(if (position > 0) resumeLabel(position) else "Play") }
-        if (position > 0) {
-            Button(onClick = { playItem?.let { onPlay(it, false) } }) { Text("Play from start") }
+                .onFocusChanged {
+                    if (it.isFocused) {
+                        focusedChildren.add(target)
+                        focusedTarget = target
+                    } else {
+                        focusedChildren.remove(target)
+                        if (focusedTarget == target) focusedTarget = null
+                    }
+                    onHeaderFocus(target, it.isFocused)
+                    if (BuildConfig.DEBUG && it.isFocused) PlaybackDiagnostics.write("detail-focus target=$target")
+                    if (it.isFocused) detailTiming("focus-acquired", "target=$target")
+                }.testTag("detail:$tag$suffix").semantics {
+                    // Identify this virtual action independently of an outgoing player node.
+                    testTagsAsResourceId = true
+                    // Keep Material input focus/geometry while exposing the real availability
+                    // to services. Compose omits click actions for disabled semantics.
+                    if (pending?.available == false) disabled()
+                    val available = !blocked && pending?.available != false
+                    if (!available) {
+                        contentDescription = app.pictureshow.core.detailHeldActionLabel(target)
+                        role = Role.Button
+                    }
+                    val currentState = when (target) {
+                        "played" -> if (item.isWatched) "Watched" else "Unwatched"
+                        "favorite" -> if (item.userData.isFavorite) "Favorite" else "Not favorite"
+                        else -> null
+                    }
+                    val requested = target in requestedTargets
+                    // Acceptance is a one-shot event. Rediscovery exposes the outstanding request.
+                    val requestedCue = requested
+                    when {
+                        requestedCue -> {
+                            contentDescription = app.pictureshow.core.detailRequestedActionLabel(target, false)
+                            role = Role.Button
+                            if (activeRequestCue != target && available) currentState?.let { stateDescription = it }
+                        }
+                        else -> app.pictureshow.core.detailActionDescription(
+                            currentState,
+                            available && activeRequestCue != target
+                        )?.let { stateDescription = it }
+                    }
+                }.onPreviewKeyEvent {
+                    // Handle pending Select at DOWN, before a fresh callback can replace it.
+                    // Activity's handoff owns the matching UP/repeats, even across completion.
+                    if (!blocked &&
+                        pending != null &&
+                        it.type == KeyEventType.KeyDown &&
+                        it.nativeKeyEvent.repeatCount == 0 &&
+                        it.nativeKeyEvent.keyCode in listOf(
+                            android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                            android.view.KeyEvent.KEYCODE_ENTER,
+                            android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                        )
+                    ) {
+                        click()
+                        true
+                    } else {
+                        false
+                    }
+                }
         }
-        Button(
-            onClick = onPlayed,
-            enabled = !busy && !item.isEmptyContainer,
-            modifier = (
-                if (playItem == null &&
-                    !item.isEmptyContainer
+        // TV Material raises the focused surface. Stable parents keep native traversal order
+        // and node identities unchanged as pending labels become authoritative actions.
+        key("primary") {
+            Box {
+                val click: () -> Unit = pending?.onPlay ?: {
+                    playItem?.let { onPlay(it, position > 0) }
+                    Unit
+                }
+                Button(
+                    onClick = { if (!blocked) click() },
+                    enabled = !blocked && (pending != null || playItem != null),
+                    modifier = (if (pending != null || playItem != null) Modifier.focusRequester(initial) else Modifier)
+                        .then(actionModifier("primary", "play", click))
+                        .then(
+                            if (pending == null && playItem == null && item.type in listOf("Series", "Season")) {
+                                Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                            } else {
+                                Modifier
+                            }
+                        )
                 ) {
-                    Modifier.focusRequester(initial)
-                } else {
-                    Modifier
+                    Text(
+                        labels.getValue("primary"),
+                        modifier = Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary"))
+                    )
                 }
-                ).testTag("detail:played").semantics {
-                toggleableState = ToggleableState(item.isWatched)
-                stateDescription = if (item.isWatched) "Watched" else "Unwatched"
             }
-        ) { Text(if (item.isWatched) "Mark unwatched" else "Mark watched") }
-        Button(
-            onClick = onFavorite,
-            enabled = !busy,
-            modifier = (if (playItem == null && item.isEmptyContainer) Modifier.focusRequester(initial) else Modifier)
-                .testTag("detail:favorite").semantics {
-                    toggleableState = ToggleableState(item.userData.isFavorite)
-                    stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite"
+        }
+        if (!stableLayout && position > 0) {
+            key("from-start") {
+                Box {
+                    Button(
+                        onClick = { if (!blocked) playItem?.let { onPlay(it, false) } },
+                        enabled = !blocked,
+                        modifier = Modifier.detailFocusDiagnostic("from-start")
+                    ) { Text("Play from start") }
                 }
-        ) {
-            Text(if (item.userData.isFavorite) "Unfavorite" else "Favorite")
+            }
+        }
+        key("played") {
+            Box {
+                val click = pending?.onPlayed ?: onPlayed
+                Button(
+                    onClick = { if (!blocked) click() },
+                    enabled = !blocked && (pending != null || (!item.isEmptyContainer && (stableLayout || !busy))),
+                    modifier = (
+                        if (pending == null &&
+                            playItem == null &&
+                            !item.isEmptyContainer
+                        ) {
+                            Modifier.focusRequester(initial)
+                        } else {
+                            Modifier
+                        }
+                        )
+                        .then(playedFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                        .then(actionModifier("played", "played", click)).semantics {
+                            if (!blocked && pending?.available != false && activeRequestCue != "played") {
+                                toggleableState = ToggleableState(item.isWatched)
+                            }
+                        }
+                ) {
+                    Text(
+                        labels.getValue("played"),
+                        modifier = Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played"))
+                    )
+                }
+            }
+        }
+        key("favorite") {
+            Box {
+                val click = pending?.onFavorite ?: onFavorite
+                Button(
+                    onClick = { if (!blocked) click() },
+                    enabled = !blocked && (pending != null || stableLayout || !busy),
+                    modifier = (
+                        if (pending == null &&
+                            playItem == null &&
+                            item.isEmptyContainer
+                        ) {
+                            Modifier.focusRequester(initial)
+                        } else {
+                            Modifier
+                        }
+                        )
+                        .then(favoriteFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                        .then(actionModifier("favorite", "favorite", click)).semantics {
+                            if (!blocked && pending?.available != false && activeRequestCue != "favorite") {
+                                toggleableState = ToggleableState(item.userData.isFavorite)
+                            }
+                        }
+                ) {
+                    Text(
+                        labels.getValue("favorite"),
+                        modifier = Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite"))
+                    )
+                }
+            }
+        }
+        if (stableLayout) {
+            key("from-start") {
+                Box {
+                    val click = pending?.onFromStart ?: {
+                        playItem?.let { onPlay(it, false) }
+                        Unit
+                    }
+                    Button(
+                        onClick = { if (!blocked) click() },
+                        enabled = !blocked && (pending != null || playItem != null),
+                        modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
+                            .then(actionModifier("from-start", "from-start", click))
+                    ) {
+                        Text(
+                            labels.getValue("from-start"),
+                            modifier = Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start"))
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1292,11 +2759,11 @@ internal fun CatalogArtwork(
 }
 
 @Composable
-private fun CatalogHeading(title: String, large: Boolean = true) {
+private fun CatalogHeading(title: String, modifier: Modifier = Modifier, large: Boolean = true) {
     Text(
         title,
         style = if (large) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineSmall,
-        modifier = Modifier.semantics { heading() }
+        modifier = modifier.semantics { heading() }
     )
 }
 

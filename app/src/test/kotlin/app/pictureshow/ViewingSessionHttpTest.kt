@@ -82,7 +82,7 @@ class ViewingSessionHttpTest {
                                 "SupportsTranscoding":true,"TranscodingContainer":"ts","TranscodingSubProtocol":"hls",
                                 "TranscodingUrl":"/Videos/film/master.m3u8?VideoCodec=h264&MaxFramerate=30&AudioCodec=aac&PlaySessionId=encode-$sequence",
                                 "DefaultAudioStreamIndex":1,"DefaultSubtitleStreamIndex":-1,
-                                "MediaStreams":[{"Type":"Video","RealFrameRate":60},{"Type":"Audio","Index":1,"Codec":"pcm_s16le","Channels":2}]}]}""",
+                                "MediaStreams":[{"Type":"Video","RealFrameRate":60},{"Type":"Audio","Index":1,"Codec":"pcm_s16le","Channels":2},{"Type":"Audio","Index":2,"Codec":"aac","Channels":2}]}]}""",
                                     headers = headersOf(HttpHeaders.ContentType, "application/json")
                                 )
                             }
@@ -127,7 +127,7 @@ class ViewingSessionHttpTest {
                 session.ready()
                 runCurrent()
             }
-            session.select(MediaStreamType.Audio, 1)
+            session.select(MediaStreamType.Audio, 2)
             runCurrent()
             session.ready()
             runCurrent()
@@ -138,6 +138,7 @@ class ViewingSessionHttpTest {
             assertEquals(1, wire.reports("").size, "Stream replacement must not start another play")
             assertTrue(wire.reports("/Stopped").isEmpty(), "Only leaving playback reports Stop")
             val progress = wire.reports("/Progress").last()
+            assertEquals("2", progress["AudioStreamIndex"]?.jsonPrimitive?.content)
             assertEquals("encode-6", progress["PlaySessionId"]?.jsonPrimitive?.content)
             assertEquals(3_000_000_000L, progress["PositionTicks"]?.jsonPrimitive?.long)
             assertEquals(true, progress["IsPaused"]?.jsonPrimitive?.boolean)

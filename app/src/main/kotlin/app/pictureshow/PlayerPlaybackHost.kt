@@ -44,7 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koin.compose.koinInject
 
-internal data class EpisodeLookup(val attempt: Int, val result: ClientResult<MediaItem?>)
+internal data class TouchEpisodeLookup(val attempt: Int, val result: ClientResult<MediaItem?>)
 
 /** Session ownership and terminal transitions shared by the remote and touch presentations. */
 internal class PlaybackHostState(
@@ -63,7 +63,7 @@ internal class PlaybackHostState(
     var duration by mutableLongStateOf(0)
     var metadata by mutableStateOf(item)
     var segments by mutableStateOf(emptyList<MediaSegment>())
-    internal var nextLookup by mutableStateOf<EpisodeLookup?>(null)
+    internal var nextLookup by mutableStateOf<TouchEpisodeLookup?>(null)
     var nextRetry by mutableIntStateOf(0)
     var extras by mutableStateOf<PlaybackExtrasClient?>(null)
     var tiles by mutableStateOf<TrickplayCache?>(null)
@@ -210,7 +210,7 @@ internal fun rememberPlaybackHost(
         LaunchedEffect(extras, metadata.id, metadata.type, metadata.seriesId, nextRetry) {
             val client = extras ?: return@LaunchedEffect
             nextLookup = null
-            nextLookup = EpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
+            nextLookup = TouchEpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
         }
         LaunchedEffect(ended, nextLookup, nextCancelled) {
             if (!ended) return@LaunchedEffect

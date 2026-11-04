@@ -73,7 +73,9 @@ class AccessibilityRc3Test {
                 CatalogDetail(CatalogDetailState(account, MediaItem("series", "A Series", "Series"), loading = true), {}, {}, {}, {}, {})
             }
         }
-        compose.onNodeWithTag("detail:play").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        compose.onNodeWithTag("detail:play").assertDoesNotExist()
+        compose.onNodeWithTag("detail:play", useUnmergedTree = true)
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
     }
 
     @Test fun endedPlayButtonDoesNotClaimToBePlaying() {
@@ -125,7 +127,10 @@ class AccessibilityRc3Test {
             state = state.copy(items = listOf(MediaItem("m", "A Film", "Movie")), loading = false)
         }
         compose.onNodeWithTag("grid:m").assertIsFocused()
-        compose.onNodeWithTag("grid").assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Films"))
+        // The full-screen grid retains heading context, without emitting obsolete pane
+        // window events over the next destination's focused action.
+        compose.onNodeWithText("Films").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+        compose.onNodeWithTag("grid").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.PaneTitle))
         compose.onNodeWithTag("grid:sort:SortName").assertExists()
     }
 

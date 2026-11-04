@@ -533,12 +533,12 @@ class DeviceProfileBuilderTest {
             assertEquals(listOf("ts"), profile.transcodingProfiles.map { it.container })
             val ts = profile.transcodingProfiles.single()
             assertEquals(MediaStreamProtocol.Hls, ts.protocol)
-            assertEquals("h264", ts.videoCodec.split(',').first())
+            assertEquals("hevc", ts.videoCodec.split(',').first())
             assertEquals(false, ts.breakOnNonKeyFrames)
             assertEquals(1, ts.minSegments)
         }
         val ts = streamer.transcodingProfiles.single()
-        assertEquals("h264,hevc", ts.videoCodec)
+        assertEquals("hevc,h264", ts.videoCodec)
         assertEquals("eac3,ac3,aac,mp3", ts.audioCodec)
         // The server ranks all profiles by video/audio copy compatibility. A fallback fMP4 profile could win
         // despite list order, exposing negative audio decode times when only audio must be re-encoded.

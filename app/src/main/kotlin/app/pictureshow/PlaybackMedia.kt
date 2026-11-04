@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 
-/** One factory is shared by the manifest, media segments and external subtitle media sources. */
+/** Finite HLS media can use a shorter deadline while all sources share the process transport. */
 internal object PlaybackMedia {
     // Reopens can happen faster than OkHttp's idle eviction. A pool/dispatcher per source keeps
     // sockets and workers from many retired players alive. Child clients share these bounded
@@ -42,9 +42,25 @@ internal object PlaybackMedia {
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    /** Network interceptors run again for redirect hops; default request properties cannot enforce origin. */
-    fun httpFactory(server: Server, decision: PlayDecision): OkHttpDataSource.Factory {
+    /** Network interceptors run again for redirect hops; default request properties cannot enforce origin.
+     * [nativeHlsMedia] is false for playlists and external subtitles, which may wait for encoder startup.
+     */
+    fun httpFactory(server: Server, decision: PlayDecision, nativeHlsMedia: Boolean = true): OkHttpDataSource.Factory {
         val client = transport.newBuilder()
+            .apply {
+                if (nativeHlsMedia &&
+                    decision.method == PlayMethod.Transcode &&
+                    decision.mediaSource.transcodingSubProtocol == app.pictureshow.core.playback.MediaStreamProtocol.Hls &&
+                    !TranscodeSeek.required(decision)
+                ) {
+                    // A rendition has one sequential loader. Repeated 20-second reads can consume
+                    // the session's 45-second buffering budget before Media3 gets a useful retry.
+                    // Bound silent reads AND bodies that dribble forever. OkHttp retires a failed
+                    // exchange; Media3 owns retry/backoff and resuming the partially read chunk.
+                    readTimeout(8, TimeUnit.SECONDS)
+                    callTimeout(15, TimeUnit.SECONDS)
+                }
+            }
             .addNetworkInterceptor { chain ->
                 val incoming = chain.request()
                 val cleanUrl = Redaction.stripApiKey(incoming.url.toString())
@@ -86,11 +102,7 @@ internal object PlaybackMedia {
         }
         .setSubtitleConfigurations(
             decision.mediaSource.mediaStreams.filter {
-                it.type == MediaStreamType.Subtitle &&
-                    deliveredExternally(it) &&
-                    it.deliveryMethod != SubtitleDeliveryMethod.Encode &&
-                    !it.deliveryUrl.isNullOrBlank() &&
-                    subtitleMime(it.codec) != null
+                sideloadedSubtitle(it)
             }.map { stream ->
                 MediaItem.SubtitleConfiguration.Builder(
                     subtitleUrl(server, stream, serverStartMs).toUri()
@@ -134,6 +146,12 @@ internal object PlaybackMedia {
         }.build().toString()
     }
 
+    fun sideloadedSubtitle(stream: MediaStream): Boolean = stream.type == MediaStreamType.Subtitle &&
+        deliveredExternally(stream) &&
+        stream.deliveryMethod != SubtitleDeliveryMethod.Encode &&
+        !stream.deliveryUrl.isNullOrBlank() &&
+        subtitleMime(stream.codec) != null
+
     fun deliveredExternally(stream: MediaStream): Boolean =
         stream.isExternal || stream.isExternalUrl || stream.deliveryMethod == SubtitleDeliveryMethod.External
 
@@ -147,12 +165,6 @@ internal object PlaybackMedia {
         else -> null
     }
 
-    fun defaultStream(streams: List<MediaStream>, type: MediaStreamType, serverIndex: Int?, preferredLanguage: String): Int {
-        // A null server subtitle index means its user mode selected no subtitles (for example None).
-        if (type == MediaStreamType.Subtitle) return serverIndex ?: -1
-        val preferred = PlaybackTracks.language(preferredLanguage)
-        return serverIndex ?: streams.firstOrNull { it.type == type && it.isDefault }?.index
-            ?: streams.firstOrNull { it.type == type && preferred != null && PlaybackTracks.language(it.language) == preferred }?.index
-            ?: if (type == MediaStreamType.Audio) streams.firstOrNull { it.type == type }?.index ?: -1 else -1
-    }
+    fun defaultStream(streams: List<MediaStream>, type: MediaStreamType, serverIndex: Int?, preferredLanguage: String): Int =
+        app.pictureshow.core.playback.StreamDefaults.choose(streams, type, serverIndex, preferredLanguage)
 }

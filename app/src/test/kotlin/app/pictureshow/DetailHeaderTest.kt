@@ -353,7 +353,7 @@ class DetailHeaderTest {
     @Test
     fun emptySeriesKeepsHeaderActionsReachableWithoutStartingPlayback() {
         var plays = 0
-        show(CatalogDetailState(account, series, loading = false), { _, _ -> plays++ })
+        show(CatalogDetailState(account, series, loading = false, readSucceeded = true), { _, _ -> plays++ })
         compose.onNodeWithTag("detail:played").assertIsFocused().assertIsDisplayed()
         compose.onNodeWithText("No episodes are available.").assertExists()
         compose.runOnIdle { assertEquals(0, plays) }

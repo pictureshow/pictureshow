@@ -10,3 +10,10 @@
 .DS_Store
 
 /build-logic/.gradle/
+
+# Apple local builds and per-user Xcode state
+**/.build/
+**/.swiftpm/
+**/xcuserdata/
+**/*.xcuserstate
+**/__pycache__/
