@@ -55,7 +55,7 @@ data class RemoteControllerEvent(
 )
 
 private val TargetTransport = listOf("play", "pause", "seek", "stop", "play-now")
-private val FollowUps = listOf("next", "previous", "audio", "subtitle", "volume")
+private val FollowUps = listOf("next", "previous", "audio", "subtitle", "volume", "queue")
 
 private fun CommandState.syncFrom(now: RemoteNowPlaying?): CommandState = copy(
     capabilities = if (now?.canSeek == false) TargetTransport - "seek" else TargetTransport,
@@ -100,6 +100,7 @@ fun reduceRemoteController(state: RemoteControllerState, event: RemoteController
                 effect = if (s.phase == "detached") "none" else "refresh"
             )
         }
+        "signed-out" -> RemoteControllerState(s.server, s.viewer, phase = "signed-out", generation = s.generation + 1)
         "intent" -> intent(s, event)
         "sent" -> sent(s, event)
         "tick" -> tick(s, event)
@@ -169,6 +170,7 @@ private fun refresh(s: RemoteControllerState, event: RemoteControllerEvent): Rem
             "audio" -> now?.audio == pending.audio
             "subtitle" -> now?.subtitle == pending.subtitle
             "volume" -> now?.volume == pending.volume
+            // A session row carries no queue: a queue edit can only ever be sent, never shown as done.
             else -> false
         }
         if (done) pending.copy(result = "confirmed") else pending

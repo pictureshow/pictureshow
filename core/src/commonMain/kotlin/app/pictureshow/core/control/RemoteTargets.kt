@@ -27,8 +27,13 @@ data class RemoteNowPlaying(
     val audio: Int? = null,
     val subtitle: Int? = null,
     val volume: Int? = null,
-    val muted: Boolean = false
+    val muted: Boolean = false,
+    val tracks: List<RemoteTrack> = emptyList()
 )
+
+/** A stream of what is playing, offered only to the viewer who is watching it. */
+@Serializable
+data class RemoteTrack(val type: String, val index: Int, val label: String)
 
 /** One session the server says this viewer may control and that really can play. */
 @Serializable
@@ -54,6 +59,13 @@ private fun JsonElement?.int(): Int? = (this as? JsonPrimitive)?.takeUnless { it
 private fun JsonElement?.ticks(): Long = (this as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull?.coerceAtLeast(0) ?: 0
 
 private fun JsonElement?.strings(): List<String> = (this as? JsonArray).orEmpty().mapNotNull { it.text() }
+
+private fun tracks(streams: JsonElement?): List<RemoteTrack> = (streams as? JsonArray).orEmpty().mapNotNull { element ->
+    val stream = element as? JsonObject ?: return@mapNotNull null
+    val type = stream["Type"].text()?.takeIf { it == "Audio" || it == "Subtitle" } ?: return@mapNotNull null
+    val index = stream["Index"].int() ?: return@mapNotNull null
+    RemoteTrack(type, index, stream["DisplayTitle"].text() ?: stream["Language"].text() ?: "$type $index")
+}
 
 /** Jellyfin writes the same GUID dashed or undashed depending on the DTO. */
 internal fun normalizedId(value: String?): String? {
@@ -98,7 +110,8 @@ fun remoteTargets(sessions: JsonArray, viewer: String, selfDevice: String): List
                     audio = state?.get("AudioStreamIndex").int(),
                     subtitle = state?.get("SubtitleStreamIndex").int(),
                     volume = state?.get("VolumeLevel").int(),
-                    muted = state?.get("IsMuted").flag()
+                    muted = state?.get("IsMuted").flag(),
+                    tracks = if (same) tracks(nowItem?.get("MediaStreams")) else emptyList()
                 )
             }
         )
