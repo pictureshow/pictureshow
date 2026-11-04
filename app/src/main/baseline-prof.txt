@@ -1,0 +1,32 @@
+# Pictureshow baseline profile: rules ART compiles ahead of time at install (Play: cloud profile and .dm;
+# sideloaded installs: androidx.profileinstaller writes it on first launch). Library AARs bring their own
+# rules for common Compose paths; these add what a traced TalkBack movie open on an Android 11 TV still
+# JIT-compiled. Rules use the human-readable ART profile syntax with wildcards; R8 rewrites them to the
+# minified names. Hand-written, because every screen worth covering needs a signed-in Jellyfin server,
+# and a wildcard over our own package covers startup, home, library, detail, player and back without one.
+
+# Our own code (app and core): startup, home, library, detail, player, playback-exit focus, back.
+HSPLapp/pictureshow/**->**(**)**
+Lapp/pictureshow/**;
+
+# Compose's accessibility delegate and the semantics it reads whenever TalkBack (or any accessibility
+# service) is on. Library profiles cover the common Compose paths but not this one.
+HSPLandroidx/compose/ui/platform/AndroidComposeViewAccessibilityDelegateCompat*;->**(**)**
+Landroidx/compose/ui/platform/AndroidComposeViewAccessibilityDelegateCompat*;
+HSPLandroidx/compose/ui/platform/AndroidComposeViewAccessibilityDelegateCompat_androidKt*;->**(**)**
+HSPLandroidx/compose/ui/platform/AndroidAccessibilityManager*;->**(**)**
+HSPLandroidx/compose/ui/platform/SemanticsUtils_androidKt;->**(**)**
+HSPLandroidx/compose/ui/platform/SemanticsNodeCopy;->**(**)**
+HSPLandroidx/compose/ui/platform/accessibility/**->**(**)**
+HSPLandroidx/compose/ui/semantics/**->**(**)**
+Landroidx/compose/ui/semantics/**;
+HSPLandroidx/core/view/accessibility/**->**(**)**
+HSPLandroidx/core/view/AccessibilityDelegateCompat*;->**(**)**
+
+# Collections and coroutine machinery that the same open compiled at run time.
+HSPLandroidx/collection/**->**(**)**
+Landroidx/collection/**;
+HSPLkotlin/coroutines/jvm/internal/**->**(**)**
+Lkotlin/coroutines/jvm/internal/**;
+HSPLkotlin/sequences/SequencesKt__SequenceBuilderKt*;->**(**)**
+HSPLkotlin/sequences/SequenceBuilderIterator;->**(**)**

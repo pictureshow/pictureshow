@@ -102,7 +102,11 @@ jobs:
           echo "::error::Android emulator image download failed after 3 attempts"
           exit 1
 
-      - name: Run Android instrumented audio decoder tests on an emulator
+      # Minified and non-debuggable like release, signed with the runner's debug key so it installs.
+      - name: Build the release-like app APK for the baseline profile check
+        run: ./gradlew :app:assembleDeviceTest
+
+      - name: Run Android instrumented audio decoder tests and the baseline profile check on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -111,7 +115,9 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-snapshot
-          script: ./gradlew :media3-ffmpeg:connectedDebugAndroidTest
+          script: |
+            ./gradlew :media3-ffmpeg:connectedDebugAndroidTest
+            tools/check-baseline-profile.sh app/build/outputs/apk/deviceTest/app-deviceTest.apk app/build/outputs/mapping/deviceTest/mapping.txt android-device-test-results/baseline-profile
 
       - name: Collect Android instrumented test counts
         if: always()
