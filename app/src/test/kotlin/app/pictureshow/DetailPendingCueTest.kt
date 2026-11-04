@@ -108,11 +108,48 @@ class DetailPendingCueTest {
         compose.mainClock.advanceTimeBy(2_000)
         compose.runOnIdle { assertEquals(listOf("Play when ready"), f.cues()) }
         f.settle()
-        compose.runOnIdle { assertEquals(listOf("Play when ready", "Ready"), f.cues()) }
+        compose.runOnIdle { assertEquals(listOf("Play when ready", "Ready. Play"), f.cues()) }
         compose.mainClock.advanceTimeBy(500)
         compose.runOnIdle {
-            assertEquals(listOf("Play when ready", "Ready"), f.cues())
+            assertEquals(listOf("Play when ready", "Ready. Play"), f.cues())
             assertTrue(f.events.none { it.first == AccessibilityEvent.TYPE_ANNOUNCEMENT })
+        }
+    }
+
+    @Test fun aReadSettlingJustAfterThePendingCueLeavesThatCueItsTurn() {
+        val f = Fixture()
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.runOnIdle { assertEquals(listOf("Play when ready"), f.cues()) }
+        f.settle()
+        compose.runOnIdle { assertEquals(listOf("Play when ready"), f.cues(), "A newer cue would discard the waiting one") }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.runOnIdle { assertEquals(listOf("Play when ready", "Ready. Play"), f.cues()) }
+    }
+
+    @Test fun aReaderWhoLeavesDuringTheReadyHoldDoesNotGetIt() {
+        val f = Fixture()
+        compose.mainClock.advanceTimeBy(1_600)
+        f.settle()
+        compose.runOnIdle { f.reader = 2 }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.runOnIdle { assertEquals(listOf("Play when ready"), f.cues()) }
+    }
+
+    @Test fun readyNamesAResumeActionByItsCurrentLabel() {
+        val f = Fixture()
+        compose.mainClock.advanceTimeBy(3_500)
+        compose.runOnIdle {
+            f.state.value = f.state.value.copy(
+                item = film.copy(userData = film.userData.copy(playbackPositionTicks = 6_000_000_000)),
+                loading = false,
+                playbackPending = false,
+                readSucceeded = true
+            )
+        }
+        compose.mainClock.advanceTimeBy(160)
+        compose.runOnIdle {
+            val ready = f.cues().last()
+            assertTrue(ready.startsWith("Ready. Resume"), "Got: $ready")
         }
     }
 

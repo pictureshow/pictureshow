@@ -38,6 +38,20 @@ class DetailReadLifecycle {
     }
 }
 
+/**
+ * A reader can replace a waiting pending cue with this one, so it may be the only cue heard:
+ * it names the action rather than relying on "when ready" having been spoken.
+ */
+fun detailReadyCue(actionLabel: String): String = "Ready. $actionLabel"
+
+/**
+ * TalkBack gives every label change on the selected control one speech group, and a newer one
+ * discards the older one still waiting. The first arrival speech has taken up to about 1.8 s on
+ * a slow speech engine, so hold Ready this long after a pending cue. Readers hear Ready late, and
+ * the action works throughout.
+ */
+const val DETAIL_READY_AFTER_PENDING_CUE_MILLIS = 1_500L
+
 /** Readiness belongs only to a held control already presented to the reader. */
 class DetailReadyFeedback {
     private var presentedHold = false

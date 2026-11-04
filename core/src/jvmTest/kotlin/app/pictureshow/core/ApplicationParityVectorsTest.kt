@@ -325,6 +325,7 @@ class ApplicationParityVectorsTest {
                             }
                         )
                     }
+                    "detail-ready-cue" -> JsonPrimitive(detailReadyCue(input.getValue("label").jsonPrimitive.content))
                     "detail-ready-feedback" -> {
                         val feedback = DetailReadyFeedback()
                         JsonArray(
