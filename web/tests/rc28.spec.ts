@@ -369,11 +369,13 @@ test("rc28 arrival inside grace keeps the plain name and never emits Ready", asy
     await openDetail(page);
     const play = page.locator('[data-focus="play"]');
     await expect(play).toHaveAccessibleName("Play");
-    await expect(play).toHaveAttribute("aria-disabled", "true");
+    await expect(play).toHaveAttribute("data-state", "pending");
+    await expect(play).toHaveAttribute("aria-disabled", "false");
     expect(await play.evaluate((e: HTMLButtonElement) => e.disabled)).toBe(
         false,
     );
     read.release();
+    await expect(play).toHaveAttribute("data-state", "ready");
     await expect(play).toHaveAttribute("aria-disabled", "false");
     await page.waitForTimeout(500);
     await evidence(page, "arrival-grace", true);
@@ -756,8 +758,8 @@ test("rc28 timed-out held request expires, Retry explains it, and release cannot
     await page.getByRole("button", { name: "Retry", exact: true }).click();
     await page.clock.runFor(200);
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
-        "aria-disabled",
-        "false",
+        "data-state",
+        "ready",
     );
     expect(writes).toBe(0);
     await evidence(page, "expired-request");

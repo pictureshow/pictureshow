@@ -29,6 +29,8 @@ export type Stream = {
 export type Source = {
     Id: string;
     Container?: string;
+    Bitrate?: number;
+    TranscodingContainer?: string;
     MediaStreams?: Stream[];
     SupportsDirectPlay?: boolean;
     SupportsDirectStream?: boolean;
@@ -420,6 +422,23 @@ export function canDirect(source: Source, probe: Probe, audioIndex?: number) {
     return probe(
         `${mime}; codecs="${[videoCodecs[v.Codec], a?.Codec ? audioCodecs[a.Codec] : undefined].filter(Boolean).join(",")}"`,
     );
+}
+/**
+ * PLAY-27 per-file gate: whether this browser's own probes say it can decode the
+ * source's picture. A notice must never blame the browser for video it could play.
+ */
+export function canDecodeVideo(source: Source | undefined, probe: Probe) {
+    const v = source?.MediaStreams?.find((s) => s.Type === "Video");
+    if (
+        !v?.Codec ||
+        !videoCodecs[v.Codec] ||
+        (v.BitDepth ?? 8) > 8 ||
+        (v.Width ?? 0) > 3840 ||
+        (v.Height ?? 0) > 2160 ||
+        (v.RealFrameRate ?? 0) > 60
+    )
+        return false;
+    return probe(`video/mp4; codecs="${videoCodecs[v.Codec]}"`);
 }
 export function browserProfile(probe: Probe, bitrate = 200_000_000) {
     const video = Object.entries(videoCodecs)

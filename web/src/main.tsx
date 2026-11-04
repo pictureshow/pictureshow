@@ -9,6 +9,7 @@ import {
     type Item,
 } from "@pictureshow/core";
 import { spatialKey } from "./navigation";
+import { installLastInput } from "./last-input";
 import { Player } from "./player";
 import { Home, Detail, Search, Libraries, type CatalogRoute } from "./catalog";
 import {
@@ -908,4 +909,5 @@ function App() {
         </>
     );
 }
+installLastInput();
 createRoot(document.getElementById("root")!).render(<App />);

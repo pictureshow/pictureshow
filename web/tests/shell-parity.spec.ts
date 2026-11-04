@@ -365,16 +365,21 @@ test("failed final report retries its exact viewing snapshot before fresh action
         exact: true,
     });
     await expect(retry).toBeVisible();
+    // A report error guards commands; a press is accepted as pending (CAT-13).
+    await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
+        "data-state",
+        "pending",
+    );
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
         "aria-disabled",
-        "true",
+        "false",
     );
     await retry.click();
     await expect.poll(() => attempts.length).toBe(2);
     expect(attempts[1]).toEqual(attempts[0]);
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
-        "aria-disabled",
-        "false",
+        "data-state",
+        "ready",
     );
 });
 

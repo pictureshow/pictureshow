@@ -357,6 +357,10 @@ test("detail Retry retains its target while loading and hands focus to fresh pri
     release!();
     await expect(page.locator('[data-focus="play"]')).toBeFocused();
     await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
+        "data-state",
+        "ready",
+    );
+    await expect(page.locator('[data-focus="play"]')).toHaveAttribute(
         "aria-disabled",
         "false",
     );
@@ -526,7 +530,8 @@ test("fresh unresolved detail accepts one pending Play and negotiates only after
     await page.locator('[data-focus="latest:library:movie"]').click();
     const pending = page.locator('[data-focus="play"]');
     await expect(pending).toBeFocused();
-    await expect(pending).toHaveAttribute("aria-disabled", "true");
+    await expect(pending).toHaveAttribute("data-state", "pending");
+    await expect(pending).toHaveAttribute("aria-disabled", "false");
     await page.keyboard.press("Enter");
     await expect(page.locator("[data-detail-feedback]")).toContainText(
         "Play requested",
@@ -568,7 +573,8 @@ test("rc28 cold detail starts plain, then announces Ready only after the same fo
     const play = page.locator('[data-focus="play"]');
     await expect(play).toBeFocused();
     await expect(play).toHaveAccessibleName("Play");
-    await expect(play).toHaveAttribute("aria-disabled", "true");
+    await expect(play).toHaveAttribute("data-state", "pending");
+    await expect(play).toHaveAttribute("aria-disabled", "false");
     await page.keyboard.press("ArrowRight");
     const watched = page.locator('[data-focus="watched"]');
     await expect(watched).toBeFocused();
@@ -578,6 +584,7 @@ test("rc28 cold detail starts plain, then announces Ready only after the same fo
     await captureRecovery(page, "held");
     release();
     await expect(watched).toBeFocused();
+    await expect(watched).toHaveAttribute("data-state", "ready");
     await expect(watched).toHaveAttribute("aria-disabled", "false");
     await expect(page.locator("[data-detail-feedback]")).toHaveText("Ready");
     await captureRecovery(page, "ready");
@@ -720,8 +727,281 @@ test("rc26 failed Series read keeps unknown season and toggle state neutral with
     for (const label of ["Watched", "Favorite"]) {
         const action = page.getByRole("button", { name: label, exact: true });
         await expect(action).toHaveAttribute("aria-disabled", "true");
+        await expect(action).toHaveAttribute("data-state", "unavailable");
         await expect(action).not.toHaveAttribute("aria-pressed");
     }
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.locator("[data-detail-feedback]")).toContainText("503");
+});
+
+test("CAT-09/11 pending Watched is accepting (not aria-disabled) and runs after release; read-failure Watched refuses", async ({
+    page,
+}) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let phase: "held" | "fail" | "ok" = "held",
+        played = false,
+        writes = 0;
+    await start(page, async (url, method) => {
+        if (url.pathname === "/Items/movie") {
+            if (phase === "held") await held;
+            if (phase === "fail") return { status: 503 };
+            const item = movie();
+            return {
+                body: {
+                    ...item,
+                    UserData: { ...item.UserData, Played: played },
+                },
+            };
+        }
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        ) {
+            const item = movie();
+            return {
+                body: {
+                    Items: [
+                        {
+                            ...item,
+                            UserData: { ...item.UserData, Played: played },
+                        },
+                    ],
+                },
+            };
+        }
+        if (url.pathname.endsWith("/UserPlayedItems/movie")) {
+            writes++;
+            played = method === "POST";
+            return { body: { Played: played } };
+        }
+        return {};
+    });
+    const press = async (target: ReturnType<Page["locator"]>) => {
+        const box = await target.boundingBox();
+        expect(box).not.toBeNull();
+        await page.mouse.click(
+            box!.x + box!.width / 2,
+            box!.y + box!.height / 2,
+        );
+    };
+    const opener = page.locator('[data-focus="latest:library:movie"]');
+    await opener.click();
+    const watched = page.locator('[data-focus="watched"]');
+    await expect(watched).toHaveAttribute("data-state", "pending");
+    await expect(watched).toHaveAttribute("aria-disabled", "false");
+    await expect(watched).toHaveAttribute(
+        "aria-description",
+        "Runs when this item is ready",
+    );
+    await press(watched);
+    await expect(watched).toContainText("already requested");
+    await expect(watched).toHaveAccessibleName("Watched already requested");
+    expect(writes).toBe(0);
+    phase = "ok";
+    release();
+    await expect.poll(() => writes).toBe(1);
+    expect(played).toBe(true);
+    await expect(watched).toHaveAttribute("data-state", "ready");
+    await expect(watched).toHaveAttribute("aria-pressed", "true");
+    await expect(watched).not.toHaveAttribute("aria-description");
+
+    await page.keyboard.press("Escape");
+    phase = "fail";
+    await opener.click();
+    const retry = page.getByRole("button", { name: "Retry", exact: true });
+    await expect(retry).toBeVisible();
+    await expect(watched).toHaveAttribute("data-state", "unavailable");
+    await expect(watched).toHaveAttribute("aria-disabled", "true");
+    await expect(watched).not.toHaveAttribute("aria-description");
+    await press(watched);
+    await expect(watched).not.toContainText("already requested");
+    await expect(page.locator("[data-detail-feedback]")).not.toContainText(
+        "Watched change requested",
+    );
+    phase = "ok";
+    await retry.click();
+    await expect(watched).toHaveAttribute("data-state", "ready");
+    await page.waitForTimeout(300);
+    expect(writes).toBe(1);
+    expect(played).toBe(true);
+});
+
+test("presses during Saving… are queued, not dropped: a different action runs next and a repeat deduplicates", async ({
+    page,
+}) => {
+    // Android queueReadyMutation: returning controls keep focus while a mutation is busy,
+    // and a fresh press joins the same ordered queue (CAT-07, CAT-09).
+    let favorite = false,
+        played = false,
+        holdFavorite: (() => void) | undefined;
+    const writes: string[] = [];
+    const item = () => ({
+        ...movie(),
+        UserData: { ...movie().UserData, IsFavorite: favorite, Played: played },
+    });
+    await start(page, async (url, method) => {
+        if (url.pathname === "/Items/movie") return { body: item() };
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        )
+            return { body: { Items: [item()] } };
+        if (url.pathname === "/UserFavoriteItems/movie") {
+            writes.push(`favorite ${method}`);
+            await new Promise<void>((resolve) => (holdFavorite = resolve));
+            favorite = method === "POST";
+            return { body: { IsFavorite: favorite, Played: played } };
+        }
+        if (url.pathname === "/UserPlayedItems/movie") {
+            writes.push(`watched ${method}`);
+            played = method === "POST";
+            return { body: { IsFavorite: favorite, Played: played } };
+        }
+        return {};
+    });
+    await openMovie(page);
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    const watchedButton = page.locator('[data-focus="watched"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    // The same button again while saving deduplicates; Mark watched is a distinct request.
+    await favoriteButton.click();
+    await watchedButton.click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Watched change requested",
+    );
+    expect(writes).toEqual(["favorite POST"]);
+    holdFavorite!();
+    await expect(
+        page.getByRole("button", { name: "Remove favorite", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+        page.getByRole("button", { name: "Mark unwatched", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(500);
+    // One favorite write (the repeat joined it) and the watched press ran after it.
+    expect(writes).toEqual(["favorite POST", "watched POST"]);
+    // The "requested" status does not outlive the request.
+    await expect(page.locator(".catalog-detail-status")).toHaveCount(0);
+});
+
+/** A movie whose favorite POST waits for release, then fails or succeeds. */
+async function heldFavorite(page: Page, outcome: "fail" | "ok") {
+    const state = {
+        favorite: false,
+        played: false,
+        writes: [] as string[],
+        release: undefined as (() => void) | undefined,
+    };
+    const item = () => ({
+        ...movie(),
+        UserData: {
+            ...movie().UserData,
+            IsFavorite: state.favorite,
+            Played: state.played,
+        },
+    });
+    await start(page, async (url, method) => {
+        if (url.pathname === "/Items/movie") return { body: item() };
+        if (
+            url.pathname === "/Items" &&
+            url.searchParams.get("ids") === "movie"
+        )
+            return { body: { Items: [item()] } };
+        if (url.pathname === "/UserFavoriteItems/movie") {
+            state.writes.push(`favorite ${method}`);
+            await new Promise<void>((resolve) => (state.release = resolve));
+            if (outcome === "fail") return { status: 500, body: {} };
+            state.favorite = method === "POST";
+            return {
+                body: { IsFavorite: state.favorite, Played: state.played },
+            };
+        }
+        if (url.pathname === "/UserPlayedItems/movie") {
+            state.writes.push(`watched ${method}`);
+            state.played = method === "POST";
+            return {
+                body: { IsFavorite: state.favorite, Played: state.played },
+            };
+        }
+        return {};
+    });
+    await openMovie(page);
+    return state;
+}
+
+test("a failed save still runs the change queued behind it, and a queued Play says it did not start", async ({
+    page,
+}) => {
+    // Android's consumer runs a queued mutation after a write error (CAT-09: a failed
+    // first mutation must not cancel an independent one); a queued Play does not start.
+    const state = await heldFavorite(page, "fail");
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    await page.locator('[data-focus="watched"]').click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Watched change requested",
+    );
+    state.release!();
+    await expect(
+        page.getByRole("button", { name: "Mark unwatched", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true", { timeout: 10000 });
+    expect(state.writes).toEqual(["favorite POST", "watched POST"]);
+    // The favorite stays as the server has it: not favorite.
+    await expect(
+        page.getByRole("button", { name: "Add favorite", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".catalog-detail-status")).toHaveCount(0);
+});
+
+test("a failed save with Play queued behind it reports that Play did not start, and offers Retry saving", async ({
+    page,
+}) => {
+    const state = await heldFavorite(page, "fail");
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    await page.locator('[data-focus="play"]').click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Play requested",
+    );
+    state.release!();
+    const failure = page.getByText(
+        /Change failed\..*Play did not start\. Choose it again\./,
+    );
+    await expect(failure).toBeVisible({ timeout: 10000 });
+    await expect(
+        page.getByRole("button", { name: "Retry saving" }),
+    ).toBeVisible();
+    // Still on the detail page: the player never opened over an unsaved change.
+    await expect(
+        page.getByRole("heading", { name: "A picture", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("video")).toHaveCount(0);
+    expect(state.writes).toEqual(["favorite POST"]);
+});
+
+test("leaving the item while a save is in flight drops its queued presses", async ({
+    page,
+}) => {
+    const state = await heldFavorite(page, "ok");
+    const favoriteButton = page.locator('[data-focus="favorite"]');
+    await favoriteButton.click();
+    await expect(favoriteButton).toHaveText("Saving favorite…");
+    await page.locator('[data-focus="watched"]').click();
+    await expect(page.locator(".catalog-detail-status")).toContainText(
+        "Watched change requested",
+    );
+    await page.getByRole("button", { name: "← Back" }).click();
+    await expect(
+        page.getByRole("heading", { name: "A picture", exact: true }),
+    ).toHaveCount(0);
+    state.release!();
+    await page.waitForTimeout(1500);
+    // The in-flight write completes on the server; the queued press never runs.
+    expect(state.writes).toEqual(["favorite POST"]);
 });

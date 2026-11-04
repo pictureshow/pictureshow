@@ -44,11 +44,7 @@ import { referenceProfile, referenceCompatibility } from "./reference-profile";
 import * as rc26 from "./rc26";
 import * as rc28 from "./rc28";
 import * as playbackInformation from "./playback-information";
-import {
-    controlProjection,
-    controlSuites,
-    runControlCase,
-} from "./control";
+import { controlProjection, controlSuites, runControlCase } from "./control";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
@@ -125,6 +121,13 @@ for (const file of files) {
                 const i = c.input,
                     ctx = suite.context;
                 let value: unknown;
+                if (suite.suite === "playback-information") {
+                    // One strict runner: unknown operations and malformed inputs throw.
+                    expect(playbackInformation.runVector(c)).toEqual(
+                        c.expected,
+                    );
+                    return;
+                }
                 switch (c.operation) {
                     case "visibility-play":
                         value = rc28.visibilityPlay(
@@ -260,35 +263,6 @@ for (const file of files) {
                             i.known,
                             i.played,
                             i.favorite,
-                        );
-                        break;
-                    case "reason":
-                        value = playbackInformation.transcodeReason(
-                            i.reason,
-                            i.qualityMbps,
-                        );
-                        break;
-                    case "method":
-                        value = playbackInformation.playbackMethod(
-                            i.method,
-                            i.url,
-                        );
-                        break;
-                    case "subtitle":
-                        value = playbackInformation.subtitleDelivery(
-                            i.source,
-                            i.index,
-                        );
-                        break;
-                    case "bitrate":
-                        value = playbackInformation.formatBitrate(i.bitrate);
-                        break;
-                    case "speed":
-                        value = String(
-                            playbackInformation.speedSupported(
-                                i.speed,
-                                i.encoded,
-                            ),
                         );
                         break;
                     case "external-subtitle-loading":

@@ -1075,6 +1075,27 @@ export function Detail({
         !savingReport &&
         reportReady.current;
     readyRef.current = ready;
+    // An authoritative read failure refuses detail commands (CAT-11) unless the
+    // returning report barrier will still schedule a fresh read (CAT-09/13).
+    const refusing = !!readError && !savingReport;
+    // Accessibility state follows behavior: a pending slot accepts and queues
+    // the press, so it is not aria-disabled; only a refusing slot is.
+    function slotState(unavailable: boolean) {
+        const state =
+            unavailable || refusing
+                ? "unavailable"
+                : ready
+                  ? "ready"
+                  : "pending";
+        return {
+            "data-state": state,
+            "aria-disabled": state === "unavailable",
+            "aria-description":
+                state === "pending"
+                    ? "Runs when this item is ready"
+                    : undefined,
+        } as const;
+    }
     const selected = focusedAction;
     useLayoutEffect(() => {
         let active = document.activeElement as HTMLElement | null;
@@ -1094,7 +1115,8 @@ export function Detail({
         const action = active?.dataset.focus;
         const sameHeld = action && action === heldFocus.current;
         const usable =
-            active?.getAttribute("aria-disabled") === "false" &&
+            ready &&
+            active?.dataset.state === "ready" &&
             !active?.hasAttribute("disabled");
         if (
             !ready &&
@@ -1262,11 +1284,32 @@ export function Detail({
                     setAttempt((value) => value + 1);
                 } catch (error) {
                     if (!alive.current) return;
-                    queue.current = [];
-                    setWriteError(errorText(error));
+                    // Like Android's consumer, a failed write does not cancel the presses
+                    // queued behind it (CAT-09: distinct requests serialize): queued
+                    // Watched/Favorite changes still run against the unchanged item.
+                    // A queued Play does not start over an unsaved change; it says so
+                    // instead of vanishing.
+                    const playQueued = queue.current.some(
+                        (p) =>
+                            p.action.kind === "play" ||
+                            p.action.kind === "restart",
+                    );
+                    queue.current = queue.current.filter(
+                        (p) =>
+                            p.action.kind !== "play" &&
+                            p.action.kind !== "restart",
+                    );
+                    requestedCue.current = undefined;
+                    setPendingMessage("");
+                    const failure =
+                        errorText(error) +
+                        (playQueued
+                            ? " Play did not start. Choose it again."
+                            : "");
+                    setWriteError(failure);
                     cancelReady();
                     cue(
-                        `Change failed. ${errorText(error)} Retry saving is available.`,
+                        `Change failed. ${failure} Retry saving is available.`,
                         "failure",
                     );
                     notify(error);
@@ -1301,7 +1344,10 @@ export function Detail({
         return () => clearInterval(timer);
     }, [pendingMessage, loading, savingReport]);
     function offer(action: PendingAction) {
-        if (!alive.current || openingPlayback.current || writing) return;
+        // A press during "Saving…" is not dropped: like Android's queueReadyMutation it
+        // joins the same ordered queue (CAT-09: distinct requests serialize, duplicates
+        // deduplicate) and runs against the state the save returns.
+        if (!alive.current || openingPlayback.current || refusing) return;
         if (queue.current.some((p) => sameAction(p.action, action))) return;
         if (queue.current.length >= 32) {
             setPendingMessage(
@@ -1311,6 +1357,20 @@ export function Detail({
         }
         queue.current.push({ action, expires: Date.now() + 30000 });
         if (action.kind === "watched") recordPlayedChoice(client, id);
+        if (writePending.current && readyRef.current) {
+            requestedCue.current = action.kind;
+            setPendingMessage(
+                `${action.kind === "play" ? "Play" : action.kind === "restart" ? "Play from start" : action.kind === "watched" ? "Watched change" : "Favorite change"} requested. It runs after the current change saves.`,
+            );
+            cue(
+                action.kind === "play"
+                    ? "Play requested"
+                    : action.kind === "restart"
+                      ? "Start requested"
+                      : `${action.kind === "watched" ? "Watched" : "Favorite"} change requested`,
+                "request",
+            );
+        }
         if (!readyRef.current) {
             cancelReady();
             requestedCue.current = action.kind;
@@ -1493,7 +1553,7 @@ export function Detail({
                             data-focus="play"
                             aria-label={queuedActionName("play")}
                             data-autofocus
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() => offer({ kind: "play" })}
                         >
                             {actionLabel("play", "Play")}
@@ -1501,7 +1561,7 @@ export function Detail({
                         <button
                             data-focus="watched"
                             aria-label={queuedActionName("watched")}
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() =>
                                 offer({ kind: "watched", desired: true })
                             }
@@ -1512,7 +1572,7 @@ export function Detail({
                             ref={favoriteRef}
                             data-focus="favorite"
                             aria-label={queuedActionName("favorite")}
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() =>
                                 offer({ kind: "favorite", desired: true })
                             }
@@ -1522,7 +1582,7 @@ export function Detail({
                         <button
                             data-focus="restart"
                             aria-label={queuedActionName("restart")}
-                            aria-disabled="true"
+                            {...slotState(false)}
                             onClick={() => offer({ kind: "restart" })}
                         >
                             {actionLabel("restart", "Play from start")}
@@ -1650,7 +1710,7 @@ export function Detail({
                                         data-focus="play"
                                         aria-label={queuedActionName("play")}
                                         data-autofocus
-                                        aria-disabled={!ready || !target}
+                                        {...slotState(!target && !loading)}
                                         disabled={!target && !loading}
                                         onClick={() => offer({ kind: "play" })}
                                     >
@@ -1668,7 +1728,7 @@ export function Detail({
                                             aria-label={queuedActionName(
                                                 "restart",
                                             )}
-                                            aria-disabled={!ready}
+                                            {...slotState(false)}
                                             onClick={() =>
                                                 offer({ kind: "restart" })
                                             }
@@ -1692,7 +1752,7 @@ export function Detail({
                                             ? acceptedWatched
                                             : undefined
                                     }
-                                    aria-disabled={!ready || !canMark}
+                                    {...slotState(!canMark)}
                                     disabled={!canMark}
                                     onClick={() =>
                                         offer({
@@ -1717,7 +1777,7 @@ export function Detail({
                                     aria-pressed={
                                         ready ? acceptedFavorite : undefined
                                     }
-                                    aria-disabled={!ready}
+                                    {...slotState(false)}
                                     onClick={() =>
                                         offer({
                                             kind: "favorite",
@@ -1741,7 +1801,7 @@ export function Detail({
                                             aria-label={queuedActionName(
                                                 "restart",
                                             )}
-                                            aria-disabled={!ready || !target}
+                                            {...slotState(!target && !loading)}
                                             disabled={!target && !loading}
                                             onClick={() =>
                                                 offer({ kind: "restart" })
