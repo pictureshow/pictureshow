@@ -57,9 +57,11 @@ internal fun PlayerConversionNotice(
 /**
  * PLAY-27 host: shows the first qualifying notice of a viewing once, for [CONVERSION_NOTICE_MS].
  * Keep this composed for the whole viewing; its memory is what makes the notice once per viewing.
- * [allowed] hides it (without restarting it) while playback is not visibly running, a panel is open
- * or a top-positioned subtitle is on screen. Only its first appearance is a live region, so a screen
- * reader hears it once even when a panel hides it and it comes back.
+ * [notice] is the current decision's notice: when a later decision no longer converts (null), a notice
+ * that already appeared leaves at once and stays gone for the viewing, so it never states a conversion
+ * that has stopped. [allowed] hides it (without restarting it) while playback is not visibly running,
+ * a panel is open or a top-positioned subtitle is on screen. Only its first appearance is a live region,
+ * so a screen reader hears it once even when a panel hides it and it comes back.
  */
 @Composable
 internal fun ConversionNoticeHost(notice: ConversionNotice?, allowed: Boolean, modifier: Modifier = Modifier, onDetails: () -> Unit) {
@@ -71,6 +73,8 @@ internal fun ConversionNoticeHost(notice: ConversionNotice?, allowed: Boolean, m
         if (phase == 0 && notice != null && allowed) {
             shown = notice
             phase = 1
+        } else if (phase == 1 && notice == null) {
+            phase = 2
         }
     }
     LaunchedEffect(phase) {
@@ -80,7 +84,8 @@ internal fun ConversionNoticeHost(notice: ConversionNotice?, allowed: Boolean, m
         }
     }
     val current = shown
-    if (phase == 1 && allowed && current != null) {
+    // `notice != null` hides it in the same frame the conversion stops, before the effect retires it.
+    if (phase == 1 && allowed && current != null && notice != null) {
         ConversionNoticeCard(current, modifier, announce = !announced, onDetails = onDetails)
         DisposableEffect(Unit) { onDispose { announced = true } }
     }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -124,6 +125,62 @@ class ConversionNoticeTest {
         notice = range
         Snapshot.sendApplyNotifications()
         compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithTag("player:conversion-notice").assertDoesNotExist()
+    }
+
+    @Test fun aNoticeLeavesAtOnceWhenALaterDecisionStopsConvertingAndDoesNotReturnInThatViewing() {
+        val converting = tvNotice("VideoCodecNotSupported")
+        var notice by mutableStateOf<ConversionNotice?>(converting)
+        var allowed by mutableStateOf(true)
+        var viewing by mutableStateOf(1)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MaterialTheme {
+                // PlayerScreen keys the host to the viewing: the next item is a new viewing.
+                key(viewing) { ConversionNoticeHost(notice, allowed) {} }
+            }
+        }
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithTag("player:conversion-notice").assertExists()
+
+        // 2 s in, a later decision in this viewing no longer converts (say, burned-in subtitles turned off).
+        compose.mainClock.advanceTimeBy(2_000)
+        notice = null
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag("player:conversion-notice").assertDoesNotExist()
+
+        // Converting again inside the old 10 s window, or after a panel closes,
+        // neither shows nor announces the notice again in this viewing.
+        compose.mainClock.advanceTimeBy(1_000)
+        notice = converting
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithTag("player:conversion-notice").assertDoesNotExist()
+        allowed = false
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(500)
+        allowed = true
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(CONVERSION_NOTICE_MS)
+        compose.onNodeWithTag("player:conversion-notice").assertDoesNotExist()
+
+        viewing = 2
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(100)
+        val next = compose.onNodeWithTag("player:conversion-notice").fetchSemanticsNode()
+        assertEquals(LiveRegionMode.Polite, next.config.getOrNull(SemanticsProperties.LiveRegion), "the next item is a new viewing")
+        // A hidden notice whose conversion stops while a panel is up does not come back either.
+        allowed = false
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(500)
+        notice = null
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(500)
+        notice = converting
+        allowed = true
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithTag("player:conversion-notice").assertDoesNotExist()
     }
 
