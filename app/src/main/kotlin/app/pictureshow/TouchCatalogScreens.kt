@@ -260,7 +260,10 @@ internal fun TouchCatalogDetail(
     onFavorite: () -> Unit,
     onRetry: () -> Unit,
     onPlay: (MediaItem, Boolean) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onPlayOnTv: (MediaItem, Boolean) -> Unit = { _, _ -> },
+    onPlayNext: (MediaItem) -> Unit = {},
+    onAddToQueue: (MediaItem) -> Unit = {}
 ) {
     val item = state.item.takeUnless { state.playbackPending }
     val playable = touchDetailPlayItem(state)
@@ -317,6 +320,21 @@ internal fun TouchCatalogDetail(
                                                 Text("Play from start")
                                             }
                                         }
+                                        OutlinedButton(
+                                            onClick = { playable?.let { onPlayOnTv(it, it.userData.playbackPositionTicks > 0) } },
+                                            enabled = playable != null && !state.busy,
+                                            modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play-on-tv")
+                                        ) { Text("Play on TV") }
+                                        OutlinedButton(
+                                            onClick = { playable?.let(onPlayNext) },
+                                            enabled = playable != null && !state.busy,
+                                            modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play-next")
+                                        ) { Text("Play next on TV") }
+                                        OutlinedButton(
+                                            onClick = { playable?.let(onAddToQueue) },
+                                            enabled = playable != null && !state.busy,
+                                            modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:add-to-queue")
+                                        ) { Text("Add to TV queue") }
                                         OutlinedButton(
                                             onClick = onFavorite,
                                             enabled = !state.busy && !state.loading,

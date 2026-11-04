@@ -56,6 +56,7 @@ internal fun TouchShell(
     selected: String?,
     onTab: (String) -> Unit,
     fullscreen: Boolean = false,
+    above: @Composable () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     // Playback owns its control insets; the video itself fills the window behind cutouts.
@@ -78,6 +79,7 @@ internal fun TouchShell(
             }
             Column(Modifier.weight(1f).fillMaxSize()) {
                 Box(Modifier.weight(1f).fillMaxSize().clipToBounds()) { content() }
+                above()
                 if (navigationVisible && !rail) {
                     NavigationBar {
                         touchTabs.forEach { (route, label) ->

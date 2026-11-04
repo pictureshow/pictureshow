@@ -46,13 +46,15 @@ internal fun TouchSettings(
     onAccounts: () -> Unit,
     onAbout: () -> Unit,
     onSupport: () -> Unit,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    onRemote: () -> Unit = {}
 ) {
     val local = state.local
     val configuration = state.configuration
     val ready = !state.loading && !state.saving && configuration != null
     TouchPage("Settings", onBack) {
         TouchAction("Accounts", onClick = onAccounts)
+        TouchAction("Remote for a TV", onClick = onRemote)
         TouchHeading("Playback on this device")
         Text("Changes are saved immediately and apply the next time you open the player.")
         TouchChoice(

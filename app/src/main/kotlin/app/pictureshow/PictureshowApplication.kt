@@ -68,6 +68,24 @@ class PictureshowApplication : Application() {
                         val name = deviceDisplayName(this@PictureshowApplication)
                         val store = get<DeviceIdentityStore>()
                         val http = get<HttpClient>()
+                        suspend fun remote() = app.pictureshow.core.control.RemoteClient(
+                            http,
+                            app.pictureshow.core.ClientIdentity(name, store.getOrCreate(), BuildConfig.VERSION_NAME)
+                        )
+                        RemoteControllerHost(
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main.immediate),
+                            object : RemoteControllerGateway {
+                                override suspend fun targets(account: Account) = remote().targets(account)
+                                override suspend fun send(account: Account, request: app.pictureshow.core.control.RemoteRequest) =
+                                    remote().send(account, request)
+                            },
+                            android.os.SystemClock::elapsedRealtime
+                        )
+                    }
+                    single {
+                        val name = deviceDisplayName(this@PictureshowApplication)
+                        val store = get<DeviceIdentityStore>()
+                        val http = get<HttpClient>()
                         suspend fun identity(account: Account) =
                             app.pictureshow.core.ClientIdentity(name, store.getOrCreate(), BuildConfig.VERSION_NAME).forAccount(account)
                         RemoteTargetHost(

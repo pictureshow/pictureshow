@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavType
@@ -86,8 +87,38 @@ internal fun TouchPictureshow(
         route?.startsWith("login?") != true &&
         route?.startsWith("quick?") != true &&
         !inPlayer
+    val remote: RemoteControllerHost = koinInject()
+    val remoteState by remote.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state.snapshot.currentAccount) { remote.bind(state.snapshot.currentAccount) }
+    LifecycleResumeEffect(remote) {
+        remote.setForeground(true)
+        onPauseOrDispose { remote.setForeground(false) }
+    }
+    // What the viewer asked to play while choosing a TV. Picking runs it once; closing the picker forgets it.
+    var remotePicking by rememberSaveable { mutableStateOf(false) }
+    var remotePending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun chooseRemote(then: (() -> Unit)?) {
+        remotePending = then
+        remotePicking = true
+        remote.setPicker(true)
+    }
+    if (remotePicking) {
+        fun close() {
+            remotePicking = false
+            remotePending = null
+            remote.setPicker(false)
+        }
+        TouchRemotePicker(remoteState, onPick = { target ->
+            remote.attach(target)
+            remotePending?.invoke()
+            close()
+            if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote")
+        }, onDismiss = ::close)
+    }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
-    TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer) {
+    TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer, above = {
+        if (!inPlayer && route != "remote") TouchRemoteBar(remoteState) { nav.navigate("remote") { launchSingleTop = true } }
+    }) {
         LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired, state.snapshot.currentAccount?.accessToken) {
             val key = state.snapshot.currentKey
             val expired = state.snapshot.currentAccount?.expired
@@ -365,10 +396,31 @@ internal fun TouchPictureshow(
                                     )
                                 )
                             },
+                            onPlayOnTv = { playable, resume ->
+                                val ticks = 0L.takeUnless { resume }
+                                chooseRemote { remote.playNow(listOf(playable.id), ticks) }
+                            },
+                            onPlayNext = { playable ->
+                                if (remoteState.controller?.phase == "attached") {
+                                    remote.queue(listOf(playable.id), next = true)
+                                } else {
+                                    chooseRemote { remote.queue(listOf(playable.id), next = true) }
+                                }
+                            },
+                            onAddToQueue = { playable ->
+                                if (remoteState.controller?.phase == "attached") {
+                                    remote.queue(listOf(playable.id), next = false)
+                                } else {
+                                    chooseRemote { remote.queue(listOf(playable.id), next = false) }
+                                }
+                            },
                             onBack = { nav.popBackStack() }
                         )
                     }
                 }
+            }
+            composable("remote") {
+                TouchRemoteScreen(remoteState, remote, onChoose = { chooseRemote(null) }, onBack = { nav.popBackStack() })
             }
             composable("settings") {
                 state.snapshot.currentAccount?.let { account ->
@@ -392,7 +444,8 @@ internal fun TouchPictureshow(
                         vm::reload,
                         { nav.navigate("accounts") },
                         { nav.navigate("about") },
-                        { nav.navigate("supporter") }
+                        { nav.navigate("supporter") },
+                        onRemote = { nav.navigate("remote") }
                     )
                 }
             }
