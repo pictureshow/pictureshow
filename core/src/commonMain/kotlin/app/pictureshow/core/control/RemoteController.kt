@@ -95,7 +95,7 @@ fun reduceRemoteController(state: RemoteControllerState, event: RemoteController
         "resume" -> {
             val command = s.command ?: return s
             s.copy(
-                command = reduceCommand(command, CommandEvent("disconnect", owner = command.owner)).copy(effect = "none"),
+                command = command.disconnected(),
                 followUp = s.followUp?.unresolved(),
                 effect = if (s.phase == "detached") "none" else "refresh"
             )
@@ -111,13 +111,22 @@ fun reduceRemoteController(state: RemoteControllerState, event: RemoteController
 
 private fun RemoteFollowUp.unresolved() = if (result == "sent") copy(result = "unknown") else this
 
+/** Losing sight of the target makes an open command unknown. A command it already settled keeps its result. */
+private fun CommandState.disconnected(): CommandState {
+    val settled = pending?.takeUnless { it.result == "sent" }
+    return reduceCommand(this, CommandEvent("disconnect", owner = owner)).copy(
+        effect = "none",
+        pending = settled ?: pending?.copy(result = "unknown")
+    )
+}
+
 private fun lost(s: RemoteControllerState, phase: String, replacement: String? = null): RemoteControllerState {
     val command = s.command
     return s.copy(
         phase = phase,
         replacement = replacement,
         followUp = s.followUp?.unresolved(),
-        command = command?.let { reduceCommand(it, CommandEvent("disconnect", owner = it.owner)).copy(effect = "none") }
+        command = command?.disconnected()
     )
 }
 
