@@ -271,7 +271,7 @@ internal fun PlayerItemScreen(
             else -> null
         }
     }
-    PlaybackExitFocusEvents(openerReturnTag != null || (accessibleControls && restoringSeekFocus))
+    PlaybackExitFocusEvents(openerReturnTag != null || (accessibleControls && restoringSeekFocus), suppressClosingPane = accessibleControls)
     val readerOpenerOnly: (String) -> Modifier = { tag ->
         if (openerReturnTag != null && openerReturnTag != tag) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
     }
@@ -868,9 +868,14 @@ internal fun PlayerItemScreen(
                     )
                     // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                     // The visual clock keeps moving; it is not a live accessibility announcement.
-                    val announcedPosition = remember(paused, seekPreview, state.seekTargetMs, duration, ended) {
-                        state.seekTargetMs ?: position
-                    }
+                    val announcedPosition = rememberAnnouncedPosition(
+                        paused,
+                        seekRequest = state.seekTargetMs ?: seekPreview,
+                        seekTargetMs = state.seekTargetMs,
+                        durationMs = duration,
+                        ended = ended,
+                        positionMs = position
+                    )
                     PlayerTimeline(
                         position,
                         announcedPosition,
@@ -892,7 +897,12 @@ internal fun PlayerItemScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play"))) {
+                        PlaybackToggle(
+                            paused,
+                            showPlayButton,
+                            Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play")),
+                            ended
+                        ) {
                             val pending = deferredNext
                             if (pending != null) finish(pending) else player?.togglePlayback()
                             interaction++
@@ -969,7 +979,7 @@ internal fun PlayerItemScreen(
                         player?.seekTo(target)
                         position = target
                         interaction++
-                    }, onFocusRemoved = restoreActionFocus, showButton = actionsVisible)
+                    }, onFocusRemoved = restoreActionFocus, showButton = actionsVisible && openerReturnTag == null)
                     (deferredNext ?: nextEpisode)?.takeUnless { nextCancelled }?.let { next ->
                         key(deferredNext, output.stopGeneration) {
                             val trigger = nextEpisodeTriggerMs(duration, segments)

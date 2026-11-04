@@ -9,6 +9,10 @@ import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -68,6 +72,32 @@ class AccessibilityPlayerTest {
         compose.runOnIdle { assertEquals(0, plays) }
         compose.onNodeWithTag("next:play").performSemanticsAction(SemanticsActions.OnClick) { kotlin.test.assertTrue(it()) }
         compose.runOnIdle { assertEquals(1, plays) }
+    }
+
+    /** rc30: "Paused" at a natural end, made as the player stopped and cut off by the detail page's button. */
+    @Test
+    fun theEndOfTheVideoDoesNotChangeTheFocusedToggleUntilFocusMoves() {
+        val paused = mutableStateOf(false)
+        val ended = mutableStateOf(false)
+        val toggle = FocusRequester()
+        val other = FocusRequester()
+        compose.setContent {
+            PictureshowTheme {
+                androidx.compose.foundation.layout.Column {
+                    PlaybackToggle(paused.value, paused.value, Modifier.focusRequester(toggle).testTag("toggle"), ended.value) {}
+                    PlaybackToggle(false, false, Modifier.focusRequester(other)) {}
+                }
+            }
+        }
+        compose.runOnIdle { toggle.requestFocus() }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        compose.runOnIdle {
+            ended.value = true
+            paused.value = true
+        }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        compose.runOnIdle { other.requestFocus() }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused"))
     }
 
     @Test

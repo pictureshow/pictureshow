@@ -7,6 +7,7 @@ package app.pictureshow
 
 import android.app.Application
 import android.content.Context
+import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
@@ -395,6 +396,136 @@ class SeekReturnFocusTest {
         assertTrue(playbackLines().any { it.startsWith("panel-return cancelled controls=false") }, playbackLines().toString())
         compose.mainClock.autoAdvance = true
         compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    /**
+     * rc30: TalkBack read the closing pane's window-state event as a new screen. It dropped the opener's focus event,
+     * spoke the app's name and reached the button about 2 s late. The real pane events pass the real delegate here.
+     */
+    @Test fun closingAPanelKeepsItsPaneEventFromTheReaderWhileOpeningStillAnnounces() {
+        val sent = mutableListOf<AccessibilityEvent>()
+        val content = compose.activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(
+            content,
+            object : androidx.core.view.AccessibilityDelegateCompat() {
+                override fun onRequestSendAccessibilityEvent(
+                    parent: android.view.ViewGroup,
+                    child: android.view.View,
+                    event: AccessibilityEvent
+                ): Boolean {
+                    sent += AccessibilityEvent.obtain(event)
+                    return true
+                }
+            }
+        )
+        spokenServiceEnabled()
+        launch(true)
+        val paneEvents = {
+            sent.filter { it.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED }.map { it.contentChangeTypes }
+        }
+        val opener = compose.onNodeWithTag("player:speed")
+        opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { check(it()) }
+        opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { check(it()) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("player:speed").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(5_000) {
+            paneEvents().contains(AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED)
+        }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("player:speed").fetchSemanticsNodes().isNotEmpty() }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.runOnIdle {
+            assertTrue(paneEvents().none { it and AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED != 0 }, paneEvents().toString())
+            assertTrue(playbackLines().any { it == "panel-close pane-event suppressed" }, playbackLines().toString())
+        }
+    }
+
+    @Test fun withoutAReaderAPaneEventIsNotFiltered() {
+        launch(false)
+        compose.runOnIdle { assertTrue(hostPaneEventReachesReader(AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED)) }
+    }
+
+    /** TalkBack hears no close, so the same title again would be no change of window title and no focus handoff to the row. */
+    @Test fun reopeningThePanelGivesTalkBackADifferentTitleWithTheSameWords() {
+        launch(true)
+        val titles = (1..3).map {
+            val opener = compose.onNodeWithTag("player:info")
+            opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { check(it()) }
+            opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { check(it()) }
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag("player:panel").fetchSemanticsNodes().isNotEmpty() }
+            val title = compose.onNodeWithTag("player:panel").fetchSemanticsNode().config[SemanticsProperties.PaneTitle]
+            compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag("player:panel").fetchSemanticsNodes().isEmpty() }
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag("player:info").fetchSemanticsNodes().isNotEmpty() }
+            title
+        }
+        assertEquals("Playback info", titles[0])
+        assertTrue(titles[0] != titles[1] && titles[1] != titles[2], titles.toString())
+        assertEquals(setOf("Playback info"), titles.map { it.replace("\u200B", "") }.toSet())
+    }
+
+    /** rc30: "Button. Skip credits" was spoken at +215 ms, ahead of the opener. It's offered once the opener has been reached. */
+    @Test fun aSkipOfferWaitsForTheOpenerAfterAPanelCloses() {
+        launch(true)
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("skip:Intro").fetchSemanticsNodes().isNotEmpty() }
+        closePanelFrom("player:speed")
+        compose.onNodeWithTag("player:speed").assertIsFocused()
+        compose.onNodeWithTag("skip:Intro").assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(1_600)
+        frames(3)
+        compose.onNodeWithTag("skip:Intro").assertExists()
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** rc30: two utterance ids on each hide. The app announces nothing: one focus move and one change of the node's description. */
+    @Test fun hidingTheControlsMovesFocusAndChangesOneDescriptionAndAnnouncesNothing() {
+        val sent = mutableListOf<String>()
+        val content = compose.activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(
+            content,
+            object : androidx.core.view.AccessibilityDelegateCompat() {
+                override fun onRequestSendAccessibilityEvent(
+                    parent: android.view.ViewGroup,
+                    child: android.view.View,
+                    event: AccessibilityEvent
+                ): Boolean {
+                    sent += AccessibilityEvent.eventTypeToString(event.eventType) +
+                        " changes=${event.contentChangeTypes} text=${event.text} desc=${event.contentDescription} class=${event.className}"
+                    return true
+                }
+            }
+        )
+        spokenServiceEnabled()
+        launch(true)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle { sent.clear() }
+        hideControls()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle {
+            assertTrue(sent.none { it.startsWith("TYPE_ANNOUNCEMENT") }, sent.toString())
+            assertEquals(1, sent.count { it.startsWith("TYPE_VIEW_FOCUSED") }, sent.toString())
+            assertEquals(1, sent.count { "desc=Controls hidden" in it }, sent.toString())
+        }
+    }
+
+    /** Compose sends accessibility events only when a service is enabled; the manager's enabled flag isn't enough. */
+    private fun spokenServiceEnabled() {
+        val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        shadowOf(manager).setEnabledAccessibilityServiceList(
+            listOf(
+                android.accessibilityservice.AccessibilityServiceInfo().apply {
+                    feedbackType = android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_SPOKEN
+                }
+            )
+        )
+        shadowOf(manager).setTouchExplorationEnabled(true)
+    }
+
+    private fun hostPaneEventReachesReader(types: Int): Boolean {
+        val parent = host.parent as android.view.ViewGroup
+        val event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED).apply { contentChangeTypes = types }
+        val delegate = androidx.core.view.ViewCompat.getAccessibilityDelegate(parent) ?: return true
+        return delegate.onRequestSendAccessibilityEvent(parent, host, event)
     }
 
     @Test fun reopeningAPanelDuringTheReturnHidesNothingAndTheNextReturnEnds() {

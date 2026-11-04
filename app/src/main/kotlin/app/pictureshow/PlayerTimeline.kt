@@ -92,6 +92,25 @@ internal fun PlayerTimeline(
     }
 }
 
+/**
+ * What the position control says until the viewer acts again: captured when the controls open, on pause or
+ * resume, and once per seek. A seek's preview expiring or the player finishing the seek is not news, and a
+ * changed state description on the focused control is read aloud, so neither captures a new position.
+ */
+@Composable
+internal fun rememberAnnouncedPosition(
+    paused: Boolean,
+    seekRequest: Long?,
+    seekTargetMs: Long?,
+    durationMs: Long,
+    ended: Boolean,
+    positionMs: Long
+): Long {
+    val lastSeek = remember { arrayOfNulls<Long>(1) }
+    if (seekRequest != null) lastSeek[0] = seekRequest
+    return remember(paused, lastSeek[0], durationMs, ended) { seekTargetMs ?: positionMs }
+}
+
 /** Status labels may appear over the last decoded frame while an output is replaced. */
 @Composable
 internal fun PlaybackStatus(label: String, modifier: Modifier = Modifier) {

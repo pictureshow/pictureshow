@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.media3.common.Player
@@ -93,18 +94,30 @@ internal fun playerButtonScale() = ButtonDefaults.scale(focusedScale = if (remem
 
 /** The label names the next action; the state names what playback is doing now. */
 @Composable
-internal fun PlaybackToggle(paused: Boolean, showPlayButton: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun PlaybackToggle(
+    paused: Boolean,
+    showPlayButton: Boolean,
+    modifier: Modifier = Modifier,
+    ended: Boolean = false,
+    onClick: () -> Unit
+) {
+    val current = if (paused) {
+        "Paused"
+    } else if (showPlayButton) {
+        "Not playing"
+    } else {
+        "Playing"
+    }
+    // The end of the video stops the player, which isn't the viewer pausing. A changed state on the
+    // focused button is read aloud, so keep it still until focus moves; a later visit reads the real state.
+    val beforeEnd = remember { arrayOf(current) }
+    if (!ended) beforeEnd[0] = current
+    var focused by remember { mutableStateOf(false) }
     Button(
         onClick = onClick,
         scale = playerButtonScale(),
-        modifier = modifier.semantics {
-            stateDescription = if (paused) {
-                "Paused"
-            } else if (showPlayButton) {
-                "Not playing"
-            } else {
-                "Playing"
-            }
+        modifier = modifier.onFocusChanged { focused = it.isFocused }.semantics {
+            stateDescription = if (ended && focused) beforeEnd[0] else current
         }
     ) {
         Text(if (showPlayButton) "Play" else "Pause")
