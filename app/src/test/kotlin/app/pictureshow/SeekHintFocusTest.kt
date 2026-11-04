@@ -169,6 +169,7 @@ class SeekHintFocusTest {
         startKoin {
             modules(
                 module {
+                    single { inertRemoteTarget() }
                     single { http }
                     single { DeviceIdentityStore(store) }
                     single { PlaybackPreferencesStore(store) }

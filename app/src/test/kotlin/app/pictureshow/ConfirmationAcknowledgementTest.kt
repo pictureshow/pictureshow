@@ -115,6 +115,7 @@ class ConfirmationAcknowledgementTest {
         startKoin {
             modules(
                 module {
+                    single { inertRemoteTarget() }
                     single { accounts }
                     single<JellyfinService> { service }
                     single<CatalogService> { catalog }
