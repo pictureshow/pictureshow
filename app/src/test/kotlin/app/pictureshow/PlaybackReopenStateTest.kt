@@ -97,7 +97,11 @@ class PlaybackReopenStateTest {
             } else {
                 output.beginSeek()
             }
-            assertEquals(Player.STATE_BUFFERING, session.player.playbackState, "An active viewing must remain buffering during negotiation")
+            // A viewing that has not played yet presents preparation with play intent as PLAYING at speed 0
+            // (PlaybackMediaSession), so the TV Now Playing card is not posted again as audio starts.
+            val preparing = if (paused) Player.STATE_BUFFERING else Player.STATE_READY
+            assertEquals(preparing, session.player.playbackState, "An active viewing must keep its preparation state during negotiation")
+            assertEquals(false, session.player.isPlaying)
             assertEquals(!paused, session.player.playWhenReady)
             if (paused) Util.handlePlayButtonAction(controller) else controller.pause()
             shadowOf(Looper.getMainLooper()).idle()
@@ -107,10 +111,13 @@ class PlaybackReopenStateTest {
             assertEquals(Player.STATE_IDLE, decoder.playbackState, "Play must not re-prepare the retired stream")
             output.open(decision("replacement"), 50_000, -1, -1, output.position().paused)
             assertEquals(token, handle().session.platformToken)
-            assertEquals(Player.STATE_BUFFERING, session.player.playbackState)
+            // The viewer toggled play intent: Play during preparation grants the preparation grace, Pause ends it.
+            val replaced = if (paused) Player.STATE_READY else Player.STATE_BUFFERING
+            assertEquals(replaced, session.player.playbackState)
+            assertEquals(false, session.player.isPlaying)
             assertEquals(paused, session.player.playWhenReady)
             shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(Player.STATE_BUFFERING, controller.playbackState)
+            assertEquals(replaced, controller.playbackState)
             assertEquals(paused, controller.playWhenReady)
             assertEquals(false, Player.STATE_IDLE in observed, "Controllers must never observe no media between decoders")
             controller.release()
