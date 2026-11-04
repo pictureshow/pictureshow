@@ -321,10 +321,17 @@ internal fun TouchCatalogDetail(
                                             }
                                         }
                                         OutlinedButton(
-                                            onClick = { playable?.let { onPlayOnTv(it, it.userData.playbackPositionTicks > 0) } },
+                                            onClick = { playable?.let { onPlayOnTv(it, false) } },
                                             enabled = playable != null && !state.busy,
                                             modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play-on-tv")
                                         ) { Text("Play on TV") }
+                                        if ((playable?.userData?.playbackPositionTicks ?: 0L) > 0L) {
+                                            OutlinedButton(
+                                                onClick = { playable?.let { onPlayOnTv(it, true) } },
+                                                enabled = !state.busy,
+                                                modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play-on-tv-start")
+                                            ) { Text("Play on TV from start") }
+                                        }
                                         OutlinedButton(
                                             onClick = { playable?.let(onPlayNext) },
                                             enabled = playable != null && !state.busy,

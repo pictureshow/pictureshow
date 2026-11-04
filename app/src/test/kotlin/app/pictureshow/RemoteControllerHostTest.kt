@@ -177,6 +177,42 @@ class RemoteControllerHostTest {
     }
 
     @Test
+    fun aNeverConfirmedCommandSaysSoThenLeavesTheScreen() = runTest {
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        host.pause()
+        runCurrent()
+        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime))
+        advanceTimeBy(6_000)
+        assertEquals(
+            "The TV didn't confirm that. Showing what it reports now.",
+            remoteCommandStatus(host.state.value.controller, currentTime)
+        )
+        advanceTimeBy(10_000)
+        assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
+    @Test
+    fun aConfirmedCommandShowsNothingAfterTheLockScreen() = runTest {
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        host.pause()
+        gateway.targets = ClientResult.Success(listOf(tv.copy(now = tv.now!!.copy(paused = true))))
+        advanceTimeBy(2_500)
+        assertEquals("confirmed", host.state.value.controller!!.command!!.pending!!.result)
+        host.setForeground(false)
+        host.setForeground(true)
+        runCurrent()
+        assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
+    @Test
     fun problemCopyNamesNoMediaOrUser() {
         listOf("target-gone", "target-restarted", "denied", "signed-out").forEach {
             assertTrue(remoteProblem(it)!!.isNotBlank())

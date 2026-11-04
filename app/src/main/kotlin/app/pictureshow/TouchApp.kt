@@ -396,9 +396,9 @@ internal fun TouchPictureshow(
                                     )
                                 )
                             },
-                            onPlayOnTv = { playable, resume ->
-                                val ticks = 0L.takeUnless { resume }
-                                chooseRemote { remote.playNow(listOf(playable.id), ticks) }
+                            // Without a position the TV applies this viewer's own resume, which is newer than this screen.
+                            onPlayOnTv = { playable, fromStart ->
+                                chooseRemote { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },
                             onPlayNext = { playable ->
                                 if (remoteState.controller?.phase == "attached") {

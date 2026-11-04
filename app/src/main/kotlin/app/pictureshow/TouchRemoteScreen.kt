@@ -112,7 +112,7 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
     val ready = attached && controller?.command?.fresh == true
     val now = target?.now?.takeIf { attached }
     val problem = remoteProblem(controller?.phase)
-    val status = remoteCommandStatus(controller)
+    val status = remoteCommandStatus(controller, host.now())
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("touch:remote"),
         verticalArrangement = Arrangement.spacedBy(12.dp)

@@ -54,6 +54,8 @@ internal class RemoteControllerHost(
 
     private val controller get() = mutable.value.controller
 
+    fun now() = nowMs()
+
     private fun reduce(event: RemoteControllerEvent) {
         val current = controller ?: return
         val after = reduceRemoteController(current, event)
@@ -230,12 +232,25 @@ internal fun remoteProblem(phase: String?): String? = when (phase) {
     else -> null
 }
 
-/** What the screen may claim about the last command. A 204 only ever reads as sending. */
-internal fun remoteCommandStatus(state: RemoteControllerState?): String? {
-    val result = state?.followUp?.result ?: state?.command?.pending?.result
-    val operation = state?.followUp?.op ?: state?.command?.pending?.operation
+private const val STATUS_SHOWN_MS = 15_000L
+
+/**
+ * What the screen may claim about the last command. A 204 only ever reads as sending, and an old outcome leaves the
+ * screen rather than sitting under whatever has happened since.
+ */
+internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long): String? {
+    if (state?.phase != "attached") return null
+    val follow = state.followUp
+    val pending = state.command?.pending
+    val latest = if (follow != null && (pending == null || follow.id > pending.id)) {
+        Triple(follow.op, follow.result, follow.sentAtMs)
+    } else {
+        pending?.let { Triple(it.operation, it.result, it.sentAtMs) }
+    } ?: return null
+    val (operation, result, sentAtMs) = latest
+    if (nowMs - sentAtMs >= STATUS_SHOWN_MS) return null
     return when (result) {
-        "sent" -> "Sending to the TV…"
+        "sent" -> if (operation == "queue") "Sent to the TV." else "Sending to the TV…"
         "unknown" -> if (operation == "queue") {
             "Sent. The TV doesn't report its queue, so check there."
         } else {
