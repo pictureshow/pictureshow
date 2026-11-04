@@ -84,12 +84,49 @@ class PlaybackSessionRebufferTest {
     }
 
     @Test
-    fun initialPreparationRemainsBuffering() {
+    fun initialPreparationWithPlayIntentKeepsOneLegacyPlayingStateIntoPlayback() {
+        val player = StatePlayer(Player.STATE_BUFFERING)
+        val handle = open(player)
+        val states = mutableListOf<Int>()
+        handle.session.player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                states += playbackState
+            }
+        })
+        try {
+            // The card posted at session start must not be cancelled for BUFFERING and posted again as audio
+            // starts: TalkBack holds that second announcement until audio stops, then speaks it over the detail page.
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            assertEquals(0f, legacy(handle).playbackSpeed)
+            val position = legacy(handle).position
+            idle(29_000)
+            player.invalidateForTest()
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            assertEquals(position, legacy(handle).position)
+            player.change(Player.STATE_READY)
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            assertEquals(1f, legacy(handle).playbackSpeed)
+            assertEquals(emptyList(), states)
+        } finally {
+            handle.close()
+            player.release()
+            idle()
+        }
+    }
+
+    @Test
+    fun initialPreparationBeyondThirtySecondsIsRealBufferingAndDoesNotRearm() {
         val player = StatePlayer(Player.STATE_BUFFERING)
         val handle = open(player)
         try {
+            idle(29_999)
+            assertEquals(PlaybackStateCompat.STATE_PLAYING, legacy(handle).state)
+            idle(1)
             assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
-            idle(6_000)
+            handle.session.player.pause()
+            idle()
+            handle.session.player.play()
+            idle()
             assertEquals(PlaybackStateCompat.STATE_BUFFERING, legacy(handle).state)
         } finally {
             handle.close()

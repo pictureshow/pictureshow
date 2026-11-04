@@ -56,7 +56,16 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ScrollAxisRange
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.horizontalScrollAxisRange
+import androidx.compose.ui.semantics.scrollBy
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.semantics.verticalScrollAxisRange
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -163,6 +172,7 @@ internal fun PlayerItemScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val view = LocalView.current
+    val layoutDirection = LocalLayoutDirection.current
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val accessibleControls = rememberAccessibilityEnabled()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -220,6 +230,23 @@ internal fun PlayerItemScreen(
     var seekOpen by remember { mutableStateOf(false) }
     var restoringSeekFocus by remember { mutableStateOf(false) }
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
+    // PLAY-05/25/26: Speed and Playback info return the screen reader to their opener, not to the first
+    // text it finds after the host view's own empty focus event. Until the reader acknowledges the opener
+    // (or the bounded wait fails open), that host event is suppressed and only the opener is offered,
+    // as the Seek return does for the position control and the detail page does after playback.
+    val openerReturnTag = if (!accessibleControls) {
+        null
+    } else {
+        when (returnFocus) {
+            speedFocus -> "player:speed"
+            infoFocus -> "player:info"
+            else -> null
+        }
+    }
+    PlaybackExitFocusEvents(openerReturnTag != null || (accessibleControls && restoringSeekFocus))
+    val readerOpenerOnly: (String) -> Modifier = { tag ->
+        if (openerReturnTag != null && openerReturnTag != tag) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+    }
     val error = setupError ?: state.error
     var metadata by remember { mutableStateOf(item) }
     var segments by remember { mutableStateOf(emptyList<MediaSegment>()) }
@@ -311,6 +338,24 @@ internal fun PlayerItemScreen(
             applyPendingSeek()
         }
         controls = true
+        interaction++
+    }
+
+    // A reader's seek reveals the controls with the position control focused, so the new clock is spoken.
+    fun readerSeek(delta: Long) {
+        seek(delta)
+        if (accessibleControls) {
+            focusControls = false
+            restoringSeekFocus = true
+            returnFocus = timelineFocus
+        } else {
+            focusControls = true
+        }
+    }
+
+    fun readerShowControls() {
+        controls = true
+        focusControls = true
         interaction++
     }
 
@@ -536,6 +581,22 @@ internal fun PlayerItemScreen(
             androidx.compose.runtime.withFrameNanos { }
             val requested = target.requestFocus()
             PlaybackDiagnostics.write("panel-return requested=$requested")
+            val openerTag = if (!accessibleControls) {
+                null
+            } else {
+                when (target) {
+                    speedFocus -> "player:speed"
+                    infoFocus -> "player:info"
+                    else -> null
+                }
+            }
+            if (openerTag != null) {
+                val started = android.os.SystemClock.uptimeMillis()
+                val acknowledged = awaitInitialPlayerPanelFocus(view, openerTag)
+                PlaybackDiagnostics.write(
+                    "panel-return target=$openerTag acknowledged=$acknowledged waitMs=${android.os.SystemClock.uptimeMillis() - started}"
+                )
+            }
             if (restoringSeekFocus && accessibleControls) {
                 val started = android.os.SystemClock.uptimeMillis()
                 val acknowledged = awaitInitialPlayerPanelFocus(view, "player:position")
@@ -640,6 +701,33 @@ internal fun PlayerItemScreen(
                             interaction++
                             true
                         }
+                        // PLAY-03 with a TV screen reader: TalkBack keeps the D-pad arrows for its own
+                        // navigation, and with the controls hidden this surface is its only node, so an arrow
+                        // ends at "no next item". There TalkBack scrolls a focused scrollable node in the
+                        // arrow's direction, so the arrows keep their meaning: Left/Right seek 10 s and land
+                        // on the position control, Up/Down show the controls. Keys without a reader are unchanged.
+                        horizontalScrollAxisRange = ReaderArrowRange
+                        verticalScrollAxisRange = ReaderArrowRange
+                        scrollBy { x, y ->
+                            // Compose mirrors horizontal scroll amounts in RTL; the remote's Right still means forward.
+                            val forward = if (layoutDirection == LayoutDirection.Rtl) x < 0f else x > 0f
+                            when {
+                                x != 0f -> readerSeek(if (forward) 10_000L else -10_000L)
+                                y != 0f -> readerShowControls()
+                                else -> return@scrollBy false
+                            }
+                            true
+                        }
+                        customActions = listOf(
+                            CustomAccessibilityAction("Back 10 seconds") {
+                                readerSeek(-10_000L)
+                                true
+                            },
+                            CustomAccessibilityAction("Forward 10 seconds") {
+                                readerSeek(10_000L)
+                                true
+                            }
+                        )
                     } else {
                         hideFromAccessibility()
                     }
@@ -731,7 +819,10 @@ internal fun PlayerItemScreen(
                             controlsHeight = with(density) { it.height.toDp() }
                         }.onGloballyPositioned {
                             controlsTop = it.positionInRoot().y.toInt()
-                        }.semantics { isTraversalGroup = true }.background(Color(0xE610131C)).padding(36.dp),
+                        }.semantics {
+                            isTraversalGroup = true
+                            testTagsAsResourceId = true
+                        }.background(Color(0xE610131C)).padding(36.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     val sourceId = state.decision?.mediaSourceId
@@ -743,7 +834,11 @@ internal fun PlayerItemScreen(
                     Text(
                         item.name,
                         style = MaterialTheme.typography.headlineSmall,
-                        modifier = if (restoringSeekFocus) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+                        modifier = if (restoringSeekFocus || openerReturnTag != null) {
+                            Modifier.clearAndSetSemantics { hideFromAccessibility() }
+                        } else {
+                            Modifier
+                        }
                     )
                     // Capture for speech when controls open, on pause/resume, and after an explicit seek.
                     // The visual clock keeps moving; it is not a live accessibility announcement.
@@ -754,7 +849,7 @@ internal fun PlayerItemScreen(
                         position,
                         announcedPosition,
                         duration,
-                        modifier = Modifier.focusRequester(timelineFocus),
+                        modifier = Modifier.focusRequester(timelineFocus).then(readerOpenerOnly("player:position")),
                         paused = paused,
                         ended = ended,
                         arrowsSeek = rootFocused && !restoringSeekFocus,
@@ -771,7 +866,7 @@ internal fun PlayerItemScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus)) {
+                        PlaybackToggle(paused, showPlayButton, Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play"))) {
                             val pending = deferredNext
                             if (pending != null) finish(pending) else player?.togglePlayback()
                             interaction++
@@ -784,7 +879,7 @@ internal fun PlayerItemScreen(
                                 trackMenus.menus != null && state.decision != null,
                                 state.audioIndex
                             )
-                        }, modifier = Modifier.focusRequester(audioFocus)) { Text("Audio") }
+                        }, modifier = Modifier.focusRequester(audioFocus).then(readerOpenerOnly("player:audio"))) { Text("Audio") }
                         Button(scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
                                 MediaStreamType.Subtitle,
@@ -793,30 +888,36 @@ internal fun PlayerItemScreen(
                                 trackMenus.menus != null && state.decision != null,
                                 state.subtitleIndex
                             )
-                        }, modifier = Modifier.focusRequester(subtitleFocus)) { Text("Subtitles") }
+                        }, modifier = Modifier.focusRequester(subtitleFocus).then(readerOpenerOnly("player:subtitles"))) {
+                            Text("Subtitles")
+                        }
                         if (metadata.chapters.isNotEmpty()) {
                             Button(scale = playerButtonScale(), onClick = {
                                 chaptersOpen = true
                                 seekPreview = null
-                            }, modifier = Modifier.focusRequester(chaptersFocus)) { Text("Chapters") }
+                            }, modifier = Modifier.focusRequester(chaptersFocus).then(readerOpenerOnly("player:chapters"))) {
+                                Text("Chapters")
+                            }
                         }
                         Button(
                             scale = playerButtonScale(),
                             onClick = {
                                 openExtraPanel("Playback speed", speedFocus)
                             },
-                            modifier = Modifier.focusRequester(speedFocus).playerTouchClick {
-                                openExtraPanel("Playback speed", speedFocus)
-                            }
+                            modifier = Modifier.focusRequester(speedFocus).testTag("player:speed").then(readerOpenerOnly("player:speed"))
+                                .playerTouchClick {
+                                    openExtraPanel("Playback speed", speedFocus)
+                                }
                         ) {
                             Text("Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}")
                         }
                         Button(scale = playerButtonScale(), onClick = {
                             openExtraPanel("Playback info", infoFocus)
-                        }, modifier = Modifier.focusRequester(infoFocus).playerTouchClick { openExtraPanel("Playback info", infoFocus) }) {
+                        }, modifier = Modifier.focusRequester(infoFocus).testTag("player:info").then(readerOpenerOnly("player:info"))
+                            .playerTouchClick { openExtraPanel("Playback info", infoFocus) }) {
                             Text("Playback info")
                         }
-                        Button(scale = playerButtonScale(), onClick = { finish(reason = "stop-button") }) {
+                        Button(scale = playerButtonScale(), onClick = { finish(reason = "stop-button") }, modifier = readerOpenerOnly("player:stop")) {
                             Text("Stop")
                         }
                     }
@@ -1071,3 +1172,6 @@ internal fun PlayerSubtitles(
         }
     }
 }
+
+/** Both directions always remain available: the surface's "scroll" is a 10 s seek or a reveal, never a position. */
+private val ReaderArrowRange = ScrollAxisRange(value = { 1f }, maxValue = { 2f })

@@ -357,6 +357,7 @@ internal fun TrackChoices(
     onSelect: (Int) -> Unit,
     title: String? = null,
     touchEnabled: Boolean = false,
+    rowDescription: (Int, String) -> String? = { _, _ -> null },
     footer: (@Composable () -> Unit)? = null
 ) {
     val entry = remember { PlayerPanelEntryFocus() }
@@ -446,6 +447,8 @@ internal fun TrackChoices(
                         ).testTag("track:$index").semantics {
                         selected = index == selectedIndex
                         traversalIndex = if (index == initialIndex) -1f else 0f
+                        // A row may be the panel's only focus stop; it then carries what the footer explains.
+                        rowDescription(index, label)?.let { contentDescription = it }
                     }.then(with(entry) { Modifier.row(index) })
                         .then(
                             if (!initialFocusReady && index != initialIndex) {
