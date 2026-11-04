@@ -186,11 +186,13 @@ internal fun PlayerPanel(
                 it()
             }
         }
+        val paneHost = LocalView.current
         PlayerPanelContent(
             title,
             scrollable,
             firstLayout.focusProperties { onExit = { cancelFocusChange() } }.focusGroup(),
-            announcePane = title != "Seek"
+            announcePane = title != "Seek",
+            paneTitleText = remember(paneHost, title) { nextInWindowPaneTitle(paneHost, title) }
         ) { panelScope.content() }
         return
     }
@@ -239,6 +241,7 @@ internal fun PlayerPanelContent(
     scrollable: Boolean,
     modifier: Modifier = Modifier,
     announcePane: Boolean = true,
+    paneTitleText: String = title,
     content: @Composable () -> Unit
 ) {
     val scroll = rememberScrollState()
@@ -270,7 +273,7 @@ internal fun PlayerPanelContent(
                 )
                 .semantics {
                     isTraversalGroup = true
-                    if (announcePane) paneTitle = title
+                    if (announcePane) paneTitle = paneTitleText
                     testTagsAsResourceId = true
                 },
             verticalArrangement = Arrangement.spacedBy(12.dp)
