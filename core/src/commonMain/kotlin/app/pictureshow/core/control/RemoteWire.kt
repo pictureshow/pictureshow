@@ -156,7 +156,10 @@ private fun malformed(reason: String) = RemoteInbound("malformed", reason = reas
 private fun JsonElement?.textValue(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
 
 /** Numbers only: Jellyfin sends ticks as JSON integers. A fraction, exponent or string is not a position. */
-private fun JsonElement?.wholeNumber(): Long? = (this as? JsonPrimitive)?.takeUnless { it.isString }?.takeIf { it.longOrNull != null && it.content.all { c -> c.isDigit() || c == '-' } }?.longOrNull
+private fun JsonElement?.wholeNumber(): Long? = (this as? JsonPrimitive)?.takeUnless { it.isString }?.takeIf {
+    it.longOrNull != null &&
+        it.content.all { c -> c.isDigit() || c == '-' }
+}?.longOrNull
 
 fun parseRemoteMessage(text: String): RemoteInbound {
     if (text.length > REMOTE_MESSAGE_LIMIT) return malformed("oversize")
@@ -181,7 +184,10 @@ fun parseRemoteMessage(text: String): RemoteInbound {
             if (rawItems.isEmpty() || rawItems.size > REMOTE_ITEM_LIMIT) return malformed("bad-items")
             val items = rawItems.map { normalizedId(it.textValue()) ?: return malformed("bad-items") }
             val ticks = play["StartPositionTicks"]?.let { it.wholeNumber() ?: return malformed("bad-ticks") }
-            val index = play["StartIndex"]?.let { it.wholeNumber()?.takeIf { value -> value in items.indices }?.toInt() ?: return malformed("bad-index") }
+            val index = play["StartIndex"]?.let {
+                it.wholeNumber()?.takeIf { value -> value in items.indices }?.toInt()
+                    ?: return malformed("bad-index")
+            }
             if ((ticks ?: 0) < 0) return malformed("bad-ticks")
             RemoteInbound("play", id, normalizedId(play["ControllingUserId"].textValue()), command, items, ticks, index)
         }

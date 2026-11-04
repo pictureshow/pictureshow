@@ -77,7 +77,9 @@ class PictureshowApplication : Application() {
                                 app.pictureshow.core.control.RemoteClient(http, identity(account))
                                     .registerTarget(account, commands.isNotEmpty(), commands)
                             },
-                            authorization = { account -> app.pictureshow.core.AuthorizationHeader.build(identity(account), account.accessToken) },
+                            authorization = { account ->
+                                app.pictureshow.core.AuthorizationHeader.build(identity(account), account.accessToken)
+                            },
                             nowMs = android.os.SystemClock::elapsedRealtime,
                             trace = PlaybackDiagnostics::write
                         )

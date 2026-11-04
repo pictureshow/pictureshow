@@ -53,7 +53,9 @@ internal fun interface RemoteSocketFactory {
 /** The token goes in the header: 12.4 refuses it in the query (measured), and URLs end up in logs. */
 internal class OkHttpRemoteSocketFactory(private val client: OkHttpClient = OkHttpClient()) : RemoteSocketFactory {
     override fun open(url: String, authorization: String, events: RemoteSocketEvents): RemoteSocket {
-        val request = Request.Builder().url(url.replaceFirst("ws", "http", ignoreCase = true)).header("Authorization", authorization).build()
+        val request = Request.Builder().url(
+            url.replaceFirst("ws", "http", ignoreCase = true)
+        ).header("Authorization", authorization).build()
         val socket = client.newWebSocket(
             request,
             object : WebSocketListener() {
@@ -98,7 +100,11 @@ internal class RemoteQueue(private val server: String, private val viewer: Strin
     private fun entries(items: List<String>) = items.map { QueueEntry("r${++sequence}", it) }
 
     private fun apply(op: String, entries: List<QueueEntry> = emptyList()) {
-        q = reduceQueue(q, QueueEvent(op, revision = q.revision, generation = q.generation, entries = entries, completion = q.completion)).queue
+        q =
+            reduceQueue(
+                q,
+                QueueEvent(op, revision = q.revision, generation = q.generation, entries = entries, completion = q.completion)
+            ).queue
     }
 
     private fun media(id: String?) = q.entries.firstOrNull { it.id == id }?.media
