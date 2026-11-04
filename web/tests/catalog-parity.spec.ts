@@ -587,7 +587,7 @@ test("rc28 cold detail starts plain, then announces Ready only after the same fo
     await expect(watched).toHaveAttribute("data-state", "ready");
     await expect(watched).toHaveAttribute("aria-disabled", "false");
     await expect(page.locator("[data-detail-feedback]")).toHaveText(
-        "Ready. Watched",
+        "Ready. Mark watched",
     );
     await captureRecovery(page, "ready");
     await page.keyboard.press("ArrowRight");
