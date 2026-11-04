@@ -103,6 +103,7 @@ fun reduceRemoteController(state: RemoteControllerState, event: RemoteController
         "signed-out" -> RemoteControllerState(s.server, s.viewer, phase = "signed-out", generation = s.generation + 1)
         "intent" -> intent(s, event)
         "sent" -> sent(s, event)
+        "answer" -> answer(s, event)
         "tick" -> tick(s, event)
         else -> error("Unknown remote-controller operation: ${event.op}")
     }
@@ -236,6 +237,20 @@ private fun sent(s: RemoteControllerState, event: RemoteControllerEvent): Remote
                 effect = "refresh"
             )
         }
+    }
+}
+
+/**
+ * Navigation and text have nothing to observe, so they never become pending. Only an answer that says the target or the
+ * right has gone changes anything, and it is judged like any other send.
+ */
+private fun answer(s: RemoteControllerState, event: RemoteControllerEvent): RemoteControllerState {
+    val command = s.command ?: return s
+    return when (event.status) {
+        401 -> RemoteControllerState(s.server, s.viewer, phase = "signed-out", generation = s.generation + 1)
+        403 -> s.copy(phase = "denied", command = reduceCommand(command, CommandEvent("denied", owner = command.owner)), followUp = s.followUp?.unresolved())
+        404 -> lost(s, "target-gone")
+        else -> s
     }
 }
 

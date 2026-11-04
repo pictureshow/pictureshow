@@ -2524,6 +2524,116 @@
       ]
     },
     {
+      "id": "remote-reconnect-unobserved-send-only-reacts-to-lost-access",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "answer",
+            "status": 204
+          },
+          "expected": {
+            "phase": "attached"
+          }
+        },
+        {
+          "event": {
+            "op": "answer",
+            "status": 0
+          },
+          "expected": {
+            "phase": "attached"
+          }
+        },
+        {
+          "event": {
+            "op": "answer",
+            "status": 404
+          },
+          "expected": {
+            "phase": "target-gone"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-unobserved-send-403-denies",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "answer",
+            "status": 403
+          },
+          "expected": {
+            "phase": "denied"
+          }
+        }
+      ]
+    },
+    {
       "id": "remote-reconnect-session-list-401-signs-out",
       "operation": "controller",
       "state": {
