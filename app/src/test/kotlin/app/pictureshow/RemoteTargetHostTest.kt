@@ -41,14 +41,30 @@ class RemoteTargetHostTest {
 
     private class Player : RemotePlayerBridge {
         val calls = mutableListOf<String>()
-        override fun pause() { calls += "pause" }
-        override fun unpause() { calls += "unpause" }
-        override fun report() { calls += "report" }
-        override fun seekTo(positionMs: Long) { calls += "seek:$positionMs" }
-        override fun stop() { calls += "stop" }
-        override fun next(item: String?) { calls += "next:$item" }
-        override fun audio(index: Int) { calls += "audio:$index" }
-        override fun subtitle(index: Int) { calls += "subtitle:$index" }
+        override fun pause() {
+            calls += "pause"
+        }
+        override fun unpause() {
+            calls += "unpause"
+        }
+        override fun report() {
+            calls += "report"
+        }
+        override fun seekTo(positionMs: Long) {
+            calls += "seek:$positionMs"
+        }
+        override fun stop() {
+            calls += "stop"
+        }
+        override fun next(item: String?) {
+            calls += "next:$item"
+        }
+        override fun audio(index: Int) {
+            calls += "audio:$index"
+        }
+        override fun subtitle(index: Int) {
+            calls += "subtitle:$index"
+        }
     }
 
     private inner class Rig(scope: TestScope) {
@@ -92,7 +108,9 @@ class RemoteTargetHostTest {
     }
 
     private fun play(id: String, items: List<String>, command: String = "PlayNow", controller: String = viewer) =
-        """{"MessageId":"$id","MessageType":"Play","Data":{"ItemIds":[${items.joinToString(",") { "\"$it\"" }}],"PlayCommand":"$command","ControllingUserId":"$controller"}}"""
+        """{"MessageId":"$id","MessageType":"Play","Data":{"ItemIds":[${items.joinToString(",") {
+            "\"$it\""
+        }}],"PlayCommand":"$command","ControllingUserId":"$controller"}}"""
 
     private fun state(id: String, command: String, controller: String = viewer, extra: String = "") =
         """{"MessageId":"$id","MessageType":"Playstate","Data":{"Command":"$command","ControllingUserId":"$controller"$extra}}"""

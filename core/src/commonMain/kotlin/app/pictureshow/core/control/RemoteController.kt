@@ -230,7 +230,10 @@ private fun sent(s: RemoteControllerState, event: RemoteControllerEvent): Remote
         404 -> lost(s, "target-gone")
         // Unknown means unknown. A retry could pause twice or seek twice, so refresh and let the viewer decide.
         else -> {
-            val settled = command.pending?.takeIf { it.id == event.id && it.result == "sent" }?.let { command.copy(pending = it.copy(result = "unknown")) } ?: command
+            val settled = command.pending
+                ?.takeIf { it.id == event.id && it.result == "sent" }
+                ?.let { command.copy(pending = it.copy(result = "unknown")) }
+                ?: command
             s.copy(
                 command = settled.copy(fresh = false, seekTarget = null),
                 followUp = s.followUp?.takeIf { it.id == event.id }?.unresolved() ?: s.followUp,
@@ -248,7 +251,11 @@ private fun answer(s: RemoteControllerState, event: RemoteControllerEvent): Remo
     val command = s.command ?: return s
     return when (event.status) {
         401 -> RemoteControllerState(s.server, s.viewer, phase = "signed-out", generation = s.generation + 1)
-        403 -> s.copy(phase = "denied", command = reduceCommand(command, CommandEvent("denied", owner = command.owner)), followUp = s.followUp?.unresolved())
+        403 -> s.copy(
+            phase = "denied",
+            command = reduceCommand(command, CommandEvent("denied", owner = command.owner)),
+            followUp = s.followUp?.unresolved()
+        )
         404 -> lost(s, "target-gone")
         else -> s
     }
@@ -263,5 +270,9 @@ private fun tick(s: RemoteControllerState, event: RemoteControllerEvent): Remote
         command
     }
     val follow = s.followUp?.let { if (it.result == "sent" && event.nowMs - it.sentAtMs >= 5_000) it.copy(result = "unknown") else it }
-    return s.copy(command = expired.copy(effect = "none"), followUp = follow, effect = if (expired.effect == "refresh") "refresh" else s.effect)
+    return s.copy(
+        command = expired.copy(effect = "none"),
+        followUp = follow,
+        effect = if (expired.effect == "refresh") "refresh" else s.effect
+    )
 }

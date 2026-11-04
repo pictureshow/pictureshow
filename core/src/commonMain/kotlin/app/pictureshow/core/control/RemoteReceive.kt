@@ -77,7 +77,8 @@ data class RemoteReceiveEvent(
 )
 
 private val PlayModes = mapOf("PlayNow" to "open", "PlayNext" to "queue-next", "PlayLast" to "queue-add")
-private val TransportCommands = listOf("Pause", "Unpause", "PlayPause", "Seek", "Stop", "NextTrack", "PreviousTrack", "Rewind", "FastForward")
+private val TransportCommands =
+    listOf("Pause", "Unpause", "PlayPause", "Seek", "Stop", "NextTrack", "PreviousTrack", "Rewind", "FastForward")
 private const val REMOTE_SKIP_TICKS = 300_000_000L
 
 /** Only 12.4 is measured refusing another viewer without the right; anything older or unknown is treated as not enforcing. */

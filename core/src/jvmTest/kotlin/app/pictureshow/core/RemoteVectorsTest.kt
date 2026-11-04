@@ -122,10 +122,16 @@ class RemoteVectorsTest {
         }
         "targets-path" -> buildJsonObject { put("path", remoteTargetsPath(event.getValue("viewer").jsonPrimitive.content)) }
         "receive" -> json.encodeToJsonElement(
-            reduceRemoteReceive(json.decodeFromJsonElement<RemoteReceiveState>(state), json.decodeFromJsonElement<RemoteReceiveEvent>(event))
+            reduceRemoteReceive(
+                json.decodeFromJsonElement<RemoteReceiveState>(state),
+                json.decodeFromJsonElement<RemoteReceiveEvent>(event)
+            )
         )
         "controller" -> json.encodeToJsonElement(
-            reduceRemoteController(json.decodeFromJsonElement<RemoteControllerState>(state), json.decodeFromJsonElement<RemoteControllerEvent>(event))
+            reduceRemoteController(
+                json.decodeFromJsonElement<RemoteControllerState>(state),
+                json.decodeFromJsonElement<RemoteControllerEvent>(event)
+            )
         )
         else -> error("Unknown remote vector operation: $operation")
     }

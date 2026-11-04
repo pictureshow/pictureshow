@@ -355,7 +355,10 @@ internal fun PlayerItemScreen(
 
     fun remoteSeek(targetMs: Long) {
         val current = state.decision
-        if (current != null && app.pictureshow.core.playback.TranscodeSeek.required(current) && controller?.seek(targetMs, current) == true) {
+        if (current != null &&
+            app.pictureshow.core.playback.TranscodeSeek.required(current) &&
+            controller?.seek(targetMs, current) == true
+        ) {
             position = targetMs
             seekPreview = targetMs
         } else {

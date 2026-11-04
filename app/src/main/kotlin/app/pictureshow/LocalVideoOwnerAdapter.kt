@@ -59,7 +59,17 @@ internal class LocalVideoOwnerAdapter(
     private fun claimReport(): Boolean {
         val owner = ownership.owner
         val allowed = reportAllowed(if (owner.kind == "local") owner else identity, reportSequence++)
-        if (!allowed) onSuppressed(if (retired) "retired" else if (owner.kind == "local") ownership.reason.orEmpty() else "handed-off")
+        if (!allowed) {
+            onSuppressed(
+                if (retired) {
+                    "retired"
+                } else if (owner.kind == "local") {
+                    ownership.reason.orEmpty()
+                } else {
+                    "handed-off"
+                }
+            )
+        }
         return allowed
     }
 

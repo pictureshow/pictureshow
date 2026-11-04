@@ -173,8 +173,24 @@ class LocalVideoOwnerAdapterTest {
     }
 
     @Test fun realPlaybackSessionKeepsItsExactReportOrderThroughTheAdapter() = runTest {
-        val first = PlayDecision("film", MediaSourceInfo(id = "source"), PlayMethod.Transcode, "https://example.invalid/one", emptyMap(), "encode-one")
-        val second = PlayDecision("film", MediaSourceInfo(id = "source"), PlayMethod.Transcode, "https://example.invalid/two", emptyMap(), "encode-two")
+        val first =
+            PlayDecision(
+                "film",
+                MediaSourceInfo(id = "source"),
+                PlayMethod.Transcode,
+                "https://example.invalid/one",
+                emptyMap(),
+                "encode-one"
+            )
+        val second =
+            PlayDecision(
+                "film",
+                MediaSourceInfo(id = "source"),
+                PlayMethod.Transcode,
+                "https://example.invalid/two",
+                emptyMap(),
+                "encode-two"
+            )
         val outcomes = ArrayDeque(listOf(first, second))
         val positions = object : PlaybackOutput by output {
             override fun position() = PlaybackPosition(7, false)
