@@ -71,7 +71,8 @@ internal fun SegmentControl(
     modes: Map<SegmentType, SegmentMode>,
     onSeek: (Long) -> Unit,
     onFocusRemoved: () -> Unit,
-    showButton: Boolean = true
+    showButton: Boolean = true,
+    button: (@Composable (String, () -> Unit) -> Unit)? = null
 ) {
     val active = activeSegment(segments, positionMs, modes)
     val mode = active?.let { modes[it.type] ?: SegmentMode.Ask }
@@ -92,12 +93,16 @@ internal fun SegmentControl(
         if (active != null && mode == SegmentMode.Automatic) seek(active.endMs)
     }
     if (active != null && mode == SegmentMode.Ask && showButton) {
-        Button(
-            scale = playerButtonScale(),
-            onClick = { seek(active.endMs) },
-            modifier = Modifier.testTag("skip:${active.type}").semantics { liveRegion = LiveRegionMode.Polite }
-                .onFocusChanged { focused = it.isFocused }
-        ) { Text("Skip ${segmentLabel(active.type)}") }
+        if (button != null) {
+            button("Skip ${segmentLabel(active.type)}") { seek(active.endMs) }
+        } else {
+            Button(
+                scale = playerButtonScale(),
+                onClick = { seek(active.endMs) },
+                modifier = Modifier.testTag("skip:${active.type}").semantics { liveRegion = LiveRegionMode.Polite }
+                    .onFocusChanged { focused = it.isFocused }
+            ) { Text("Skip ${segmentLabel(active.type)}") }
+        }
     }
 }
 
@@ -188,7 +193,8 @@ internal fun NextEpisodeControl(
     compact: Boolean = false,
     // Time left in this episode when there are no credits to skip: the card shows it and waits for the end.
     remainingMs: Long? = null,
-    autoPlay: Boolean = true
+    autoPlay: Boolean = true,
+    card: (@Composable (Long, () -> Unit, () -> Unit) -> Unit)? = null
 ) {
     var cancelled by remember(next.id) { mutableStateOf(false) }
     var played by remember(next.id) { mutableStateOf(false) }
@@ -219,52 +225,65 @@ internal fun NextEpisodeControl(
         }
     }
     if (shown) {
-        Column(
-            Modifier.width(380.dp).background(Color(0xF510131C)).padding(20.dp)
-                .onFocusChanged { focused = it.hasFocus }.focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
-            Text(
-                if (autoPlay) "Next episode · $seconds s left" else "Next episode",
-                modifier = if (autoPlay) {
-                    Modifier.semantics { heading() }
-                } else {
-                    Modifier.clearAndSetSemantics {
-                        heading()
-                        liveRegion = LiveRegionMode.Polite
-                        contentDescription = "Next episode, ${catalogAnnouncement(next)}"
-                    }
-                },
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium
-            )
-            imageUrl(account.server, next, 320, wide = true)?.takeUnless { compact }?.let { url ->
-                AsyncImage(url, contentDescription = null, modifier = Modifier.width(240.dp).height(100.dp))
-            }
-            Text(next.name, color = Color.White)
-            Button(
-                scale = playerButtonScale(),
-                onClick = {
-                    if (!played) {
-                        played = true
-                        play()
-                    }
-                },
-                modifier = Modifier.testTag("next:play").semantics {
-                    contentDescription = "Play next episode, ${catalogAnnouncement(next)}"
+        if (card != null) {
+            val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining.toLong()
+            card(seconds, {
+                if (!played) {
+                    played = true
+                    play()
                 }
-            ) { Text("Play now", modifier = Modifier.clearAndSetSemantics {}) }
-            Button(scale = playerButtonScale(), onClick = {
-                val hadFocus = focused
+            }, {
                 cancelled = true
                 onCancel()
-                // The caller may remove this whole card, so its SideEffect would not run.
-                if (hadFocus) {
-                    focused = false
-                    restore()
+            })
+        } else {
+            Column(
+                Modifier.width(380.dp).background(Color(0xF510131C)).padding(20.dp)
+                    .onFocusChanged { focused = it.hasFocus }.focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
+                Text(
+                    if (autoPlay) "Next episode · $seconds s left" else "Next episode",
+                    modifier = if (autoPlay) {
+                        Modifier.semantics { heading() }
+                    } else {
+                        Modifier.clearAndSetSemantics {
+                            heading()
+                            liveRegion = LiveRegionMode.Polite
+                            contentDescription = "Next episode, ${catalogAnnouncement(next)}"
+                        }
+                    },
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                imageUrl(account.server, next, 320, wide = true)?.takeUnless { compact }?.let { url ->
+                    AsyncImage(url, contentDescription = null, modifier = Modifier.width(240.dp).height(100.dp))
                 }
-            }, modifier = Modifier.testTag("next:cancel")) { Text("Cancel next episode") }
+                Text(next.name, color = Color.White)
+                Button(
+                    scale = playerButtonScale(),
+                    onClick = {
+                        if (!played) {
+                            played = true
+                            play()
+                        }
+                    },
+                    modifier = Modifier.testTag("next:play").semantics {
+                        contentDescription = "Play next episode, ${catalogAnnouncement(next)}"
+                    }
+                ) { Text("Play now", modifier = Modifier.clearAndSetSemantics {}) }
+                Button(scale = playerButtonScale(), onClick = {
+                    val hadFocus = focused
+                    cancelled = true
+                    onCancel()
+                    // The caller may remove this whole card, so its SideEffect would not run.
+                    if (hadFocus) {
+                        focused = false
+                        restore()
+                    }
+                }, modifier = Modifier.testTag("next:cancel")) { Text("Cancel next episode") }
+            }
         }
     }
 }

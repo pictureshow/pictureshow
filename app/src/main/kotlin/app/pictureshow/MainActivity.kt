@@ -6,9 +6,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -147,15 +149,34 @@ class MainActivity : ComponentActivity() {
                 else -> null
             }
         }
+        val touch = !usesTvInterface(this)
+        if (touch) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            )
+        }
         setContent {
-            PictureshowTheme {
-                Pictureshow(
-                    searchEntry = searchEntry,
-                    consumeSearchEntry = { searchEntry = null },
-                    playbackEntry = playbackEntry,
-                    entrySequence = entrySequence,
-                    consumePlaybackEntry = { playbackEntry = null }
-                )
+            if (touch) {
+                TouchTheme {
+                    TouchPictureshow(
+                        searchEntry = searchEntry,
+                        consumeSearchEntry = { searchEntry = null },
+                        playbackEntry = playbackEntry,
+                        entrySequence = entrySequence,
+                        consumePlaybackEntry = { playbackEntry = null }
+                    )
+                }
+            } else {
+                PictureshowTheme {
+                    Pictureshow(
+                        searchEntry = searchEntry,
+                        consumeSearchEntry = { searchEntry = null },
+                        playbackEntry = playbackEntry,
+                        entrySequence = entrySequence,
+                        consumePlaybackEntry = { playbackEntry = null }
+                    )
+                }
             }
         }
     }
@@ -266,7 +287,7 @@ internal fun recoverPlaybackEntry(nav: NavHostController, item: MediaItem) {
 }
 
 /** Expired sessions start directly on login; their Back still needs an account-management exit. */
-private fun leaveLogin(nav: NavHostController) {
+internal fun leaveLogin(nav: NavHostController) {
     if (!nav.popBackStack()) {
         nav.navigate("accounts") {
             popUpTo(nav.graph.id) { inclusive = true }
@@ -275,7 +296,7 @@ private fun leaveLogin(nav: NavHostController) {
     }
 }
 
-private fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
+internal fun serverRoute(screen: String, server: Server) = "$screen?server=${Uri.encode(Json.encodeToString(server))}"
 
 internal fun accountDestination(snapshot: AccountSnapshot): String {
     val account = snapshot.currentAccount
@@ -291,7 +312,7 @@ internal fun accountDestination(snapshot: AccountSnapshot): String {
  * Identity/expiry changes still bootstrap the graph; this also handles unchanged identities.
  */
 @Composable
-private fun SignInCompletion(
+internal fun SignInCompletion(
     completed: Boolean,
     entryId: String,
     nav: NavHostController,
