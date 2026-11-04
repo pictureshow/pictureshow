@@ -103,6 +103,7 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
+    implementation(libs.profileinstaller)
     coreLibraryDesugaring(libs.desugar)
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.compose.ui.test)
