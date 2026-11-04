@@ -16,6 +16,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityEventCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.accessibility.AccessibilityNodeProviderCompat
 import java.util.WeakHashMap
@@ -115,7 +116,7 @@ internal class PlaybackExitFocusDelegate(
  * speaks the app's name before it moves focus. Without the event, the opener's focus event is simply read.
  */
 private fun paneDisappeared(event: AccessibilityEvent): Boolean = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-    event.contentChangeTypes and AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED != 0
+    event.contentChangeTypes and AccessibilityEventCompat.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED != 0
 
 private val inWindowPaneTitles = WeakHashMap<View, String>()
 
