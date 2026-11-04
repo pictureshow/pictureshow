@@ -419,6 +419,23 @@ class PlayerPanelAccessibilityTest {
         )
     }
 
+    @Test fun theSelectedSpeedRowFollowsTheOutputWhileThePanelIsOpen() {
+        val limited = PlaybackSpeedState(encodedAudio = true, message = app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO)
+        var speed by androidx.compose.runtime.mutableStateOf(PlaybackSpeedState())
+        compose.setContent { PictureshowTheme { SpeedChoices(speed, transcode = false) {} } }
+        compose.onNodeWithTag("track:100").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        // The output switches to passthrough audio with the panel still open.
+        compose.runOnIdle { speed = limited }
+        compose.onNodeWithTag("track:100").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ContentDescription,
+                listOf("1×. ${app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO}")
+            )
+        )
+        compose.runOnIdle { speed = PlaybackSpeedState() }
+        compose.onNodeWithTag("track:100").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+    }
+
     @Test fun anUnlimitedSpeedRowKeepsItsPlainLabel() {
         compose.setContent { PictureshowTheme { SpeedChoices(PlaybackSpeedState(), transcode = false) {} } }
         compose.onNodeWithTag("track:100").assertIsSelected()

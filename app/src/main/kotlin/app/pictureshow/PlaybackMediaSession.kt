@@ -124,7 +124,9 @@ internal object PlaybackMediaSession {
  * player, metadata or playback intent. Stalls beyond five seconds are real BUFFERING.
  * The deadline belongs to the viewing, including decoder replacement, not each event.
  *
- * Initial preparation with play intent is presented the same way, for up to thirty seconds. Otherwise
+ * Initial preparation with play intent is presented the same way, for up to thirty seconds from when it first
+ * waits with play intent; a pause inside that window keeps its absolute deadline, and a decoder replacement
+ * before first play carries the pending grace or the armed deadline, never a new one. Otherwise
  * the card posted at session start is cancelled for BUFFERING and posted again as the audio starts,
  * and TalkBack holds that second announcement until audio stops: it was spoken over the detail page
  * after every natural end that followed (projector run, PLAY-27).
@@ -136,12 +138,17 @@ internal object PlaybackMediaSession {
  */
 private class SessionRebufferPlayer(private val output: Player, previous: Window?, private val onStop: () -> Unit) :
     ForwardingPlayer(output) {
-    data class Window(val deadlineMs: Long?, val eligible: Boolean)
+    data class Window(val deadlineMs: Long?, val eligible: Boolean, val preparing: Boolean, val preparation: Boolean)
 
     private val handler = Handler(output.applicationLooper)
     private var deadlineMs = previous?.deadlineMs
     private var eligible = previous?.eligible ?: output.isPlaying
-    private var preparing = previous == null && !output.isPlaying
+
+    // A replacement before first play still owes that play its grace; once armed, the absolute deadline travels instead.
+    private var preparing = previous?.preparing ?: !output.isPlaying
+
+    // The armed deadline is the first preparation's: a pause inside it keeps it, and play resumes it, not a new one.
+    private var preparation = previous?.preparation ?: false
     private var stopped = false
     private var detached = false
     private var scheduledDeadlineMs: Long? = null
@@ -164,7 +171,7 @@ private class SessionRebufferPlayer(private val output: Player, previous: Window
 
     fun window(): Window {
         refreshWindow()
-        return Window(deadlineMs, eligible)
+        return Window(deadlineMs, eligible, preparing, preparation)
     }
 
     private fun refreshWindow() {
@@ -172,6 +179,7 @@ private class SessionRebufferPlayer(private val output: Player, previous: Window
         if (!stopped && output.isPlaying) {
             eligible = true
             preparing = false
+            preparation = false
             deadlineMs = null
         } else if (!stopped &&
             output.playbackState == Player.STATE_BUFFERING &&
@@ -181,14 +189,20 @@ private class SessionRebufferPlayer(private val output: Player, previous: Window
         ) {
             if (deadlineMs == null && (eligible || preparing)) {
                 deadlineMs = SystemClock.uptimeMillis() + if (preparing) PREPARATION_GRACE_MS else REBUFFER_GRACE_MS
+                preparation = preparing
                 eligible = false
                 preparing = false
             }
         } else {
+            val finished = stopped || output.playerError != null || output.playbackState == Player.STATE_ENDED
             eligible = false
-            deadlineMs = null
+            if (finished || !preparation || output.playbackState == Player.STATE_IDLE) {
+                // A rebuffer grace ends with any interruption. Legacy clients see PAUSED either way while paused.
+                deadlineMs = null
+                preparation = false
+            }
             // Idle before prepare, or paused while preparing, still owes the first play its grace.
-            if (stopped || output.playerError != null || output.playbackState == Player.STATE_ENDED) preparing = false
+            if (finished) preparing = false
         }
         val deadline = deadlineMs
         if (deadline == null) {

@@ -230,23 +230,6 @@ internal fun PlayerItemScreen(
     var seekOpen by remember { mutableStateOf(false) }
     var restoringSeekFocus by remember { mutableStateOf(false) }
     var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
-    // PLAY-05/25/26: Speed and Playback info return the screen reader to their opener, not to the first
-    // text it finds after the host view's own empty focus event. Until the reader acknowledges the opener
-    // (or the bounded wait fails open), that host event is suppressed and only the opener is offered,
-    // as the Seek return does for the position control and the detail page does after playback.
-    val openerReturnTag = if (!accessibleControls) {
-        null
-    } else {
-        when (returnFocus) {
-            speedFocus -> "player:speed"
-            infoFocus -> "player:info"
-            else -> null
-        }
-    }
-    PlaybackExitFocusEvents(openerReturnTag != null || (accessibleControls && restoringSeekFocus))
-    val readerOpenerOnly: (String) -> Modifier = { tag ->
-        if (openerReturnTag != null && openerReturnTag != tag) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
-    }
     val error = setupError ?: state.error
     var metadata by remember { mutableStateOf(item) }
     var segments by remember { mutableStateOf(emptyList<MediaSegment>()) }
@@ -272,6 +255,26 @@ internal fun PlayerItemScreen(
     var exitRequested by remember { mutableStateOf(false) }
     var topCues by remember { mutableStateOf(false) }
     var conversionDetailsRequested by remember { mutableStateOf(false) }
+    // PLAY-05/25/26: Speed and Playback info return the screen reader to their opener, not to the first
+    // text it finds after the host view's own empty focus event. Until the reader acknowledges the opener
+    // (or the bounded wait fails open), that host event is suppressed and only the opener is offered,
+    // as the Seek return does for the position control and the detail page does after playback.
+    // The return ends early once its opener cannot be shown (controls hidden, an error, the next item),
+    // and nothing is hidden for it while a panel is open again.
+    val openerShown = controls && error == null && !switching
+    val openerReturnTag = if (!accessibleControls || !openerShown || chooser != null || extraPanel != null || chaptersOpen || seekOpen) {
+        null
+    } else {
+        when (returnFocus) {
+            speedFocus -> "player:speed"
+            infoFocus -> "player:info"
+            else -> null
+        }
+    }
+    PlaybackExitFocusEvents(openerReturnTag != null || (accessibleControls && restoringSeekFocus))
+    val readerOpenerOnly: (String) -> Modifier = { tag ->
+        if (openerReturnTag != null && openerReturnTag != tag) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+    }
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
         extraPanel = null
@@ -341,8 +344,24 @@ internal fun PlayerItemScreen(
         interaction++
     }
 
+    // One remote press seeks once even when it arrives both as a key and as the reader's scroll action.
+    val onePressSeek = remember { OnePressSeek() }
+    fun keySeek(delta: Long) {
+        if (!onePressSeek.admit(OnePressSeek.Path.Key, delta)) {
+            PlaybackDiagnostics.write("player-seek source=key deltaMs=$delta dropped=paired")
+            return
+        }
+        PlaybackDiagnostics.write("player-seek source=key deltaMs=$delta")
+        seek(delta)
+    }
+
     // A reader's seek reveals the controls with the position control focused, so the new clock is spoken.
-    fun readerSeek(delta: Long) {
+    fun readerSeek(delta: Long, arrow: Boolean = false) {
+        if (arrow && !onePressSeek.admit(OnePressSeek.Path.Reader, delta)) {
+            PlaybackDiagnostics.write("player-seek source=reader deltaMs=$delta dropped=paired")
+            return
+        }
+        PlaybackDiagnostics.write("player-seek source=reader deltaMs=$delta")
         seek(delta)
         if (accessibleControls) {
             focusControls = false
@@ -575,6 +594,13 @@ internal fun PlayerItemScreen(
             focusControls = true
         }
     }
+    val openerReturnGone = !openerShown && (returnFocus == speedFocus || returnFocus == infoFocus)
+    LaunchedEffect(openerReturnGone) {
+        if (openerReturnGone) {
+            PlaybackDiagnostics.write("panel-return cancelled controls=$controls error=${error != null} switching=$switching")
+            returnFocus = null
+        }
+    }
     LaunchedEffect(returnFocus, chooser, chaptersOpen, seekOpen, extraPanel, windowFocused) {
         val target = returnFocus
         if (target != null && windowFocused && chooser == null && extraPanel == null && !chaptersOpen && !seekOpen) {
@@ -670,7 +696,7 @@ internal fun PlayerItemScreen(
                 .playerRemoteKeys(
                     enabled = chooser == null && extraPanel == null && !chaptersOpen && !seekOpen && error == null && !switching,
                     rootFocused = rootFocused,
-                    seek = ::seek,
+                    seek = ::keySeek,
                     showControls = {
                         controls = true
                         if (rootFocused) focusControls = true
@@ -712,7 +738,7 @@ internal fun PlayerItemScreen(
                             // Compose mirrors horizontal scroll amounts in RTL; the remote's Right still means forward.
                             val forward = if (layoutDirection == LayoutDirection.Rtl) x < 0f else x > 0f
                             when {
-                                x != 0f -> readerSeek(if (forward) 10_000L else -10_000L)
+                                x != 0f -> readerSeek(if (forward) 10_000L else -10_000L, arrow = true)
                                 y != 0f -> readerShowControls()
                                 else -> return@scrollBy false
                             }
