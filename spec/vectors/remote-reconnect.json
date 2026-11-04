@@ -1,0 +1,2470 @@
+{
+  "schemaVersion": 1,
+  "suite": "remote-reconnect",
+  "cases": [
+    {
+      "id": "remote-reconnect-dispatched-is-not-confirmed",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "phase": "attached",
+            "generation": "1"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 204
+          },
+          "expected": {
+            "phase": "attached",
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": true,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "confirmed"
+              },
+              "observed": {
+                "paused": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-no-observation-is-unknown-after-5s",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 204
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "4999"
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            },
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "5000"
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "unknown"
+              },
+              "fresh": false
+            },
+            "effect": "refresh"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "2",
+            "nowMs": "5001",
+            "value": "play"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "refresh-required"
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "6000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "fresh": true,
+              "pending": {
+                "result": "unknown"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "2",
+            "nowMs": "6001",
+            "value": "play"
+          },
+          "expected": {
+            "effect": "dispatch"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-server-failure-is-unknown-never-retried",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 500
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "unknown"
+              },
+              "fresh": false
+            },
+            "effect": "refresh"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-network-failure-is-unknown",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "stop"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 0
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "unknown"
+              }
+            },
+            "effect": "refresh"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-stale-send-result-ignored",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "9",
+            "status": 500
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            },
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-seek-confirmed-within-drift",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "seek-absolute",
+            "entry": "50000000"
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "ticks": "50000000"
+              },
+              "seekTarget": "50000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "30000000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "52000000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "confirmed"
+              },
+              "seekTarget": null,
+              "observed": {
+                "ticks": "52000000"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-seek-just-below-window-not-confirmed",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "seek-absolute",
+            "entry": "50000000"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "39999999",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-seek-unavailable-when-target-says-no",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": false
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "seek-absolute",
+            "entry": "5"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-relative-seek-does-not-stack-on-unknown",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "seek-relative",
+            "entry": "100"
+          },
+          "expected": {
+            "command": {
+              "seekTarget": "1100"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "5000"
+          },
+          "expected": {
+            "command": {
+              "seekTarget": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-stop-confirmed-when-now-playing-clears",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "stop"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 204
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": null
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "confirmed"
+              },
+              "observed": {
+                "entry": null
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-play-now-confirmed-only-by-that-title",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": null
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "play-now",
+            "entry": "cccccccccccccccccccccccccccccccc"
+          },
+          "expected": {
+            "effect": "dispatch"
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 204
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "dddddddddddddddddddddddddddddddd",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "pending": {
+                "result": "confirmed"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-next-confirmed-by-entry-change",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "next"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "followUp": {
+              "result": "sent",
+              "baselineItem": "cccccccccccccccccccccccccccccccc"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "followUp": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "dddddddddddddddddddddddddddddddd",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "followUp": {
+              "result": "confirmed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-audio-confirmed-by-its-own-index",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "audio",
+            "index": 2
+          },
+          "expected": {
+            "followUp": {
+              "audio": 2
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "followUp": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true,
+                  "audio": 2
+                }
+              }
+            ]
+          },
+          "expected": {
+            "followUp": {
+              "result": "confirmed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-volume-unknown-after-5s",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "volume",
+            "level": 30
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "5000"
+          },
+          "expected": {
+            "followUp": {
+              "result": "unknown"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-unadvertised-follow-up-refused",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "volume",
+            "level": 30
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-new-session-needs-deliberate-reattach",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s2",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "phase": "target-restarted",
+            "replacement": "s2",
+            "target": {
+              "session": "s1"
+            },
+            "command": {
+              "pending": {
+                "result": "unknown"
+              },
+              "fresh": false
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "2",
+            "nowMs": "1001",
+            "value": "play"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "not-attached"
+          }
+        },
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s2",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "phase": "attached",
+            "generation": "2",
+            "target": {
+              "session": "s2"
+            },
+            "replacement": null,
+            "command": {
+              "pending": null,
+              "fresh": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-same-session-id-after-gap-needs-reattach",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": []
+          },
+          "expected": {
+            "phase": "target-gone"
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "phase": "target-restarted",
+            "replacement": "s1"
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "2",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "not-attached"
+          }
+        },
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "phase": "attached"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-target-gone-marks-unknown",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": []
+          },
+          "expected": {
+            "phase": "target-gone",
+            "command": {
+              "pending": {
+                "result": "unknown"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "2",
+            "nowMs": "0",
+            "value": "play"
+          },
+          "expected": {
+            "rejection": "not-attached"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-other-device-does-not-count-as-return",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": []
+          },
+          "expected": {
+            "phase": "target-gone"
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "targets": [
+              {
+                "session": "s9",
+                "device": "tv9",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": null
+              }
+            ]
+          },
+          "expected": {
+            "phase": "target-gone",
+            "replacement": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-send-404-is-gone",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 404
+          },
+          "expected": {
+            "phase": "target-gone",
+            "command": {
+              "pending": {
+                "result": "unknown"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-send-403-explains-denial",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 403
+          },
+          "expected": {
+            "phase": "denied",
+            "command": {
+              "authorized": false,
+              "pending": {
+                "result": "rejected"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "2",
+            "nowMs": "0",
+            "value": "play"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "denied"
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "phase": "denied"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-send-401-clears-everything",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 401
+          },
+          "expected": {
+            "phase": "signed-out",
+            "target": null,
+            "command": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-foreground-refreshes-before-enabling",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "resume"
+          },
+          "expected": {
+            "effect": "refresh",
+            "command": {
+              "fresh": false
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "refresh-required"
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "dispatch"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-lock-with-pending-is-unknown-not-replayed",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "effect": "dispatch"
+          }
+        },
+        {
+          "event": {
+            "op": "resume"
+          },
+          "expected": {
+            "effect": "refresh",
+            "command": {
+              "pending": {
+                "result": "unknown"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": true,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "effect": "none",
+            "command": {
+              "pending": {
+                "result": "unknown"
+              },
+              "observed": {
+                "paused": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-longer-title-after-lock-refreshes",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "2000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "resume"
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "900000000",
+                  "positionTicks": "500000000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "command": {
+              "fresh": true,
+              "observed": {
+                "ticks": "500000000"
+              },
+              "rejection": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-disconnect-has-no-stop",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "detach"
+          },
+          "expected": {
+            "phase": "detached",
+            "target": null,
+            "effect": "none",
+            "command": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "2",
+            "nowMs": "0",
+            "value": "pause"
+          },
+          "expected": {
+            "rejection": "not-attached"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-account-switch-detaches-immediately",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "account",
+            "server": "srv",
+            "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "expected": {
+            "phase": "detached",
+            "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "target": null,
+            "command": null,
+            "generation": "2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-same-account-does-not-detach",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "account",
+            "server": "srv",
+            "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "expected": {
+            "phase": "attached"
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-controller-only-dispatches-no-report",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "bogus"
+          },
+          "expected": {
+            "effect": "none",
+            "rejection": "unsupported"
+          }
+        }
+      ]
+    }
+  ]
+}

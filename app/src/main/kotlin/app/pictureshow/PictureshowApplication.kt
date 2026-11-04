@@ -65,6 +65,24 @@ class PictureshowApplication : Application() {
                     single { PlaybackPreferencesStore(get()) }
                     single<ServerDiscovery> { JvmServerDiscovery() }
                     single {
+                        val name = deviceDisplayName(this@PictureshowApplication)
+                        val store = get<DeviceIdentityStore>()
+                        val http = get<HttpClient>()
+                        suspend fun identity(account: Account) =
+                            app.pictureshow.core.ClientIdentity(name, store.getOrCreate(), BuildConfig.VERSION_NAME).forAccount(account)
+                        RemoteTargetHost(
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main.immediate),
+                            OkHttpRemoteSocketFactory(),
+                            register = { account, commands ->
+                                app.pictureshow.core.control.RemoteClient(http, identity(account))
+                                    .registerTarget(account, commands.isNotEmpty(), commands)
+                            },
+                            authorization = { account -> app.pictureshow.core.AuthorizationHeader.build(identity(account), account.accessToken) },
+                            nowMs = android.os.SystemClock::elapsedRealtime,
+                            trace = PlaybackDiagnostics::write
+                        )
+                    }
+                    single {
                         createApiHttpClient()
                     }
                     single<JellyfinService> {

@@ -309,3 +309,22 @@ owner-command. route accepts cast/airplay: with a group it emits require-leave, 
 retains group. leave requests leave-group; only a subsequent confirmed left acknowledgment selects the route.
 No external-route SyncPlay clock is started. OS delivery, browser suspension and actual platform playback
 continuation require platform qualification; these vectors decide routing only.
+
+## Remote (REM) trace format
+
+`remote-targets`, `remote-wire`, `remote-receive` and `remote-reconnect` use the shared trace format and encoding
+above and run through `RemoteVectorsTest` (Gradle packages them in `remote-vectors`). Web lists them as `it.todo`
+through `pendingPortSuites` until it ports them; delete a name there when the port lands.
+
+Operations: `targets` (state `sessions`, `viewer`, `selfDevice`, the server's PascalCase JSON as received;
+expected `targets`), `request` (state `target`, event a command; expected `request` with exact `method`, `path`, `query`,
+`body`, or `rejection`), `parse` (event `text`; expected the validated message), `capabilities`, `advertised`,
+`relay-rights` (`version`; expected `enforces`), `socket-url` (`server`; expected `url`), `targets-path` (`viewer`;
+expected `path`), `receive` (the target's gate: `message`, `viewing`, `resolved`, `field`, `policy`, `tick`, `disconnect`,
+`reconnect`, `account`) and `controller` (the controller's states: `attach`, `detach`, `account`, `refresh`, `resume`,
+`intent`, `sent`, `tick`).
+
+Fixed behaviour worth reading before porting: a 2xx from a send never confirms anything; only a later `refresh` can.
+Seek confirms when the observed position lands in [target - 1 s, target + 6 s]; pause, stop and play-now confirm by
+state, and next, previous, track and volume by their own observation. Nothing is retried, held input dies at 5 s or on
+reconnect, and PlayPause resolves against the viewing's observed state.

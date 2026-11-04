@@ -1,0 +1,557 @@
+{
+  "schemaVersion": 1,
+  "suite": "remote-targets",
+  "cases": [
+    {
+      "id": "remote-targets-same-viewer-observed-state",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ],
+            "NowPlayingItem": {
+              "Id": "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC",
+              "Name": "Secret film",
+              "RunTimeTicks": 9007199254740993
+            },
+            "PlayState": {
+              "PositionTicks": 100,
+              "IsPaused": true,
+              "CanSeek": true,
+              "AudioStreamIndex": 1,
+              "SubtitleStreamIndex": -1,
+              "VolumeLevel": 40,
+              "IsMuted": false
+            }
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "Living room",
+                "client": "Pictureshow TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "viewerName": "Ana",
+                "sameViewer": true,
+                "duplicateName": false,
+                "commands": [
+                  "MoveUp",
+                  "SendString"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "title": "Secret film",
+                  "durationTicks": "9007199254740993",
+                  "positionTicks": "100",
+                  "paused": true,
+                  "canSeek": true,
+                  "audio": 1,
+                  "subtitle": -1,
+                  "volume": 40,
+                  "muted": false
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-other-viewer-title-hidden",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ],
+            "NowPlayingItem": {
+              "Id": "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC",
+              "Name": "Secret film",
+              "RunTimeTicks": 9007199254740993
+            },
+            "PlayState": {
+              "PositionTicks": 100,
+              "IsPaused": true,
+              "CanSeek": true,
+              "AudioStreamIndex": 1,
+              "SubtitleStreamIndex": -1,
+              "VolumeLevel": 40,
+              "IsMuted": false
+            }
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "Living room",
+                "client": "Pictureshow TV",
+                "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "viewerName": "Ana",
+                "sameViewer": false,
+                "duplicateName": false,
+                "commands": [
+                  "MoveUp",
+                  "SendString"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "title": null,
+                  "durationTicks": "9007199254740993",
+                  "positionTicks": "100",
+                  "paused": true,
+                  "canSeek": true,
+                  "audio": 1,
+                  "subtitle": -1,
+                  "volume": 40,
+                  "muted": false
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-shared-device-has-no-viewer",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "00000000000000000000000000000000",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": []
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "Living room",
+                "client": "Pictureshow TV",
+                "viewer": null,
+                "viewerName": null,
+                "sameViewer": false,
+                "duplicateName": false,
+                "commands": [],
+                "now": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-own-device-excluded",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "phone1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ]
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-no-remote-control-excluded",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": false,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ]
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-audio-only-excluded",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Audio"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ]
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-no-session-id-excluded",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "DeviceId": "tv1",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ]
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-unsafe-session-id-excluded",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "../x",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ]
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-malformed-rows-skipped",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          7,
+          null,
+          {
+            "Id": "s2",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ]
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": [
+              {
+                "session": "s2",
+                "device": "tv1",
+                "name": "Living room",
+                "client": "Pictureshow TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "viewerName": "Ana",
+                "sameViewer": true,
+                "duplicateName": false,
+                "commands": [
+                  "MoveUp",
+                  "SendString"
+                ],
+                "now": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-same-name-flagged-own-first",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s3",
+            "DeviceId": "tv3",
+            "DeviceName": "Same",
+            "Client": "Pictureshow TV",
+            "UserId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": []
+          },
+          {
+            "Id": "s2",
+            "DeviceId": "tv2",
+            "DeviceName": "Same",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": []
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": [
+              {
+                "session": "s2",
+                "device": "tv2",
+                "name": "Same",
+                "client": "Pictureshow TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "viewerName": "Ana",
+                "sameViewer": true,
+                "duplicateName": true,
+                "commands": [],
+                "now": null
+              },
+              {
+                "session": "s3",
+                "device": "tv3",
+                "name": "Same",
+                "client": "Pictureshow TV",
+                "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "viewerName": "Ana",
+                "sameViewer": false,
+                "duplicateName": true,
+                "commands": [],
+                "now": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-title-not-kept-after-account-change",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [
+              "MoveUp",
+              "SendString"
+            ],
+            "NowPlayingItem": {
+              "Id": "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC",
+              "Name": "Secret film",
+              "RunTimeTicks": 9007199254740993
+            },
+            "PlayState": {
+              "PositionTicks": 100,
+              "IsPaused": true,
+              "CanSeek": true,
+              "AudioStreamIndex": 1,
+              "SubtitleStreamIndex": -1,
+              "VolumeLevel": 40,
+              "IsMuted": false
+            }
+          }
+        ],
+        "viewer": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "Living room",
+                "client": "Pictureshow TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "viewerName": "Ana",
+                "sameViewer": false,
+                "duplicateName": false,
+                "commands": [
+                  "MoveUp",
+                  "SendString"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "title": null,
+                  "durationTicks": "9007199254740993",
+                  "positionTicks": "100",
+                  "paused": true,
+                  "canSeek": true,
+                  "audio": 1,
+                  "subtitle": -1,
+                  "volume": 40,
+                  "muted": false
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -90,6 +90,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -120,6 +121,7 @@ class MainActivity : ComponentActivity() {
     private var playbackEntry by mutableStateOf<ParsedPlaybackEntry?>(null)
     private var searchEntry by mutableStateOf<String?>(null)
     private var entrySequence by mutableStateOf(0L)
+    private val remoteTarget: RemoteTargetHost by lazy { org.koin.core.context.GlobalContext.get().get() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -161,6 +163,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         lifecycleScope.launch { (application as PictureshowApplication).supporter.refresh() }
+        remoteTarget.setForeground(true)
+    }
+
+    override fun onStop() {
+        // No background receiver: a TV that is asleep or left this app is simply not a target.
+        remoteTarget.setForeground(false)
+        super.onStop()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -203,6 +212,17 @@ private fun playerRoute(item: MediaItem, resume: Boolean) =
     playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
 
 internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
+
+/** Pictureshow's own navigation only: these keys go to this activity, never to the system. */
+internal fun remoteKeyCode(name: String): Int? = when (name) {
+    "MoveUp" -> android.view.KeyEvent.KEYCODE_DPAD_UP
+    "MoveDown" -> android.view.KeyEvent.KEYCODE_DPAD_DOWN
+    "MoveLeft" -> android.view.KeyEvent.KEYCODE_DPAD_LEFT
+    "MoveRight" -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+    "Select" -> android.view.KeyEvent.KEYCODE_DPAD_CENTER
+    "Back" -> android.view.KeyEvent.KEYCODE_BACK
+    else -> null
+}
 
 internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlaybackEntry.Open) {
     nav.navigate("home") {
@@ -366,6 +386,48 @@ internal fun Pictureshow(
         val destination = searchIntentDestination(state.snapshot, query)
         if (destination.startsWith("search?")) navigateSearchEntry(nav, query)
         consumeSearchEntry()
+    }
+    val remoteTarget: RemoteTargetHost = koinInject()
+    val playbackPreferences: PlaybackPreferencesStore = koinInject()
+    val remotePolicy by remember(playbackPreferences) {
+        playbackPreferences.values.map<PlaybackPreferences, String?> { it.remoteReceiver }
+    }.collectAsStateWithLifecycle(null)
+    LaunchedEffect(state.snapshot.currentAccount, remotePolicy) {
+        remotePolicy?.let { remoteTarget.bind(state.snapshot.currentAccount, it) }
+    }
+    val remoteAccount by rememberUpdatedState(state.snapshot.currentAccount)
+    val remoteCatalog by rememberUpdatedState(catalog)
+    LaunchedEffect(remoteTarget) {
+        launch {
+            remoteTarget.opens.collect { effect ->
+                val account = remoteAccount?.takeUnless { it.expired }
+                val item = effect.items.getOrNull(effect.index ?: 0)
+                val resolved = if (account != null && item != null) {
+                    resolvePlaybackEntry(PlaybackEntry(item, effect.ticks?.div(10_000)), account, remoteCatalog)
+                } else {
+                    ResolvedPlaybackEntry.Unavailable
+                }
+                val open = resolved as? ResolvedPlaybackEntry.Open
+                if (remoteTarget.resolved(effect.generation, open != null)) {
+                    navigatePlaybackEntry(nav, requireNotNull(open))
+                } else if (open == null) {
+                    Toast.makeText(context, ENTRY_UNAVAILABLE, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        remoteTarget.navigation.collect { name ->
+            val code = remoteKeyCode(name)
+            if (code != null) {
+                val activity = context as? android.app.Activity
+                activity?.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+                activity?.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+            } else if (name == "GoHome" && remoteAccount?.expired == false) {
+                nav.navigate("home") {
+                    popUpTo(nav.graph.id) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        }
     }
     val accessibleNavigation = rememberAccessibilityEnabled()
     NavHost(
@@ -787,6 +849,11 @@ internal fun Pictureshow(
                 val screen by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(entry) {
                     vm.initialize(entry.savedStateHandle, entry.arguments?.getString("query").orEmpty())
+                }
+                // Search is the only field a controller can type into; sign-in and Quick Connect never register.
+                DisposableEffect(vm) {
+                    remoteTarget.setSearchField { vm.query(it, immediate = true) }
+                    onDispose { remoteTarget.setSearchField(null) }
                 }
                 SearchScreen(
                     screen, account, entry.arguments?.getBoolean("keyboard") ?: true,

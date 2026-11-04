@@ -108,6 +108,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
 
@@ -236,7 +237,15 @@ internal fun PlayerItemScreen(
     // A pending or failed optional lookup is not evidence that this is the last episode.
     var nextLookup by remember { mutableStateOf<EpisodeLookup?>(null) }
     var nextRetry by remember { mutableIntStateOf(0) }
-    val nextEpisode = (nextLookup?.result as? ClientResult.Success)?.value
+    val remoteTarget: RemoteTargetHost = koinInject()
+    // A title queued from a controller goes first. With no controller this is always null, and nothing below changes.
+    var remoteNext by remember { mutableStateOf<MediaItem?>(null) }
+    LaunchedEffect(remoteTarget.queueRevision, catalog) {
+        remoteNext = remoteTarget.upcoming?.let { id ->
+            (resolvePlaybackEntry(PlaybackEntry(id), account, catalog) as? ResolvedPlaybackEntry.Open)?.item
+        }
+    }
+    val nextEpisode = remoteNext ?: (nextLookup?.result as? ClientResult.Success)?.value
     var extras by remember { mutableStateOf<PlaybackExtrasClient?>(null) }
     var tiles by remember { mutableStateOf<TrickplayCache?>(null) }
     var chaptersOpen by remember { mutableStateOf(false) }
@@ -342,6 +351,71 @@ internal fun PlayerItemScreen(
         }
         controls = true
         interaction++
+    }
+
+    fun remoteSeek(targetMs: Long) {
+        val current = state.decision
+        if (current != null && app.pictureshow.core.playback.TranscodeSeek.required(current) && controller?.seek(targetMs, current) == true) {
+            position = targetMs
+            seekPreview = targetMs
+        } else {
+            pendingSeek = targetMs
+            position = targetMs
+            seekPreview = targetMs
+            applyPendingSeek()
+        }
+        controls = true
+        interaction++
+    }
+    val remotePlayer = remember { Any() }
+    val remoteBridge = object : RemotePlayerBridge {
+        override fun pause() {
+            player?.pause()
+        }
+        override fun unpause() {
+            player?.play()
+        }
+        override fun report() {
+            controller?.progress()
+        }
+        override fun seekTo(positionMs: Long) = remoteSeek(positionMs)
+        override fun stop() = finish(reason = "remote-stop")
+        override fun next(item: String?) {
+            if (item == null) {
+                nextEpisode?.let { finish(it, reason = "remote-next") }
+                return
+            }
+            reportScope.launch {
+                (resolvePlaybackEntry(PlaybackEntry(item), account, catalog) as? ResolvedPlaybackEntry.Open)?.let {
+                    finish(it.item, reason = "remote-next")
+                }
+            }
+        }
+        override fun audio(index: Int) {
+            val streams = state.decision?.mediaSource?.mediaStreams.orEmpty()
+            if (streams.any { it.type == MediaStreamType.Audio && it.index == index }) controller?.select(MediaStreamType.Audio, index)
+        }
+        override fun subtitle(index: Int) {
+            val streams = state.decision?.mediaSource?.mediaStreams.orEmpty()
+            if (index == -1 || streams.any { it.type == MediaStreamType.Subtitle && it.index == index }) {
+                controller?.select(MediaStreamType.Subtitle, index)
+            }
+        }
+    }
+    SideEffect { remoteTarget.setPlayer(remotePlayer, remoteBridge) }
+    DisposableEffect(Unit) { onDispose { remoteTarget.clearPlayer(remotePlayer) } }
+    val remoteReady = !exitRequested && !switching && state.decision != null && !state.preparing && player != null && duration > 0
+    LaunchedEffect(item.id, remoteReady, paused, duration, position) {
+        remoteTarget.report(
+            app.pictureshow.core.control.RemoteViewing(
+                item = item.id,
+                ready = remoteReady,
+                durationTicks = duration * 10_000,
+                ticks = position * 10_000,
+                paused = paused,
+                canSeek = duration > 0
+            )
+        )
     }
 
     // One remote press seeks once even when it arrives both as a key and as the reader's scroll action.
@@ -454,7 +528,7 @@ internal fun PlayerItemScreen(
                 },
                 MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
                 item.id
-            )
+            ) { reason -> PlaybackDiagnostics.write("owner-report suppressed reason=$reason") }
             val session = PlaybackSession(
                 localOwner.playbackGateway,
                 localOwner.playbackOutput,

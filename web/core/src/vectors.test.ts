@@ -48,6 +48,13 @@ import { controlProjection, controlSuites, runControlCase } from "./control";
 const spec =
     process.env.PICTURESHOW_SPEC ??
     fileURLToPath(new URL("../../../spec", import.meta.url));
+// Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
+const pendingPortSuites = new Set([
+    "remote-targets",
+    "remote-wire",
+    "remote-receive",
+    "remote-reconnect",
+]);
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))
     .map((p) => String(p));
@@ -66,6 +73,7 @@ for (const file of files) {
             "recovery",
             "playback-information",
             ...controlSuites,
+            ...pendingPortSuites,
         ].includes(suite.suite) ||
         !Array.isArray(suite.cases)
     )
@@ -73,6 +81,12 @@ for (const file of files) {
     for (const c of suite.cases) {
         if (ids.has(c.id)) throw new Error("Duplicate vector ID: " + c.id);
         ids.add(c.id);
+    }
+    if (pendingPortSuites.has(suite.suite)) {
+        describe("owed " + file, () => {
+            for (const c of suite.cases) it.todo(c.id);
+        });
+        continue;
     }
     if (controlSuites.has(suite.suite)) {
         if (foundControlSuites.has(suite.suite))
