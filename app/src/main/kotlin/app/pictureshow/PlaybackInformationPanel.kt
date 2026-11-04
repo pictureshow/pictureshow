@@ -41,6 +41,11 @@ internal fun SpeedChoices(state: PlaybackSpeedState, transcode: Boolean, onSelec
         { onSelect(it / 100f) },
         title = "Playback speed",
         touchEnabled = true,
+        // TV TalkBack moves only between D-pad stops. With encoded audio 1× is the panel's only stop,
+        // so its limitation must be part of that stop rather than footer text the reader never reaches.
+        rowDescription = { index, label ->
+            state.message?.takeIf { index == (state.speed * 100).toInt() }?.let { "$label. $it" }
+        },
         footer = {
             Text("Pitch is preserved. Resets to 1× next time.")
             state.message?.let { Text(it) }

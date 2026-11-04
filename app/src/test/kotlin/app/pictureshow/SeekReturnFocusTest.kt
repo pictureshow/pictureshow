@@ -11,12 +11,14 @@ import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -156,7 +158,332 @@ class SeekReturnFocusTest {
         compose.runOnIdle { assertEquals(0, exits) }
     }
 
-    private fun launch(accessible: Boolean) {
+    @Test fun speedReturnOffersTheReaderOnlyItsOpenerUntilFocusIsAcknowledged() = openerReturn("player:speed")
+
+    @Test fun playbackInfoReturnOffersTheReaderOnlyItsOpenerUntilFocusIsAcknowledged() = openerReturn("player:info")
+
+    /** rc29: after Back from these panels the reader landed on the title, sent there by the host view's empty focus event. */
+    private fun openerReturn(tag: String) {
+        launch(true)
+        val titleId = compose.onNodeWithText("An episode").fetchSemanticsNode().id
+        val stopId = compose.onNodeWithText("Stop").fetchSemanticsNode().id
+        val positionId = compose.onNodeWithContentDescription("Playback position").fetchSemanticsNode().id
+        val opener = compose.onNodeWithTag(tag)
+        opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { check(it()) }
+        opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { check(it()) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty() }
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        repeat(6) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+        }
+        compose.onNodeWithTag(tag).assertIsFocused()
+        compose.runOnIdle {
+            val provider = host.accessibilityNodeProvider!!
+            listOf(titleId, stopId, positionId).forEach { id ->
+                val node = provider.createAccessibilityNodeInfo(id)
+                assertTrue(node == null || !node.isVisibleToUser, "Only the opener is offered while the reader returns to it")
+            }
+            assertTrue(!hostFocusReachesReader(), "The host's empty focus event must not send the reader to the first text")
+        }
+        // No reader acknowledges focus here, so the wait fails open and the controls are whole again.
+        compose.mainClock.advanceTimeBy(1_600)
+        repeat(3) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+        }
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag(tag).assertIsFocused()
+        compose.runOnIdle {
+            val provider = host.accessibilityNodeProvider!!
+            listOf(titleId, stopId, positionId).forEach { id ->
+                assertTrue(checkNotNull(provider.createAccessibilityNodeInfo(id)).isVisibleToUser)
+            }
+            assertTrue(hostFocusReachesReader())
+            assertEquals(0, exits)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hostFocusReachesReader(): Boolean {
+        val parent = host.parent as android.view.ViewGroup
+        val event = android.view.accessibility.AccessibilityEvent.obtain(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED)
+            .apply { className = "android.view.ViewGroup" }
+        val delegate = androidx.core.view.ViewCompat.getAccessibilityDelegate(parent) ?: return true
+        return delegate.onRequestSendAccessibilityEvent(parent, host, event)
+    }
+
+    @Test fun hiddenControlsLetReaderArrowsSeekAndReturnToThePosition() {
+        launch(true)
+        val positionNode = compose.onNodeWithContentDescription("Playback position")
+        val before = positionNode.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        hideControls()
+        val surfaceId = compose.onNodeWithTag("player:surface").fetchSemanticsNode().id
+        compose.runOnIdle {
+            val provider = host.accessibilityNodeProvider!!
+            val surface = checkNotNull(provider.createAccessibilityNodeInfo(surfaceId))
+            // TalkBack keeps the arrows; at "no next item" it scrolls a focused scrollable node in the arrow's direction.
+            assertTrue(surface.isScrollable)
+            val actions = surface.actionList.map { it.id }
+            listOf(
+                android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT,
+                android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT,
+                android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP,
+                android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN
+            ).forEach { assertTrue(it.id in actions, "Missing $it") }
+            val labels = surface.actionList.mapNotNull { it.label?.toString() }
+            assertTrue("Back 10 seconds" in labels && "Forward 10 seconds" in labels && "Show controls" in labels)
+            assertTrue(
+                provider.performAction(
+                    surfaceId,
+                    android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id,
+                    null
+                )
+            )
+        }
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription("Playback position").fetchSemanticsNodes().singleOrNull()
+                ?.config?.getOrNull(SemanticsProperties.Focused) == true
+        }
+        val after = compose.onNodeWithContentDescription("Playback position").fetchSemanticsNode()
+            .config[SemanticsProperties.StateDescription]
+        assertTrue(before != after, "The position read after a reader seek must be the new one: $before")
+        compose.onNodeWithTag("player:surface").assertIsNotFocused()
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun hiddenControlsLetReaderUpAndDownRevealTheControls() {
+        launch(true)
+        hideControls()
+        val surfaceId = compose.onNodeWithTag("player:surface").fetchSemanticsNode().id
+        compose.runOnIdle {
+            assertTrue(
+                host.accessibilityNodeProvider!!.performAction(
+                    surfaceId,
+                    android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.id,
+                    null
+                )
+            )
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("player:surface").assertIsNotFocused()
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun oneReaderArrowThatArrivesAsBothKeyAndScrollSeeksOnce() {
+        // Review fix round 1: a reader or service that forwards the arrow and also scrolls must not move 20 s.
+        launch(true)
+        for (keyFirst in listOf(false, true)) {
+            hideControls()
+            val surfaceId = compose.onNodeWithTag("player:surface").fetchSemanticsNode().id
+            val before = seekLines().size
+            compose.runOnIdle {
+                // One press, delivered in one frame on both paths before either can recompose the surface.
+                if (keyFirst) key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+                host.accessibilityNodeProvider!!.performAction(
+                    surfaceId,
+                    android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id,
+                    null
+                )
+                if (!keyFirst) key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+                key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, android.view.KeyEvent.ACTION_UP)
+            }
+            compose.waitForIdle()
+            val lines = seekLines().drop(before)
+            assertEquals(1, lines.count { "dropped" !in it }, "keyFirst=$keyFirst: $lines")
+            assertTrue(lines.single { "dropped" !in it }.contains("deltaMs=10000"), lines.toString())
+            if (!keyFirst) assertTrue(lines.any { "source=key" in it && "dropped=paired" in it }, lines.toString())
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+        }
+        // Separate reader presses are separate seeks.
+        repeat(2) {
+            hideControls()
+            val surfaceId = compose.onNodeWithTag("player:surface").fetchSemanticsNode().id
+            compose.runOnIdle {
+                host.accessibilityNodeProvider!!.performAction(
+                    surfaceId,
+                    android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id,
+                    null
+                )
+            }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+        }
+        val readerBack = seekLines().filter { "source=reader deltaMs=-10000" in it }
+        assertEquals(2, readerBack.count { "dropped" !in it }, readerBack.toString())
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun withAReaderOnTheHiddenSurfaceTheRemoteKeysKeepTheirMeanings() {
+        launch(true)
+        compose.waitUntil(5_000) { activeIntro() }
+        hideControls()
+        // A visible Ask segment takes OK first: one skip, and the controls stay hidden.
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(20_000L, output.player.value!!.currentPosition) }
+        assertTrue(compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isEmpty(), "OK skipped instead")
+        // Past the segment, OK shows the controls.
+        press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+        for (code in listOf(android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN)) {
+            hideControls()
+            val before = seekLines().size
+            press(code)
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+            assertEquals(before, seekLines().size, "Up and Down show the controls without seeking")
+        }
+        hideControls()
+        val before = seekLines().size
+        press(android.view.KeyEvent.KEYCODE_DPAD_LEFT)
+        compose.waitForIdle()
+        // Held: the sixth repeat steps 30 s, as without a reader; each event is one seek.
+        compose.runOnIdle {
+            for (repeat in 0..5) key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, repeat = repeat)
+            key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, android.view.KeyEvent.ACTION_UP)
+        }
+        compose.waitForIdle()
+        assertEquals(
+            listOf(-10_000L) + List(5) { 10_000L } + 30_000L,
+            seekLines().drop(before).map { it.substringAfter("deltaMs=").substringBefore(' ').toLong() }
+        )
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun inRightToLeftLayoutsTheRemotesRightArrowStillSeeksForward() {
+        launch(true, rtl = true)
+        hideControls()
+        var before = seekLines().size
+        press(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+        compose.waitForIdle()
+        assertEquals(listOf("player-seek source=key deltaMs=10000"), seekLines().drop(before))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+        // A later press: real time passes between presses, while this test's clock otherwise stands still.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(1))
+        hideControls()
+        before = seekLines().size
+        val surfaceId = compose.onNodeWithTag("player:surface").fetchSemanticsNode().id
+        compose.runOnIdle {
+            host.accessibilityNodeProvider!!.performAction(
+                surfaceId,
+                android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id,
+                null
+            )
+        }
+        compose.waitForIdle()
+        assertEquals(listOf("player-seek source=reader deltaMs=10000"), seekLines().drop(before))
+    }
+
+    @Test fun backWhileTheReaderReturnsToItsOpenerEndsTheReturnAtOnce() {
+        launch(true)
+        val surfaceId = compose.onNodeWithTag("player:surface").fetchSemanticsNode().id
+        closePanelFrom("player:speed")
+        compose.onNodeWithTag("player:speed").assertIsFocused()
+        // Back again hides the controls: the opener is gone, so nothing may stay suppressed for it.
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(3)
+        compose.runOnIdle {
+            assertTrue(hostFocusReachesReader(), "The return must end with its opener")
+            assertTrue(checkNotNull(host.accessibilityNodeProvider!!.createAccessibilityNodeInfo(surfaceId)).isVisibleToUser)
+        }
+        compose.onNodeWithTag("player:surface").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) {
+            check(it())
+        }
+        frames(3)
+        // Well inside the 1.5 s wait: the returned controls are whole at once.
+        assertControlsOffered()
+        assertTrue(playbackLines().any { it.startsWith("panel-return cancelled controls=false") }, playbackLines().toString())
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun reopeningAPanelDuringTheReturnHidesNothingAndTheNextReturnEnds() {
+        launch(true)
+        closePanelFrom("player:info")
+        compose.onNodeWithTag("player:info").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) {
+            check(it())
+        }
+        frames(6)
+        compose.runOnIdle { assertTrue(hostFocusReachesReader(), "Nothing is suppressed for a return while a panel is open") }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(6)
+        compose.onNodeWithTag("player:info").assertIsFocused()
+        compose.mainClock.advanceTimeBy(1_600)
+        frames(3)
+        assertControlsOffered()
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle { assertEquals(0, exits) }
+    }
+
+    @Test fun aReturnWithoutAReaderDoesNotWait() {
+        launch(false)
+        compose.onNodeWithTag("player:surface").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) {
+            check(it())
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("player:speed").fetchSemanticsNodes().isNotEmpty() }
+        closePanelFrom("player:speed")
+        compose.onNodeWithTag("player:speed").assertIsFocused()
+        val lines = playbackLines()
+        assertTrue(lines.any { it.startsWith("panel-return requested=true") }, lines.toString())
+        assertTrue(lines.none { it.startsWith("panel-return target=") }, "No reader acknowledgment is awaited: $lines")
+        compose.runOnIdle { assertTrue(hostFocusReachesReader()) }
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** Opens the panel from [tag], then Back closes it and six frames pass with the clock held. */
+    private fun closePanelFrom(tag: String) {
+        val opener = compose.onNodeWithTag(tag)
+        opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { check(it()) }
+        opener.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { check(it()) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty() }
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(6)
+    }
+
+    private fun assertControlsOffered() {
+        val ids = listOf(
+            compose.onNodeWithText("An episode").fetchSemanticsNode().id,
+            compose.onNodeWithText("Stop").fetchSemanticsNode().id,
+            compose.onNodeWithContentDescription("Playback position").fetchSemanticsNode().id
+        )
+        compose.runOnIdle {
+            val provider = host.accessibilityNodeProvider!!
+            ids.forEach { assertTrue(checkNotNull(provider.createAccessibilityNodeInfo(it)).isVisibleToUser) }
+            assertTrue(hostFocusReachesReader())
+        }
+    }
+
+    private fun frames(count: Int) = repeat(count) {
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+    }
+
+    private fun activeIntro(): Boolean =
+        compose.onAllNodesWithText("Skip intro", substring = true, ignoreCase = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun playbackLines(): List<String> = org.robolectric.shadows.ShadowLog.getLogsForTag("PictureshowPlayback").map { it.msg }
+
+    private fun seekLines(): List<String> = playbackLines().filter { it.startsWith("player-seek ") }
+
+    private fun key(code: Int, action: Int = android.view.KeyEvent.ACTION_DOWN, repeat: Int = 0) {
+        host.dispatchKeyEvent(android.view.KeyEvent(0L, 0L, action, code, repeat))
+    }
+
+    private fun press(code: Int) = compose.runOnIdle {
+        key(code)
+        key(code, android.view.KeyEvent.ACTION_UP)
+    }
+
+    private fun hideControls() {
+        compose.onNodeWithText("An episode").assertExists()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("player:surface")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Controls hidden")))
+    }
+
+    private fun launch(accessible: Boolean, rtl: Boolean = false) {
         val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "fake")
         val item = MediaItem("episode", "An episode", "Episode", seriesId = "series")
         val store = object : DataStore<Preferences> {
@@ -209,7 +536,12 @@ class SeekReturnFocusTest {
         shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
         compose.setContent {
             host = androidx.compose.ui.platform.LocalView.current
-            PictureshowTheme { PlayerItemScreen(account, item, 0, catalog, {}, { exits++ }, providedOutput = output) }
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalLayoutDirection provides
+                    if (rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
+            ) {
+                PictureshowTheme { PlayerItemScreen(account, item, 0, catalog, {}, { exits++ }, providedOutput = output) }
+            }
         }
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()
