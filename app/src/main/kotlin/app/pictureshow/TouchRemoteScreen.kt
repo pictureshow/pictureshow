@@ -99,7 +99,13 @@ internal fun TouchRemoteBar(state: RemoteControllerUi, nowMs: Long, onOpen: () -
         ?: remoteCommandStatus(state.controller, nowMs)
         ?: target.now?.let { now -> "${now.title ?: "Playing"}${if (now.paused) ", paused" else ""}" }
         ?: "Nothing playing"
-    TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:bar").semantics { liveRegion = LiveRegionMode.Polite }) {
+    TextButton(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:bar").semantics {
+            liveRegion =
+                LiveRegionMode.Polite
+        }
+    ) {
         Text("${remoteTargetLabel(target)}: $line")
     }
 }
