@@ -361,6 +361,7 @@ fun CatalogHome(
                                 onSearch()
                             },
                             modifier = target(Modifier, restoreAction == "search").focusRequester(search).testTag("home:search")
+                                .staysInRow(first = true, last = false)
                                 .onFocusChanged {
                                     // The first attached target during the first load, like the profile actions below.
                                     if (it.isFocused && (restored || initialNavigation)) selectedRow = "search"
@@ -374,6 +375,7 @@ fun CatalogHome(
                             },
                             enabled = !state.busy,
                             modifier = target(Modifier, restoreAction == "settings").focusRequester(settingsFocus).testTag("home:settings")
+                                .staysInRow(first = false, last = true)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Settings") }
@@ -433,6 +435,7 @@ fun CatalogHome(
                                             restoreAction == null && row.key == restoreRow?.key && item.id == restoreItem?.id
                                         ).focusRequester(requesters.getValue("${row.key}:${item.id}"))
                                             .testTag("home:${row.key}:${item.id}")
+                                            .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
                                             .onFocusChanged {
                                                 if (it.isFocused && (restored || initialNavigation)) select(rowIndex, itemIndex)
                                             }.onPreviewKeyEvent {
@@ -464,6 +467,7 @@ fun CatalogHome(
                         },
                         enabled = !state.busy,
                         modifier = target(Modifier, restoreAction == "profile").focusRequester(profile).testTag("home:switch-user")
+                            .staysInRow(first = true, last = false)
                             .onFocusChanged {
                                 // During the first load these are the only attached targets. Automatic focus is
                                 // not a saved user choice and must not outrank the first arriving catalog card.
@@ -492,7 +496,7 @@ fun CatalogHome(
                     Button(
                         onClick = onSignOut,
                         enabled = !state.busy,
-                        modifier = target(Modifier, false).testTag("home:sign-out").onFocusChanged {
+                        modifier = target(Modifier, false).testTag("home:sign-out").staysInRow(first = false, last = true).onFocusChanged {
                             if (it.isFocused && (restored || initialNavigation)) selectedRow = "profile"
                         }.onPreviewKeyEvent {
                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
@@ -2583,7 +2587,7 @@ private fun DetailRow(
             horizontalArrangement = Arrangement.spacedBy(18.dp),
             contentPadding = PaddingValues(16.dp)
         ) {
-            itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
+            itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
                 val requester = remember(item.id) { FocusRequester() }
                 val focusKey = "$section:${item.id}"
                 var focused by remember(item.id) { mutableStateOf(false) }
@@ -2605,6 +2609,7 @@ private fun DetailRow(
                     onClick = { onOpen(item) },
                     selected = selectedId?.let { item.id == it },
                     modifier = Modifier.focusRequester(requester).testTag("detail:$focusKey")
+                        .staysInRow(index == 0, index == items.lastIndex)
                         .onFocusChanged {
                             focused = it.isFocused
                             if (it.isFocused) onFocus(item)

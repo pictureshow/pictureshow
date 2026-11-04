@@ -68,6 +68,41 @@ def policy(admin, user, **changes):
     admin.ok('POST', f'/Users/{user}/Policy', {**current, **changes})
     return {k: current.get(k) for k in changes}
 
+def same(a, b): return (a or '').replace('-', '').lower() == (b or '').replace('-', '').lower()
+def forged_routes(session, item, forged):
+    """Every place a request can carry a ControllingUserId: a target must see the caller, whatever the caller writes."""
+    play, field = {'playCommand': 'PlayNow', 'itemIds': item}, {'ControllingUserId': forged}
+    query = {'controllingUserId': forged, 'ControllingUserId': forged}
+    base = f'/Sessions/{session}'
+    return [
+        ('play-query', 'Play', base + '/Playing', None, {**play, **query}),
+        ('play-body', 'Play', base + '/Playing', {**field, 'ItemIds': [item], 'PlayCommand': 'PlayNow'}, play),
+        ('playstate-query', 'Playstate', base + '/Playing/Pause', None, query),
+        ('playstate-body', 'Playstate', base + '/Playing/Pause', {**field, 'Command': 'Pause'}, None),
+        ('playstate-seek-query', 'Playstate', base + '/Playing/Seek', None, {'seekPositionTicks': 600000000, **query}),
+        ('general-body', 'GeneralCommand', base + '/Command', {**field, 'Name': 'MoveUp', 'Arguments': {}}, None),
+        ('general-body-camel', 'GeneralCommand', base + '/Command', {'controllingUserId': forged, 'Name': 'MoveUp'}, None),
+        ('general-body-sendstring', 'GeneralCommand', base + '/Command', {**field, 'Name': 'SendString', 'Arguments': {'String': 'forged'}}, None),
+        ('general-query', 'GeneralCommand', base + '/Command', {'Name': 'MoveUp', 'Arguments': {}}, query),
+        ('general-named-query', 'GeneralCommand', base + '/Command/MoveUp', None, query),
+        ('general-named-body', 'GeneralCommand', base + '/Command/MoveUp', field, None),
+        ('general-system-query', 'GeneralCommand', base + '/System/GoHome', None, query),
+    ]
+def forged_pass(label, caller, target, session, item, forged, must_deliver, tolerate=False):
+    """Reads what the target's own socket received. Passes only if no delivered event names the forged user."""
+    delivered, forgeable = set(), set()
+    for route, kind, path, body, query in forged_routes(session, item, forged):
+        mark = len(target.messages); status, _ = caller.req('POST', path, body, query=query)
+        event = target.wait(kind, mark, 1.5 if status < 300 else .3)
+        named = (event or {}).get('Data', {}).get('ControllingUserId') if event else None
+        if event: delivered.add(kind)
+        observed = {'status': status, 'delivered': event is not None, 'namesForged': bool(event) and same(named, forged), 'namesCaller': bool(event) and same(named, caller.user), 'event': event}
+        if event and same(named, forged): forgeable.add(route)
+        check(f'forged-controller-{label}-{route}', tolerate or not (event and same(named, forged)), observed)
+    if must_deliver:
+        check(f'forged-controller-{label}-not-vacuous', delivered == {'Play', 'Playstate', 'GeneralCommand'}, {'delivered': sorted(delivered)})
+    return forgeable
+
 parser = argparse.ArgumentParser(); parser.add_argument('--out', type=pathlib.Path, required=True); parser.add_argument('--idle', type=int, default=75)
 args = parser.parse_args(); version = os.environ['JF_VERSION']
 admin = login(version, 'scope-admin', 'remote-admin')
@@ -126,7 +161,10 @@ try:
     _, rows = listed(other); row = find(rows, tv.device); check('other-viewer-listed-with-right', row is not None, row and {'title': bool(row.get('NowPlayingItem')), 'userName': bool(row.get('UserName'))})
     mark = len(target.messages); status, _ = other.req('POST', f'/Sessions/{session}/Playing/Pause'); event = target.wait('Playstate', mark, 2)
     check('other-viewer-send-with-right-names-controller', status == 204 and event and event['Data'].get('ControllingUserId', '').replace('-', '') == other.user.replace('-', ''), {'status': status})
+    forged_pass('with-right', other, target, session, allowed, tv.user, True)
     policy(admin, other.user, EnableRemoteControlOfOtherUsers=False)
+    forged_pass('without-right', other, target, session, allowed, tv.user, False)
+    forged_pass('admin-user', admin, target, session, allowed, tv.user, True)
     _, rows = listed(other); check('revoked-right-removes-target', find(rows, tv.device) is None)
     # Inaccessible title: relay is not an access check; the target's own token is.
     restricted_target = Target(restricted); sockets.append(restricted_target); time.sleep(.3)
@@ -149,8 +187,16 @@ try:
     _, rows = listed(phone); denied_list = find(rows, shared.device) is None
     policy(admin, phone.user, EnableSharedDeviceControl=True)
     _, rows = listed(phone); row = find(rows, shared.device)
+    _, shared_window = listed(phone, None)
     policy(admin, phone.user, EnableSharedDeviceControl=False)
-    check('shared-device-right-distinct', denied_list and row is not None, {'sessionHasUser': bool((shared_row or {}).get('UserId') and set((shared_row or {}).get('UserId')) - {'0', '-'}), 'listedWithout': not denied_list, 'listedWith': row is not None})
+    # 10.10.7 can leave an API-key session without media control after accepting its capabilities (204), so nothing lists it: no target, the safe direction.
+    usable = (shared_row or {}).get('SupportsRemoteControl') is True or version != '10.10.7'
+    check('shared-device-right-distinct', denied_list and (row is not None or not usable), {'sessionHasUser': bool((shared_row or {}).get('UserId') and set((shared_row or {}).get('UserId')) - {'0', '-'}), 'supportsRemote': (shared_row or {}).get('SupportsRemoteControl'), 'listedWithout': not denied_list, 'listedWith': row is not None, 'listedWithNoWindow': (lambda r: find(r, shared.device) is not None)(shared_window)})
+    # A session with no user keeps whatever the Playstate query says: the server only overwrites it from a user.
+    forgeable = forged_pass('api-key', shared, target, session, allowed, tv.user, False, tolerate=True)
+    check('forged-controller-api-key-only-playstate-query', forgeable <= {'playstate-query', 'playstate-seek-query'}, {'forgeable': sorted(forgeable)})
+    status, _ = other.req('POST', '/Auth/Keys', query={'app': 'remote-contract-viewer'}); listing, _ = other.req('GET', '/Auth/Keys')
+    check('viewer-cannot-make-or-read-api-keys', status in (401, 403) and listing in (401, 403), {'create': status, 'list': listing})
     shared_target.close()
     # Idle: a socket-only target against activeWithinSeconds.
     time.sleep(args.idle)
@@ -169,6 +215,30 @@ try:
     check('reconnect-delivers-no-queued-input', not queued, {'queued': len(queued)})
     checks.append({'name': 'reconnect-session-id', 'passed': True, 'observed': {'listed': new is not None, 'changed': bool(new) and new['Id'] != session}})
     print('MEASURE reconnect listed', new is not None, 'changed', bool(new) and new['Id'] != session, flush=True)
+    # The setting's Off: what closing alone leaves behind, and what withdrawing capabilities adds.
+    target.close(); time.sleep(1.5)
+    tv.req('GET', f'/Users/{tv.user}/Items', query={'Limit': 1}); time.sleep(.3)
+    _, rows = listed(phone, None); ghost = find(rows, tv.device)
+    status, _ = phone.req('POST', f"/Sessions/{ghost['Id']}/Playing/Pause") if ghost else (None, None)
+    checks.append({'name': 'closed-socket-then-http-activity', 'passed': True, 'observed': {'relisted': ghost is not None, 'supportsRemote': bool(ghost) and ghost.get('SupportsRemoteControl'), 'commands': (ghost or {}).get('SupportedCommands'), 'sendStatus': status}})
+    print('MEASURE closed-then-activity relisted', ghost is not None, status, flush=True)
+    ghost_report = {'ItemId': allowed, 'PositionTicks': 50000000, 'IsPaused': True, 'PlayMethod': 'DirectPlay', 'CanSeek': True, 'PlaySessionId': uuid.uuid4().hex}
+    tv.req('POST', '/Sessions/Playing', ghost_report); time.sleep(.3)
+    _, rows = listed(phone, None); ghost = find(rows, tv.device)
+    checks.append({'name': 'closed-socket-then-playing-report', 'passed': True, 'observed': {'relisted': ghost is not None}})
+    print('MEASURE closed-then-report relisted', ghost is not None, flush=True)
+    tv.req('POST', '/Sessions/Playing/Stopped', {'ItemId': allowed, 'PositionTicks': 50000000, 'PlaySessionId': ghost_report['PlaySessionId']})
+    target.messages.clear(); target.open(); time.sleep(.5)
+    withdrawn = {'PlayableMediaTypes': [], 'SupportedCommands': [], 'SupportsMediaControl': False, 'SupportsPersistentIdentifier': True}
+    # With the socket still open, as when a proxy or a dead network hides the close from the server.
+    status, _ = tv.req('POST', '/Sessions/Capabilities/Full', withdrawn); time.sleep(.3)
+    _, rows = listed(phone, None); check('withdrawn-capabilities-leave-the-picker', status == 204 and find(rows, tv.device) is None, {'status': status, 'row': find(rows, tv.device)})
+    target.close(); time.sleep(1.5)
+    tv.req('GET', f'/Users/{tv.user}/Items', query={'Limit': 1}); time.sleep(.3)
+    _, rows = listed(phone, None); check('withdrawn-stays-out-after-http-activity', find(rows, tv.device) is None, {'row': find(rows, tv.device)})
+    target.messages.clear(); target.open(); time.sleep(.5)
+    _, rows = listed(phone); row = find(rows, tv.device)
+    check('re-enabled-socket-lists-target-again', row is not None and row.get('SupportedCommands') == target.commands, row and {'commands': row.get('SupportedCommands')})
     target.close()
     tv.ok('POST', '/Sessions/Logout'); tv.token = None
     time.sleep(.5); _, rows = listed(phone, None); check('sign-out-removes-target', find(rows, tv.device) is None)

@@ -317,6 +317,7 @@ fun SearchScreen(
                                 .catalogFocusTarget(!handoff) {
                                     !returning || (restored && !handoff) || interacted
                                 }.testTag("recent:$index")
+                                .staysInRow(index == 0, last = false)
                                 .onPreviewKeyEvent {
                                     if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown) {
                                         focusField()
@@ -409,7 +410,7 @@ fun SearchScreen(
                             contentPadding = PaddingValues(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(18.dp)
                         ) {
-                            itemsIndexed(row.items, key = { _, item -> item.id }) { _, item ->
+                            itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
                                 val target = "${row.key}:${item.id}"
                                 CatalogCard(
                                     item,
@@ -425,6 +426,7 @@ fun SearchScreen(
                                     },
                                     modifier = arrivalTarget(Modifier, target == returnTarget)
                                         .focusRequester(requests.getValue(target)).testTag("search:$target")
+                                        .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
                                         .onFocusChanged {
                                             if (it.isFocused && (!returning || (restored && !handoff) || interacted)) {
                                                 selected = target

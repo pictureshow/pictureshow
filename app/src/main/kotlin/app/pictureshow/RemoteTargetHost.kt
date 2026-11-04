@@ -171,6 +171,9 @@ internal class RemoteTargetHost(
     private var generation = 0L
     private var queue: RemoteQueue? = null
     private var loop: Job? = null
+    private var registration: Job? = null
+    private var withdrawal: Job? = null
+    private var withdrawnFor: String? = null
     private var socket: RemoteSocket? = null
     private var playerToken: Any? = null
     private var player: RemotePlayerBridge? = null
@@ -228,9 +231,37 @@ internal class RemoteTargetHost(
         val wanted = foreground && current != null && policy != "off"
         if (!wanted) {
             if (loop != null) stop()
+            if (foreground && current != null && policy == "off" && withdrawnFor != current.key) withdraw(current)
             return
         }
-        if (loop == null) loop = scope.launch { connect(requireNotNull(current)) }
+        withdrawnFor = null
+        if (loop == null) {
+            val pending = withdrawal
+            loop = scope.launch {
+                pending?.join()
+                connect(requireNotNull(current))
+            }
+        }
+    }
+
+    /**
+     * Closing the socket stops commands and, once the server sees the close, ends the listing (measured on 10.10, 10.11
+     * and 12.4). A proxy or a dead network can hide that close, so say so directly: a server that hears this drops the
+     * target at once, even with the socket still open (also measured). Waits for a registration already on the wire, so
+     * the withdrawal is the last word the server hears.
+     */
+    private fun withdraw(target: Account) {
+        withdrawnFor = target.key
+        val prior = registration
+        withdrawal = scope.launch {
+            prior?.join()
+            val status = register(target, emptyList())
+            if (status !in 200..299) {
+                trace("remote capabilities status=$status")
+                // Offline: the next bind or return to the foreground tries again.
+                if (withdrawnFor == target.key) withdrawnFor = null
+            }
+        }
     }
 
     private suspend fun connect(target: Account) {
@@ -283,8 +314,10 @@ internal class RemoteTargetHost(
                                 }
                             }
                             // Capabilities follow every socket: a new connection has none until told.
-                            val status = register(target, advertised())
-                            if (status !in 200..299) trace("remote capabilities status=$status")
+                            registration = scope.launch {
+                                val status = register(target, advertised())
+                                if (status !in 200..299) trace("remote capabilities status=$status")
+                            }
                         }
                     }
                     override fun message(text: String) {
