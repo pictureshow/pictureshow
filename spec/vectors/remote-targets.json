@@ -69,7 +69,8 @@
                   "audio": 1,
                   "subtitle": -1,
                   "volume": 40,
-                  "muted": false
+                  "muted": false,
+                  "tracks": []
                 }
               }
             ]
@@ -144,7 +145,8 @@
                   "audio": 1,
                   "subtitle": -1,
                   "volume": 40,
-                  "muted": false
+                  "muted": false,
+                  "tracks": []
                 }
               }
             ]
@@ -190,6 +192,96 @@
                 "duplicateName": false,
                 "commands": [],
                 "now": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-targets-tracks-for-own-viewing-only",
+      "operation": "targets",
+      "state": {
+        "sessions": [
+          {
+            "Id": "s1",
+            "DeviceId": "tv1",
+            "DeviceName": "Living room",
+            "Client": "Pictureshow TV",
+            "UserId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "UserName": "Ana",
+            "SupportsRemoteControl": true,
+            "PlayableMediaTypes": [
+              "Video"
+            ],
+            "SupportedCommands": [],
+            "NowPlayingItem": {
+              "Id": "cccccccccccccccccccccccccccccccc",
+              "MediaStreams": [
+                {
+                  "Type": "Video",
+                  "Index": 0
+                },
+                {
+                  "Type": "Audio",
+                  "Index": 1,
+                  "DisplayTitle": "English"
+                },
+                {
+                  "Type": "Subtitle",
+                  "Index": 2,
+                  "Language": "fr"
+                },
+                {
+                  "Type": "Audio",
+                  "DisplayTitle": "no index"
+                }
+              ]
+            }
+          }
+        ],
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selfDevice": "phone1"
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "Living room",
+                "client": "Pictureshow TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "viewerName": "Ana",
+                "sameViewer": true,
+                "duplicateName": false,
+                "commands": [],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "title": null,
+                  "durationTicks": "0",
+                  "positionTicks": "0",
+                  "paused": false,
+                  "canSeek": false,
+                  "audio": null,
+                  "subtitle": null,
+                  "volume": null,
+                  "muted": false,
+                  "tracks": [
+                    {
+                      "type": "Audio",
+                      "index": 1,
+                      "label": "English"
+                    },
+                    {
+                      "type": "Subtitle",
+                      "index": 2,
+                      "label": "fr"
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -545,7 +637,8 @@
                   "audio": 1,
                   "subtitle": -1,
                   "volume": 40,
-                  "muted": false
+                  "muted": false,
+                  "tracks": []
                 }
               }
             ]

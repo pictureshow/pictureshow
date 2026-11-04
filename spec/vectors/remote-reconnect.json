@@ -2418,6 +2418,159 @@
       ]
     },
     {
+      "id": "remote-reconnect-queue-edit-is-only-ever-sent",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "intent",
+            "id": "1",
+            "nowMs": "0",
+            "value": "queue"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "followUp": {
+              "op": "queue"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "sent",
+            "id": "1",
+            "status": 204
+          },
+          "expected": {
+            "followUp": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "refresh",
+            "nowMs": "1000",
+            "targets": [
+              {
+                "session": "s1",
+                "device": "tv1",
+                "name": "TV",
+                "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "sameViewer": true,
+                "commands": [
+                  "SetAudioStreamIndex",
+                  "SetSubtitleStreamIndex",
+                  "SetVolume"
+                ],
+                "now": {
+                  "item": "cccccccccccccccccccccccccccccccc",
+                  "durationTicks": "100000000",
+                  "positionTicks": "1000",
+                  "paused": false,
+                  "canSeek": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "followUp": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "tick",
+            "nowMs": "5000"
+          },
+          "expected": {
+            "followUp": {
+              "result": "unknown"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-reconnect-session-list-401-signs-out",
+      "operation": "controller",
+      "state": {
+        "server": "srv",
+        "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "attach",
+            "target": {
+              "session": "s1",
+              "device": "tv1",
+              "name": "TV",
+              "viewer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sameViewer": true,
+              "commands": [
+                "SetAudioStreamIndex",
+                "SetSubtitleStreamIndex",
+                "SetVolume"
+              ],
+              "now": {
+                "item": "cccccccccccccccccccccccccccccccc",
+                "durationTicks": "100000000",
+                "positionTicks": "1000",
+                "paused": false,
+                "canSeek": true
+              }
+            }
+          },
+          "expected": {
+            "rejection": null
+          }
+        },
+        {
+          "event": {
+            "op": "signed-out"
+          },
+          "expected": {
+            "phase": "signed-out",
+            "target": null,
+            "command": null
+          }
+        }
+      ]
+    },
+    {
       "id": "remote-reconnect-controller-only-dispatches-no-report",
       "operation": "controller",
       "state": {
