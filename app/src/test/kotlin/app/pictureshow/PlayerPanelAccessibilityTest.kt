@@ -405,6 +405,7 @@ class PlayerPanelAccessibilityTest {
         assertEquals("A Film", movie.title.toString())
         assertEquals("Movie", movie.artist.toString())
     }
+
     @Test fun encodedAudioSpeedLimitIsPartOfThePanelsOnlyReaderStop() {
         val limited = PlaybackSpeedState(encodedAudio = true, message = app.pictureshow.core.playback.PlaybackSpeeds.ENCODED_AUDIO)
         compose.setContent { PictureshowTheme { SpeedChoices(limited, transcode = false) {} } }
@@ -422,6 +423,7 @@ class PlayerPanelAccessibilityTest {
         compose.setContent { PictureshowTheme { SpeedChoices(PlaybackSpeedState(), transcode = false) {} } }
         compose.onNodeWithTag("track:100").assertIsSelected()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
-        compose.onNodeWithTag("track:125", useUnmergedTree = true).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+        compose.onNodeWithTag("track:125", useUnmergedTree = true)
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
     }
 }

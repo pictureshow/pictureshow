@@ -52,26 +52,26 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ScrollAxisRange
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.horizontalScrollAxisRange
-import androidx.compose.ui.semantics.scrollBy
-import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.semantics.verticalScrollAxisRange
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.horizontalScrollAxisRange
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.scrollBy
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.semantics.verticalScrollAxisRange
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -911,13 +911,21 @@ internal fun PlayerItemScreen(
                         ) {
                             Text("Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speedState.speed)}")
                         }
-                        Button(scale = playerButtonScale(), onClick = {
-                            openExtraPanel("Playback info", infoFocus)
-                        }, modifier = Modifier.focusRequester(infoFocus).testTag("player:info").then(readerOpenerOnly("player:info"))
-                            .playerTouchClick { openExtraPanel("Playback info", infoFocus) }) {
+                        Button(
+                            scale = playerButtonScale(),
+                            onClick = {
+                                openExtraPanel("Playback info", infoFocus)
+                            },
+                            modifier = Modifier.focusRequester(infoFocus).testTag("player:info").then(readerOpenerOnly("player:info"))
+                                .playerTouchClick { openExtraPanel("Playback info", infoFocus) }
+                        ) {
                             Text("Playback info")
                         }
-                        Button(scale = playerButtonScale(), onClick = { finish(reason = "stop-button") }, modifier = readerOpenerOnly("player:stop")) {
+                        Button(
+                            scale = playerButtonScale(),
+                            onClick = { finish(reason = "stop-button") },
+                            modifier = readerOpenerOnly("player:stop")
+                        ) {
                             Text("Stop")
                         }
                     }
