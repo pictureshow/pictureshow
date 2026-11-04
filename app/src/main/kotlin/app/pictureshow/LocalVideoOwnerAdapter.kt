@@ -24,7 +24,8 @@ internal class LocalVideoOwnerAdapter(
     val identity: ViewingIdentity,
     gateway: PlaybackGateway,
     val playbackOutput: PlaybackOutput,
-    itemId: String
+    itemId: String,
+    private val onSuppressed: (String) -> Unit = {}
 ) {
     var ownership = OwnerState(identity, intent = ControlIntent(entry = itemId, queue = listOf(itemId)))
         private set
@@ -51,7 +52,26 @@ internal class LocalVideoOwnerAdapter(
         return ownership.effect == "report"
     }
 
-    private fun claimReport(): Boolean = reportAllowed(identity, reportSequence++)
+    /**
+     * A replaced or switched local viewing continues as the same player, so it reports as the current local owner.
+     * Once another device or Cast owns the viewing this player claims with its own identity and stays quiet.
+     */
+    private fun claimReport(): Boolean {
+        val owner = ownership.owner
+        val allowed = reportAllowed(if (owner.kind == "local") owner else identity, reportSequence++)
+        if (!allowed) {
+            onSuppressed(
+                if (retired) {
+                    "retired"
+                } else if (owner.kind == "local") {
+                    ownership.reason.orEmpty()
+                } else {
+                    "handed-off"
+                }
+            )
+        }
+        return allowed
+    }
 
     /** A coordinator can commit a handoff without altering the retiring viewing's cleanup scope. */
     fun ownerEvent(event: OwnerEvent) {
@@ -60,7 +80,10 @@ internal class LocalVideoOwnerAdapter(
 
     /** Returns one desired effect; the caller applies it to this viewing, never blindly retries it. */
     fun submit(event: CommandEvent): CommandState {
-        if (retired || ownership.owner != identity) return commands.copy(effect = "none", rejection = "retired-owner")
+        if (retired) return commands.copy(effect = "none", rejection = "retired-owner")
+        val owner = ownership.owner
+        if (owner.kind != "local") return commands.copy(effect = "none", rejection = "handed-off")
+        if (commands.owner != owner) commands = CommandState(owner)
         commands = reduceCommand(commands, event)
         return commands
     }

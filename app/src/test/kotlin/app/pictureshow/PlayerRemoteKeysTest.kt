@@ -98,6 +98,55 @@ class PlayerRemoteKeysTest {
     }
 
     @Test
+    fun aPhonesPressTakesTheActivityRouteAndSeeksOnceEachWithoutPairingAgainstItself() {
+        val root = FocusRequester()
+        var focused by mutableStateOf(false)
+        var seeks = listOf<Long>()
+        var shows = 0
+        var skips = 0
+        var nowMs = 1_000L
+        // Run as the player runs it: every key-path seek passes the one-press gate first.
+        val gate = OnePressSeek { nowMs }
+        compose.setContent {
+            MaterialTheme {
+                Column(
+                    Modifier.focusRequester(root).onFocusChanged { focused = it.isFocused }
+                        .playerRemoteKeys(
+                            true,
+                            focused,
+                            { if (gate.admit(OnePressSeek.Path.Key, it)) seeks = seeks + it },
+                            { shows++ },
+                            {},
+                            back = {},
+                            skip = { skips++ }
+                        )
+                        .focusable()
+                ) { Text("Surface") }
+            }
+        }
+        compose.runOnIdle { root.requestFocus() }
+        compose.runOnIdle { assertEquals(true, focused) }
+        fun press(code: Int) {
+            compose.runOnIdle { compose.activity.pressRemoteKey(code) }
+            compose.waitForIdle()
+        }
+        press(requireNotNull(remoteKeyCode("MoveRight")))
+        compose.runOnIdle { assertEquals(listOf(10_000L), seeks) }
+        // Two quick presses are two seeks: a claim absorbs only the reader's half of the same press.
+        press(requireNotNull(remoteKeyCode("MoveRight")))
+        compose.runOnIdle { assertEquals(listOf(10_000L, 10_000L), seeks) }
+        nowMs += 100
+        compose.runOnIdle { assertEquals(false, gate.admit(OnePressSeek.Path.Reader, 10_000L)) }
+        press(requireNotNull(remoteKeyCode("MoveLeft")))
+        compose.runOnIdle { assertEquals(listOf(10_000L, 10_000L, -10_000L), seeks) }
+        press(requireNotNull(remoteKeyCode("Select")))
+        compose.runOnIdle {
+            assertEquals(1, skips)
+            assertEquals(0, shows)
+        }
+    }
+
+    @Test
     fun centerOnTheSurfaceShowsControlsWithoutChangingPlayback() {
         val root = FocusRequester()
         var focused by mutableStateOf(false)

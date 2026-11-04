@@ -24,6 +24,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 class LocalVideoOwnerAdapterTest {
@@ -134,5 +136,100 @@ class LocalVideoOwnerAdapterTest {
         assertTrue(events.isEmpty())
         assertEquals(remote, adapter.ownership.owner)
         assertEquals("none", adapter.submit(CommandEvent("intent", identity, id = 1, value = "play")).effect)
+    }
+
+    @Test fun aReplacedOrSwitchedLocalViewingKeepsReportingAsTheCurrentOwner() = runTest {
+        val suppressed = mutableListOf<String>()
+        val adapter = LocalVideoOwnerAdapter(identity, gateway, output, "film", suppressed::add)
+        val report = PlaybackReports(decision).progress(7.milliseconds, true, 2, -1)
+        adapter.playbackGateway.start(report) {}
+        val resumed = identity.copy(session = "resumed", generation = 2)
+        adapter.ownerEvent(OwnerEvent("replace", resumed))
+        adapter.playbackGateway.progress(report) {}
+        val switched = identity.copy(viewer = "next", session = "switched", generation = 3)
+        adapter.ownerEvent(OwnerEvent("viewer-switch", switched))
+        adapter.playbackGateway.start(report)
+        adapter.playbackGateway.progress(report)
+        assertEquals(listOf("start:70000", "progress:70000", "start:70000", "progress:70000"), events)
+        assertEquals(switched, adapter.ownership.owner)
+        assertTrue(suppressed.isEmpty())
+        assertEquals("dispatch", adapter.submit(CommandEvent("intent", switched, id = 1, value = "pause")).effect)
+        assertEquals("stale-owner", adapter.submit(CommandEvent("intent", identity, id = 2, value = "play")).rejection)
+    }
+
+    @Test fun suppressedReportsLeaveAReasonAndCommandsNameTheRightOne() = runTest {
+        val suppressed = mutableListOf<String>()
+        val adapter = LocalVideoOwnerAdapter(identity, gateway, output, "film", suppressed::add)
+        val remote = identity.copy(device = "tv", session = "remote", generation = 2, kind = "jellyfin")
+        listOf("select", "connect", "prepare", "local-paused").forEach { adapter.ownerEvent(OwnerEvent(it, remote)) }
+        adapter.ownerEvent(OwnerEvent("ready", remote, ticks = 0))
+        val report = PlaybackReports(decision).progress(7.milliseconds, true, 2, -1)
+        adapter.playbackGateway.progress(report)
+        assertEquals("handed-off", adapter.submit(CommandEvent("intent", identity, id = 1, value = "play")).rejection)
+        adapter.cleanupDone()
+        adapter.playbackGateway.progress(report)
+        assertEquals(listOf("handed-off", "retired"), suppressed)
+        assertEquals("retired-owner", adapter.submit(CommandEvent("intent", identity, id = 2, value = "play")).rejection)
+    }
+
+    @Test fun realPlaybackSessionKeepsItsExactReportOrderThroughTheAdapter() = runTest {
+        val first =
+            PlayDecision(
+                "film",
+                MediaSourceInfo(id = "source"),
+                PlayMethod.Transcode,
+                "https://example.invalid/one",
+                emptyMap(),
+                "encode-one"
+            )
+        val second =
+            PlayDecision(
+                "film",
+                MediaSourceInfo(id = "source"),
+                PlayMethod.Transcode,
+                "https://example.invalid/two",
+                emptyMap(),
+                "encode-two"
+            )
+        val outcomes = ArrayDeque(listOf(first, second))
+        val positions = object : PlaybackOutput by output {
+            override fun position() = PlaybackPosition(7, false)
+            override fun select(type: MediaStreamType, index: Int) = false
+        }
+        val trace = object : PlaybackGateway by gateway {
+            override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> {
+                events += "prepare"
+                return ClientResult.Success(PlayOutcome.Play(outcomes.removeFirst()))
+            }
+        }
+        val adapter = LocalVideoOwnerAdapter(identity, trace, positions, "film")
+        val session = PlaybackSession(adapter.playbackGateway, adapter.playbackOutput, backgroundScope, "en")
+        session.start(0)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        advanceTimeBy(10_001)
+        runCurrent()
+        session.select(MediaStreamType.Audio, 1)
+        runCurrent()
+        session.ready()
+        runCurrent()
+        session.close()
+        runCurrent()
+        adapter.cleanupDone()
+        assertEquals(
+            listOf(
+                "prepare",
+                "start:70000",
+                "progress:70000", // ticker
+                "cleanup:encode-one", // the transcode replacement stops only the old encode
+                "prepare",
+                "progress:70000", // the replacement reports without a second Start
+                "progress:70000", // close's final position
+                "stop:70000",
+                "cleanup:encode-two"
+            ),
+            events
+        )
     }
 }

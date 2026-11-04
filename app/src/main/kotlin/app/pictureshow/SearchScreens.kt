@@ -54,8 +54,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -221,14 +223,25 @@ fun SearchScreen(
                     -2f
             }
         )
+        // Text can arrive from outside the keyboard (a recent search, a phone remote). The caret goes after it.
+        var fieldValue by remember { mutableStateOf(TextFieldValue(state.query, TextRange(state.query.length))) }
+        var seenQuery by remember { mutableStateOf(state.query) }
+        if (state.query != seenQuery) {
+            seenQuery = state.query
+            if (state.query != fieldValue.text) fieldValue = TextFieldValue(state.query, TextRange(state.query.length))
+        }
         InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
             BasicTextField(
-                value = state.query,
+                value = fieldValue,
                 onValueChange = {
-                    focusResults = false
-                    selected = ""
-                    selections = emptyMap()
-                    onQuery(it)
+                    val changed = it.text != fieldValue.text
+                    fieldValue = it
+                    if (changed) {
+                        focusResults = false
+                        selected = ""
+                        selections = emptyMap()
+                        onQuery(it.text)
+                    }
                 },
                 readOnly = !editing,
                 singleLine = true,
@@ -304,6 +317,7 @@ fun SearchScreen(
                                 .catalogFocusTarget(!handoff) {
                                     !returning || (restored && !handoff) || interacted
                                 }.testTag("recent:$index")
+                                .staysInRow(index == 0, last = false)
                                 .onPreviewKeyEvent {
                                     if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown) {
                                         focusField()
@@ -396,7 +410,7 @@ fun SearchScreen(
                             contentPadding = PaddingValues(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(18.dp)
                         ) {
-                            itemsIndexed(row.items, key = { _, item -> item.id }) { _, item ->
+                            itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
                                 val target = "${row.key}:${item.id}"
                                 CatalogCard(
                                     item,
@@ -412,6 +426,7 @@ fun SearchScreen(
                                     },
                                     modifier = arrivalTarget(Modifier, target == returnTarget)
                                         .focusRequester(requests.getValue(target)).testTag("search:$target")
+                                        .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
                                         .onFocusChanged {
                                             if (it.isFocused && (!returning || (restored && !handoff) || interacted)) {
                                                 selected = target

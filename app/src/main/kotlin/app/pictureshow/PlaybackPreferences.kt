@@ -30,6 +30,7 @@ class PlaybackPreferencesStore(private val preferences: DataStore<Preferences>) 
             next.bitrateMbps?.let { data[BITRATE] = it } ?: data.remove(BITRATE)
             data[PASSTHROUGH] = next.passthrough
             data[CONVERSION_NOTICE] = next.conversionNotice
+            data[REMOTE_RECEIVER] = next.remoteReceiver
             data[SIZE] = next.subtitleSize.name
             data[BACKGROUND] = next.subtitleBackground.name
             SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
@@ -44,7 +45,8 @@ class PlaybackPreferencesStore(private val preferences: DataStore<Preferences>) 
         subtitleSize = data[SIZE],
         subtitleBackground = data[BACKGROUND],
         segmentModes = SegmentType.entries.filter { it != SegmentType.Unknown }.associateWith { data[segmentKey(it)] },
-        conversionNotice = data[CONVERSION_NOTICE]
+        conversionNotice = data[CONVERSION_NOTICE],
+        remoteReceiver = data[REMOTE_RECEIVER]
     )
 
     private fun segmentKey(type: SegmentType) = stringPreferencesKey("segment_${type.name.lowercase()}")
@@ -53,6 +55,7 @@ class PlaybackPreferencesStore(private val preferences: DataStore<Preferences>) 
         val BITRATE = intPreferencesKey("playback_bitrate_mbps")
         val PASSTHROUGH = booleanPreferencesKey("playback_passthrough")
         val CONVERSION_NOTICE = booleanPreferencesKey("playback_conversion_notice")
+        val REMOTE_RECEIVER = stringPreferencesKey("remote_receiver")
         val SIZE = stringPreferencesKey("subtitle_size")
         val BACKGROUND = stringPreferencesKey("subtitle_background")
     }

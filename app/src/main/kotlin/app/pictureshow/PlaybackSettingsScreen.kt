@@ -196,6 +196,28 @@ internal fun PlaybackSettingsScreen(
             Text("Conversion notice: ${if (local.conversionNotice) "On" else "Off"}")
         }
         Text("Shows a short note when the server has to convert a video for this TV.")
+        val phoneRemote = when (local.remoteReceiver) {
+            "off" -> "Off"
+            "server-allowed" -> "Anyone this server allows"
+            else -> "Only you"
+        }
+        Button(
+            onClick = {
+                onLocal {
+                    it.copy(
+                        remoteReceiver = when (it.remoteReceiver) {
+                            "same-viewer" -> "server-allowed"
+                            "server-allowed" -> "off"
+                            else -> "same-viewer"
+                        }
+                    )
+                }
+            },
+            modifier = Modifier.testTag("settings:phone-remote").semantics { stateDescription = phoneRemote }
+        ) {
+            Text("Phone remote: $phoneRemote")
+        }
+        Text("Who can play and control things on this TV from their phone while Pictureshow is open.")
         Button(onClick = {
             onLocal { it.copy(subtitleSize = nextSetting(SubtitleSize.entries, it.subtitleSize)) }
         }, modifier = Modifier.testTag("settings:size").semantics { onClick(label = "Change value", action = null) }) {

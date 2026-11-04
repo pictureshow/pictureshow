@@ -160,4 +160,38 @@ class HomeSettingsAndBackTest {
         compose.setContent { Harness(home.copy(busy = true)) }
         compose.onNodeWithTag("home:settings").assertIsNotEnabled()
     }
+
+    @Test
+    fun aPressPastTheEndOfARowStaysInThatRowSoSignOutIsNeverOneRightAway() {
+        // Short shelves leave Sign out to the right of their last card, the layout a phone's D-pad found it in.
+        val short = home.copy(
+            rows = listOf(
+                HomeRow("libraries", "Libraries", listOf(MediaItem("library", "Cinema", "CollectionFolder", isFolder = true))),
+                HomeRow("latest:library", "Latest in Cinema", movies.take(2))
+            )
+        )
+        compose.setContent { Harness(short) }
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:latest:library:film-0").assertIsFocused()
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:latest:library:film-0").assertIsFocused()
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:latest:library:film-1").assertIsFocused()
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:latest:library:film-1").assertIsFocused()
+        assertEquals(0, signOuts)
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:switch-user").assertIsFocused()
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:switch-user").assertIsFocused()
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:sign-out").assertIsFocused()
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:sign-out").assertIsFocused()
+    }
 }
