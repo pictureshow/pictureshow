@@ -117,7 +117,7 @@ internal fun TouchPictureshow(
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
     TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer, above = {
-        if (!inPlayer && route != "remote") TouchRemoteBar(remoteState) { nav.navigate("remote") { launchSingleTop = true } }
+        if (!inPlayer && route != "remote") TouchRemoteBar(remoteState, remote.now()) { nav.navigate("remote") { launchSingleTop = true } }
     }) {
         LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired, state.snapshot.currentAccount?.accessToken) {
             val key = state.snapshot.currentKey

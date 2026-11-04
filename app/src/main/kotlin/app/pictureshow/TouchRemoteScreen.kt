@@ -93,12 +93,13 @@ internal fun TouchRemotePicker(state: RemoteControllerUi, onPick: (RemoteTarget)
 
 /** Stays in reach while browsing. It shows what the TV reports and opens the remote; it sends nothing itself. */
 @Composable
-internal fun TouchRemoteBar(state: RemoteControllerUi, onOpen: () -> Unit) {
+internal fun TouchRemoteBar(state: RemoteControllerUi, nowMs: Long, onOpen: () -> Unit) {
     val target = state.controller?.target ?: return
     val line = remoteProblem(state.controller.phase)?.let { "Needs attention" }
+        ?: remoteCommandStatus(state.controller, nowMs)
         ?: target.now?.let { now -> "${now.title ?: "Playing"}${if (now.paused) ", paused" else ""}" }
         ?: "Nothing playing"
-    TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:bar")) {
+    TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:bar").semantics { liveRegion = LiveRegionMode.Polite }) {
         Text("${remoteTargetLabel(target)}: $line")
     }
 }
