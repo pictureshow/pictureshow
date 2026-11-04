@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -70,6 +71,8 @@ class RemoteTargetHostTest {
     private inner class Rig(scope: TestScope) {
         val sockets = mutableListOf<FakeSocket>()
         val registered = mutableListOf<List<String>>()
+        var gate: CompletableDeferred<Unit>? = null
+        var status = 204
         val opens = mutableListOf<RemoteEffect>()
         val navigation = mutableListOf<String>()
         val trace = mutableListOf<String>()
@@ -77,8 +80,9 @@ class RemoteTargetHostTest {
             scope.backgroundScope,
             { url, authorization, events -> FakeSocket(url, authorization, events).also { sockets += it } },
             register = { _, commands ->
+                gate?.await()
                 registered += commands
-                204
+                status
             },
             authorization = { "auth:${it.user.id}" },
             nowMs = { scope.testScheduler.currentTime },
@@ -195,6 +199,132 @@ class RemoteTargetHostTest {
         old.events.message(state("late", "Stop"))
         runCurrent()
         assertTrue(rig.player.calls.isEmpty())
+    }
+
+    @Test fun offWithdrawsWhatWasAdvertisedAndStopsCommandsAndOnAdvertisesAgain() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.watching()
+        val first = rig.sockets.single()
+        assertTrue(rig.registered.single().isNotEmpty())
+        rig.host.bind(account, "off")
+        // The press that was already on its way is refused before the withdrawal has even been answered.
+        first.events.message(state("late", "Pause"))
+        runCurrent()
+        assertTrue(first.closed)
+        assertEquals(listOf(emptyList()), rig.registered.drop(1), "the picker must not keep listing a TV that said no")
+        assertTrue(rig.player.calls.isEmpty())
+        rig.host.setForeground(false)
+        rig.host.setForeground(true)
+        runCurrent()
+        assertEquals(1, rig.sockets.size, "off stays off across a return to the foreground")
+        assertEquals(2, rig.registered.size, "a withdrawal the server accepted is not repeated")
+        rig.host.bind(account, "same-viewer")
+        runCurrent()
+        val second = rig.sockets.last()
+        assertEquals(2, rig.sockets.size)
+        second.events.opened()
+        runCurrent()
+        assertEquals(rig.registered.first(), rig.registered.last())
+        rig.message(this, state("back", "Pause"))
+        assertEquals(listOf("pause"), rig.player.calls)
+    }
+
+    @Test fun aWithdrawalAndARegistrationReachTheServerInThePressOrder() = runTest {
+        val rig = Rig(this)
+        val slow = CompletableDeferred<Unit>()
+        rig.gate = slow
+        rig.online(this)
+        rig.host.bind(account, "off")
+        rig.host.bind(account, "same-viewer")
+        rig.host.bind(account, "off")
+        runCurrent()
+        assertTrue(rig.registered.isEmpty(), "the withdrawal waits for the registration on the wire")
+        slow.complete(Unit)
+        runCurrent()
+        assertTrue(rig.registered.first().isNotEmpty())
+        assertEquals(emptyList(), rig.registered.last())
+    }
+
+    @Test fun anAppStartedWithOffWithdrawsOnceAndAFailedWithdrawalTriesAgain() = runTest {
+        val rig = Rig(this)
+        rig.status = 0
+        rig.host.bind(account, "off")
+        runCurrent()
+        assertTrue(rig.registered.isEmpty(), "nothing is sent while the activity is stopped")
+        rig.host.setForeground(true)
+        runCurrent()
+        assertEquals(listOf(emptyList()), rig.registered)
+        rig.status = 204
+        rig.host.setForeground(false)
+        rig.host.setForeground(true)
+        runCurrent()
+        assertEquals(2, rig.registered.size)
+        rig.host.setForeground(false)
+        rig.host.setForeground(true)
+        runCurrent()
+        assertEquals(2, rig.registered.size)
+        assertTrue(rig.sockets.isEmpty())
+    }
+
+    @Test fun aSocketDropWithACommandInFlightActsNothingAfterTheReconnect() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.watching()
+        val old = rig.sockets.last()
+        // Read before the drop: it may act now, while this connection is still the live one.
+        old.events.message(state("before", "Pause"))
+        old.events.closed()
+        runCurrent()
+        assertEquals(listOf("pause"), rig.player.calls)
+        advanceTimeBy(1_001)
+        runCurrent()
+        val fresh = rig.sockets.last()
+        assertTrue(fresh !== old)
+        // A callback delivered late, racing the new connection before and after it opens.
+        old.events.message(state("late-1", "Stop"))
+        runCurrent()
+        fresh.events.opened()
+        old.events.message(state("late-2", "Stop"))
+        old.events.message(general("late-3", "MoveUp"))
+        runCurrent()
+        rig.watching()
+        old.events.message(state("late-4", "Stop"))
+        runCurrent()
+        assertEquals(listOf("pause"), rig.player.calls)
+        assertTrue(rig.navigation.isEmpty())
+    }
+
+    @Test fun aCommandInFlightWhenTheActivityStopsOrTheViewerChangesDoesNothing() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.watching()
+        rig.sockets.last().events.message(state("stopping", "Pause"))
+        rig.host.setForeground(false)
+        runCurrent()
+        assertTrue(rig.player.calls.isEmpty())
+        rig.host.setForeground(true)
+        runCurrent()
+        rig.sockets.last().events.opened()
+        runCurrent()
+        rig.watching()
+        rig.sockets.last().events.message(state("switching", "Pause"))
+        rig.host.bind(account.copy(user = User(other, "Bo")), "same-viewer")
+        runCurrent()
+        assertTrue(rig.player.calls.isEmpty())
+    }
+
+    @Test fun textInFlightWhenTheScreenLeavesSearchNeverReachesTheNextScreen() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        val typed = mutableListOf<String>()
+        rig.host.setSearchField(typed::add)
+        // The screen moves on, to a credential field say, with the phone's text already on its way.
+        rig.sockets.last().events.message(general("gone", "SendString", """{"String":"secret"}"""))
+        rig.host.setSearchField(null)
+        runCurrent()
+        assertTrue(typed.isEmpty())
+        assertTrue(rig.trace.any { it.startsWith("remote refused") }, rig.trace.toString())
     }
 
     @Test fun titleStillResolvingForThePreviousViewerCannotOpen() = runTest {

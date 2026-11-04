@@ -245,6 +245,22 @@ internal fun remoteKeyCode(name: String): Int? = when (name) {
     else -> null
 }
 
+/** Text from a phone reaches this composable's sink only while it is composed: leaving by any path withdraws it. */
+@Composable
+internal fun RemoteTextDestination(register: (((String) -> Unit)?) -> Unit, sink: (String) -> Unit) {
+    val current by androidx.compose.runtime.rememberUpdatedState(sink)
+    DisposableEffect(register) {
+        register { current(it) }
+        onDispose { register(null) }
+    }
+}
+
+/** A phone's press takes the same route as the TV remote's, one key down and one key up, to this activity only. */
+internal fun android.app.Activity.pressRemoteKey(code: Int) {
+    dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+    dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+}
+
 internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlaybackEntry.Open) {
     nav.navigate("home") {
         popUpTo(nav.graph.id) { inclusive = true }
@@ -439,9 +455,7 @@ internal fun Pictureshow(
         remoteTarget.navigation.collect { name ->
             val code = remoteKeyCode(name)
             if (code != null) {
-                val activity = context as? android.app.Activity
-                activity?.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
-                activity?.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+                (context as? android.app.Activity)?.pressRemoteKey(code)
             } else if (name == "GoHome" && remoteAccount?.expired == false) {
                 nav.navigate("home") {
                     popUpTo(nav.graph.id) { inclusive = true }
@@ -872,10 +886,7 @@ internal fun Pictureshow(
                     vm.initialize(entry.savedStateHandle, entry.arguments?.getString("query").orEmpty())
                 }
                 // Search is the only field a controller can type into; sign-in and Quick Connect never register.
-                DisposableEffect(vm) {
-                    remoteTarget.setSearchField { vm.query(it, immediate = true) }
-                    onDispose { remoteTarget.setSearchField(null) }
-                }
+                RemoteTextDestination(remoteTarget::setSearchField) { vm.query(it, immediate = true) }
                 SearchScreen(
                     screen, account, entry.arguments?.getBoolean("keyboard") ?: true,
                     vm::query, vm::submit, { vm.query(it, immediate = true) }, vm::clearRecent, vm::retry,
