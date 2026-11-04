@@ -150,9 +150,12 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
         if ("MoveUp" in target.commands) RemoteDpad(ready, host)
         if ("SendString" in target.commands) RemoteText(ready, host)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { host.detach() }, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:disconnect").semantics {
-                contentDescription = "Disconnect this phone. Playback on the TV continues."
-            }) { Text("Disconnect") }
+            OutlinedButton(
+                onClick = { host.detach() },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("remote:disconnect").semantics {
+                    contentDescription = "Disconnect this phone. Playback on the TV continues."
+                }
+            ) { Text("Disconnect") }
             OutlinedButton(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp)) { Text("Choose another TV") }
         }
     }
@@ -266,7 +269,15 @@ private fun RemoteText(ready: Boolean, host: RemoteControllerHost) {
         modifier = Modifier.fillMaxWidth().testTag("remote:text")
     )
     Text("Works when the TV has its search screen open. Passwords can't be typed from here.")
-    if (failed) Text("That can't be sent. Use up to 256 characters on one line.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    if (failed) {
+        Text(
+            "That can't be sent. Use up to 256 characters on one line.",
+            modifier = Modifier.semantics {
+                liveRegion =
+                    LiveRegionMode.Polite
+            }
+        )
+    }
     Button(
         onClick = {
             if (host.text(value)) value = "" else failed = true
