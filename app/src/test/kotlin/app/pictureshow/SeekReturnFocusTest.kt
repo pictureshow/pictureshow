@@ -462,8 +462,7 @@ class SeekReturnFocusTest {
     private fun activeIntro(): Boolean =
         compose.onAllNodesWithText("Skip intro", substring = true, ignoreCase = true).fetchSemanticsNodes().isNotEmpty()
 
-    private fun playbackLines(): List<String> =
-        org.robolectric.shadows.ShadowLog.getLogsForTag("PictureshowPlayback").map { it.msg }
+    private fun playbackLines(): List<String> = org.robolectric.shadows.ShadowLog.getLogsForTag("PictureshowPlayback").map { it.msg }
 
     private fun seekLines(): List<String> = playbackLines().filter { it.startsWith("player-seek ") }
 
