@@ -476,6 +476,81 @@ class SeekReturnFocusTest {
         compose.mainClock.autoAdvance = true
     }
 
+    @Test fun aSkipOfferAppearsOnceTheReaderReachesTheOpener() {
+        spokenServiceEnabled()
+        launch(true)
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("skip:Intro").fetchSemanticsNodes().isNotEmpty() }
+        closePanelFrom("player:speed")
+        compose.onNodeWithTag("skip:Intro").assertDoesNotExist()
+        val opener = compose.onNodeWithTag("player:speed").fetchSemanticsNode().id
+        compose.runOnIdle {
+            val focused = host.accessibilityNodeProvider!!.performAction(
+                opener,
+                android.view.accessibility.AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS,
+                null
+            )
+            assertTrue(focused)
+        }
+        // Well short of the 1.5 s the return waits when nothing acknowledges it.
+        frames(6)
+        compose.onNodeWithTag("skip:Intro").assertExists()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun aSkipOfferDoesNotWaitOnAnOpenerThatHasGone() {
+        launch(true)
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("skip:Intro").fetchSemanticsNodes().isNotEmpty() }
+        closePanelFrom("player:speed")
+        compose.onNodeWithTag("skip:Intro").assertDoesNotExist()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        frames(6)
+        compose.onNodeWithTag("player:speed").assertDoesNotExist()
+        compose.onNodeWithTag("skip:Intro").assertExists()
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** The screen's real end path: the player is released and the toggle, still focused, says what it said. */
+    @Test fun theEndOfTheVideoLeavesTheFocusedToggleInThePlayerSaying() {
+        launch(true)
+        val toggle = compose.onNodeWithText("Pause")
+        toggle.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { check(it()) }
+        toggle.assertIsFocused()
+        val before = toggle.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        assertEquals("Playing", before)
+        compose.runOnIdle {
+            val decision = Media3PlaybackOutput::class.java.getDeclaredField("current")
+                .apply { isAccessible = true }.get(output) as app.pictureshow.core.playback.PlayDecision
+            output.onEnded(decision)
+        }
+        compose.waitUntil(5_000) { output.player.value == null }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertTrue(playbackLines().any { it.startsWith("continuation item=") }, playbackLines().toString())
+        // The label names the next action, so it does change.
+        compose.onNodeWithText("Play").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, before))
+    }
+
+    /** PLAY-06: the position control's words are fresh on open. Hiding the controls forgets the last capture. */
+    @Test fun openingTheControlsCapturesWhereHiddenPlaybackHasReached() {
+        launch(true)
+        val spokenPosition = {
+            compose.onNodeWithContentDescription("Playback position").fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        }
+        assertTrue(spokenPosition().startsWith("0:00"), spokenPosition())
+        hideControls()
+        // A jump the screen didn't ask for, which is what time passing looks like to it.
+        compose.runOnIdle { output.player.value!!.seekTo(45_000) }
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+        compose.onNodeWithTag("player:surface").performSemanticsAction(
+            androidx.compose.ui.semantics.SemanticsActions.OnClick
+        ) { check(it()) }
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription("Playback position").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(spokenPosition().startsWith("0:45"), spokenPosition())
+    }
+
     /** rc30: two utterance ids on each hide. The app announces nothing: one focus move and one change of the node's description. */
     @Test fun hidingTheControlsMovesFocusAndChangesOneDescriptionAndAnnouncesNothing() {
         val sent = mutableListOf<String>()

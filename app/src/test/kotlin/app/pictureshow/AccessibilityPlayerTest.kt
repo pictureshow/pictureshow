@@ -7,6 +7,7 @@ import android.app.Application
 import android.content.Context
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -98,6 +99,40 @@ class AccessibilityPlayerTest {
         compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
         compose.runOnIdle { other.requestFocus() }
         compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused"))
+    }
+
+    /** The real order: `ended` is set in the turn that releases the player, and what the release changes arrives after it. */
+    @Test
+    fun aStateThatArrivesAfterTheEndDoesNotChangeTheFocusedToggle() {
+        val (paused, ended) = focusedToggle()
+        compose.runOnIdle { ended.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        compose.runOnIdle { paused.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+    }
+
+    /** A pause composed before the end is the viewer's, or the system's, and was already read. It isn't rewritten at the end. */
+    @Test
+    fun aPauseBeforeTheEndStaysARealPause() {
+        val (paused, ended) = focusedToggle()
+        compose.runOnIdle { paused.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused"))
+        compose.runOnIdle { ended.value = true }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Paused"))
+    }
+
+    private fun focusedToggle(): Pair<MutableState<Boolean>, MutableState<Boolean>> {
+        val paused = mutableStateOf(false)
+        val ended = mutableStateOf(false)
+        val toggle = FocusRequester()
+        compose.setContent {
+            PictureshowTheme {
+                PlaybackToggle(paused.value, paused.value, Modifier.focusRequester(toggle).testTag("toggle"), ended.value) {}
+            }
+        }
+        compose.runOnIdle { toggle.requestFocus() }
+        compose.onNodeWithTag("toggle").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Playing"))
+        return paused to ended
     }
 
     @Test

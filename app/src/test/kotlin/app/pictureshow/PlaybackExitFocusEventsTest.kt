@@ -69,6 +69,17 @@ class PlaybackExitFocusEventsTest {
         assertEquals(2, forwarded.size)
     }
 
+    @Test fun anotherWindowStateEventFromTheOwnedHostIsForwarded() {
+        val filtering = PlaybackExitFocusDelegate(original, child, closingPane = { true }) { false }
+        val changes = listOf(
+            AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED,
+            AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_TITLE,
+            AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED
+        )
+        changes.forEach { assertTrue(filtering.onRequestSendAccessibilityEvent(parent, child, paneEvent(it)), "changes=$it") }
+        assertEquals(changes.size, forwarded.size)
+    }
+
     @Test fun withoutAReaderAClosingPaneIsForwarded() {
         val filtering = PlaybackExitFocusDelegate(original, child, closingPane = { false }) { false }
         assertTrue(

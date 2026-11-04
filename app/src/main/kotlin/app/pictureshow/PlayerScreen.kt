@@ -870,8 +870,8 @@ internal fun PlayerItemScreen(
                     // The visual clock keeps moving; it is not a live accessibility announcement.
                     val announcedPosition = rememberAnnouncedPosition(
                         paused,
-                        seekRequest = state.seekTargetMs ?: seekPreview,
-                        seekTargetMs = state.seekTargetMs,
+                        // The preview follows a held key; the server's target can lag it.
+                        seekRequest = seekPreview ?: state.seekTargetMs,
                         durationMs = duration,
                         ended = ended,
                         positionMs = position

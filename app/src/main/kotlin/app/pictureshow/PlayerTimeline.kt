@@ -93,22 +93,27 @@ internal fun PlayerTimeline(
 }
 
 /**
- * What the position control says until the viewer acts again: captured when the controls open, on pause or
- * resume, and once per seek. A seek's preview expiring or the player finishing the seek is not news, and a
- * changed state description on the focused control is read aloud, so neither captures a new position.
+ * What the position control says until the viewer acts again: captured on pause or resume, and once per seek.
+ * The caller composes this only while the controls are up, so hiding them forgets it and opening captures anew.
+ * A seek's preview expiring or the player finishing the seek is not news, and a changed state description on
+ * the focused control is read aloud, so neither captures a new position.
+ *
+ * [seekRequest] is the newest target the viewer asked for, or null with none in flight. A new value is a new seek,
+ * and so is the same value after none, such as Left at the start a second time.
  */
 @Composable
-internal fun rememberAnnouncedPosition(
-    paused: Boolean,
-    seekRequest: Long?,
-    seekTargetMs: Long?,
-    durationMs: Long,
-    ended: Boolean,
-    positionMs: Long
-): Long {
-    val lastSeek = remember { arrayOfNulls<Long>(1) }
-    if (seekRequest != null) lastSeek[0] = seekRequest
-    return remember(paused, lastSeek[0], durationMs, ended) { seekTargetMs ?: positionMs }
+internal fun rememberAnnouncedPosition(paused: Boolean, seekRequest: Long?, durationMs: Long, ended: Boolean, positionMs: Long): Long {
+    val seeks = remember { SeekCount() }
+    if (seekRequest != seeks.request) {
+        if (seekRequest != null) seeks.count++
+        seeks.request = seekRequest
+    }
+    return remember(paused, seeks.count, durationMs, ended) { seekRequest ?: positionMs }
+}
+
+private class SeekCount {
+    var request: Long? = null
+    var count = 0
 }
 
 /** Status labels may appear over the last decoded frame while an output is replaced. */

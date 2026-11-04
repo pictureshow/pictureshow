@@ -42,8 +42,7 @@ class PositionReadTest {
         compose.setContent {
             spoken = rememberAnnouncedPosition(
                 paused.value,
-                target.value ?: preview.value,
-                target.value,
+                preview.value ?: target.value,
                 596_000,
                 false,
                 position.longValue
@@ -69,6 +68,51 @@ class PositionReadTest {
         compose.runOnIdle { position.longValue = 105_000 }
         compose.runOnIdle { paused.value = true }
         compose.runOnIdle { assertEquals(105_000, spoken, "Pausing still captures the position") }
+    }
+
+    @Test fun aSecondSeekAHeldRepeatAndTheSameTargetAgainAreEachRead() {
+        val preview = mutableStateOf<Long?>(null)
+        val target = mutableStateOf<Long?>(null)
+        val position = mutableLongStateOf(90_000)
+        val paused = mutableStateOf(false)
+        var spoken = -1L
+        compose.setContent {
+            spoken = rememberAnnouncedPosition(
+                paused.value,
+                preview.value ?: target.value,
+                596_000,
+                false,
+                position.longValue
+            )
+        }
+        fun seekTo(ms: Long) {
+            compose.runOnIdle {
+                preview.value = ms
+                position.longValue = ms
+            }
+            compose.runOnIdle { assertEquals(ms, spoken, "Seek to $ms") }
+        }
+        seekTo(103_000)
+        compose.runOnIdle {
+            preview.value = null
+            position.longValue = 110_000
+        }
+        compose.runOnIdle { assertEquals(103_000, spoken) }
+        seekTo(113_000)
+        // A held key: the server's target stays on the first step while the preview moves on.
+        compose.runOnIdle { target.value = 113_000 }
+        seekTo(123_000)
+        seekTo(133_000)
+        compose.runOnIdle { assertEquals(133_000, spoken) }
+        compose.runOnIdle {
+            target.value = null
+            preview.value = null
+            position.longValue = 140_000
+        }
+        compose.runOnIdle { assertEquals(133_000, spoken, "The held seek settling is not another read") }
+        compose.runOnIdle { paused.value = true }
+        compose.runOnIdle { assertEquals(140_000, spoken) }
+        seekTo(133_000)
     }
 
     @Test fun backAtTheStartGivesFeedbackEvenWhenThePositionDoesNotChange() {

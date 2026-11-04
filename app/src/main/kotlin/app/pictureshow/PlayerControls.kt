@@ -110,6 +110,8 @@ internal fun PlaybackToggle(
     }
     // The end of the video stops the player, which isn't the viewer pausing. A changed state on the
     // focused button is read aloud, so keep it still until focus moves; a later visit reads the real state.
+    // The end sets `ended` in the same main-thread turn that releases the player, so anything the release
+    // changes composes after it. A pause composed before the end was a real pause and has already been read.
     val beforeEnd = remember { arrayOf(current) }
     if (!ended) beforeEnd[0] = current
     var focused by remember { mutableStateOf(false) }
