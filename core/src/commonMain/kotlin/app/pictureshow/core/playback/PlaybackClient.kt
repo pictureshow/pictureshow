@@ -64,8 +64,7 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         itemId: String,
         capabilities: DeviceCapabilities,
         playback: PlaybackRequest = PlaybackRequest()
-    ): ClientResult<PlayOutcome> =
-        negotiate(account, itemId, playbackInfoRequest(account, capabilities, playback), playback)
+    ): ClientResult<PlayOutcome> = negotiate(account, itemId, playbackInfoRequest(account, capabilities, playback), playback)
 
     /**
      * The same negotiation for an output that isn't this device, such as a Cast receiver: [profile] is that output's

@@ -691,6 +691,38 @@
       ]
     },
     {
+      "id": "cast-capability.a-name-starting-like-link-local-is-a-name",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "https://feature.example.com"
+          },
+          "expected": {
+            "category": "public-https",
+            "tryable": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.a-name-starting-like-private-v6-is-a-name",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "https://fdroid.example.com"
+          },
+          "expected": {
+            "category": "public-https",
+            "tryable": true
+          }
+        }
+      ]
+    },
+    {
       "id": "cast-capability.profile-is-the-receiver-table",
       "operation": "profile",
       "state": {},

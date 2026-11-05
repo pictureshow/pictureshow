@@ -147,7 +147,9 @@ private fun decision(itemId: String) = PlayDecision(
     MediaSourceInfo(
         id = "source",
         container = "mp4",
-        mediaStreams = listOf(MediaStream(type = MediaStreamType.Subtitle, index = 3, isTextSubtitleStream = true, displayTitle = "English"))
+        mediaStreams = listOf(
+            MediaStream(type = MediaStreamType.Subtitle, index = 3, isTextSubtitleStream = true, displayTitle = "English")
+        )
     ),
     PlayMethod.DirectPlay,
     "http://server.example/jf/Videos/$itemId/stream?static=true",
@@ -297,7 +299,8 @@ class CastSenderHostTest {
     }
 
     @Test fun serverRefusalIsAFailureNotAStall() = runTest {
-        gateway.outcome = ClientResult.Success(PlayOutcome.Unplayable(app.pictureshow.core.playback.UnplayableReason.NO_COMPATIBLE_SOURCE, "no"))
+        gateway.outcome =
+            ClientResult.Success(PlayOutcome.Unplayable(app.pictureshow.core.playback.UnplayableReason.NO_COMPATIBLE_SOURCE, "no"))
         val host = host()
         handoff(host)
         assertEquals("unsupported-media", host.state.value.cast!!.recovery)
@@ -656,7 +659,9 @@ class CastSenderHostTest {
 
     @Test fun queueEntriesStayDistinctWhenTheSameItemRepeats() = runTest {
         val host = host()
-        host.openChooser(CastPlayRequest(listOf(CastPlayItem(ITEM, "A"), CastPlayItem(ITEM, "A"), CastPlayItem("item-2", "B")), startIndex = 1))
+        host.openChooser(
+            CastPlayRequest(listOf(CastPlayItem(ITEM, "A"), CastPlayItem(ITEM, "A"), CastPlayItem("item-2", "B")), startIndex = 1)
+        )
         runCurrent()
         host.pick(ROUTE)
         link.sink!!.onConnected("Living room")
@@ -673,7 +678,14 @@ class CastSenderHostTest {
     }
 
     @Test fun everyStateHasPlainWordsAndNoCodes() {
-        listOf("os-too-old", "browser-unsupported", "services-missing", "services-update-required", "viewer-disabled", "permission-denied").forEach {
+        listOf(
+            "os-too-old",
+            "browser-unsupported",
+            "services-missing",
+            "services-update-required",
+            "viewer-disabled",
+            "permission-denied"
+        ).forEach {
             assertNotNull(castCapabilityMessage(it), it)
         }
         listOf("loopback", "link-local", "sender-vpn").forEach { assertTrue(castReachMessage(it).contains("TV")) }

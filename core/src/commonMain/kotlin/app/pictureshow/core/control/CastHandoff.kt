@@ -100,22 +100,28 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
                 notice = null
             )
         }
+
         "link-connecting" -> if (s.owner.candidate != null && s.owner.phase == "selecting") {
             viaOwner(s, OwnerEvent("connect", identity = s.owner.candidate)) { it.copy(link = "connecting") }
         } else {
             s.copy(link = "connecting")
         }
+
         "link-connected" -> linkConnected(s)
+
         "link-suspended" -> s.copy(
             link = "suspended",
             observed = null,
             commands = s.commands?.let { reduceCommand(it, CommandEvent("disconnect", owner = it.owner)).copy(effect = "none") }
         )
+
         "link-lost" -> linkLost(s)
+
         "local-paused" -> viaOwner(s, OwnerEvent("local-paused", identity = s.owner.candidate)) {
             // The start position is where local output actually paused, not where the viewer first opened the chooser.
             it.copy(owner = it.owner.copy(intent = it.owner.intent.copy(ticks = event.ticks ?: it.owner.intent.ticks)))
         }
+
         "load-failed", "load-timeout", "cancel" -> {
             val op = when (event.op) {
                 "load-failed" -> "fail"
@@ -129,13 +135,17 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
             }
             viaOwner(s, OwnerEvent(op, identity = s.owner.candidate)) { it.copy(recovery = recovery) }
         }
+
         "observe" -> observe(s, event)
+
         "command" -> command(s, event)
+
         "command-timeout" -> {
             val commands = s.commands ?: return s.copy(reason = "stale-owner")
             val after = reduceCommand(commands, CommandEvent("timeout", owner = commands.owner, id = event.id, nowMs = event.nowMs))
             s.copy(commands = after, effect = if (after.effect == "refresh") "request-status" else "none")
         }
+
         "command-rejected" -> {
             val commands = s.commands ?: return s.copy(reason = "stale-owner")
             val pending = commands.pending
@@ -146,6 +156,7 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
                 s.copy(commands = commands.copy(pending = pending.copy(result = "rejected"), seekTarget = null))
             }
         }
+
         "disconnect" -> viaOwner(s, OwnerEvent("disconnect", identity = s.owner.owner)) {
             it.copy(
                 link = "idle",
@@ -156,11 +167,17 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
                 effect = "detach"
             )
         }
+
         "stop" -> beginStop(s, "end")
+
         "play-here" -> beginStop(s, "here")
+
         "retry-stop" -> if (s.stop == "unknown") beginStop(s, s.stopPurpose ?: "end") else s.copy(reason = "stale-stop")
+
         "stop-timeout" -> if (s.stop != "sent") s.copy(reason = "stale-stop") else stopUnconfirmed(s)
+
         "cleanup-done" -> if (s.cleanup == "pending") s.copy(cleanup = "done") else s.copy(reason = "stale-cleanup")
+
         "resume-here" -> viaOwner(s, OwnerEvent("resume-here", identity = event.identity, confirmed = event.confirmed)) { after ->
             // reduceOwner resumes playing. Play here returns with the pause intent it recorded when the viewer asked.
             val paused = after.returnPaused
@@ -180,6 +197,7 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
                 recovery = null
             )
         }
+
         "report" -> {
             val target = event.identity ?: s.owner.owner
             if (s.owner.owner.kind == "cast" && (s.link != "connected" || s.observed == null)) {
@@ -188,9 +206,19 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
                 viaOwner(s, OwnerEvent("report", identity = target, sequence = event.sequence)) { it }
             }
         }
+
         "viewer-switch", "replace" -> viaOwner(s, OwnerEvent(event.op, identity = event.identity, intent = event.intent)) {
-            it.copy(link = "idle", mediaSession = null, observed = null, commands = null, stop = "none", stopPurpose = null, effect = "detach")
+            it.copy(
+                link = "idle",
+                mediaSession = null,
+                observed = null,
+                commands = null,
+                stop = "none",
+                stopPurpose = null,
+                effect = "detach"
+            )
         }
+
         else -> error("Unknown cast-handoff operation: ${event.op}")
     }
 }
@@ -232,11 +260,14 @@ private fun linkLost(s: CastState): CastState {
     val candidate = s.owner.candidate
     return when {
         candidate != null -> viaOwner(s, OwnerEvent("fail", identity = candidate)) { it.copy(link = "lost", recovery = "link-lost") }
+
         s.stop == "sent" -> stopUnconfirmed(s).copy(link = "lost", observed = null)
+
         s.owner.owner.kind == "cast" && s.owner.phase == "active" ->
             viaOwner(s, OwnerEvent("disconnect", identity = s.owner.owner)) {
                 it.copy(link = "lost", observed = null, mediaSession = null, commands = null, notice = "link-lost", effect = "none")
             }
+
         else -> s.copy(link = "lost", observed = null)
     }
 }
@@ -261,9 +292,10 @@ private fun beginStop(s: CastState, purpose: String): CastState {
     }
 }
 
-private fun stopUnconfirmed(s: CastState): CastState = viaOwner(s, OwnerEvent("remote-stopped", identity = s.owner.owner, confirmed = false)) {
-    it.copy(stop = "unknown", effect = if (s.stopPurpose == "here") "require-choice" else "stop-unknown")
-}
+private fun stopUnconfirmed(s: CastState): CastState =
+    viaOwner(s, OwnerEvent("remote-stopped", identity = s.owner.owner, confirmed = false)) {
+        it.copy(stop = "unknown", effect = if (s.stopPurpose == "here") "require-choice" else "stop-unknown")
+    }
 
 private fun stopConfirmed(s: CastState): CastState {
     val returning = if (s.owner.phase == "returning") {
@@ -272,7 +304,18 @@ private fun stopConfirmed(s: CastState): CastState {
         viaOwner(s, OwnerEvent("return", identity = s.owner.owner)) { it }
     }
     return viaOwner(returning, OwnerEvent("remote-stopped", identity = s.owner.owner, confirmed = true)) {
-        it.copy(stop = "confirmed", cleanup = "pending", effect = if (s.stopPurpose == "here") "resume-here" else "cleanup", observed = null)
+        it.copy(
+            stop = "confirmed",
+            cleanup = "pending",
+            effect = if (s.stopPurpose ==
+                "here"
+            ) {
+                "resume-here"
+            } else {
+                "cleanup"
+            },
+            observed = null
+        )
     }
 }
 
@@ -319,7 +362,9 @@ private fun observe(s: CastState, event: CastEvent): CastState {
         val older = o.generation in 0 until target.generation
         return when {
             older || waiting -> s.copy(reason = "stale-observation")
+
             s.stop == "sent" || s.stop == "unknown" -> stopConfirmed(s)
+
             // Someone else loaded their media on this receiver: this viewing is over, and that media isn't ours to show.
             else -> receiverEnded(s, if (idle) endedNotice(o.idleReason) else "receiver-taken", null)
         }
@@ -330,7 +375,9 @@ private fun observe(s: CastState, event: CastEvent): CastState {
     val bound = s.copy(mediaSession = o.mediaSession, observed = o)
     return when (s.owner.phase) {
         "awaiting-ready" -> awaitingReady(bound, o)
+
         "returning", "return-uncertain" -> if (idle) stopConfirmed(bound) else bound
+
         "disconnected" -> if (idle) {
             receiverEnded(bound, endedNotice(o.idleReason), o.ticks)
         } else {
@@ -341,11 +388,13 @@ private fun observe(s: CastState, event: CastEvent): CastState {
                 notice = null
             )
         }
+
         "active" -> if (idle) {
             receiverEnded(bound, endedNotice(o.idleReason), o.ticks)
         } else {
             bound.copy(commands = observeCommands(bound.commands ?: freshCommands(target, o), o, event.nowMs))
         }
+
         else -> bound
     }
 }
@@ -358,6 +407,7 @@ private fun awaitingReady(s: CastState, o: CastObservation): CastState {
             "error" -> viaOwner(s, OwnerEvent("fail", identity = candidate)) { it.copy(recovery = "receiver-load-failed", observed = null) }
             else -> viaOwner(s, OwnerEvent("fail", identity = candidate)) { it.copy(recovery = "receiver-interrupted", observed = null) }
         }
+
         "playing", "paused" -> {
             val intended = s.owner.intent.ticks
             val distance = if (o.ticks > intended) o.ticks - intended else intended - o.ticks
@@ -370,6 +420,7 @@ private fun awaitingReady(s: CastState, o: CastObservation): CastState {
                 }
             }
         }
+
         else -> s.copy(reason = "not-ready")
     }
 }

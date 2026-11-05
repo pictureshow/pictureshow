@@ -96,8 +96,20 @@ fun castControls(input: CastControlsInput): CastControls {
         volume = volume,
         volumeReason = if (volume) null else "receiver-fixed-volume",
         timeline = if (live) "live" else "vod",
-        seekStartTicks = if (!canSeek) null else if (live) input.seekableStartTicks else 0,
-        seekEndTicks = if (!canSeek) null else if (live) input.seekableEndTicks else known,
+        seekStartTicks = if (!canSeek) {
+            null
+        } else if (live) {
+            input.seekableStartTicks
+        } else {
+            0
+        },
+        seekEndTicks = if (!canSeek) {
+            null
+        } else if (live) {
+            input.seekableEndTicks
+        } else {
+            known
+        },
         tracks = input.tracks.map { track ->
             CastTrackControl(
                 track.id,
@@ -134,7 +146,10 @@ data class CastReach(
  */
 fun castReach(input: CastReachInput): CastReach {
     val scheme = input.baseUrl.substringBefore("://", "").lowercase()
-    val authority = input.baseUrl.substringAfter("://", "").substringBefore('/').substringBefore('?').substringBefore('#').substringAfter('@')
+    val authority = input.baseUrl.substringAfter(
+        "://",
+        ""
+    ).substringBefore('/').substringBefore('?').substringBefore('#').substringAfter('@')
     val host = if (authority.startsWith("[")) {
         authority.substringAfter('[').substringBefore(']')
     } else {
@@ -142,10 +157,13 @@ fun castReach(input: CastReachInput): CastReach {
     }.lowercase()
     if (scheme !in listOf("http", "https") || host.isEmpty()) return CastReach("invalid", false)
     val v4 = parseIpv4(host)
-    if (host == "localhost" || host.endsWith(".localhost") || host == "::1" || (v4 != null && v4 ushr 24 == 127L)) {
+    val isLoopback = v4 != null && v4 ushr 24 == 127L
+    if (host == "localhost" || host.endsWith(".localhost") || host == "::1" || isLoopback) {
         return CastReach("loopback", false)
     }
-    if ((v4 != null && v4 ushr 16 == 0xA9FEL) || host.startsWith("fe8") || host.startsWith("fe9") || host.startsWith("fea") || host.startsWith("feb")) {
+    val isLinkLocal = v4 != null && v4 ushr 16 == 0xA9FEL
+    val isV6 = ':' in host
+    if (isLinkLocal || (isV6 && listOf("fe8", "fe9", "fea", "feb").any { host.startsWith(it) })) {
         return CastReach("link-local", false)
     }
     if (input.vpn.active) {
@@ -157,9 +175,8 @@ fun castReach(input: CastReachInput): CastReach {
     val private = host.endsWith(".local") ||
         host.endsWith(".lan") ||
         host.endsWith(".home.arpa") ||
-        '.' !in host && ':' !in host ||
-        host.startsWith("fc") ||
-        host.startsWith("fd") ||
+        ('.' !in host && !isV6) ||
+        (isV6 && (host.startsWith("fc") || host.startsWith("fd"))) ||
         (v4 != null && isPrivateV4(v4))
     return CastReach((if (private) "private-" else "public-") + scheme, true)
 }
