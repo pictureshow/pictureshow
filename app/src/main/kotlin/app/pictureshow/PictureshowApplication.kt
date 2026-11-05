@@ -63,6 +63,7 @@ class PictureshowApplication : Application() {
                     single { AccountStore(AccountPersistence(get())) }
                     single { DeviceIdentityStore(get()) }
                     single { PlaybackPreferencesStore(get()) }
+                    single { AndroidOfflineForeground(this@PictureshowApplication) }
                     single {
                         val store = get<DeviceIdentityStore>()
                         OfflineEngine(
@@ -75,7 +76,7 @@ class PictureshowApplication : Application() {
                                     BuildConfig.VERSION_NAME
                                 )
                             },
-                            AndroidOfflineForeground(this@PictureshowApplication)
+                            get<AndroidOfflineForeground>()
                         )
                     }
                     single<ServerDiscovery> { JvmServerDiscovery() }

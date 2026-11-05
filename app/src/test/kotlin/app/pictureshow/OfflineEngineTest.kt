@@ -61,6 +61,11 @@ class OfflineEngineTest {
     private var quickConnect = true
     private var logoutStatus = 204
 
+    @Volatile
+    private var serverOff = false
+    private var restMs = 1L
+    private var recheckMs = 30_000L
+
     private lateinit var serverInfo: Server
     private lateinit var viewerA: Account
     private lateinit var viewerB: Account
@@ -76,6 +81,7 @@ class OfflineEngineTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 requests += request
+                if (serverOff) return MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
                 val path = request.path.orEmpty().substringBefore('?')
                 return when {
                     path.startsWith("/Users/") && path.contains("/Items/") -> json(itemJson(path.substringAfterLast('/')))
@@ -158,6 +164,8 @@ class OfflineEngineTest {
             freeBytes = { free },
             quotaBytes = { 1000L * 1024 * 1024 * 1024 },
             retryDelayMs = { 1 },
+            unreachableDelayMs = { restMs },
+            storageRecheckMs = recheckMs,
             scope = scope
         )
     }
@@ -440,5 +448,78 @@ class OfflineEngineTest {
         assertEquals("downloads", offlineColdStartDestination("home", engine, viewerA.key, OfflineNetwork.none))
         assertEquals("home", offlineColdStartDestination("home", engine, viewerA.key, OfflineNetwork.unmetered))
         assertEquals("login", offlineColdStartDestination("login", engine, viewerA.key, OfflineNetwork.none))
+    }
+
+    @Test
+    fun `a server out of reach rests between attempts however often the network reports in`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        serverOff = true
+        restMs = 60_000
+        requests.clear()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        delay(200)
+        val tried = requests.size
+        repeat(50) {
+            engine.networkCapabilitiesChanged()
+            delay(5)
+        }
+        delay(200)
+        assertEquals(tried, requests.size)
+        assertEquals(OfflinePhase.waitingNetwork, engine.entry(viewerA, "1")?.job?.phase)
+    }
+
+    @Test
+    fun `a rest ends on its own, and the next try finishes once the server is back`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        serverOff = true
+        restMs = 300
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        serverOff = false
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `a real network change ends the rest at once`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        serverOff = true
+        restMs = 60_000
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        serverOff = false
+        engine.networkChanged()
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `network capability reports that change the answer still count`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        network = OfflineNetwork.none
+        engine.networkChanged()
+        delay(100)
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        network = OfflineNetwork.unmetered
+        engine.networkCapabilitiesChanged()
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `a download waiting for space goes on by itself when space comes back`() = runBlocking<Unit> {
+        signIn(viewerA)
+        recheckMs = 100
+        free = 10
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingStorage)
+        delay(400)
+        assertEquals("no change in free space, no new attempt", OfflinePhase.waitingStorage, engine.entry(viewerA, "1")?.job?.phase)
+        free = 10L * 1024 * 1024 * 1024
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
     }
 }

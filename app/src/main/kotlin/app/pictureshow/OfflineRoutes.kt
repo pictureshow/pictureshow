@@ -3,8 +3,8 @@
  */
 package app.pictureshow
 
-import android.app.Activity
 import android.net.Uri
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -12,7 +12,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
@@ -77,7 +76,7 @@ private fun NavBackStackEntry.text(name: String) = arguments?.getString(name)?.t
 /** Downloads as the first screen has nothing behind it: Back leaves the app rather than showing an empty graph. */
 @Composable
 private fun rememberDownloadsBack(nav: NavController): () -> Unit {
-    val activity = LocalContext.current as? Activity
+    val activity = LocalActivity.current
     return { if (nav.previousBackStackEntry == null) activity?.finish() else nav.popBackStack() }
 }
 

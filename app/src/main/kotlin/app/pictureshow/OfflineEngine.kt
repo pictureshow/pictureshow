@@ -83,6 +83,7 @@ internal interface OfflineForeground {
 }
 
 private const val OFFLINE_RETRIES = 3
+private const val OFFLINE_STORAGE_MARGIN = 16L * 1024 * 1024
 
 internal class OfflineEngine(
     private val context: Context,
@@ -95,6 +96,8 @@ internal class OfflineEngine(
     private val freeBytes: (File) -> Long? = { dir -> runCatching { StatFs(dir.existingParent().path).availableBytes }.getOrNull() },
     private val quotaBytes: (File) -> Long? = { dir -> runCatching { StatFs(dir.existingParent().path).totalBytes }.getOrNull() },
     private val retryDelayMs: (Int) -> Long = { attempt -> 5_000L * (1L shl (attempt * 2)) },
+    private val unreachableDelayMs: (Int) -> Long = { tries -> minOf(300_000L, 5_000L shl tries.coerceAtMost(6)) },
+    private val storageRecheckMs: Long = 30_000L,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     internal val files = OfflineFiles(context.noBackupFilesDir)
@@ -107,6 +110,12 @@ internal class OfflineEngine(
     private var api: OfflineApi? = null
     private var sessionOwner: OfflineSessionOwner? = null
     private var lastAccountKeys = emptySet<String>()
+    private val unreachable = mutableMapOf<String, OfflineUnreachable>()
+    private val freeAtDenial = mutableMapOf<String, Long>()
+    private var storageWatch: Job? = null
+
+    @Volatile
+    private var lastNetwork: OfflineNetwork? = null
 
     val libraries: StateFlow<Map<String, OfflineLibrary>> = mutableLibraries
 
@@ -128,6 +137,7 @@ internal class OfflineEngine(
                 snapshot.accounts.forEach { loadLocked(it.key) }
                 lastAccountKeys = snapshot.accounts.map(Account::key).toSet()
                 pumpLocked()
+                watchStorageLocked()
             }
             scope.launch { observeAccounts() }
             registerNetworkCallback()
@@ -436,20 +446,32 @@ internal class OfflineEngine(
         foreground.update(titles)
     }
 
+    /** The network really changed, or the viewer came to look: a server that couldn't be reached is worth trying now. */
     fun networkChanged() {
         scope.launch {
-            mutex.withLock { applyNetworkLocked() }
+            mutex.withLock {
+                unreachable.clear()
+                applyNetworkLocked()
+            }
             if (networkState() != OfflineNetwork.none) syncAll()
         }
     }
 
+    /** Android reports these many times a second on some networks. Only a different answer counts as a change. */
+    fun networkCapabilitiesChanged() {
+        if (networkState() != lastNetwork) networkChanged()
+    }
+
     private fun applyNetworkLocked() {
         val network = networkState()
+        lastNetwork = network
+        val now = monotonicMs()
         lastAccountKeys.forEach { key ->
             val manifest = library(key)?.manifest ?: return@forEach
             manifest.entries.forEach { entry ->
                 val allowed = offlineNetworkAllows(network, manifest.wifiOnly, entry.job.cellularAllowed)
-                if (entry.job.phase == OfflinePhase.waitingNetwork && allowed) {
+                val resting = (unreachable[unreachableSlot(key, entry.id)]?.untilMs ?: 0L) > now
+                if (entry.job.phase == OfflinePhase.waitingNetwork && allowed && !resting) {
                     eventLocked(key, entry.id, OfflineJobEvent("network-back"))
                 } else if (!allowed &&
                     entry.job.phase in
@@ -580,8 +602,56 @@ internal class OfflineEngine(
             )
         }
 
+    /**
+     * The network can look fine while the server is off or out of reach, so an attempt that couldn't reach it rests
+     * before the next one, longer each time. Bytes arriving or a real network change end the rest.
+     */
     private suspend fun networkLost(key: String, entryId: String) {
-        mutex.withLock { eventLocked(key, entryId, OfflineJobEvent("network-lost")) }
+        mutex.withLock {
+            eventLocked(key, entryId, OfflineJobEvent("network-lost"))
+            val slot = unreachableSlot(key, entryId)
+            val tries = unreachable[slot]?.tries ?: 0
+            val rest = unreachableDelayMs(tries)
+            unreachable[slot] = OfflineUnreachable(tries + 1, monotonicMs() + rest)
+            scope.launch {
+                delay(rest)
+                mutex.withLock { applyNetworkLocked() }
+            }
+        }
+    }
+
+    private fun unreachableSlot(key: String, entryId: String) = "$key/$entryId"
+
+    private fun monotonicMs() = System.nanoTime() / 1_000_000
+
+    /** Space comes back without telling anyone. While something waits for it, look now and then. */
+    private fun watchStorageLocked() {
+        if (storageWatch?.isActive == true) return
+        if (lastAccountKeys.none(::hasWaitingStorage)) return
+        storageWatch = scope.launch {
+            while (true) {
+                delay(storageRecheckMs)
+                val more = mutex.withLock {
+                    val waiting = lastAccountKeys.filter(::hasWaitingStorage)
+                    waiting.forEach { key ->
+                        val free = freeBytes(files.accountDir(key)) ?: return@forEach
+                        val before = freeAtDenial[key]
+                        if (before == null || free > before + OFFLINE_STORAGE_MARGIN) {
+                            freeAtDenial[key] = free
+                            storageMayHaveFreedLocked(key)
+                            pumpLocked()
+                        }
+                    }
+                    waiting.isNotEmpty()
+                }
+                if (!more) return@launch
+            }
+        }
+    }
+
+    private fun hasWaitingStorage(key: String): Boolean {
+        val entries = library(key)?.manifest?.entries.orEmpty()
+        return entries.any { it.job.phase == OfflinePhase.waitingStorage }
     }
 
     private suspend fun fail(key: String, entryId: String, attempt: Long, reason: String) {
@@ -597,6 +667,7 @@ internal class OfflineEngine(
         }
 
         override suspend fun commit(bytes: Long) = mutex.withLock {
+            unreachable.remove(unreachableSlot(key, entryId))
             library(key)?.manifest?.budget?.commit(entryId, bytes)?.let { setBudgetLocked(key, it.budget) } ?: Unit
         }
 
@@ -654,7 +725,11 @@ internal class OfflineEngine(
                     return true
                 }
                 OfflineTransferResult.NoBudget -> {
-                    mutex.withLock { eventLocked(key, entryId, OfflineJobEvent("storage-denied")) }
+                    mutex.withLock {
+                        eventLocked(key, entryId, OfflineJobEvent("storage-denied"))
+                        freeBytes(files.accountDir(key))?.let { freeAtDenial[key] = it }
+                        watchStorageLocked()
+                    }
                     return false
                 }
                 is OfflineTransferResult.Failed -> {
@@ -739,7 +814,7 @@ internal class OfflineEngine(
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) = networkChanged()
                     override fun onLost(network: Network) = networkChanged()
-                    override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = networkChanged()
+                    override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = networkCapabilitiesChanged()
                 }
             )
         }
@@ -761,6 +836,8 @@ private fun File.existingParent(): File {
     while (at != null && !at.exists()) at = at.parentFile
     return at ?: this
 }
+
+private data class OfflineUnreachable(val tries: Int, val untilMs: Long)
 
 internal fun measuredNetwork(context: Context): OfflineNetwork {
     val manager = context.getSystemService(ConnectivityManager::class.java) ?: return OfflineNetwork.none
