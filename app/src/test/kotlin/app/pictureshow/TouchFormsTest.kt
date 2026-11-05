@@ -16,6 +16,8 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -167,11 +169,11 @@ class TouchFormsTest {
                 )
             }
         }
-        compose.onNodeWithText("Max streaming bitrate: Auto (200 Mbps)").performScrollTo().performClick()
+        compose.onNodeWithText("Auto (200 Mbps)").performScrollTo().performClick()
         compose.onNodeWithText("10 Mbps").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(10, chosen) }
         compose.onNodeWithText("Loading server preferences…").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Audio language: No preference").assertIsNotEnabled()
+        compose.onAllNodesWithText("No preference").onFirst().assertIsNotEnabled()
         compose.runOnIdle { state = state.copy(loading = false, error = "Could not read preferences.") }
         compose.onNodeWithText("Retry").performScrollTo().performClick()
         compose.runOnIdle {

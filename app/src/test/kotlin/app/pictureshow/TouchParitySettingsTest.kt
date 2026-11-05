@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -17,7 +18,6 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -73,14 +73,20 @@ class TouchParitySettingsTest {
         compose.runOnIdle { assertEquals(false, state().local.conversionNotice) }
     }
 
+    // Catalog T10: the whole row toggles, and it is one named switch.
+    @Test fun aSettingsSwitchTogglesFromItsWholeRow() {
+        settings()
+        compose.onNodeWithText("Audio passthrough").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("touch:settings:passthrough").assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+    }
+
     @Test fun conversionNoticeSitsDirectlyAfterAudioPassthrough() {
         settings()
         val toggle = compose.onNodeWithTag("touch:settings:conversion-notice").performScrollTo().getBoundsInRoot()
-        val passthrough = compose.onNodeWithContentDescription("Audio passthrough").getBoundsInRoot()
-        val accepted = compose.onNodeWithText("Audio output accepts: PCM").getBoundsInRoot()
-        val next = compose.onNodeWithText("Subtitle size", substring = true).getBoundsInRoot()
-        assertTrue(passthrough.bottom <= accepted.top, "the output caption stays with passthrough")
-        assertTrue(accepted.bottom <= toggle.top, "the notice follows passthrough")
+        val passthrough = compose.onNodeWithTag("touch:settings:passthrough").getBoundsInRoot()
+        val next = compose.onNodeWithText("Subtitle size").getBoundsInRoot()
+        assertTrue(passthrough.bottom <= toggle.top, "the notice follows passthrough")
         assertTrue(toggle.bottom <= next.top, "no other setting comes between them")
     }
 

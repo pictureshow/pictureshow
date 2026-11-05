@@ -11,15 +11,21 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -27,6 +33,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import app.pictureshow.core.Account
@@ -57,6 +64,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 @RunWith(RobolectricTestRunner::class)
@@ -89,10 +97,13 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
     }
 
-    @Test fun playingHidesAfterFiveSecondsAndPausePinsControls() {
+    // PLAY-04: the shared 10 s, not a shorter touch one.
+    @Test fun playingHidesAfterTenSecondsAndPausePinsControls() {
         compose.mainClock.autoAdvance = false
         launch()
-        compose.mainClock.advanceTimeBy(5_100)
+        compose.mainClock.advanceTimeBy(9_000)
+        compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(1_100)
         compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
         compose.runOnIdle { decoder.pause() }
         compose.mainClock.advanceTimeByFrame()
@@ -425,7 +436,7 @@ class TouchPlayerControlsTest {
         compose.onNodeWithContentDescription("Next episode, Season 1, Episode 2, Another episode").assert(
             androidx.compose.ui.test.SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
         )
-        compose.onNodeWithContentDescription("Play next episode, Season 1, Episode 2, Another episode").performClick()
+        compose.onNodeWithContentDescription("Play now, next episode, Season 1, Episode 2, Another episode").performClick()
         compose.onNodeWithContentDescription("Cancel next episode").performClick()
         compose.runOnIdle { assertEquals(1 to 1, plays to cancels) }
     }
@@ -437,6 +448,233 @@ class TouchPlayerControlsTest {
             host.stateSource = androidx.compose.runtime.mutableStateOf(failed)
         }
         compose.onNodeWithText("Could not save progress: Offline").assertIsDisplayed()
+    }
+
+    @Test fun leavingDoesNotBringTheControlsBackWhileTheExitFinishes() {
+        launch()
+        compose.onNodeWithTag("touch:gestures").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        settled()
+        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
+        compose.runOnIdle {
+            host.exitRequested = true
+            decoder.pause()
+        }
+        settled()
+        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
+    }
+
+    private fun settled() {
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+    }
+
+    private fun creditsCard(position: Long = 50_000) {
+        compose.runOnIdle {
+            host.position = position
+            host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
+            host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
+        }
+        settled()
+    }
+
+    private fun bounds(tag: String) = compose.onNodeWithTag(tag).getBoundsInRoot()
+
+    // TOUCH-13: a number shows only while it is really counting.
+    @Test fun nextCardCountsOnlyWhileTheCountdownRuns() {
+        launch()
+        creditsCard()
+        compose.onNodeWithText("Next episode · ", substring = true).assertIsDisplayed()
+        compose.runOnIdle { decoder.pause() }
+        settled()
+        compose.onNodeWithText("s left", substring = true).assertDoesNotExist()
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+    }
+
+    @Test fun nextCardShowsNoCountdownAfterABackgroundReturn() {
+        launch()
+        creditsCard()
+        compose.runOnIdle {
+            output.setForeground(false)
+            output.setForeground(true)
+        }
+        settled()
+        compose.onNodeWithText("s left", substring = true).assertDoesNotExist()
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+    }
+
+    @Test fun nextCardNeverPromisesMoreThanTheMediaLeft() {
+        assertEquals(10, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 60_000, speed = 1f))
+        assertEquals(2, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 2_000, speed = 1f))
+        assertEquals(1, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 2_000, speed = 2f))
+        assertEquals(10, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 0, speed = 1f), "duration unknown")
+        assertEquals(7, touchNextCountdownSeconds(7, creditsCountdown = false, mediaLeftMs = 2_000, speed = 2f), "already media time")
+    }
+
+    // Tablet B1: a tap aimed at Cancel lands on Cancel, whatever else is happening.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "sw800dp-w1280dp-h800dp-land-mdpi")
+    @Test
+    fun cancelKeepsOnePlaceWithControlsShownOrHiddenAndWithOrWithoutSkip() {
+        launch()
+        compose.runOnIdle { host.deferredNext = MediaItem("next", "Another episode") }
+        settled()
+        val shown = bounds("next:cancel")
+        compose.onNodeWithTag("touch:gestures").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        settled()
+        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
+        assertEquals(shown, bounds("next:cancel"), "hiding the controls moved Cancel")
+        compose.runOnIdle {
+            host.position = 50_000
+            host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
+        }
+        settled()
+        assertEquals(1, compose.onAllNodesWithTag("touch:skip").fetchSemanticsNodes().size, "Skip travels inside the card")
+        assertTrue(bounds("touch:skip").let { it.top >= bounds("next:card").top && it.bottom <= bounds("next:card").bottom })
+        assertEquals(shown, bounds("next:cancel"), "Skip arriving moved Cancel")
+    }
+
+    @Test fun cardsAndSkipShareOneRightEdge() {
+        launch()
+        compose.runOnIdle {
+            host.position = 10_000
+            host.segments = listOf(MediaSegment("intro", SegmentType.Intro, 0, 200_000_000))
+        }
+        settled()
+        val skip = bounds("touch:skip")
+        compose.runOnIdle { host.deferredNext = MediaItem("next", "Another episode") }
+        settled()
+        assertEquals(skip.right, bounds("next:card").right)
+    }
+
+    @Test fun narrowNoticeAndNextCardDoNotOverlap() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.runOnIdle { host.deferredNext = MediaItem("next", "Another episode") }
+        settled()
+        assertTrue(bounds("touch:conversion-notice").bottom <= bounds("next:card").top)
+    }
+
+    // Phone B9: the most used control moves nothing when it changes.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun playAndPauseTakeOneWidth() {
+        launch()
+        settled()
+        val pausing = listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds)
+        compose.onNodeWithTag("touch:toggle").performClick()
+        settled()
+        compose.onNodeWithText("Play").assertIsDisplayed()
+        assertEquals(pausing, listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds))
+    }
+
+    // Phone B4: a deliberate layout, not wherever the width ran out.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun portraitControlsAreTransportThenEqualColumns() {
+        launch()
+        settled()
+        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
+        listOf("touch:back10", "touch:forward10", "touch:stop").forEach {
+            assertEquals(row.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
+        }
+        assertTrue(bounds("touch:stop").right > bounds("touch:open:Subtitles").right, "Stop ends the row")
+        assertEquals(bounds("touch:open:Audio").left, bounds("touch:open:Speed").left)
+        assertEquals(bounds("touch:open:Subtitles").left, bounds("touch:open:Info").left)
+        assertEquals(bounds("touch:open:Chapters").left, bounds("touch:orientation").left)
+        val first = bounds("touch:open:Subtitles").left - bounds("touch:open:Audio").left
+        val second = bounds("touch:open:Chapters").left - bounds("touch:open:Subtitles").left
+        assertEquals(first.value, second.value, 1f, "equal cells")
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w914dp-h411dp-land-xxhdpi")
+    @Test
+    fun landscapeControlsHoldOneLineWithStopAtTheFarEnd() {
+        launch()
+        settled()
+        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
+        TouchPlayerSheet.entries.map { "touch:open:$it" }.plus(listOf("touch:orientation", "touch:stop")).forEach {
+            assertEquals(row.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
+        }
+        assertEquals(bounds("touch:panel").right.value - 16f, bounds("touch:stop").right.value, 1f)
+        assertTrue(bounds("touch:open:Audio").left - bounds("touch:forward10").right >= 16.dp)
+    }
+
+    // Phone B3: on a short window every rate shows at once, and the video stays in view.
+    @Config(qualifiers = "w914dp-h411dp-land-xxhdpi")
+    @Test
+    fun speedOnAShortWindowIsOneRowWithEveryRateInView() {
+        launch()
+        compose.onNodeWithTag("touch:open:Speed").performClick()
+        settled()
+        val row = bounds("touch:speed:50").top
+        listOf(50, 75, 100, 125, 150, 175, 200).forEach {
+            compose.onNodeWithTag("touch:speed:$it").assertIsDisplayed()
+            assertEquals(row, bounds("touch:speed:$it").top)
+        }
+        compose.onNodeWithTag("touch:speed:100").assertIsSelected()
+        compose.onNodeWithTag("touch:speed:200").performClick()
+        settled()
+        compose.onNodeWithText("Speed · 2×").assertIsDisplayed()
+    }
+
+    // PLAY-25: panel entry is the current rate.
+    @Config(qualifiers = "w620dp-h500dp-land-xhdpi")
+    @Test
+    fun speedListOpensOnTheCurrentRate() {
+        launch()
+        compose.onNodeWithTag("touch:open:Speed").performClick()
+        settled()
+        compose.onNodeWithTag("touch:speed:200").performScrollTo().performClick()
+        settled()
+        compose.onNodeWithTag("touch:open:Speed").performClick()
+        settled()
+        compose.onNodeWithTag("touch:speed:200").assertIsDisplayed().assertIsSelected()
+    }
+
+    // Phone B5, B6: the one shared row, and a header on one line.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun sheetChoicesAreRadioRowsAndDoneSitsOnTheTitleLine() {
+        launch()
+        compose.onNodeWithTag("touch:open:Speed").performClick()
+        settled()
+        compose.onNodeWithTag("touch:speed:100").assertIsSelected()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+        val title = compose.onNodeWithText("Playback speed").getBoundsInRoot()
+        val done = bounds("touch:sheet:done")
+        assertEquals((title.top + title.bottom).value / 2, (done.top + done.bottom).value / 2, 1f)
+    }
+
+    // Check 2 of the design review: the background latch belongs to one viewing; Play now starts the next one playing.
+    @Test fun playNowAfterABackgroundReturnStartsTheNextEpisodeUnlatched() {
+        val hosts = mutableListOf<PlaybackHostState>()
+        val first = MediaItem("first", "First episode")
+        val next = MediaItem("next", "Next episode")
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                PlayerViewing(account, first, 0, {}) { current, start, onNext ->
+                    val viewing = rememberPlaybackHostState(account, current, start, onNext, {})
+                    SideEffect { if (viewing !in hosts) hosts += viewing }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            hosts.single().output.setForeground(false)
+            hosts.single().output.setForeground(true)
+            assertTrue(hosts.single().output.pauseIntent.value, "the return keeps the viewing paused until a deliberate Play")
+            hosts.single().advanceReported = true
+            hosts.single().finish(next)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(2, hosts.size)
+            assertEquals(next.id, hosts.last().item.id)
+            assertEquals(false, hosts.last().output.pauseIntent.value)
+        }
     }
 
     private fun decision(method: PlayMethod) = PlayDecision(

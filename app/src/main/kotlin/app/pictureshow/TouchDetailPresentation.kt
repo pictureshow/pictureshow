@@ -63,7 +63,11 @@ internal data class TouchDetailAction(
     val reserve: List<String>,
     val enabled: Boolean,
     val state: String?,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    /** Accepted while the page waits: it shows a check beside its requested wording. */
+    val requested: Boolean = false,
+    val visible: Boolean = true,
+    val icon: String? = null
 )
 
 internal data class TouchDetailPresentation(
@@ -353,7 +357,6 @@ internal fun rememberTouchDetailPresentation(
     val primaryPending = when {
         !captureOpen -> detailUnavailableActionLabel("primary")
         playQueued == "primary" -> detailRequestedActionLabel("primary", true)
-        playQueued == "from-start" -> "Start already requested"
         else -> "Play when ready"
     }
 
@@ -416,6 +419,7 @@ internal fun rememberTouchDetailPresentation(
         reserve = listOf(name, "$name when ready", "$name requested"),
         enabled = if (pendingEnabled) captureOpen && !(inPlaySlot && playQueued != null && !requested) else fresh && playItem != null,
         state = null,
+        requested = requested,
         onClick = {
             when {
                 pendingEnabled && inPlaySlot -> capturePlay(target, "$name requested") { latestOnPlayOnTv(it, fromStart) }
@@ -426,7 +430,10 @@ internal fun rememberTouchDetailPresentation(
     )
 
     val canFreshPlay = fresh && playItem != null
-    val localPlayOpen = captureOpen && (playQueued == null || playQueued == "primary" || playQueued == "from-start")
+
+    // One rule for the play slot: once a Play is accepted, every other Play is disabled under its plain name.
+    fun playOpen(target: String) = captureOpen && (playQueued == null || playQueued == target)
+    val pendingPosition = pendingItem?.userData?.playbackPositionTicks ?: 0L
     val currentItem = state.item
     val playedEnabled = when {
         pendingEnabled -> captureOpen
@@ -438,14 +445,16 @@ internal fun rememberTouchDetailPresentation(
         add(
             TouchDetailAction(
                 target = "primary",
-                label = if (pendingEnabled) {
-                    label("primary", playQueued == "primary" || playQueued == "from-start", primaryPending)
-                } else {
-                    primaryFresh
+                label = when {
+                    !pendingEnabled -> primaryFresh
+                    playQueued != null && playQueued != "primary" -> plain("primary")
+                    else -> label("primary", playQueued == "primary", primaryPending)
                 },
-                reserve = listOf("Play", primaryFresh, "Play when ready", "Play requested", "Start already requested", "Play unavailable"),
-                enabled = if (pendingEnabled) localPlayOpen else canFreshPlay,
+                // The longest resume wording stands in for any position, so fresh data arriving moves nothing.
+                reserve = listOf("Play", "Resume from 0:00:00", primaryFresh, "Play when ready", "Play requested", "Play unavailable"),
+                enabled = if (pendingEnabled) playOpen("primary") else canFreshPlay,
                 state = null,
+                requested = pendingEnabled && playQueued == "primary",
                 onClick = {
                     if (pendingEnabled) {
                         capturePlay("primary", detailRequestedActionLabel("primary", true)) {
@@ -471,6 +480,7 @@ internal fun rememberTouchDetailPresentation(
                 ),
                 enabled = playedEnabled,
                 state = detailActionDescription(if (currentItem?.isWatched == true) "Watched" else "Unwatched", stateKnown),
+                icon = "check",
                 onClick = { if (pendingEnabled) captureMutation(true) else queueReadyMutation(true) }
             )
         )
@@ -481,35 +491,37 @@ internal fun rememberTouchDetailPresentation(
                 reserve = listOf("Favorite", "Unfavorite", "Unfavorite when ready", "Favorite change requested", "Favorite unavailable"),
                 enabled = favoriteEnabled,
                 state = detailActionDescription(if (currentItem?.userData?.isFavorite == true) "Favorite" else "Not favorite", stateKnown),
+                icon = if (favoriteNow) "heart" else "heart-outline",
                 onClick = { if (pendingEnabled) captureMutation(false) else queueReadyMutation(false) }
             )
         )
         add(
             TouchDetailAction(
                 target = "from-start",
-                label = if (pendingEnabled) {
-                    label(
+                label = when {
+                    !pendingEnabled -> "Play from start"
+                    playQueued != null && playQueued != "from-start" -> "Play from start"
+                    else -> label(
                         "from-start",
-                        playQueued == "primary" || playQueued == "from-start",
+                        playQueued == "from-start",
                         when {
                             !captureOpen -> detailUnavailableActionLabel("from-start")
                             playQueued == "from-start" -> detailRequestedActionLabel("from-start", true)
-                            playQueued == "primary" -> "Play already requested"
                             else -> "Play from start when ready"
                         }
                     )
-                } else {
-                    "Play from start"
                 },
                 reserve = listOf(
                     "Play from start",
                     "Play from start when ready",
                     "Start requested",
-                    "Play already requested",
                     "Start unavailable"
                 ),
-                enabled = if (pendingEnabled) localPlayOpen else canFreshPlay,
+                enabled = if (pendingEnabled) playOpen("from-start") else canFreshPlay,
                 state = null,
+                requested = pendingEnabled && playQueued == "from-start",
+                // CAT: a resume-only action; the returning layout keeps its place until the fresh position is known.
+                visible = (returning && waiting) || recoveryActive || position > 0 || pendingPosition > 0 || playQueued == "from-start",
                 onClick = {
                     if (pendingEnabled) {
                         capturePlay("from-start", detailRequestedActionLabel("from-start", true)) { latestOnPlay(it, false) }

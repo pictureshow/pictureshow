@@ -101,3 +101,64 @@ internal fun touchNavIcon(route: String): ImageVector = ImageVector.Builder(
         }
     }
 }.build()
+
+/** Small original action marks: a check, two chevrons and a heart, outlined or filled. */
+internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
+    name = kind,
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f
+).apply {
+    path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
+        when (kind) {
+            "check" -> {
+                moveTo(4f, 12.5f)
+                lineTo(6f, 10.5f)
+                lineTo(10f, 14.5f)
+                lineTo(18f, 6.5f)
+                lineTo(20f, 8.5f)
+                lineTo(10f, 18.5f)
+                close()
+            }
+            "chevron-down" -> {
+                moveTo(6f, 8f)
+                lineTo(12f, 14f)
+                lineTo(18f, 8f)
+                lineTo(20f, 10f)
+                lineTo(12f, 18f)
+                lineTo(4f, 10f)
+                close()
+            }
+            "chevron-right" -> {
+                moveTo(8.5f, 4f)
+                lineTo(16.5f, 12f)
+                lineTo(8.5f, 20f)
+                lineTo(6.5f, 18f)
+                lineTo(12.5f, 12f)
+                lineTo(6.5f, 6f)
+                close()
+            }
+            else -> {
+                moveTo(12f, 21f)
+                curveTo(5f, 15.5f, 2f, 12f, 2f, 8f)
+                curveTo(2f, 5f, 4.5f, 3f, 7f, 3f)
+                curveTo(9f, 3f, 11f, 4f, 12f, 6f)
+                curveTo(13f, 4f, 15f, 3f, 17f, 3f)
+                curveTo(19.5f, 3f, 22f, 5f, 22f, 8f)
+                curveTo(22f, 12f, 19f, 15.5f, 12f, 21f)
+                close()
+                if (kind == "heart-outline") {
+                    moveTo(12f, 18.4f)
+                    curveTo(17.4f, 14f, 20f, 11.2f, 20f, 8f)
+                    curveTo(20f, 6.1f, 18.5f, 5f, 17f, 5f)
+                    curveTo(15.4f, 5f, 13.9f, 5.9f, 12f, 9f)
+                    curveTo(10.1f, 5.9f, 8.6f, 5f, 7f, 5f)
+                    curveTo(5.5f, 5f, 4f, 6.1f, 4f, 8f)
+                    curveTo(4f, 11.2f, 6.6f, 14f, 12f, 18.4f)
+                    close()
+                }
+            }
+        }
+    }
+}.build()

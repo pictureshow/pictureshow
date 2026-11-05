@@ -6,18 +6,18 @@ package app.pictureshow
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,10 +34,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
@@ -61,94 +59,103 @@ internal fun TouchSettings(
     val configuration = state.configuration
     val ready = !state.loading && !state.saving && configuration != null
     TouchPage("Settings", onBack) {
-        TouchAction("Accounts", onClick = onAccounts)
-        TouchAction("Remote for a TV", onClick = onRemote)
-        TouchHeading("Playback on this device")
-        Text("Changes are saved immediately and apply the next time you open the player.")
-        TouchChoice(
-            "Max streaming bitrate",
-            local.bitrateMbps,
-            PlaybackPreferences.BITRATES,
-            { it?.let { value -> "$value Mbps" } ?: "Auto (200 Mbps)" }
-        ) { value -> onLocal { it.copy(bitrateMbps = value) } }
-        androidx.compose.foundation.layout.Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        TouchSection {
+            TouchNavRow("Accounts", onClick = onAccounts)
+            TouchNavRow("Remote for a TV", onClick = onRemote)
+        }
+        TouchSection(
+            "Playback on ${device.replaceFirstChar(Char::lowercase)}",
+            "Changes are saved immediately and apply the next time you open the player."
         ) {
-            Text("Audio passthrough", modifier = Modifier.weight(1f))
-            Switch(
-                checked = local.passthrough,
-                onCheckedChange = { checked -> onLocal { it.copy(passthrough = checked) } },
-                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Audio passthrough" }
-            )
-        }
-        Text("Audio output accepts: $acceptedAudio", style = MaterialTheme.typography.bodySmall)
-        androidx.compose.foundation.layout.Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-        ) {
-            Text("Conversion notice", modifier = Modifier.weight(1f))
-            Switch(
-                checked = local.conversionNotice,
-                onCheckedChange = { checked -> onLocal { it.copy(conversionNotice = checked) } },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("touch:settings:conversion-notice").semantics {
-                    contentDescription = "Conversion notice"
-                    stateDescription = if (local.conversionNotice) "On" else "Off"
-                }
-            )
-        }
-        Text(
-            "Shows a short note when the server has to convert a video for ${device.replaceFirstChar(Char::lowercase)}.",
-            style = MaterialTheme.typography.bodySmall
-        )
-        TouchChoice("Subtitle size", local.subtitleSize, SubtitleSize.entries, { settingLabel(it.name) }) { value ->
-            onLocal { it.copy(subtitleSize = value) }
-        }
-        TouchChoice("Subtitle background", local.subtitleBackground, SubtitleBackground.entries, { settingLabel(it.name) }) { value ->
-            onLocal { it.copy(subtitleBackground = value) }
-        }
-        Text("System follows Android caption settings. Bitmap subtitles keep their authored appearance.")
-        TouchHeading("Skip segments")
-        SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
             TouchChoice(
-                segmentLabel(type).replaceFirstChar { it.uppercase() },
-                local.segmentModes[type] ?: SegmentMode.Ask,
-                SegmentMode.entries,
-                { if (it == SegmentMode.Automatic) "Skip automatically" else it.name }
-            ) { value -> onLocal { it.copy(segmentModes = it.segmentModes + (type to value)) } }
+                "Max streaming bitrate",
+                local.bitrateMbps,
+                PlaybackPreferences.BITRATES,
+                { it?.let { value -> "$value Mbps" } ?: "Auto (200 Mbps)" }
+            ) { value -> onLocal { it.copy(bitrateMbps = value) } }
+            TouchSwitchRow(
+                "Audio passthrough",
+                "Audio output accepts: $acceptedAudio",
+                local.passthrough,
+                "touch:settings:passthrough"
+            ) { checked -> onLocal { it.copy(passthrough = checked) } }
+            TouchSwitchRow(
+                "Conversion notice",
+                "Shows a short note when the server has to convert a video for ${device.replaceFirstChar(Char::lowercase)}.",
+                local.conversionNotice,
+                "touch:settings:conversion-notice"
+            ) { checked -> onLocal { it.copy(conversionNotice = checked) } }
+            TouchChoice("Subtitle size", local.subtitleSize, SubtitleSize.entries, { settingLabel(it.name) }) { value ->
+                onLocal { it.copy(subtitleSize = value) }
+            }
+            TouchChoice("Subtitle background", local.subtitleBackground, SubtitleBackground.entries, { settingLabel(it.name) }) { value ->
+                onLocal { it.copy(subtitleBackground = value) }
+            }
+            TouchHelper("System follows Android caption settings. Bitmap subtitles keep their authored appearance.")
         }
-        Text("Ask shows a skip button during playback.")
-        TouchHeading("Your server preferences")
-        Text("These follow your account to other Jellyfin apps.")
-        if (state.loading) Text("Loading server preferences…")
-        if (state.saving) Text("Saving server preferences…")
-        TouchChoice(
-            "Audio language",
-            configuration?.audioLanguage.orEmpty(),
-            preferenceLanguages,
-            ::preferenceLanguageLabel,
-            ready
-        ) { onServer("AudioLanguagePreference", it) }
-        TouchChoice(
-            "Subtitle language",
-            configuration?.subtitleLanguage.orEmpty(),
-            preferenceLanguages,
-            ::preferenceLanguageLabel,
-            ready
-        ) { onServer("SubtitleLanguagePreference", it) }
-        TouchChoice("Subtitle mode", configuration?.subtitleMode ?: "Default", subtitleModes, {
-            it
-        }, ready) { onServer("SubtitleMode", it) }
-        TouchMessage(state.error)
-        if (state.error != null) TouchAction("Retry", !state.saving, onRetry)
-        TouchHeading("Troubleshooting")
-        TouchAction(device, onClick = onThisDevice)
-        TouchHeading("Pictureshow")
-        TouchAction(stringResource(R.string.supporter_title), onClick = onSupport)
-        TouchAction("About Pictureshow", onClick = onAbout)
+        TouchSection("Skip segments") {
+            SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
+                TouchChoice(
+                    segmentLabel(type).replaceFirstChar { it.uppercase() },
+                    local.segmentModes[type] ?: SegmentMode.Ask,
+                    SegmentMode.entries,
+                    { if (it == SegmentMode.Automatic) "Skip automatically" else it.name }
+                ) { value -> onLocal { it.copy(segmentModes = it.segmentModes + (type to value)) } }
+            }
+            TouchHelper("Ask shows a skip button during playback.")
+        }
+        TouchSection("Your server preferences", "These follow your account to other Jellyfin apps.") {
+            if (state.loading) TouchHelper("Loading server preferences…")
+            if (state.saving) TouchHelper("Saving server preferences…")
+            TouchChoice(
+                "Audio language",
+                configuration?.audioLanguage.orEmpty(),
+                preferenceLanguages,
+                ::preferenceLanguageLabel,
+                ready
+            ) { onServer("AudioLanguagePreference", it) }
+            TouchChoice(
+                "Subtitle language",
+                configuration?.subtitleLanguage.orEmpty(),
+                preferenceLanguages,
+                ::preferenceLanguageLabel,
+                ready
+            ) { onServer("SubtitleLanguagePreference", it) }
+            TouchChoice("Subtitle mode", configuration?.subtitleMode ?: "Default", subtitleModes, {
+                it
+            }, ready) { onServer("SubtitleMode", it) }
+            TouchMessage(state.error)
+            if (state.error != null) TouchAction("Retry", !state.saving, onRetry)
+        }
+        TouchSection("Troubleshooting") { TouchNavRow(device, onClick = onThisDevice) }
+        TouchSection("Pictureshow") {
+            TouchNavRow(stringResource(R.string.supporter_title), onClick = onSupport)
+            TouchNavRow("About Pictureshow", onClick = onAbout)
+        }
     }
+}
+
+/** A heading owns the gap above it and the rows under it, so a row's spacing never comes from the page's column. */
+@Composable
+private fun TouchSection(title: String? = null, caption: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = if (title == null) 0.dp else 12.dp)) {
+        if (title != null) {
+            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+            Spacer(Modifier.height(8.dp))
+        }
+        if (caption != null) TouchHelper(caption)
+        content()
+    }
+}
+
+@Composable
+private fun TouchHelper(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(vertical = 4.dp)
+    )
 }
 
 /** The same width split Android itself documents for tablets; TV uses its own screen. */
@@ -179,13 +186,13 @@ internal fun TouchThisDevice(
     }
     TouchPage(device, onBack) {
         Text("Reported capabilities, not a playback benchmark. Shared diagnostics contain no account or server information.")
-        TouchAction("Refresh capabilities") { generation++ }
+        TouchSecondaryAction("Refresh capabilities") { generation++ }
         val captured = report
         if (captured != null) {
             TouchAction("Share diagnostics and profile JSON") {
                 context.startActivity(Intent.createChooser(thisTvShareIntent(captured, device), "Share $device"))
             }
-            TouchAction(if (showJson) "Hide device profile JSON" else "View device profile JSON") { showJson = !showJson }
+            TouchSecondaryAction(if (showJson) "Hide device profile JSON" else "View device profile JSON") { showJson = !showJson }
             SelectionContainer {
                 Text(
                     if (showJson) captured.profileJson else captured.summary,
@@ -207,11 +214,6 @@ private fun settingLabel(value: String): String = when (value) {
 }
 
 @Composable
-private fun TouchHeading(label: String) {
-    Text(label, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-}
-
-@Composable
 private fun <T> TouchChoice(
     title: String,
     value: T,
@@ -221,7 +223,7 @@ private fun <T> TouchChoice(
     onSelect: (T) -> Unit
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
-    TouchAction("$title: ${label(value)}", enabled) { open = true }
+    TouchValueRow(title, label(value), enabled) { open = true }
     if (open) {
         val shortWindow = isShortTouchWindow()
         AlertDialog(
@@ -233,18 +235,10 @@ private fun <T> TouchChoice(
                         if (shortWindow) Text("Scroll for more options", style = MaterialTheme.typography.bodySmall)
                     }
                     items(values) { option ->
-                        TextButton(
-                            enabled = enabled,
-                            onClick = {
-                                onSelect(option)
-                                open = false
-                            },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                        ) {
-                            RadioButton(selected = option == value, onClick = null)
-                            Spacer(Modifier.width(12.dp))
-                            Text(label(option), modifier = Modifier.weight(1f))
-                        }
+                        TouchRadioRow(option == value, enabled = enabled, onClick = {
+                            onSelect(option)
+                            open = false
+                        }) { Text(label(option), modifier = Modifier.weight(1f)) }
                     }
                 }
             },
@@ -262,9 +256,11 @@ internal fun TouchAbout(onLicenses: () -> Unit, onBack: () -> Unit) {
         Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         Text("Free and open-source under the Mozilla Public License 2.0")
         Text("Made by Legitimate LLC")
-        TouchAction("Source code") { uri.openUri("https://github.com/pictureshow/pictureshow") }
-        TouchAction("Privacy policy") { uri.openUri("https://pictureshow.app/privacy/") }
-        TouchAction("Open-source licenses", onClick = onLicenses)
+        Column {
+            TouchNavRow("Source code") { uri.openUri("https://github.com/pictureshow/pictureshow") }
+            TouchNavRow("Privacy policy") { uri.openUri("https://pictureshow.app/privacy/") }
+            TouchNavRow("Open-source licenses", onClick = onLicenses)
+        }
     }
 }
 
@@ -272,8 +268,10 @@ internal fun TouchAbout(onLicenses: () -> Unit, onBack: () -> Unit) {
 internal fun TouchLicenses(libraries: List<LicenseEntry>, onOpen: (Int) -> Unit, onBack: () -> Unit) {
     TouchPage("Open-source licenses", onBack) {
         Text("${libraries.size} libraries. Tap a library to read its license and notices.")
-        libraries.forEachIndexed { index, library ->
-            TouchAction("${library.name} ${library.version} · ${library.license}") { onOpen(index) }
+        Column {
+            libraries.forEachIndexed { index, library ->
+                TouchNavRow("${library.name} ${library.version} · ${library.license}") { onOpen(index) }
+            }
         }
     }
 }

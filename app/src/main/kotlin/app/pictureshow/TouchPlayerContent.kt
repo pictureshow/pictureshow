@@ -16,30 +16,40 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,8 +58,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
@@ -67,16 +80,20 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.ui.compose.ContentFrame
 import app.pictureshow.core.Account
+import app.pictureshow.core.SegmentMode
+import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.trickplayTile
+import kotlin.math.ceil
 
 internal enum class TouchPlayerSheet(val title: String) {
     Audio("Audio"),
@@ -116,12 +133,35 @@ internal class TouchControlsState {
 
 private const val TOUCH_SEEK_STEP_MS = 10_000L
 
+/** One width for the action column, so a card arriving or leaving never moves Cancel or Skip. */
+private val TOUCH_ACTIONS_WIDTH = 360.dp
+
+/**
+ * What a running next card says. The credits count is ten wall-clock seconds (PLAY-25), but the physical end moves on
+ * first when less media than that is left, so it never promises longer than the playback rate allows. The time to the
+ * physical end is media time, which the host has already worked out.
+ */
+internal fun touchNextCountdownSeconds(wallSeconds: Long, creditsCountdown: Boolean, mediaLeftMs: Long, speed: Float): Long {
+    if (!creditsCountdown || mediaLeftMs <= 0 || speed <= 0f) return wallSeconds
+    return minOf(wallSeconds, ceil(mediaLeftMs / speed.toDouble() / 1_000.0).toLong())
+}
+
+/** The label takes the room of its widest wording, at any font scale, so its neighbours never move when it changes. */
+@Composable
+private fun TouchReservedLabel(label: String, reserve: String) {
+    Box(contentAlignment = Alignment.Center) {
+        Text(reserve, Modifier.alpha(0f).clearAndSetSemantics {}, maxLines = 1)
+        Text(label)
+    }
+}
+
 @Composable
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
     val accessible = rememberAccessibilityEnabled()
     val playback = rememberPlayerPlayback(host.player, onPause = {
-        ui.visible = true
+        // Leaving pauses the player too: the controls stay down while the stop report finishes, or Back looks refused.
+        if (!host.exitRequested) ui.visible = true
         ui.interact()
     }, onResume = ui::interact)
     val pauseIntent by host.output.pauseIntent.collectAsState()
@@ -145,7 +185,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val density = LocalDensity.current
     var controlsHeight by remember { mutableIntStateOf(0) }
     var controlsTop by remember { mutableStateOf<Int?>(null) }
-    var actionsTop by remember { mutableStateOf<Int?>(null) }
+    var noticeBounds by remember { mutableStateOf<Rect?>(null) }
+    var actionsLeft by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     var playerTop by remember { mutableStateOf(0) }
     val controlsVisible = ui.visible && ui.sheet == null && host.error == null && !host.switching
     val actionsVisible = ui.sheet == null && host.error == null && !host.switching
@@ -153,7 +194,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     BackHandler {
         if (host.switching) host.finish(reason = "back-during-next") else ui.back { host.finish(reason = "back") }
     }
-    ControlsAutoHide(ui.visible, accessible || paused || ui.sheet != null || ui.scrubMs != null, ui.interaction, 5_000) {
+    ControlsAutoHide(ui.visible, accessible || paused || ui.sheet != null || ui.scrubMs != null, ui.interaction) {
         ui.visible = false
     }
     LaunchedEffect(accessible) { if (accessible) ui.visible = true }
@@ -169,8 +210,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         }
     ) {
         ContentFrame(host.player, Modifier.fillMaxSize())
-        // The visible-controls card sits at the top; only bottom overlays reserve caption space.
-        val overlayTop = controlsTop.takeIf { controlsVisible } ?: actionsTop.takeIf { actionsVisible && !controlsVisible }
+        // Skip and the next card sit at the top, so only the controls panel lifts the captions.
+        val overlayTop = controlsTop.takeIf { controlsVisible }
         PlayerSubtitles(
             host.player,
             host.localPreferences.appearance,
@@ -216,7 +257,15 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             },
             allowed = !topCues && host.player != null && foreground && !host.state.preparing && actionsVisible,
             modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),
-            card = { notice, placement, announce, details -> TouchConversionNoticeCard(notice, placement, announce, details) }
+            card = { notice, placement, announce, details ->
+                DisposableEffect(Unit) { onDispose { noticeBounds = null } }
+                TouchConversionNoticeCard(
+                    notice,
+                    placement.onGloballyPositioned { noticeBounds = it.boundsInRoot() },
+                    announce,
+                    details
+                )
+            }
         ) {
             ui.sheet = TouchPlayerSheet.Info
             ui.interact()
@@ -233,7 +282,9 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             val imageHeight = (maxHeight - controlsSize - 56.dp).coerceIn(0.dp, 135.dp)
             if (imageHeight > 0.dp) {
                 Surface(
-                    Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = controlsSize + 8.dp)
+                    Modifier.align(Alignment.BottomStart)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                        .padding(start = 16.dp, bottom = controlsSize + 8.dp)
                         .testTag("touch:thumbnail"),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                     shape = RoundedCornerShape(8.dp),
@@ -248,12 +299,15 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
 
         if (controlsVisible) {
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing)
+                // The scrim reaches the screen's edges behind a cutout; only its content keeps to the safe area (TOUCH-10).
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .onGloballyPositioned {
                         controlsTop = it.positionInRoot().y.toInt()
                         controlsHeight = it.size.height
                     }
-                    .background(Color(0xE610131C)).heightIn(max = if (landscape) 260.dp else 430.dp)
+                    .testTag("touch:panel").background(Color(0xE610131C))
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                    .heightIn(max = if (landscape) 260.dp else 430.dp)
                     .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -272,7 +326,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     ui.scrubMs?.let(host::seekTo)
                     ui.scrubMs = null
                 })
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val toggle: @Composable () -> Unit = {
                     Button(
                         onClick = {
                             val pending = host.deferredNext
@@ -282,71 +336,141 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         Modifier.testTag("touch:toggle").semantics {
                             stateDescription = playbackToggleState(paused, playback.showPlayButton)
                         }
-                    ) { Text(if (playback.showPlayButton) "Play" else "Pause") }
-                    TextButton(
-                        onClick = { host.seek(-TOUCH_SEEK_STEP_MS) },
+                    ) { TouchReservedLabel(if (playback.showPlayButton) "Play" else "Pause", "Pause") }
+                }
+                val back: @Composable () -> Unit = {
+                    TouchBarButton(
+                        { host.seek(-TOUCH_SEEK_STEP_MS) },
                         Modifier.testTag("touch:back10").semantics { contentDescription = "Back 10 seconds" }
                     ) { Text("−10 s") }
-                    TextButton(
-                        onClick = { host.seek(TOUCH_SEEK_STEP_MS) },
+                }
+                val forward: @Composable () -> Unit = {
+                    TouchBarButton(
+                        { host.seek(TOUCH_SEEK_STEP_MS) },
                         Modifier.testTag("touch:forward10").semantics { contentDescription = "Forward 10 seconds" }
                     ) { Text("+10 s") }
+                }
+                val stop: @Composable () -> Unit = {
+                    TouchBarButton({ host.finish(reason = "stop-button") }, Modifier.testTag("touch:stop")) { Text("Stop") }
+                }
+                val options = buildList<@Composable (Modifier) -> Unit> {
                     TouchPlayerSheet.entries.forEach { sheet ->
                         if (sheet != TouchPlayerSheet.Chapters || host.metadata.chapters.isNotEmpty()) {
-                            TextButton(onClick = {
-                                ui.sheet = sheet
-                                ui.interact()
-                            }, Modifier.testTag("touch:open:$sheet")) {
-                                Text(
+                            add { placement ->
+                                TouchBarButton({
+                                    ui.sheet = sheet
+                                    ui.interact()
+                                }, placement.testTag("touch:open:$sheet")) {
                                     if (sheet == TouchPlayerSheet.Speed) {
-                                        "Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speed.speed)}"
+                                        TouchReservedLabel(
+                                            "Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speed.speed)}",
+                                            "Speed · 1.75×"
+                                        )
                                     } else {
-                                        sheet.title
+                                        Text(sheet.title)
                                     }
-                                )
+                                }
                             }
                         }
                     }
-                    TextButton(onClick = {
-                        activity?.requestedOrientation =
-                            if (landscape) ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-                        ui.interact()
-                    }) { Text(if (landscape) "Portrait" else "Landscape") }
-                    TextButton(onClick = { host.finish(reason = "stop-button") }, Modifier.testTag("touch:stop")) { Text("Stop") }
+                    add { placement ->
+                        TouchBarButton({
+                            activity?.requestedOrientation = if (landscape) {
+                                ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+                            } else {
+                                ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+                            }
+                            ui.interact()
+                        }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape") }
+                    }
+                }
+                if (this@BoxWithConstraints.maxWidth < 600.dp) {
+                    // Transport and exit on one line, then fixed columns: a break never falls where the width runs out.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        toggle()
+                        Spacer(Modifier.width(8.dp))
+                        back()
+                        forward()
+                        Spacer(Modifier.weight(1f))
+                        stop()
+                    }
+                    options.chunked(3).forEach { row ->
+                        Row(Modifier.fillMaxWidth().testTag("touch:options-row")) {
+                            row.forEach { option ->
+                                Box(Modifier.weight(1f)) { option(Modifier.offset(x = (-8).dp)) }
+                            }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                } else {
+                    // Three groups: transport, options, and Stop at the far end, since it exits at once.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        toggle()
+                        Spacer(Modifier.width(8.dp))
+                        back()
+                        forward()
+                        Spacer(Modifier.width(16.dp))
+                        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            options.forEach { option -> option(Modifier) }
+                        }
+                        stop()
+                    }
                 }
                 host.state.reportError?.let { Text("Could not save progress: $it", color = Color.White) }
             }
         }
         if (host.error == null && !host.switching) {
+            // A narrow window can't hold the notice and the action column side by side, so the column waits below it.
+            val belowNotice = noticeBounds?.takeIf { it.right > actionsLeft }
+                ?.let { with(density) { it.height.toDp() + 12.dp } } ?: 0.dp
+            // One anchor in every state: a tap aimed at Cancel lands on Cancel whether or not the controls just appeared.
             Column(
-                Modifier.align(if (controlsVisible) Alignment.TopEnd else Alignment.BottomEnd)
-                    .windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp).widthIn(max = 360.dp)
-                    .onGloballyPositioned { actionsTop = it.positionInRoot().y.toInt().takeIf { _ -> it.size.height > 0 } },
+                Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = belowNotice)
+                    .padding(12.dp).width(TOUCH_ACTIONS_WIDTH.coerceAtMost(this@BoxWithConstraints.maxWidth - 24.dp))
+                    .onGloballyPositioned { actionsLeft = it.boundsInRoot().left },
+                horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val next = (host.deferredNext ?: host.nextEpisode)?.takeUnless { host.nextCancelled }
+                val trigger = nextEpisodeTriggerMs(host.duration, host.segments)
+                val eligible = host.deferredNext != null || (trigger != null && host.position >= trigger)
+                // With the card up its Play now is the one primary, and Skip travels inside it, quietly.
+                val cardUp = next != null && actionsVisible && (eligible || host.ended)
                 SegmentControl(host.segments, host.position, host.localPreferences.segmentModes, host::seekTo, {
-                }, showButton = actionsVisible, button = { label, action ->
+                }, showButton = actionsVisible && !cardUp, button = { label, action ->
                     Button(onClick = action, Modifier.testTag("touch:skip")) { Text(label) }
                 })
-                (host.deferredNext ?: host.nextEpisode)?.takeUnless { host.nextCancelled }?.let { next ->
+                next?.let {
                     key(host.deferredNext, host.output.stopGeneration) {
-                        val trigger = nextEpisodeTriggerMs(host.duration, host.segments)
+                        val suspended = paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null
+                        val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
+                        val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
+                        val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
+                            ?.takeIf { (host.localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }
                         NextEpisodeControl(
-                            account, next, host.deferredNext != null || (trigger != null && host.position >= trigger), host.ended,
-                            paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null,
+                            account, next, eligible, host.ended, suspended,
                             onFocusRemoved = {}, onPlay = { host.finish(next) }, onCancel = host::cancelNext,
-                            remainingMs = if (creditsStartMs(host.duration, host.segments) ==
-                                null
-                            ) {
-                                (host.duration - host.position).coerceAtLeast(0)
-                            } else {
-                                null
-                            },
-                            autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null,
+                            remainingMs = if (creditsCountdown) null else (host.duration - host.position).coerceAtLeast(0),
+                            autoPlay = autoPlay,
                             visible = actionsVisible,
                             card = { seconds, play, cancel ->
-                                val autoPlay = !accessible && host.deferredNext == null
-                                TouchNextEpisodeCard(next.name, seconds, autoPlay, play, cancel, announcement = catalogAnnouncement(next))
+                                // A number shows only while it is really running (TOUCH-13); the same rule the host counts by.
+                                val running = autoPlay && (host.ended || !suspended)
+                                TouchNextEpisodeCard(
+                                    next.name,
+                                    touchNextCountdownSeconds(
+                                        seconds,
+                                        creditsCountdown,
+                                        host.duration.takeIf { it > 0 }?.let { (it - host.position).coerceAtLeast(0) } ?: 0,
+                                        speed.speed
+                                    ),
+                                    running,
+                                    play,
+                                    cancel,
+                                    announcement = catalogAnnouncement(next),
+                                    skipLabel = skip?.let { "Skip ${segmentLabel(it.type)}" },
+                                    onSkip = { skip?.let { host.seekTo(it.endMs) } }
+                                )
                             }
                         )
                     }
@@ -414,21 +538,29 @@ internal fun TouchPlayerScrubber(
     }
 }
 
+/** A bar action: tighter than a default text button, so the row fits one line, and still a 48 dp target. */
+@Composable
+private fun TouchBarButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    TextButton(onClick, modifier, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) { content() }
+}
+
 @Composable
 internal fun TouchNextEpisodeCard(
     name: String,
     seconds: Long,
-    autoPlay: Boolean,
+    counting: Boolean,
     onPlay: () -> Unit,
     onCancel: () -> Unit,
-    announcement: String = name
+    announcement: String = name,
+    skipLabel: String? = null,
+    onSkip: () -> Unit = {}
 ) {
-    Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium) {
+    Surface(Modifier.fillMaxWidth().testTag("next:card"), color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (autoPlay) {
+            if (counting) {
                 Text("Next episode · $seconds s left", style = MaterialTheme.typography.labelLarge)
             } else {
-                // With a reader nothing advances by itself, so the card has to announce that it arrived.
+                // Nothing is counting; with a reader nothing advances by itself, so the card announces that it arrived.
                 Text(
                     "Next episode",
                     style = MaterialTheme.typography.labelLarge,
@@ -440,15 +572,23 @@ internal fun TouchNextEpisodeCard(
                 )
             }
             Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Skip comes last, so it can arrive or leave without moving Play now or Cancel.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onPlay,
-                    Modifier.testTag("next:play").semantics { contentDescription = "Play next episode, $announcement" }
+                    Modifier.testTag("next:play").semantics { contentDescription = "Play now, next episode, $announcement" }
                 ) { Text("Play now") }
                 TextButton(
                     onClick = onCancel,
                     Modifier.testTag("next:cancel").semantics { contentDescription = "Cancel next episode" }
                 ) { Text("Cancel") }
+                if (skipLabel != null) {
+                    FilledTonalButton(
+                        onClick = onSkip,
+                        Modifier.testTag("touch:skip"),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) { Text(skipLabel) }
+                }
             }
         }
     }
@@ -476,7 +616,7 @@ internal fun TouchConversionNoticeCard(
         shape = MaterialTheme.shapes.medium
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(notice.title, style = MaterialTheme.typography.titleSmall)
+            Text(notice.title, style = MaterialTheme.typography.titleMedium)
             Text("${notice.reason} $TOUCH_CONVERSION_NOTICE_ACTION", fontSize = 16.sp)
         }
     }

@@ -28,6 +28,7 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.ApiTimeouts
 import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.MediaPerson
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import kotlin.test.assertEquals
@@ -103,11 +104,19 @@ class TouchDetailPendingTest {
         }
 
         fun tap(target: String) {
+            // The TV's actions live behind one control, so reaching one takes that control and then the menu's row.
+            if (target in listOf("on-tv", "play-next", "add-to-queue", "on-tv-start")) {
+                compose.onNodeWithTag("touch:detail:tv").performScrollTo().performClick()
+                settle(400)
+                compose.onNodeWithTag("touch:detail:$target").performClick()
+                settle(400)
+                return
+            }
             compose.onNodeWithTag("touch:detail:$target").performScrollTo().performClick()
             settle()
         }
 
-        fun bounds() = listOf("primary", "played", "favorite", "from-start", "on-tv", "play-next", "add-to-queue").associateWith {
+        fun bounds() = listOf("primary", "played", "favorite", "tv").associateWith {
             compose.onNodeWithTag("touch:detail:$it").getBoundsInRoot()
         }
 
@@ -206,8 +215,9 @@ class TouchDetailPendingTest {
         page.tap("primary")
         page.tap("primary")
         assertEquals("Play requested", page.label("primary"))
-        assertEquals("Play already requested", page.label("from-start"))
-        page.tap("from-start")
+        // CAT, one rule for the play slot: the accepted one says so, and every other is disabled under its plain name.
+        assertEquals("Play from start", page.label("from-start"))
+        compose.onNodeWithTag("touch:detail:from-start").assertIsNotEnabled()
         assertTrue(page.plays.isEmpty())
         page.state = fresh(resumable)
         page.settle()
@@ -304,13 +314,106 @@ class TouchDetailPendingTest {
         page.tap("play-next")
         page.tap("add-to-queue")
         page.tap("add-to-queue")
-        assertEquals("Play on TV requested", page.label("on-tv"))
+        assertEquals("Play on TV requested", page.label("tv"))
         compose.onNodeWithTag("touch:detail:primary").assertIsNotEnabled()
         assertTrue(page.remote.isEmpty())
         page.state = fresh(resumable)
         page.settle(500)
         assertEquals(listOf("tv:film:false", "next:film", "queue:film"), page.remote)
         assertTrue(page.plays.isEmpty())
+    }
+
+    // CAT line 25: Play from start is resume-only; the returning layout keeps its place until the position is known.
+    @Test fun playFromStartNeedsSomethingToResume() {
+        val page = Page(fresh(film))
+        compose.onNodeWithTag("touch:detail:from-start").assertDoesNotExist()
+        page.state = fresh(resumable)
+        page.settle()
+        compose.onNodeWithTag("touch:detail:from-start").assertExists()
+    }
+
+    @Test fun playFromStartHoldsItsPlaceDuringAReturn() {
+        Page(pending())
+        compose.onNodeWithTag("touch:detail:from-start").assertExists()
+    }
+
+    // Catalog B1: one primary, the state pair, and the TV's actions behind one control, every one reachable.
+    @Test fun phoneArrangementGathersTheTvActionsAndKeepsEachReachable() {
+        val page = Page(fresh(resumable))
+        val primary = compose.onNodeWithTag("touch:detail:primary").getBoundsInRoot()
+        val start = compose.onNodeWithTag("touch:detail:from-start").getBoundsInRoot()
+        val played = compose.onNodeWithTag("touch:detail:played").getBoundsInRoot()
+        val favorite = compose.onNodeWithTag("touch:detail:favorite").getBoundsInRoot()
+        val tv = compose.onNodeWithTag("touch:detail:tv").getBoundsInRoot()
+        assertEquals(primary.top, start.top)
+        assertEquals(played.top, favorite.top)
+        assertTrue(primary.bottom <= played.top && played.bottom <= tv.top)
+        assertEquals(primary.left, tv.left)
+        assertEquals(favorite.right, tv.right)
+        compose.onNodeWithTag("touch:detail:on-tv").assertDoesNotExist()
+        compose.onNodeWithTag("touch:detail:tv").performScrollTo().performClick()
+        page.settle(400)
+        listOf("on-tv", "play-next", "add-to-queue", "on-tv-start").forEach {
+            compose.onNodeWithTag("touch:detail:$it").assertExists()
+        }
+        compose.onNodeWithTag("touch:detail:play-next").performClick()
+        page.settle(400)
+        assertEquals(listOf("next:film"), page.remote)
+    }
+
+    @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
+    @Test
+    fun wideArrangementHoldsOneLine() {
+        Page(fresh(resumable))
+        val tops = listOf("primary", "from-start", "played", "favorite", "tv").map {
+            compose.onNodeWithTag("touch:detail:$it").getBoundsInRoot().top
+        }
+        assertEquals(1, tops.distinct().size, tops.toString())
+    }
+
+    @Test fun anAcceptedPlayDisablesTheOtherPlaysUnderTheirPlainNames() {
+        val page = Page(pending())
+        page.tap("from-start")
+        assertEquals("Start requested", page.label("from-start"))
+        assertEquals("Play", page.label("primary"))
+        compose.onNodeWithTag("touch:detail:primary").assertIsNotEnabled()
+    }
+
+    // Catalog B7: the reason reads first and Retry stays pinned beside it.
+    @Test fun failureBandHoldsItsReasonLeftOfRetry() {
+        val page = Page(pending())
+        page.settle(ApiTimeouts.REQUEST_MILLIS)
+        page.settle(1_000)
+        val reason = compose.onNodeWithTag("touch:detail:read-error").getBoundsInRoot()
+        val retry = compose.onNodeWithTag("touch:detail:retry").getBoundsInRoot()
+        assertTrue(reason.right <= retry.left)
+    }
+
+    // Tablet B3: on a series page the episodes are what the viewer came for.
+    @Config(qualifiers = "w800dp-h3000dp-port-xhdpi")
+    @Test
+    fun seriesPageShowsEpisodesAboveTheCast() {
+        val series = MediaItem(
+            "show",
+            "Invented show",
+            "Series",
+            people = listOf(MediaPerson("p", "A Person", "Actor"))
+        )
+        val episode = MediaItem("episode", "An episode", "Episode")
+        Page(
+            CatalogDetailState(
+                account,
+                series,
+                loading = false,
+                readSucceeded = true,
+                episodes = listOf(episode),
+                nextUp = listOf(episode)
+            ),
+            series
+        )
+        val episodes = compose.onNodeWithText("Episodes").getBoundsInRoot()
+        val cast = compose.onNodeWithText("Cast & crew").getBoundsInRoot()
+        assertTrue(episodes.bottom <= cast.top)
     }
 
     // CAT-10

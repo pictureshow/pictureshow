@@ -9,9 +9,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -19,6 +21,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.HomeRow
 import app.pictureshow.core.ItemUserData
@@ -34,6 +37,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 @RunWith(RobolectricTestRunner::class)
@@ -47,6 +51,40 @@ class TouchCatalogScreensTest {
     @Test fun librarySortsAreTheSpecsThree() {
         assertEquals(listOf("SortName", "DateCreated", "PremiereDate"), TOUCH_LIBRARY_SORTS.map { it.first })
         assertEquals(listOf("Title", "Date added", "Release date"), TOUCH_LIBRARY_SORTS.map { it.second })
+    }
+
+    // Catalog B4: the tab lists every library, with no sideways scrolling to find the last.
+    @Test fun librariesTabShowsEveryLibraryInView() {
+        val libraries = listOf("Collections", "Movies", "Shows").map { MediaItem(it, it, "CollectionFolder") }
+        val state = CatalogHomeState(rows = listOf(HomeRow("libraries", "Libraries", libraries, library = true)), loading = false)
+        compose.setContent { MaterialTheme { TouchCatalogHome(state, account, {}, {}, librariesOnly = true) } }
+        libraries.forEach { compose.onNodeWithTag("touch:card:${it.id}").assertIsDisplayed() }
+        compose.onNodeWithText("Libraries").assertIsDisplayed()
+        compose.onNodeWithText("Explore your collection").assertDoesNotExist()
+        compose.onNodeWithText("Your libraries").assertDoesNotExist()
+    }
+
+    // Catalog B3, tablet B8: a row of cards has one height whatever the data.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w400dp-h1600dp-port-xhdpi")
+    @Test
+    fun cardsInARowShareOneHeightWhateverTheirData() {
+        val items = listOf(
+            MediaItem("short", "Short", "Movie"),
+            MediaItem("long", "A title long enough to wrap onto a second line of its card", "Movie", productionYear = 2026),
+            MediaItem("nothing", "Plain", "Movie", productionYear = 2026)
+        )
+        val state = CatalogGridState(account, MediaItem("parent", "Movies", "CollectionFolder"), items = items, loading = false)
+        compose.setContent { MaterialTheme { TouchCatalogGrid(state, {}, {}, { _, _ -> }, {}, {}) } }
+        val heights = items.map { compose.onNodeWithTag("touch:card:${it.id}").getBoundsInRoot().let { box -> box.bottom - box.top } }
+        assertEquals(1, heights.distinct().size, heights.toString())
+    }
+
+    @Test fun gridArtworkHeightFollowsTheAdaptiveCell() {
+        // 400 dp: 360 of content, two 132 dp cells fit with a 12 dp gap, each 174 dp wide and 261 dp tall.
+        assertEquals(261.dp, touchGridArtHeight(400.dp, 132.dp, 3f / 2f))
+        // Too narrow for a second cell: one, full width.
+        assertEquals(240.dp, touchGridArtHeight(200.dp, 132.dp, 3f / 2f))
     }
 
     @Test fun homeTransitionsFromLoadingToFailureToBrowsableContent() {

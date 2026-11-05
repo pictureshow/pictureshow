@@ -469,9 +469,9 @@ class TouchNavigationTest {
     fun librariesTabReturnsHomeOnSystemBackAfterRestoration() {
         launch(signedIn = true)
         compose.onNodeWithText("Libraries").performClick()
-        waitFor("Your libraries")
+        waitFor("No libraries are available for this account.")
         restoration.emulateSavedInstanceStateRestore()
-        waitFor("Your libraries")
+        waitFor("No libraries are available for this account.")
         back()
         waitFor("What would you like to watch?")
     }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,22 +19,25 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
@@ -56,9 +60,13 @@ internal fun TouchPlayerSheetContent(
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("touch:sheet:$sheet")) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            // Done's own padding would leave its word short of the margin the title starts on.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(sheet.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                TextButton(onClick = onDismiss, Modifier.heightIn(min = 48.dp)) { Text("Done") }
+                TextButton(
+                    onClick = onDismiss,
+                    Modifier.heightIn(min = 48.dp).offset(x = 12.dp).testTag("touch:sheet:done")
+                ) { Text("Done") }
             }
             when (sheet) {
                 TouchPlayerSheet.Chapters -> TouchChapterChoices(host, account, onDismiss, onSeek)
@@ -73,14 +81,7 @@ internal fun TouchPlayerSheetContent(
 
 @Composable
 private fun TouchChoiceRow(label: String, selected: Boolean, tag: String, description: String? = null, onClick: () -> Unit) {
-    TextButton(
-        onClick = onClick,
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag).semantics {
-            this.selected = selected
-            description?.let { contentDescription = it }
-        }
-    ) {
-        RadioButton(selected = selected, onClick = null)
+    TouchRadioRow(selected, Modifier.testTag(tag), description = description, onClick = onClick) {
         Text(label, Modifier.weight(1f))
     }
 }
@@ -90,23 +91,18 @@ private fun TouchChapterChoices(host: PlaybackHostState, account: Account?, onDi
     val chapters = host.metadata.chapters
     val current = chapters.indexOfLast { it.startMs <= host.position }
     // PLAY-13: the current chapter is on screen when the sheet opens, however long the list.
-    LazyColumn(state = rememberLazyListState(initialFirstVisibleItemIndex = current.coerceAtLeast(0))) {
+    LazyColumn(Modifier.selectableGroup(), state = rememberLazyListState(initialFirstVisibleItemIndex = current.coerceAtLeast(0))) {
         itemsIndexed(chapters) { index, chapter ->
-            TextButton(
-                onClick = {
-                    onSeek(chapter.startMs)
-                    onDismiss()
-                },
-                Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .testTag("touch:chapter:$index").semantics { selected = index == current }
-            ) {
-                RadioButton(selected = index == current, onClick = null)
+            TouchRadioRow(index == current, Modifier.testTag("touch:chapter:$index"), onClick = {
+                onSeek(chapter.startMs)
+                onDismiss()
+            }) {
                 val tag = chapter.imageTag
                 if (tag != null && account != null) {
                     AsyncImage(
                         chapterImageUrl(account.server, host.item.id, index, tag),
                         contentDescription = null,
-                        modifier = Modifier.padding(end = 8.dp).width(96.dp).height(54.dp)
+                        modifier = Modifier.width(96.dp).height(54.dp)
                     )
                 }
                 Text("${chapter.name.ifBlank { "Chapter ${index + 1}" }} · ${playerTime(chapter.startMs)}", Modifier.weight(1f))
@@ -127,7 +123,7 @@ private fun TouchTrackChoices(type: MediaStreamType, host: PlaybackHostState, on
     }
     val selectedIndex = if (type == MediaStreamType.Audio) host.state.audioIndex else host.state.subtitleIndex
     val first = menu.choices.indexOfFirst { it.first == selectedIndex }.coerceAtLeast(0)
-    LazyColumn(state = rememberLazyListState(initialFirstVisibleItemIndex = first)) {
+    LazyColumn(Modifier.selectableGroup(), state = rememberLazyListState(initialFirstVisibleItemIndex = first)) {
         itemsIndexed(menu.choices, key = { _, choice -> choice.first }) { _, choice ->
             TouchChoiceRow(choice.second, choice.first == selectedIndex, "touch:track:${choice.first}") {
                 host.controller?.select(type, choice.first)
@@ -137,9 +133,11 @@ private fun TouchTrackChoices(type: MediaStreamType, host: PlaybackHostState, on
         if (type == MediaStreamType.Subtitle) {
             item {
                 val burnedIn = menu.streams.firstOrNull { it.index == selectedIndex }?.deliveryMethod == SubtitleDeliveryMethod.Encode
+                // Set apart from the list, so it doesn't read as more rows; the buttons' words start on the margin.
+                HorizontalDivider(Modifier.padding(vertical = 16.dp))
                 if (burnedIn) Text("These subtitles are burned into the video. Timing and appearance cannot be changed during playback.")
                 Text("Subtitle delay: ${host.subtitleDelayMs} ms")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.offset(x = (-12).dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(-100 to "Earlier", 0 to "Reset", 100 to "Later").forEach { (delta, label) ->
                         TextButton(enabled = !burnedIn, modifier = Modifier.heightIn(min = 48.dp), onClick = {
                             host.subtitleDelayMs =
@@ -153,11 +151,43 @@ private fun TouchTrackChoices(type: MediaStreamType, host: PlaybackHostState, on
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TouchSpeedChoices(host: PlaybackHostState, onDismiss: () -> Unit) {
     val speed by host.output.speed.collectAsState()
-    LazyColumn {
-        items(availablePlaybackSpeeds(speed)) { value ->
+    val speeds = availablePlaybackSpeeds(speed)
+    val note: @Composable () -> Unit = {
+        Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(PLAYBACK_SPEED_NOTE)
+            speed.message?.let { Text(it) }
+            if (host.state.decision?.method == PlayMethod.Transcode) Text(PlaybackSpeeds.TRANSCODE)
+        }
+    }
+    // Seven 48 dp rows can't fit a short window. On one row every rate and the current one show with no scrolling (PLAY-25).
+    if (isShortTouchWindow() && speeds.size > 1) {
+        Column {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag("touch:speed:segments")) {
+                speeds.forEachIndexed { index, value ->
+                    SegmentedButton(
+                        selected = value == speed.speed,
+                        onClick = {
+                            host.output.setSpeed(value)
+                            onDismiss()
+                        },
+                        shape = SegmentedButtonDefaults.itemShape(index, speeds.size),
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("touch:speed:${(value * 100).toInt()}"),
+                        icon = {},
+                        label = { Text(PlaybackSpeeds.label(value), maxLines = 1) }
+                    )
+                }
+            }
+            note()
+        }
+        return
+    }
+    val current = speeds.indexOf(speed.speed).coerceAtLeast(0)
+    LazyColumn(Modifier.selectableGroup(), state = rememberLazyListState(initialFirstVisibleItemIndex = current)) {
+        items(speeds) { value ->
             val label = PlaybackSpeeds.label(value)
             // With encoded audio 1× is the only row, so it carries the reason the others are gone (PLAY-25).
             val selected = value == speed.speed
@@ -167,13 +197,7 @@ private fun TouchSpeedChoices(host: PlaybackHostState, onDismiss: () -> Unit) {
                 onDismiss()
             }
         }
-        item {
-            Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(PLAYBACK_SPEED_NOTE)
-                speed.message?.let { Text(it) }
-                if (host.state.decision?.method == PlayMethod.Transcode) Text(PlaybackSpeeds.TRANSCODE)
-            }
-        }
+        item { note() }
     }
 }
 
