@@ -32,10 +32,20 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import app.pictureshow.core.MediaItem
+import app.pictureshow.core.Server
 import app.pictureshow.core.control.RemoteTarget
+import app.pictureshow.core.imageUrl
 
 private const val TEN_SECONDS_TICKS = 100_000_000L
 private const val THIRTY_SECONDS_TICKS = 300_000_000L
+
+internal fun castPlayItem(server: Server, item: MediaItem) = CastPlayItem(
+    id = item.id,
+    title = item.name,
+    imageUrl = imageUrl(server, item, width = 960, wide = true),
+    durationMs = item.runTimeTicks?.takeIf { it > 0 }?.let { it / 10_000 }
+)
 
 /** Same-named devices stay tellable apart by a fragment of their opaque id, never by an address. */
 internal fun castRouteLabel(route: CastRoute, all: List<CastRoute>): String =

@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -94,30 +95,67 @@ internal fun TouchPictureshow(
         remote.setForeground(true)
         onPauseOrDispose { remote.setForeground(false) }
     }
-    // What the viewer asked to play while choosing a TV. Picking runs it once; closing the picker forgets it.
-    var remotePicking by rememberSaveable { mutableStateOf(false) }
-    var remotePending by remember { mutableStateOf<(() -> Unit)?>(null) }
-    fun chooseRemote(then: (() -> Unit)?) {
-        remotePending = then
-        remotePicking = true
-        remote.setPicker(true)
+    val cast: CastSenderHost = koinInject()
+    val castState by cast.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state.snapshot.currentAccount) { cast.bind(state.snapshot.currentAccount) }
+    LifecycleResumeEffect(cast) {
+        cast.setForeground(true)
+        onPauseOrDispose { cast.setForeground(false) }
     }
-    if (remotePicking) {
+    // What the viewer asked to play while choosing. Picking runs it once; closing the chooser forgets it.
+    var remotePending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun chooseRemote(castRequest: CastPlayRequest? = null, then: (() -> Unit)?) {
+        remotePending = then
+        cast.openChooser(castRequest)
+    }
+    LaunchedEffect(castState.chooserOpen) { remote.setPicker(castState.chooserOpen) }
+    if (castState.chooserOpen) {
+        val castRequest = cast.chooserRequest
         fun close() {
-            remotePicking = false
             remotePending = null
-            remote.setPicker(false)
+            cast.closeChooser()
         }
-        TouchRemotePicker(remoteState, onPick = { target ->
-            remote.attach(target)
-            remotePending?.invoke()
-            close()
-            if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote")
-        }, onDismiss = ::close)
+        TouchCastChooser(
+            remoteState,
+            castState,
+            showCast = castRequest != null,
+            onThisDevice = castRequest?.let { request ->
+                {
+                    request.onThisDevice?.invoke()
+                    close()
+                }
+            },
+            onPickRemote = { target ->
+                remote.attach(target)
+                remotePending?.invoke()
+                castRequest?.onJellyfinPick?.invoke()
+                close()
+                if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote")
+            },
+            onPickCast = { target ->
+                cast.pick(target)
+                if (cast.state.value.blockedReach == null) {
+                    remotePending = null
+                    if (castRequest?.local == null) nav.navigate("cast") { launchSingleTop = true }
+                }
+            },
+            onSetCastEnabled = cast::setEnabled,
+            onDismiss = ::close
+        )
+    }
+    TouchCastAttention(castState, cast)
+    // Play here, or Resume here with no player left open: the receiver's position, in a new local player.
+    LaunchedEffect(castState.localStart?.serial) {
+        val start = castState.localStart ?: return@LaunchedEffect
+        val account = state.snapshot.currentAccount
+        val item = account?.let { catalogService.item(it, start.itemId) } as? app.pictureshow.core.ClientResult.Success
+        cast.localStartHandled(start.serial)
+        item?.let { nav.navigate(playerRoute(it.value, start.positionMs)) }
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
     TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer, above = {
         if (!inPlayer && route != "remote") TouchRemoteBar(remoteState, remote.now()) { nav.navigate("remote") { launchSingleTop = true } }
+        if (!inPlayer && route != "cast") TouchCastBar(castState) { nav.navigate("cast") { launchSingleTop = true } }
     }) {
         LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired, state.snapshot.currentAccount?.accessToken) {
             val key = state.snapshot.currentKey
@@ -342,14 +380,16 @@ internal fun TouchPictureshow(
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
-                        TouchPlayerScreen(
-                            account,
-                            item,
-                            entry.arguments?.getLong("start") ?: 0,
-                            catalog,
-                            onCurrentItem,
-                            onExit = exitPlayback
-                        )
+                        CompositionLocalProvider(LocalTouchPlayerCast provides TouchPlayerCast(cast, remote)) {
+                            TouchPlayerScreen(
+                                account,
+                                item,
+                                entry.arguments?.getLong("start") ?: 0,
+                                catalog,
+                                onCurrentItem,
+                                onExit = exitPlayback
+                            )
+                        }
                     }
                 }
             }
@@ -398,20 +438,27 @@ internal fun TouchPictureshow(
                             },
                             // Without a position the TV applies this viewer's own resume, which is newer than this screen.
                             onPlayOnTv = { playable, fromStart ->
-                                chooseRemote { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
+                                val startMs = if (fromStart) 0 else playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000
+                                chooseRemote(
+                                    CastPlayRequest(
+                                        listOf(castPlayItem(account.server, playable)),
+                                        startMs = startMs,
+                                        onThisDevice = { nav.navigate(playerRoute(playable, startMs)) }
+                                    )
+                                ) { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },
                             onPlayNext = { playable ->
                                 if (remoteState.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = true)
                                 } else {
-                                    chooseRemote { remote.queue(listOf(playable.id), next = true) }
+                                    chooseRemote(then = { remote.queue(listOf(playable.id), next = true) })
                                 }
                             },
                             onAddToQueue = { playable ->
                                 if (remoteState.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = false)
                                 } else {
-                                    chooseRemote { remote.queue(listOf(playable.id), next = false) }
+                                    chooseRemote(then = { remote.queue(listOf(playable.id), next = false) })
                                 }
                             },
                             onBack = { nav.popBackStack() }
@@ -420,7 +467,10 @@ internal fun TouchPictureshow(
                 }
             }
             composable("remote") {
-                TouchRemoteScreen(remoteState, remote, onChoose = { chooseRemote(null) }, onBack = { nav.popBackStack() })
+                TouchRemoteScreen(remoteState, remote, onChoose = { chooseRemote(then = null) }, onBack = { nav.popBackStack() })
+            }
+            composable("cast") {
+                TouchCastScreen(castState, cast, onBack = { nav.popBackStack() })
             }
             composable("settings") {
                 state.snapshot.currentAccount?.let { account ->
