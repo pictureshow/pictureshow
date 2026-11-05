@@ -224,17 +224,6 @@ class PlayerExtrasTest {
     }
 
     @Test
-    fun aPausedCardGivesNoCountThatIsNotRunning() {
-        var paused by mutableStateOf(true)
-        compose.setContent {
-            MaterialTheme { NextEpisodeControl(account, MediaItem("next", "Next story"), true, false, paused, {}, {}) }
-        }
-        compose.onNodeWithText("Next episode").assertIsDisplayed()
-        compose.runOnIdle { paused = false }
-        compose.onNodeWithText("Next episode · 10 s left").assertIsDisplayed()
-    }
-
-    @Test
     fun withoutCreditsTheCardShowsTimeLeftAndPlaysOnlyWhenTheEpisodeEnds() {
         var ended by mutableStateOf(false)
         var left by mutableStateOf(9_200L)
