@@ -244,7 +244,8 @@ internal fun NextEpisodeControl(
             ) {
                 val seconds = remainingMs?.let { ((it + 999) / 1_000).coerceAtLeast(0) } ?: remaining
                 Text(
-                    if (autoPlay) "Next episode · $seconds s left" else "Next episode",
+                    // A number shows only while it is really counting; a paused card has none to give.
+                    if (autoPlay && (ended || !paused)) "Next episode · $seconds s left" else "Next episode",
                     modifier = if (autoPlay) {
                         Modifier.semantics { heading() }
                     } else {

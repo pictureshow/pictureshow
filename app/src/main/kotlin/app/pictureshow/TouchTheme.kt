@@ -123,7 +123,8 @@ internal fun TouchBack(onBack: () -> Unit) {
     TextButton(
         onClick = onBack,
         modifier = Modifier.heightIn(min = 48.dp).testTag("touch:back"),
-        contentPadding = PaddingValues(start = 0.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+        // The end padding fills TextButton's minimum width, which would otherwise centre the word off the page margin.
+        contentPadding = PaddingValues(start = 0.dp, end = 18.dp, top = 8.dp, bottom = 8.dp)
     ) { Text("‹ Back") }
 }
 

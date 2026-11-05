@@ -138,7 +138,9 @@ internal fun TouchCatalogHome(
                 }
             }
         }
-        items(rows, key = HomeRow::key) { row -> TouchCatalogShelf(row.title, row.items, account, row.wide || row.library, onOpen) }
+        items(rows, key = HomeRow::key) { row ->
+            TouchCatalogShelf(row.title, row.items, account, row.wide || row.library, !row.library, onOpen)
+        }
     }
 }
 
@@ -292,7 +294,7 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
                 modifier = Modifier.heightIn(min = 48.dp).testTag("touch:sort")
                     .touchMenuButton(expanded, "Show sort options") { expanded = true },
                 border = touchOutlineBorder(),
-                contentPadding = PaddingValues(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+                contentPadding = PaddingValues(start = 16.dp, end = TOUCH_CHEVRON_END, top = 8.dp, bottom = 8.dp)
             ) {
                 Text("Sort: $label")
                 Spacer(Modifier.width(8.dp))
@@ -460,7 +462,7 @@ internal fun TouchCatalogDetail(
                 }
             }
             if (item?.type == "Series" && state.nextUp.isNotEmpty()) {
-                item(key = "next") { TouchCatalogShelf("Next up", state.nextUp, state.account, true, onOpen) }
+                item(key = "next") { TouchCatalogShelf("Next up", state.nextUp, state.account, true, onOpen = onOpen) }
             }
             if (item?.type == "Series" && state.seasons.isNotEmpty()) {
                 item(key = "seasons") {
@@ -480,7 +482,7 @@ internal fun TouchCatalogDetail(
                 }
             }
             if (item?.type in listOf("Series", "Season") && state.episodes.isNotEmpty()) {
-                item(key = "episodes") { TouchCatalogShelf("Episodes", state.episodes, state.account, true, onOpen) }
+                item(key = "episodes") { TouchCatalogShelf("Episodes", state.episodes, state.account, true, onOpen = onOpen) }
             }
             if (
                 showDetailEmptyState(
@@ -721,6 +723,8 @@ private fun TouchDetailActionButton(action: TouchDetailAction, modifier: Modifie
     }
 }
 
+private val TOUCH_CHEVRON_END = 16.dp
+
 /** A button that opens a menu says so: a reader hears whether it is open and what a double tap will do. */
 private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, open: () -> Unit) = semantics {
     stateDescription = if (expanded) "Expanded" else "Collapsed"
@@ -736,21 +740,35 @@ private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Mod
     var expanded by remember { mutableStateOf(false) }
     val lead = actions.firstOrNull(TouchDetailAction::requested) ?: actions.first()
     val enabled = actions.any(TouchDetailAction::enabled)
-    Box(modifier) {
+    val density = LocalDensity.current
+    var buttonWidth by remember { mutableStateOf(0.dp) }
+    Box(modifier.onSizeChanged { buttonWidth = with(density) { it.width.toDp() } }) {
         OutlinedButton(
             onClick = { expanded = true },
             enabled = enabled,
             modifier = Modifier.fillMaxWidth().fillMaxHeight().heightIn(min = 48.dp).testTag("touch:detail:tv")
                 .touchMenuButton(expanded, "Show TV actions") { expanded = true },
-            contentPadding = PaddingValues(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            contentPadding = PaddingValues(start = 12.dp, end = TOUCH_CHEVRON_END, top = 8.dp, bottom = 8.dp),
             border = touchOutlineBorder(enabled),
             colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         ) {
-            TouchDetailReservedWording(lead.label, actions.flatMap(TouchDetailAction::reserve))
+            // The wording takes what's left, so the chevron stays at the button's end whatever it says.
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                // Room for "from start" too: that action arrives with a resume point, and must not grow the button then.
+                val fromStart = "Play on TV from start"
+                TouchDetailReservedWording(
+                    lead.label,
+                    actions.flatMap(TouchDetailAction::reserve) + listOf("$fromStart when ready", "$fromStart requested")
+                )
+            }
             Spacer(Modifier.width(4.dp))
-            Icon(touchActionIcon("chevron-down"), contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(
+                touchActionIcon("chevron-down"),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp).testTag("touch:detail:tv:chevron")
+            )
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.width(buttonWidth)) {
             actions.forEach { action ->
                 DropdownMenuItem(
                     text = { Text(action.label) },
@@ -782,7 +800,14 @@ internal fun MediaPerson.touchPersonItem() = MediaItem(
 )
 
 @Composable
-internal fun TouchCatalogShelf(title: String, items: List<MediaItem>, account: Account, wide: Boolean, onOpen: (MediaItem) -> Unit) {
+internal fun TouchCatalogShelf(
+    title: String,
+    items: List<MediaItem>,
+    account: Account,
+    wide: Boolean,
+    reserveLines: Boolean = true,
+    onOpen: (MediaItem) -> Unit
+) {
     val shortWindow = isShortTouchWindow()
     Column(verticalArrangement = Arrangement.spacedBy(if (shortWindow) 8.dp else 12.dp)) {
         TouchCatalogHeading(title, Modifier.padding(horizontal = 20.dp), section = true)
@@ -797,7 +822,7 @@ internal fun TouchCatalogShelf(title: String, items: List<MediaItem>, account: A
                 } else {
                     if (wide) 244.dp else 136.dp
                 }
-                TouchCatalogCard(item, account, wide, { onOpen(item) }, Modifier.width(width))
+                TouchCatalogCard(item, account, wide, { onOpen(item) }, Modifier.width(width), reserveLines = reserveLines)
             }
         }
     }

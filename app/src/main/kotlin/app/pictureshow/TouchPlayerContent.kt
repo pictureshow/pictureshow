@@ -68,6 +68,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -136,10 +137,16 @@ private const val TOUCH_SEEK_STEP_MS = 10_000L
 /** One width for the action column, so a card arriving or leaving never moves Cancel or Skip. */
 private val TOUCH_ACTIONS_WIDTH = 360.dp
 
+/** The notice, the action column and the panel's content all keep this far from the safe edge. */
+private val TOUCH_PLAYER_EDGE = 16.dp
+
+/** The narrowest notice worth keeping beside the action column; a window with less room stacks them. */
+private val TOUCH_NOTICE_MIN_BESIDE = 280.dp
+
 /** The label takes the room of its widest wording, at any font scale, so its neighbours never move when it changes. */
 @Composable
-internal fun TouchReservedLabel(label: String, reserve: String) {
-    Box(contentAlignment = Alignment.Center) {
+internal fun TouchReservedLabel(label: String, reserve: String, alignment: Alignment = Alignment.Center) {
+    Box(contentAlignment = alignment) {
         Text(reserve, Modifier.alpha(0f).clearAndSetSemantics {}, maxLines = 1)
         Text(label)
     }
@@ -149,6 +156,11 @@ internal fun TouchReservedLabel(label: String, reserve: String) {
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
     val accessible = rememberAccessibilityEnabled()
+    // Prepared with the player, as on TV: a sheet that prepared its own would measure its waiting line, then grow.
+    val trackMenus = rememberPlayerTrackMenus(
+        host.state.decision?.mediaSourceId,
+        host.state.decision?.mediaSource?.mediaStreams.orEmpty()
+    )
     val playback = rememberPlayerPlayback(host.player, onPause = {
         // Leaving pauses the player too: the controls stay down while the stop report finishes, or Back looks refused.
         if (!host.exitRequested) ui.visible = true
@@ -190,6 +202,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         ui.visible = false
     }
     LaunchedEffect(accessible) { if (accessible) ui.visible = true }
+    // Coming back to a paused player, someone needs to see it's alive and how to go on.
+    LaunchedEffect(foreground) { if (foreground && paused && !host.exitRequested) ui.visible = true }
     LaunchedEffect(host.error, host.switching) {
         if (host.error != null || host.switching) {
             ui.sheet = null
@@ -243,17 +257,25 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         )
         // PLAY-27: top of the frame, clear of subtitles and controls. A tap opens the Playback info it points to.
         val noticeDevice = touchDeviceNoun(LocalConfiguration.current.smallestScreenWidthDp)
+        // A wide window holds the notice beside the action column, so Skip keeps its place at the top.
+        val layoutDirection = LocalLayoutDirection.current
+        val safeSides = WindowInsets.safeDrawing.let {
+            with(density) { (it.getLeft(density, layoutDirection) + it.getRight(density, layoutDirection)).toDp() }
+        }
+        val noticeRoom = maxWidth - safeSides - TOUCH_PLAYER_EDGE * 2 - TOUCH_ACTIONS_WIDTH - 12.dp
+        val noticeCap = noticeRoom.takeIf { it >= TOUCH_NOTICE_MIN_BESIDE }
         ConversionNoticeHost(
             host.state.decision?.takeIf { host.localPreferences.conversionNotice }?.let {
                 ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice)
             },
             allowed = !topCues && host.player != null && foreground && !host.state.preparing && actionsVisible,
-            modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),
+            modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(TOUCH_PLAYER_EDGE),
             card = { notice, placement, announce, details ->
                 DisposableEffect(Unit) { onDispose { noticeBounds = null } }
                 TouchConversionNoticeCard(
                     notice,
-                    placement.onGloballyPositioned { noticeBounds = it.boundsInRoot() },
+                    placement.then(noticeCap?.let { Modifier.widthIn(max = it) } ?: Modifier)
+                        .onGloballyPositioned { noticeBounds = it.boundsInRoot() },
                     announce,
                     details
                 )
@@ -300,7 +322,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     .testTag("touch:panel").background(Color(0xE610131C))
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                     .heightIn(max = if (landscape) 260.dp else 430.dp)
-                    .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+                    .verticalScroll(rememberScrollState()).padding(horizontal = TOUCH_PLAYER_EDGE, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(host.item.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
@@ -356,7 +378,9 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                     if (sheet == TouchPlayerSheet.Speed) {
                                         TouchReservedLabel(
                                             "Speed · ${app.pictureshow.core.playback.PlaybackSpeeds.label(speed.speed)}",
-                                            "Speed · 1.75×"
+                                            "Speed · 1.75×",
+                                            // Its word starts on the column's edge whichever rate is showing.
+                                            Alignment.CenterStart
                                         )
                                     } else {
                                         Text(sheet.title)
@@ -421,10 +445,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             SideEffect { heldNoticeGap = belowNotice }
             // One anchor in every state: a tap aimed at Cancel lands on Cancel whether or not the controls just appeared.
             Column(
-                Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = belowNotice)
-                    .padding(12.dp).width(TOUCH_ACTIONS_WIDTH.coerceAtMost(this@BoxWithConstraints.maxWidth - 24.dp))
+                Modifier.align(Alignment.TopEnd).testTag("touch:actions").windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = belowNotice)
+                    .padding(TOUCH_PLAYER_EDGE)
+                    .width(TOUCH_ACTIONS_WIDTH.coerceAtMost(this@BoxWithConstraints.maxWidth - TOUCH_PLAYER_EDGE * 2))
                     .onGloballyPositioned {
-                        actionsLeft = it.boundsInRoot().left
+                        // Not boundsInRoot: an empty column has no bounds, which would read as a left edge of 0.
+                        actionsLeft = it.positionInRoot().x
                         actionsHeight = it.size.height
                     },
                 horizontalAlignment = Alignment.End,
@@ -497,7 +524,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         }
     }
     ui.sheet?.let { sheet ->
-        TouchPlayerSheetContent(sheet, host, account, onDismiss = {
+        TouchPlayerSheetContent(sheet, host, trackMenus, account, onDismiss = {
             ui.sheet = null
             ui.interact()
         }, onSeek = host::seekTo)

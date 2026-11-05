@@ -285,6 +285,62 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { assertEquals(1, exits) }
     }
 
+    // The sheet measures once as it opens: choices prepared with the player mean it never measures a waiting line.
+    @Test fun aTrackSheetOpensWithItsChoicesAlreadyThere() {
+        launch()
+        decided(PlayMethod.DirectPlay)
+        compose.waitUntil(5_000) { host.state.decision != null }
+        Thread.sleep(200) // the labels are prepared on a background dispatcher
+        settled()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("touch:open:Audio").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("Waiting for playback information…").assertDoesNotExist()
+        settled()
+    }
+
+    // Phone 15b: a paused player with no controls looks dead, however the controls came to be down.
+    @Test fun comingBackToAPausedPlayerShowsTheControls() {
+        launch(paused = true)
+        compose.onNodeWithTag("touch:gestures").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        settled()
+        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
+        compose.runOnIdle { output.setForeground(false) }
+        compose.waitForIdle()
+        compose.runOnIdle { output.setForeground(true) }
+        settled()
+        compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
+    }
+
+    // Tablet N1: every rate's word starts on the column's edge.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
+    @Test
+    fun theSpeedLabelStartsOnItsColumn() {
+        launch()
+        settled()
+        val cell = bounds("touch:open:Speed")
+        val word = compose.onNodeWithText("Speed · 1×", useUnmergedTree = true).getBoundsInRoot()
+        assertEquals((cell.left + 8.dp).value, word.left.value, 1f)
+    }
+
+    // Phone T2: a wide window holds the notice beside the column, so Skip stays at the top, on the player's one edge.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w914dp-h411dp-land-xxhdpi")
+    @Test
+    fun aWideWindowHoldsTheNoticeBesideTheActions() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.runOnIdle { host.segments = listOf(MediaSegment("intro", SegmentType.Intro, 0, 600_000_000)) }
+        settled()
+        val notice = bounds("touch:conversion-notice")
+        val actions = bounds("touch:actions")
+        assertTrue(notice.right + 12.dp <= actions.left + 16.dp + 1.dp, "notice $notice beside column $actions")
+        assertTrue(bounds("touch:skip").top < 24.dp, "Skip at the top: ${bounds("touch:skip")}")
+        assertEquals(914f - 16f, bounds("touch:skip").right.value, 1f)
+    }
+
     @Test fun subtitleDelayIsBoundedAndResettable() {
         launch()
         decided(PlayMethod.DirectPlay)

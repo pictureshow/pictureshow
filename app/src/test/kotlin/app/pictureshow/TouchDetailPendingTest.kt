@@ -394,6 +394,17 @@ class TouchDetailPendingTest {
         assertEquals("Expanded", compose.onNodeWithTag("touch:detail:tv").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
     }
 
+    // Phone N2: the chevron stays at the button's end whatever the wording, so it doesn't hop when the page is ready.
+    @Test fun theTvChevronStaysAtTheButtonsEnd() {
+        val page = Page(pending())
+        fun gap() = compose.onNodeWithTag("touch:detail:tv").performScrollTo().getBoundsInRoot().right -
+            compose.onNodeWithTag("touch:detail:tv:chevron", useUnmergedTree = true).getBoundsInRoot().right
+        assertEquals(16f, gap().value, 1f)
+        page.state = fresh(resumable)
+        page.settle()
+        assertEquals(16f, gap().value, 1f)
+    }
+
     // Catalog B7: the reason reads first and Retry stays pinned beside it.
     @Test fun failureBandHoldsItsReasonLeftOfRetry() {
         val page = Page(pending())

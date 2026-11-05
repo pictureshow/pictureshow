@@ -54,12 +54,13 @@ import coil3.compose.AsyncImage
 internal fun TouchPlayerSheetContent(
     sheet: TouchPlayerSheet,
     host: PlaybackHostState,
+    trackMenus: PlayerTrackMenuPreparation,
     account: Account? = null,
     onDismiss: () -> Unit,
     onSeek: (Long) -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("touch:sheet:$sheet")) {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp).testTag("touch:sheet:$sheet")) {
             // Done's own padding would leave its word short of the margin the title starts on.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(sheet.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
@@ -70,8 +71,8 @@ internal fun TouchPlayerSheetContent(
             }
             when (sheet) {
                 TouchPlayerSheet.Chapters -> TouchChapterChoices(host, account, onDismiss, onSeek)
-                TouchPlayerSheet.Audio -> TouchTrackChoices(MediaStreamType.Audio, host, onDismiss)
-                TouchPlayerSheet.Subtitles -> TouchTrackChoices(MediaStreamType.Subtitle, host, onDismiss)
+                TouchPlayerSheet.Audio -> TouchTrackChoices(MediaStreamType.Audio, host, trackMenus, onDismiss)
+                TouchPlayerSheet.Subtitles -> TouchTrackChoices(MediaStreamType.Subtitle, host, trackMenus, onDismiss)
                 TouchPlayerSheet.Speed -> TouchSpeedChoices(host, onDismiss)
                 TouchPlayerSheet.Info -> TouchPlaybackInformation(host)
             }
@@ -112,9 +113,13 @@ private fun TouchChapterChoices(host: PlaybackHostState, account: Account?, onDi
 }
 
 @Composable
-private fun TouchTrackChoices(type: MediaStreamType, host: PlaybackHostState, onDismiss: () -> Unit) {
+private fun TouchTrackChoices(
+    type: MediaStreamType,
+    host: PlaybackHostState,
+    preparation: PlayerTrackMenuPreparation,
+    onDismiss: () -> Unit
+) {
     val decision = host.state.decision
-    val preparation = rememberPlayerTrackMenus(decision?.mediaSourceId, decision?.mediaSource?.mediaStreams.orEmpty())
     val menu = preparation.menus?.takeIf { decision != null }?.get(type)
     if (menu == null) {
         // Labels are prepared off the main thread and a title that's still loading has none yet (leg 79).
