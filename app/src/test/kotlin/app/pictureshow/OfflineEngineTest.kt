@@ -470,6 +470,26 @@ class OfflineEngineTest {
         assertEquals(OfflinePhase.waitingNetwork, engine.entry(viewerA, "1")?.job?.phase)
     }
 
+    private fun itemRequests(id: String) = requests.count { it.path.orEmpty().substringBefore('?').endsWith("/Items/$id") }
+
+    @Test
+    fun `one download's rest ending doesn't cut another's short`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("0"), choice("0"))
+        engine.awaitPhase(viewerA, "0", OfflinePhase.ready)
+        serverOff = true
+        restMs = 60_000
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        delay(100)
+        val tried = itemRequests("1")
+        restMs = 50
+        engine.enqueue(viewerA, item("2"), choice("2"))
+        withTimeout(10_000) { while (itemRequests("2") < 3) delay(10) }
+        assertEquals(tried, itemRequests("1"))
+    }
+
     @Test
     fun `a rest ends on its own, and the next try finishes once the server is back`() = runBlocking<Unit> {
         signIn(viewerA)
@@ -517,8 +537,10 @@ class OfflineEngineTest {
         val engine = started()
         engine.enqueue(viewerA, item("1"), choice("1"))
         engine.awaitPhase(viewerA, "1", OfflinePhase.waitingStorage)
+        delay(100)
+        val tried = itemRequests("1")
         delay(400)
-        assertEquals("no change in free space, no new attempt", OfflinePhase.waitingStorage, engine.entry(viewerA, "1")?.job?.phase)
+        assertEquals("no change in free space, no new attempt", tried, itemRequests("1"))
         free = 10L * 1024 * 1024 * 1024
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
     }
