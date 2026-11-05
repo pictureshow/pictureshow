@@ -5,7 +5,6 @@ package app.pictureshow
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,6 +31,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import app.pictureshow.core.control.RemoteTarget
 
 private const val TEN_SECONDS_TICKS = 100_000_000L
@@ -117,7 +117,7 @@ internal fun castStatusLine(ui: CastUi): String? {
 internal fun Context.openAppSettings() {
     runCatching {
         startActivity(
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 }
@@ -125,7 +125,7 @@ internal fun Context.openAppSettings() {
 internal fun Context.openPlayServicesListing() {
     runCatching {
         startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.gms"))
+            Intent(Intent.ACTION_VIEW, "https://play.google.com/store/apps/details?id=com.google.android.gms".toUri())
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }

@@ -4,7 +4,7 @@
 package app.pictureshow
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.CastMediaControlIntent
@@ -270,7 +270,7 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     private fun mediaInfo(item: CastLoadItem): MediaInfo {
         val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
         metadata.putString(MediaMetadata.KEY_TITLE, item.title)
-        item.imageUrl?.let { metadata.addImage(WebImage(Uri.parse(it))) }
+        item.imageUrl?.let { metadata.addImage(WebImage(it.toUri())) }
         val builder = MediaInfo.Builder(item.url)
             .setContentType(item.contentType)
             .setStreamType(if (item.live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
