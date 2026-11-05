@@ -44,6 +44,11 @@ class TouchCatalogScreensTest {
     private val account = Account(Server("server", "Server", "https://media.example.test", "12"), User("viewer", "Viewer"), "fake")
     private val movie = MediaItem("movie", "A Film", "Movie")
 
+    @Test fun librarySortsAreTheSpecsThree() {
+        assertEquals(listOf("SortName", "DateCreated", "PremiereDate"), TOUCH_LIBRARY_SORTS.map { it.first })
+        assertEquals(listOf("Title", "Date added", "Release date"), TOUCH_LIBRARY_SORTS.map { it.second })
+    }
+
     @Test fun homeTransitionsFromLoadingToFailureToBrowsableContent() {
         var state by mutableStateOf(CatalogHomeState())
         var retries = 0

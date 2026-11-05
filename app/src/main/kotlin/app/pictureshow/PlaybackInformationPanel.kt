@@ -111,7 +111,8 @@ internal fun playbackInformationSections(
 ): List<PlaybackInformationSection> = buildList {
     val source = decision.mediaSource
     if (decision.method == app.pictureshow.core.playback.PlayMethod.Transcode) {
-        add(PlaybackInformationSection("Why the server converts this stream", PlaybackInformation.reasons(decision, qualityMbps), reasons = true))
+        val why = PlaybackInformation.reasons(decision, qualityMbps)
+        add(PlaybackInformationSection("Why the server converts this stream", why, reasons = true))
     }
     val video = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
     val audio = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Audio && it.index == audioIndex }

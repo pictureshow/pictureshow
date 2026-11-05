@@ -161,7 +161,8 @@ private fun TouchSpeedChoices(host: PlaybackHostState, onDismiss: () -> Unit) {
             val label = PlaybackSpeeds.label(value)
             // With encoded audio 1× is the only row, so it carries the reason the others are gone (PLAY-25).
             val selected = value == speed.speed
-            TouchChoiceRow(label, selected, "touch:speed:${(value * 100).toInt()}", speed.message?.takeIf { selected }?.let { "$label. $it" }) {
+            val reason = speed.message?.takeIf { selected }?.let { "$label. $it" }
+            TouchChoiceRow(label, selected, "touch:speed:${(value * 100).toInt()}", reason) {
                 host.output.setSpeed(value)
                 onDismiss()
             }

@@ -412,7 +412,14 @@ class TouchPlayerControlsTest {
         var cancels = 0
         compose.setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                TouchNextEpisodeCard("Another episode", 12, false, { plays++ }, { cancels++ }, announcement = "Season 1, Episode 2, Another episode")
+                TouchNextEpisodeCard(
+                    "Another episode",
+                    12,
+                    false,
+                    onPlay = { plays++ },
+                    onCancel = { cancels++ },
+                    announcement = "Season 1, Episode 2, Another episode"
+                )
             }
         }
         compose.onNodeWithContentDescription("Next episode, Season 1, Episode 2, Another episode").assert(

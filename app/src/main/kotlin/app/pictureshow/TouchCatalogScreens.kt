@@ -88,6 +88,9 @@ import app.pictureshow.core.runtimeLabel
 import app.pictureshow.core.showDetailEmptyState
 import coil3.compose.AsyncImage
 
+/** TOUCH-06 and CAT-04: the same three sorts as TV, with touch's word for the first. */
+internal val TOUCH_LIBRARY_SORTS = listOf("SortName" to "Title", "DateCreated" to "Date added", "PremiereDate" to "Release date")
+
 @Composable
 internal fun TouchCatalogHome(
     state: CatalogHomeState,
@@ -219,7 +222,7 @@ private fun TouchMediaGrid(
 @Composable
 private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val options = listOf("SortName" to "Title", "DateCreated" to "Date added", "ProductionYear" to "Year", "CommunityRating" to "Rating")
+    val options = TOUCH_LIBRARY_SORTS
     val label = options.firstOrNull { it.first == state.sortBy }?.second ?: "Title"
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {

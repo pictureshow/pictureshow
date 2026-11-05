@@ -456,7 +456,12 @@ internal fun TouchNextEpisodeCard(
 
 /** Never blocks the video: a passing tap anywhere else still reaches the player, and playback continues underneath. */
 @Composable
-internal fun TouchConversionNoticeCard(notice: ConversionNotice, modifier: Modifier = Modifier, announce: Boolean = true, onDetails: () -> Unit) {
+internal fun TouchConversionNoticeCard(
+    notice: ConversionNotice,
+    modifier: Modifier = Modifier,
+    announce: Boolean = true,
+    onDetails: () -> Unit
+) {
     Surface(
         onClick = onDetails,
         modifier = modifier.widthIn(max = 480.dp).testTag("touch:conversion-notice").semantics(mergeDescendants = true) {

@@ -263,7 +263,13 @@ internal fun rememberPlaybackHost(
 }
 
 @Composable
-private fun RemoteTargetBinding(host: PlaybackHostState, remote: RemoteTargetHost, account: Account, catalog: CatalogSession, paused: Boolean) {
+private fun RemoteTargetBinding(
+    host: PlaybackHostState,
+    remote: RemoteTargetHost,
+    account: Account,
+    catalog: CatalogSession,
+    paused: Boolean
+) {
     LaunchedEffect(remote.queueRevision, catalog) {
         host.remoteNextResolving = remote.upcoming != null
         host.remoteNext = remote.upcoming?.let { id ->
