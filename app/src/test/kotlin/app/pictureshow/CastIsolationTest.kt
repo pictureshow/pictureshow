@@ -9,12 +9,23 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import androidx.test.core.app.ApplicationProvider
+import app.pictureshow.core.control.CastStoredSessions
+import app.pictureshow.core.control.CastViewingRecord
+import app.pictureshow.core.control.TemporaryState
 import java.io.File
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.runner.RunWith
 import org.koin.core.context.stopKoin
 import org.koin.java.KoinJavaComponent.getKoin
@@ -97,12 +108,82 @@ class CastStartupTest {
             metadata.getString("com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME")
         )
     }
+
+    /** The TV build shares this manifest. It gets nothing for a reconnection service or media notification that's turned off. */
+    @Test
+    fun theMergedManifestHasNoneOfTheSdksUnusedComponents() {
+        val flags = PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_PERMISSIONS
+        val info = context.packageManager.getPackageInfo(context.packageName, flags)
+        assertEquals(emptyList(), info.services.orEmpty().map { it.name }.filter { "gms.cast" in it })
+        assertEquals(emptyList(), info.receivers.orEmpty().map { it.name }.filter { "gms.cast" in it })
+        assertFalse("android.permission.FOREGROUND_SERVICE" in info.requestedPermissions.orEmpty())
+    }
+
+    @Test
+    fun whatTheManifestRemovesIsTurnedOffInTheOptions() {
+        val options = CastOptionsProvider().getCastOptions(context)
+        assertFalse(options.enableReconnectionService)
+        assertNull(options.castMediaOptions!!.notificationOptions)
+        assertFalse(options.castMediaOptions!!.mediaSessionEnabled)
+    }
 }
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 class CastEnvironmentTest {
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
+
+    /** A dispatcher that runs nothing until asked, so a test can see which thread of work a write was on. */
+    private class HeldDispatcher : CoroutineDispatcher() {
+        val held = ArrayDeque<Runnable>()
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            held += block
+        }
+
+        fun drain() {
+            while (held.isNotEmpty()) held.removeFirst().run()
+        }
+    }
+
+    private val session = CastStoredSessions(TemporaryState(emptyList()), emptyMap())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun noWriteHappensOnTheCallersThread() = runTest(UnconfinedTestDispatcher()) {
+        val storage = HeldDispatcher()
+        val environment = AndroidCastEnvironment(context, storage)
+        val marked = CastStoredSessions(TemporaryState(effect = "keep"), emptyMap())
+        val save = launch { environment.saveSessions(marked) }
+        assertEquals(session, environment.sessions, "held back: nothing has written yet")
+        assertFalse(save.isCompleted)
+        storage.drain()
+        assertTrue(save.isCompleted)
+        assertEquals(marked, AndroidCastEnvironment(context).sessions)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun aViewingReadsBackAtOnceAndWritesInOrder() = runTest(UnconfinedTestDispatcher()) {
+        val storage = HeldDispatcher()
+        val environment = AndroidCastEnvironment(context, storage)
+        val record = CastViewingRecord(nonce = "n", server = "s", viewer = "v", route = "r", device = "d", session = "c", generation = 2, items = emptyList())
+        val save = launch { environment.saveViewing(record) }
+        assertEquals(record, environment.viewing)
+        assertNull(AndroidCastEnvironment(context).viewing, "the disk hasn't got it yet")
+        environment.clearViewing()
+        assertNull(environment.viewing)
+        storage.drain()
+        assertTrue(save.isCompleted)
+        assertNull(AndroidCastEnvironment(context).viewing, "the later clear is the one that stays")
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun aSavedViewingSurvivesANewEnvironment() = runTest(UnconfinedTestDispatcher()) {
+        val record = CastViewingRecord(nonce = "n", server = "s", viewer = "v", route = "r", device = "d", session = "c", generation = 2, items = emptyList())
+        val storage = HeldDispatcher()
+        val save = launch { AndroidCastEnvironment(context, storage).saveViewing(record) }
+        storage.drain()
+        assertTrue(save.isCompleted)
+        assertEquals(record, AndroidCastEnvironment(context).viewing)
+    }
 
     @Test fun tvModeIsReportedSoTheHostCanRefuse() {
         val mode = context.getSystemService(UiModeManager::class.java)

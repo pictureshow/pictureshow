@@ -60,6 +60,8 @@ data class CastState(
     val recovery: String? = null,
     /** What the viewer is told about the receiver, as a fixed category. */
     val notice: String? = null,
+    /** The last status held no media and gave no reason. One of those isn't an answer yet: a second one is. */
+    val emptyStatus: Boolean = false,
     val effect: String = "none",
     val reason: String? = null
 )
@@ -87,19 +89,9 @@ data class CastEvent(
 fun reduceCast(state: CastState, event: CastEvent): CastState {
     val s = state.copy(effect = "none", reason = null)
     return when (event.op) {
-        "select" -> viaOwner(s, OwnerEvent("select", identity = event.identity, intent = event.intent)) {
-            it.copy(
-                mediaSession = null,
-                observed = null,
-                commands = null,
-                stop = "none",
-                stopPurpose = null,
-                returnPaused = null,
-                returnTicks = null,
-                recovery = null,
-                notice = null
-            )
-        }
+        "select" -> select(s, event)
+
+        "pick" -> pick(s, event)
 
         "link-connecting" -> if (s.owner.candidate != null && s.owner.phase == "selecting") {
             viaOwner(s, OwnerEvent("connect", identity = s.owner.candidate)) { it.copy(link = "connecting") }
@@ -112,10 +104,13 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
         "link-suspended" -> s.copy(
             link = "suspended",
             observed = null,
+            emptyStatus = false,
             commands = s.commands?.let { reduceCommand(it, CommandEvent("disconnect", owner = it.owner)).copy(effect = "none") }
         )
 
         "link-lost" -> linkLost(s)
+
+        "link-failed" -> linkFailed(s)
 
         "local-paused" -> viaOwner(s, OwnerEvent("local-paused", identity = s.owner.candidate)) {
             // The start position is where local output actually paused, not where the viewer first opened the chooser.
@@ -229,6 +224,52 @@ fun castReattachState(cast: ViewingIdentity, local: ViewingIdentity, intent: Con
     notice = "receiver-continues"
 )
 
+private fun select(s: CastState, event: CastEvent): CastState = viaOwner(s, OwnerEvent("select", identity = event.identity, intent = event.intent)) {
+    it.copy(
+        mediaSession = null,
+        observed = null,
+        commands = null,
+        stop = "none",
+        stopPurpose = null,
+        returnPaused = null,
+        returnTicks = null,
+        recovery = null,
+        notice = null,
+        emptyStatus = false
+    )
+}
+
+/**
+ * The viewer picked a device. A sender holds one viewing, so a live one is settled here before anything starts: what is
+ * already playing where it was asked for stays, a viewing this link can stop gives way, and a detached one on another
+ * device stays the viewer's call, because stopping it means joining a device another app may have taken since.
+ */
+private fun pick(s: CastState, event: CastEvent): CastState {
+    val owner = s.owner
+    val target = event.identity ?: return s.copy(reason = "invalid-target")
+    if (owner.candidate != null || owner.phase !in listOf("active", "failed", "disconnected")) return s.copy(reason = "handoff-busy")
+    if (owner.owner.kind != "cast" || owner.phase == "failed") return select(s, event)
+    val sameReceiver = owner.owner.device == target.device
+    val wanted = event.intent?.entry
+    val sameEntry = wanted != null && wanted == (s.observed?.entry ?: owner.intent.entry)
+    return when {
+        owner.phase == "disconnected" && !sameReceiver -> s.copy(reason = "detached-elsewhere")
+        owner.phase == "disconnected" && sameEntry -> s.copy(effect = "reconnect", reason = "already-casting")
+        owner.phase == "disconnected" -> replace(s, event, "replace-rejoin")
+        s.link != "connected" -> s.copy(reason = "link-not-ready")
+        sameReceiver && sameEntry -> s.copy(effect = "show-controls", reason = "already-casting")
+        sameReceiver -> replace(s, event, "replace-on-link")
+        else -> replace(s, event, "replace-elsewhere")
+    }
+}
+
+/** The old viewing is over from here on, so its owner goes back to local and a failed start reads like any other. */
+private fun replace(s: CastState, event: CastEvent, effect: String): CastState {
+    val selected = select(s.copy(owner = s.owner.copy(owner = s.owner.local, phase = "active", reportSequence = -1)), event)
+    if (selected.reason != null) return s.copy(reason = selected.reason)
+    return selected.copy(link = if (effect == "replace-on-link") "connected" else "idle", cleanup = "none", effect = effect)
+}
+
 /** Applies an owner event. A rejection leaves everything else alone; [next] sees the owner's result and effect. */
 private fun viaOwner(s: CastState, event: OwnerEvent, next: (CastState) -> CastState): CastState {
     val owner = reduceOwner(s.owner, event)
@@ -236,7 +277,8 @@ private fun viaOwner(s: CastState, event: OwnerEvent, next: (CastState) -> CastS
     return next(s.copy(owner = owner, effect = owner.effect, reason = owner.reason))
 }
 
-private fun linkConnected(s: CastState): CastState {
+private fun linkConnected(state: CastState): CastState {
+    val s = state.copy(emptyStatus = false)
     val candidate = s.owner.candidate
     if (candidate != null) {
         return if (s.owner.phase == "connecting") {
@@ -269,6 +311,18 @@ private fun linkLost(s: CastState): CastState {
             }
 
         else -> s.copy(link = "lost", observed = null)
+    }
+}
+
+/** A connect that never succeeded: nothing was playing there, so this isn't a lost connection. */
+private fun linkFailed(s: CastState): CastState {
+    val candidate = s.owner.candidate
+    return when {
+        candidate != null -> viaOwner(s, OwnerEvent("fail", identity = candidate)) { it.copy(link = "lost", recovery = "connect-failed") }
+
+        s.owner.owner.kind == "cast" && s.owner.phase == "disconnected" -> s.copy(link = "lost", notice = "connect-failed")
+
+        else -> s.copy(reason = "stale-link")
     }
 }
 
@@ -336,8 +390,9 @@ private fun endedNotice(reason: String?) = when (reason) {
 
 private val OBSERVING_PHASES = listOf("awaiting-ready", "returning", "return-uncertain", "disconnected", "active")
 
-private fun observe(s: CastState, event: CastEvent): CastState {
-    val o = event.observation ?: return s.copy(reason = "invalid-observation")
+private fun observe(state: CastState, event: CastEvent): CastState {
+    val o = event.observation ?: return state.copy(reason = "invalid-observation")
+    val s = if (o.mediaSession < 0) state else state.copy(emptyStatus = false)
     val target = s.owner.candidate ?: s.owner.owner
     val idle = o.playerState == "idle" || o.mediaSession < 0
     // After the choice to play here despite an unconfirmed Stop, a later idle still settles the cleanup.
@@ -355,6 +410,8 @@ private fun observe(s: CastState, event: CastEvent): CastState {
         return when {
             waiting -> s.copy(reason = "stale-observation")
             s.stop == "sent" || s.stop == "unknown" -> stopConfirmed(s)
+            // No media and no reason can be an SDK that hasn't synced yet, and ending stops a viewing that may be fine: ask once.
+            o.idleReason == null && !s.emptyStatus -> s.copy(emptyStatus = true, effect = "request-status", reason = "unconfirmed-empty")
             else -> receiverEnded(s, endedNotice(o.idleReason), null)
         }
     }

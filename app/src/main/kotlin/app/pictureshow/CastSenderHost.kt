@@ -65,6 +65,12 @@ internal const val CAST_COMMAND_TIMEOUT_MS = 5_000L
 internal const val CAST_SEARCH_MS = 8_000L
 internal const val CAST_REPORT_MS = 10_000L
 
+/** How long a rejoin to stop a detached viewing may take once its route is selected. */
+internal const val CAST_RETIRE_MS = 15_000L
+
+/** How long moving to another device waits for the old session to end before selecting anyway. */
+internal const val CAST_SWITCH_MS = 3_000L
+
 /** What the viewer asked to send. Nothing here plays until a device is picked. */
 internal class CastPlayRequest(
     val items: List<CastPlayItem>,
@@ -101,8 +107,12 @@ internal data class CastUi(
     val deviceName: String? = null,
     val title: String? = null,
     val controls: CastControls? = null,
-    val localStart: CastLocalStart? = null
+    val localStart: CastLocalStart? = null,
+    /** Why the last pick didn't start anything, as a fixed category. */
+    val pickRefusal: String? = null
 )
+
+private data class IssuedCastSession(val account: Account, val binding: TemporarySession)
 
 internal sealed interface CastSessionIssue {
     data class Issued(val session: Account) : CastSessionIssue
@@ -152,9 +162,12 @@ internal interface CastEnvironment {
     /** Whether a receiver may still be playing for us, so that returning to the app is worth a reattach. */
     var mayBeLive: Boolean
 
-    /** Written before the session is used or the load is sent, so a process death can't lose what has to be revoked. */
-    var sessions: CastStoredSessions
-    var viewing: CastViewingRecord?
+    /** Saved before the session is used or the load is sent, so a process death can't lose what has to be revoked. */
+    val sessions: CastStoredSessions
+    suspend fun saveSessions(value: CastStoredSessions)
+    val viewing: CastViewingRecord?
+    suspend fun saveViewing(record: CastViewingRecord)
+    fun clearViewing()
 }
 
 /**
@@ -174,7 +187,12 @@ internal class CastSenderHost(
     private var link: CastLink? = null
     private var routesJob: Job? = null
     private var searchJob: Job? = null
+
+    /** What the open chooser would send. */
     private var request: CastPlayRequest? = null
+
+    /** What the viewer picked a device for, and what the handoff under way works from. */
+    private var handoff: CastPlayRequest? = null
     private var loadTimer: Job? = null
     private var stopTimer: Job? = null
     private var commandTimer: Job? = null
@@ -196,6 +214,17 @@ internal class CastSenderHost(
     private var viewing: CastViewingRecord? = null
     private var retiring: CastViewingRecord? = null
     private var restoreJob: Job? = null
+    private var retireJob: Job? = null
+    private var retireEmptySeen = false
+    private var reattachEmptySeen = false
+
+    /** The route to join once the session on the old device has ended. */
+    private var pendingSelect: String? = null
+    private var switchJob: Job? = null
+
+    /** The last report, the encoder and the revocation of a viewing that just ended. The next session waits for it. */
+    private var cleanupJob: Job? = null
+    private var foreground = false
     private var loadedUrls: Map<String, String> = emptyMap()
     private var reported: CastReport? = null
     private var localAlive = false
@@ -213,7 +242,7 @@ internal class CastSenderHost(
         val usable = next?.takeUnless { it.expired }
         if (usable?.key == account?.key) {
             account = usable
-            if (usable != null) retryRevocations()
+            if (usable != null) settleStored()
             return
         }
         // A receiver doesn't follow an account change, and its media belongs to the viewer who left: it stops here.
@@ -221,7 +250,27 @@ internal class CastSenderHost(
         stopForAccountChange(usable, trigger)
         account = usable
         clear()
-        if (usable != null) retryRevocations()
+        if (usable == null) return
+        settleStored()
+        // On a cold start the foreground signal can arrive before the account does.
+        if (foreground) reattachIfLive()
+    }
+
+    private fun settleStored() {
+        retryRevocations()
+        sweepOrphans()
+    }
+
+    /**
+     * A process death between the session being saved and its viewing being recorded leaves a token nothing refers to, and
+     * the server gives it no expiry. Nothing was ever sent to a receiver with it, so it just goes.
+     */
+    private fun sweepOrphans() {
+        if (cast != null || sessionBinding != null || cleanupJob?.isActive == true) return
+        val current = environment.viewing?.device
+        val orphans = sessions.state.records.filter { it.phase == "active" && it.device != current }
+        if (orphans.isEmpty()) return
+        cleanupJob = scope.launch { orphans.forEach { endRecord(it, "forget") } }
     }
 
     private fun stopForAccountChange(next: Account?, trigger: String) {
@@ -231,25 +280,28 @@ internal class CastSenderHost(
         val last = reportFor().takeIf { active && state?.owner?.owner?.kind == "cast" }
         val stored = viewing ?: environment.viewing
         val leaving = stored?.takeIf { next == null || it.server != next.server.id || it.viewer != next.user.id }
+        // With Google Cast turned off this app stays away from Cast devices: the session still goes, the receiver is left alone.
+        val mayJoin = environment.enabled && environment.services() == "ok"
         when {
             active && state?.link == "connected" -> {
                 if (loadStarted || state.owner.owner.kind == "cast") link?.stop { }
                 link?.endSession(stopReceiver = true)
             }
 
-            active && stored != null -> rejoinToStop(stored)
+            active && stored != null -> if (mayJoin) rejoinToStop(stored)
 
-            leaving != null && environment.services() == "ok" -> rejoinToStop(leaving)
+            leaving != null && mayJoin -> rejoinToStop(leaving)
         }
         if (active || leaving != null) {
             environment.mayBeLive = false
-            environment.viewing = null
+            environment.clearViewing()
             viewing = null
         }
         session = null
         sessionBinding = null
         val records = sessions.state.records.filter { active || next == null || it.server != next.server.id || it.viewer != next.user.id }
-        scope.launch {
+        if (records.isEmpty() && last == null) return
+        cleanupJob = scope.launch {
             if (reporter != null && last != null) {
                 gateway.reportStopped(reporter, last)
                 last.playSessionId?.let { gateway.stopEncoding(reporter, it) }
@@ -264,19 +316,34 @@ internal class CastSenderHost(
      */
     private fun rejoinToStop(record: CastViewingRecord) {
         retiring = record
+        retireEmptySeen = false
         val current = ensureLink()
         current.startDiscovery()
-        scope.launch {
+        retireJob?.cancel()
+        retireJob = scope.launch {
             val found = withTimeoutOrNull(CAST_SEARCH_MS) { current.routes.first { routes -> routes.any { it.id == record.route } } }
-            if (found != null) current.select(record.route) else retiring = null
+            val selected = found != null && current.select(record.route)
             current.stopDiscovery()
+            if (selected) delay(CAST_RETIRE_MS)
+            // Connected or not, this attempt is over; left set, it would take the next cast's link for its own.
+            if (retiring === record) {
+                retiring = null
+                if (selected) current.endSession(stopReceiver = false)
+            }
         }
     }
 
-    private fun applySession(event: CastSessionEvent): String {
+    private fun stopRetiring() {
+        retiring = null
+        retireJob?.cancel()
+        retireJob = null
+    }
+
+    /** The answer is durable before the caller acts on it. The state itself moves at once, so reducers never see an old one. */
+    private suspend fun applySession(event: CastSessionEvent): String {
         val next = reduceCastSession(sessions.state, event)
         sessions = sessions.copy(state = next)
-        environment.sessions = sessions
+        environment.saveSessions(sessions)
         return next.effect
     }
 
@@ -293,7 +360,7 @@ internal class CastSenderHost(
         applySession(CastSessionEvent(if (gone) "logout-ok" else "logout-failed", record))
         if (gone && ref != null) {
             sessions = sessions.copy(secrets = sessions.secrets - ref)
-            environment.sessions = sessions
+            environment.saveSessions(sessions)
         }
     }
 
@@ -310,25 +377,30 @@ internal class CastSenderHost(
     }
 
     /** A session for this viewing, or null with the failure already dispatched. The old viewing's sessions end first. */
-    private suspend fun provision(active: Account, target: ViewingIdentity): Account? {
+    private suspend fun provision(active: Account, target: ViewingIdentity): IssuedCastSession? {
+        // The old viewing's last report goes out under its own session, so it finishes before anything revokes that.
+        cleanupJob?.join()
         sessions.state.records.toList().forEach { old ->
             if (old.phase == "active") endRecord(old, "viewer-change") else resumeRevocation(old)
         }
+        if (cast?.owner?.candidate?.generation != target.generation) return null
         val deviceId = gateway.sessionDevice(active, target.device)
         val binding = TemporarySession(active.server.id, active.user.id, deviceId, SESSION_SENDER, target.generation)
+        // Set before the save can suspend, so a cancel in that gap still finds this session to end.
+        sessionBinding = binding
         if (applySession(CastSessionEvent("provision", binding)) != "provision") {
             // Offline revocation still owed, or otherwise refused: never a second session and never the viewer's own token.
-            dispatch(CastEvent("load-failed", recovery = "server-unreachable"))
+            if (sessionBinding === binding) sessionBinding = null
+            if (cast?.owner?.candidate?.generation == target.generation) dispatch(CastEvent("load-failed", recovery = "server-unreachable"))
             return null
         }
-        sessionBinding = binding
         when (val issue = gateway.provisionSession(active, deviceId)) {
             is CastSessionIssue.Issued -> {
                 val ref = UUID.randomUUID().toString()
                 sessions = sessions.copy(secrets = sessions.secrets + (ref to issue.session))
-                environment.sessions = sessions
+                environment.saveSessions(sessions)
                 val effect = applySession(CastSessionEvent("issued", binding, issue.session.user.id, ref))
-                if (effect == "use") return issue.session
+                if (effect == "use") return IssuedCastSession(issue.session, binding)
                 if (effect == "persist-revocation" && applySession(CastSessionEvent("persisted", binding)) == "logout") logout(binding)
                 return null
             }
@@ -340,31 +412,42 @@ internal class CastSenderHost(
         return null
     }
 
-    private fun settleUnissued(binding: TemporarySession, recovery: String) {
+    private suspend fun settleUnissued(binding: TemporarySession, recovery: String) {
         sessions = sessions.copy(
             state = sessions.state.copy(
                 records = sessions.state.records.filterNot { it.device == binding.device && it.server == binding.server }
             )
         )
-        environment.sessions = sessions
-        sessionBinding = null
+        environment.saveSessions(sessions)
+        if (sessionBinding === binding) sessionBinding = null
         if (cast?.owner?.candidate?.generation == binding.generation) dispatch(CastEvent("load-failed", recovery = recovery))
     }
 
-    private fun endCurrentSession(trigger: String) {
+    /** [encodings] are stopped under the session first, while it can still ask. */
+    private fun endCurrentSession(trigger: String, encodings: List<String> = emptyList()) {
         val record = sessionBinding
+        val reporter = session
         session = null
         sessionBinding = null
         viewing = null
-        environment.viewing = null
-        if (record != null) scope.launch { endRecord(record, trigger) }
+        environment.clearViewing()
+        if (record == null) return
+        cleanupJob = scope.launch {
+            if (reporter != null) encodings.forEach { gateway.stopEncoding(reporter, it) }
+            endRecord(record, trigger)
+        }
     }
 
     /** Returning to the app reattaches only if a viewing may still be running; otherwise nothing wakes the SDK. */
     fun setForeground(value: Boolean) {
+        foreground = value
         if (!value || environment.tvInterface || account == null) return
-        retryRevocations()
-        if (!environment.mayBeLive || cast != null) return
+        settleStored()
+        reattachIfLive()
+    }
+
+    private fun reattachIfLive() {
+        if (environment.tvInterface || !environment.mayBeLive || cast != null) return
         if (environment.services() != "ok" || !environment.enabled) return
         ensureLink()
         // Without a session to resume there's nothing to wait for. The viewing is still offered, so it can still be ended.
@@ -400,17 +483,16 @@ internal class CastSenderHost(
 
     fun openChooser(playRequest: CastPlayRequest?) {
         request = playRequest
-        mutable.update { it.copy(chooserOpen = true, blockedReach = null) }
+        mutable.update { it.copy(chooserOpen = true, blockedReach = null, pickRefusal = null) }
         if (playRequest == null) return
         refreshCapability()
         startSearch()
     }
 
     fun closeChooser() {
-        // Picked and on its way: the request has to outlive the dialog.
-        if (cast?.owner?.candidate == null) request = null
+        request = null
         stopSearch()
-        mutable.update { it.copy(chooserOpen = false, blockedReach = null) }
+        mutable.update { it.copy(chooserOpen = false, blockedReach = null, pickRefusal = null) }
     }
 
     fun setEnabled(value: Boolean) {
@@ -487,9 +569,10 @@ internal class CastSenderHost(
         if (!capability(0).canDiscover) return
         val reach = castReach(CastReachInput(active.server.url, environment.senderVpn()))
         if (!reach.allowed) {
-            mutable.update { it.copy(blockedReach = reach) }
+            mutable.update { it.copy(blockedReach = reach, pickRefusal = null) }
             return
         }
+        val item = playRequest.items.getOrNull(playRequest.startIndex) ?: return
         val local = localIdentity(active, nextGeneration())
         val target = ViewingIdentity(
             active.server.id,
@@ -499,13 +582,36 @@ internal class CastSenderHost(
             nextGeneration(),
             "cast"
         )
-        val item = playRequest.items.getOrNull(playRequest.startIndex) ?: return
         val intent = ControlIntent(
             entry = entryId(playRequest.startIndex, item.id),
             ticks = playRequest.startMs * MS_TO_TICKS,
             paused = playRequest.paused,
             queue = playRequest.items.mapIndexed { index, it -> entryId(index, it.id) }
         )
+        val before = cast
+        val next = reduceCast(before ?: CastState(OwnerState(local, intent = intent)), CastEvent("pick", identity = target, intent = intent))
+        when {
+            next.reason == "already-casting" -> {
+                request = null
+                stopSearch()
+                mutable.update { it.copy(chooserOpen = false, pickRefusal = null) }
+                // After the chooser's search stops, because this starts its own.
+                if (next.effect == "reconnect") reconnect()
+                return
+            }
+
+            next.reason != null -> {
+                mutable.update { it.copy(pickRefusal = next.reason, blockedReach = null) }
+                return
+            }
+        }
+        // The viewing this replaces, while its status can still say where it got to.
+        if (next.effect.startsWith("replace-")) endReplacedViewing(before)
+        stopRetiring()
+        restoreJob?.cancel()
+        awaitingReattach = false
+        handoff = playRequest
+        request = null
         prepared = emptyMap()
         loadedUrls = emptyMap()
         reported = null
@@ -513,22 +619,70 @@ internal class CastSenderHost(
         lastStatus = null
         loadStarted = false
         localAlive = playRequest.local != null
-        mutable.update {
-            it.copy(cast = CastState(OwnerState(local, intent = intent)), deviceName = route.name, title = item.title, controls = null)
-        }
+        mutable.update { it.copy(cast = next, deviceName = route.name, title = item.title, controls = null, chooserOpen = false, pickRefusal = null) }
         environment.mayBeLive = true
-        dispatch(CastEvent("select", identity = target, intent = intent))
-        dispatch(CastEvent("link-connecting"))
-        stopSearch()
-        mutable.update { it.copy(chooserOpen = false) }
-        val joining = ensureLink()
         loadTimer?.cancel()
         // The same limit covers joining the device: a route that never connects must not leave local playback waiting.
         loadTimer = scope.launch {
             delay(CAST_LOAD_TIMEOUT_MS)
             dispatch(CastEvent("load-timeout"))
         }
-        joining.select(route.id)
+        val joining = ensureLink()
+        when (next.effect) {
+            "replace-on-link" -> {
+                // Already joined: the SDK would say nothing about selecting this route again.
+                stopSearch()
+                dispatch(CastEvent("link-connecting"))
+                dispatch(CastEvent("link-connected"))
+            }
+
+            "replace-elsewhere" -> {
+                // Selecting while the old session ends would race its own unselect, so this waits for it. Search stays on until then.
+                dispatch(CastEvent("link-connecting"))
+                pendingSelect = route.id
+                joining.endSession(stopReceiver = true)
+                switchJob?.cancel()
+                switchJob = scope.launch {
+                    delay(CAST_SWITCH_MS)
+                    selectPending()
+                }
+            }
+
+            else -> {
+                dispatch(CastEvent("link-connecting"))
+                joinRoute(joining, route.id)
+            }
+        }
+    }
+
+    /** Selected before the search stops, because stopping is what lets the router forget a route. */
+    private fun joinRoute(joining: CastLink, routeId: String) {
+        val selected = joining.select(routeId)
+        stopSearch()
+        if (!selected) dispatch(CastEvent("load-failed", recovery = "route-gone"))
+    }
+
+    private fun selectPending() {
+        val routeId = pendingSelect ?: return
+        pendingSelect = null
+        switchJob?.cancel()
+        switchJob = null
+        joinRoute(ensureLink(), routeId)
+    }
+
+    private fun cancelPendingSelect() {
+        pendingSelect = null
+        switchJob?.cancel()
+        switchJob = null
+    }
+
+    /** Stop now if this link holds it, then its last report and its session. A failed start won't leave it unowned on the receiver. */
+    private fun endReplacedViewing(before: CastState?) {
+        reportJob?.cancel()
+        commandTimer?.cancel()
+        stopTimer?.cancel()
+        if (before?.link == "connected") link?.stop { }
+        cleanup(before?.observed?.ticks, "replaced")
     }
 
     private fun nextGeneration() = ++generation
@@ -582,7 +736,7 @@ internal class CastSenderHost(
     }
 
     private fun pauseLocal() {
-        val playRequest = request
+        val playRequest = handoff
         val output = playRequest?.local
         if (output == null) {
             dispatch(CastEvent("local-paused", ticks = (playRequest?.startMs ?: 0) * MS_TO_TICKS))
@@ -596,14 +750,19 @@ internal class CastSenderHost(
 
     private fun loadRemote() {
         val active = account ?: return dispatch(CastEvent("load-failed"))
-        val playRequest = request ?: return dispatch(CastEvent("load-failed"))
+        val playRequest = handoff ?: return dispatch(CastEvent("load-failed"))
         val state = cast ?: return
         val target = state.owner.candidate ?: return
         val startMs = state.owner.intent.ticks / MS_TO_TICKS
         val serial = target.generation
         scope.launch {
-            val temporary = provision(active, target) ?: return@launch
-            if (cast?.owner?.candidate?.generation != serial) return@launch endCurrentSession("cancel")
+            val (temporary, binding) = provision(active, target) ?: return@launch
+            if (cast?.owner?.candidate?.generation != serial) {
+                // Overtaken: this ends this session and nobody else's.
+                if (sessionBinding === binding) sessionBinding = null
+                endRecord(binding, "cancel")
+                return@launch
+            }
             session = temporary
             val nonce = UUID.randomUUID().toString()
             val items = mutableListOf<CastLoadItem>()
@@ -646,7 +805,8 @@ internal class CastSenderHost(
                 deviceName = mutable.value.deviceName
             )
             viewing = record
-            environment.viewing = record
+            environment.saveViewing(record)
+            if (cast?.owner?.candidate?.generation != serial) return@launch
             loadedUrls = items.associate { it.url to (it.customData["entry"] ?: "") }
             loadStarted = true
             val current = link ?: return@launch dispatch(CastEvent("load-failed"))
@@ -695,6 +855,7 @@ internal class CastSenderHost(
     /** A failed handoff: the local player stays paused where it was, and Resume here is the viewer's call. */
     private fun failed() {
         loadTimer?.cancel()
+        cancelPendingSelect()
         val sent = loadStarted
         loadStarted = false
         environment.mayBeLive = false
@@ -702,14 +863,16 @@ internal class CastSenderHost(
             if (sent) current.stop { }
             if (cast?.link != "lost") current.endSession(stopReceiver = true)
         }
-        endCurrentSession("load-failed")
+        // The receiver may have started a transcode by now, and only this session can ask to stop it.
+        val encodings = if (sent) prepared.values.mapNotNull { it.playSessionId }.distinct() else emptyList()
+        endCurrentSession("load-failed", encodings)
     }
 
     private fun released() {
         loadTimer?.cancel()
-        request?.local?.release()
+        handoff?.local?.release()
         localAlive = false
-        request = null
+        handoff = null
         val active = session
         val report = reportFor()
         reported = report
@@ -809,8 +972,8 @@ internal class CastSenderHost(
         session = null
         sessionBinding = null
         viewing = null
-        environment.viewing = null
-        scope.launch {
+        environment.clearViewing()
+        cleanupJob = scope.launch {
             if (reporter != null && last != null) {
                 gateway.reportStopped(reporter, last)
                 last.playSessionId?.let { gateway.stopEncoding(reporter, it) }
@@ -839,13 +1002,13 @@ internal class CastSenderHost(
             cleanup(state.returnTicks, "play-here-unconfirmed")
             link?.endSession(stopReceiver = true)
         }
-        val output = request?.local.takeIf { localAlive }
+        val output = handoff?.local.takeIf { localAlive }
         startPausedItem = itemId.takeIf { output == null && state.owner.intent.paused }
         mutable.update { CastUi(capability = it.capability, localStart = if (output == null) start else null) }
         // After a failed handoff the player is still open, paused where it was.
         output?.resume()
         localAlive = false
-        request = null
+        handoff = null
     }
 
     fun localStartHandled(serial: Long) {
@@ -857,7 +1020,7 @@ internal class CastSenderHost(
 
     /** The player screen went away, so Resume here has to open a new one. */
     fun localClosed(output: CastLocalOutput) {
-        if (request?.local === output) localAlive = false
+        if (handoff?.local === output) localAlive = false
     }
 
     private fun clear() {
@@ -865,7 +1028,9 @@ internal class CastSenderHost(
         stopTimer?.cancel()
         commandTimer?.cancel()
         reportJob?.cancel()
+        cancelPendingSelect()
         request = null
+        handoff = null
         prepared = emptyMap()
         reported = null
         mutable.update { CastUi(capability = it.capability, routes = it.routes, chooserOpen = it.chooserOpen, localStart = it.localStart) }
@@ -908,8 +1073,9 @@ internal class CastSenderHost(
         current.startDiscovery()
         scope.launch {
             val found = withTimeoutOrNull(CAST_SEARCH_MS) { current.routes.first { routes -> routes.any { it.id == device } } }
-            if (found != null) current.select(device)
+            val selected = found != null && current.select(device)
             current.stopDiscovery()
+            if (!selected) dispatch(CastEvent("link-failed"))
         }
     }
 
@@ -930,6 +1096,7 @@ internal class CastSenderHost(
 
     override fun onConnected(deviceName: String?) {
         restoreJob?.cancel()
+        reattachEmptySeen = false
         if (retiring != null) {
             link?.requestStatus()
             return
@@ -949,8 +1116,12 @@ internal class CastSenderHost(
 
     override fun onEnded() {
         awaitingReattach = false
+        stopRetiring()
+        // The old device's session, which a move to another device was waiting for. It isn't the new one's failure.
+        if (pendingSelect != null) return selectPending()
         if (cast == null) {
-            environment.mayBeLive = false
+            // A viewing still on record may still be playing, and is still offered so it can be ended.
+            if (environment.viewing == null) environment.mayBeLive = false
             return
         }
         // Our own endSession also lands here, after the viewing has already moved on.
@@ -958,21 +1129,22 @@ internal class CastSenderHost(
         if (state.owner.candidate != null || state.owner.phase == "active" || state.stop == "sent") dispatch(CastEvent("link-lost"))
     }
 
+    override fun onConnectFailed() {
+        awaitingReattach = false
+        if (retiring != null) return stopRetiring()
+        dispatch(CastEvent("link-failed"))
+    }
+
     override fun onStatus(status: CastStatus) {
         retiring?.let { record ->
-            retiring = null
-            val ours = castReattach(
-                CastReattachInput(
-                    record,
-                    record.server,
-                    record.viewer,
-                    status.mediaSession,
-                    status.playerState,
-                    status.customData,
-                    status.contentUrl,
-                    link?.joinedRoute()
-                )
-            ).decision == "adopt"
+            val answer = castReattach(reattachInput(record, record.server, record.viewer, status, retireEmptySeen))
+            if (answer.decision == "recheck") {
+                retireEmptySeen = true
+                link?.requestStatus()
+                return
+            }
+            stopRetiring()
+            val ours = answer.decision == "adopt"
             if (ours) link?.stop { }
             link?.endSession(stopReceiver = ours)
             return
@@ -991,21 +1163,25 @@ internal class CastSenderHost(
 
     /** After a process death: ours only if what the receiver shows is what we stored, and what we report comes from that. */
     private fun reattach(status: CastStatus) {
-        awaitingReattach = false
         val active = account ?: return
         val record = environment.viewing
-        val answer = castReattach(
-            CastReattachInput(
-                record,
-                active.server.id,
-                active.user.id,
-                status.mediaSession,
-                status.playerState,
-                status.customData,
-                status.contentUrl,
-                link?.joinedRoute()
-            )
-        )
+        val answer = castReattach(reattachInput(record, active.server.id, active.user.id, status, reattachEmptySeen))
+        if (answer.decision == "recheck") {
+            reattachEmptySeen = true
+            link?.requestStatus()
+            // If nothing more is said, the viewing is offered with a way to end it, and nothing is stopped on a guess.
+            restoreJob?.cancel()
+            restoreJob = scope.launch {
+                delay(CAST_SEARCH_MS)
+                if (cast == null && awaitingReattach) {
+                    awaitingReattach = false
+                    restoreDetached()
+                }
+            }
+            return
+        }
+        restoreJob?.cancel()
+        awaitingReattach = false
         val entry = answer.entry
         if (answer.decision != "adopt" || record == null || entry == null || !adopt(record)) {
             leaveReceiver(record, if (answer.decision == "ended") "receiver-ended" else "foreign-media")
@@ -1028,10 +1204,24 @@ internal class CastSenderHost(
         startReporting()
     }
 
+    private fun reattachInput(record: CastViewingRecord?, server: String, viewer: String, status: CastStatus, emptyBefore: Boolean) =
+        CastReattachInput(
+            record,
+            server,
+            viewer,
+            status.mediaSession,
+            status.playerState,
+            status.customData,
+            status.contentUrl,
+            link?.joinedRoute(),
+            status.idleReason,
+            emptyBefore
+        )
+
     /** Not ours: nothing is controlled or reported, and a session we still hold for a viewing that's gone is revoked. */
     private fun leaveReceiver(record: CastViewingRecord?, trigger: String) {
         environment.mayBeLive = false
-        environment.viewing = null
+        environment.clearViewing()
         link?.endSession(stopReceiver = false)
         val stored = sessions.state.records.filter { record != null && it.device == record.device }
         scope.launch { stored.forEach { endRecord(it, trigger) } }

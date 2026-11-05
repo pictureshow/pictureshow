@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import android.content.Context
+import android.util.Log
 import androidx.core.net.toUri
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
@@ -16,6 +17,7 @@ import com.google.android.gms.cast.MediaQueueItem
 import com.google.android.gms.cast.MediaSeekOptions
 import com.google.android.gms.cast.MediaStatus
 import com.google.android.gms.cast.MediaTrack
+import com.google.android.gms.cast.CastStatusCodes
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastOptions
 import com.google.android.gms.cast.framework.CastSession
@@ -33,6 +35,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+
+private const val LOG_TAG = "PictureshowCast"
 
 /** Resolved here so no other file names the SDK's constant. */
 private val receiverApplicationId: String
@@ -101,14 +105,17 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
             listener?.onConnecting()
         }
         override fun onSessionStarted(session: CastSession, id: String) = connected(session)
-        override fun onSessionStartFailed(session: CastSession, error: Int) = ended()
+        override fun onSessionStartFailed(session: CastSession, error: Int) = connectFailed("start", error)
         override fun onSessionEnding(session: CastSession) = Unit
         override fun onSessionEnded(session: CastSession, error: Int) = ended()
         override fun onSessionResuming(session: CastSession, id: String) {
             listener?.onConnecting()
         }
         override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) = connected(session)
-        override fun onSessionResumeFailed(session: CastSession, error: Int) = ended()
+        override fun onSessionResumeFailed(session: CastSession, error: Int) {
+            Log.w(LOG_TAG, "Cast session resume failed: $error (${CastStatusCodes.getStatusCodeString(error)})")
+            ended()
+        }
         override fun onSessionSuspended(session: CastSession, reason: Int) {
             listener?.onSuspended()
         }
@@ -122,7 +129,11 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
                 shared.sessionManager.currentCastSession?.takeIf { it.isConnected }?.let(::connected)
                 if (discovering) addRouterCallback()
             }
-            .addOnFailureListener(mainExecutor) { ended() }
+            .addOnFailureListener(mainExecutor) {
+                Log.w(LOG_TAG, "Cast framework did not start: ${it.javaClass.simpleName}")
+                watch(null)
+                listener?.onConnectFailed()
+            }
     }
 
     private fun connected(session: CastSession) {
@@ -133,6 +144,12 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     private fun ended() {
         watch(null)
         listener?.onEnded()
+    }
+
+    private fun connectFailed(step: String, error: Int) {
+        Log.w(LOG_TAG, "Cast session $step failed: $error (${CastStatusCodes.getStatusCodeString(error)})")
+        watch(null)
+        listener?.onConnectFailed()
     }
 
     private fun watch(client: RemoteMediaClient?) {
@@ -229,8 +246,10 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
 
     override fun joinedRoute(): String? = router.selectedRoute.id
 
-    override fun select(routeId: String) {
-        router.routes.firstOrNull { it.id == routeId }?.let(router::selectRoute)
+    override fun select(routeId: String): Boolean {
+        val route = router.routes.firstOrNull { it.id == routeId } ?: return false
+        router.selectRoute(route)
+        return true
     }
 
     override fun endSession(stopReceiver: Boolean) {

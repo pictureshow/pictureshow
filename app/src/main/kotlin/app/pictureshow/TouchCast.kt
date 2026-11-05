@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -81,6 +82,8 @@ internal fun castRecoveryMessage(recovery: String?, device: String): String = wh
     "server-unreachable" -> "Couldn't reach your server."
     "quick-connect-off" -> "Casting needs Quick Connect, and it's off on this server. Its admin can turn it on in the server's settings."
     "link-lost" -> "Lost the connection to $device."
+    "connect-failed" -> "Couldn't connect to $device. Make sure it's on and on this Wi-Fi."
+    "route-gone" -> "$device isn't available any more. Make sure it's on and on this Wi-Fi."
     "cancelled" -> "Cancelled."
     else -> "Couldn't play on $device."
 }
@@ -92,7 +95,16 @@ internal fun castNoticeMessage(notice: String?, device: String): String? = when 
     "receiver-taken" -> "Something else is now playing on $device."
     "receiver-continues" -> "Still playing on $device. This device isn't connected to it."
     "link-lost" -> "Lost the connection to $device. It may still be playing."
+    "connect-failed" -> "Couldn't connect to $device. Make sure it's on and on this Wi-Fi."
     else -> null
+}
+
+/** Why picking a device started nothing, and what to do first. */
+internal fun castPickRefusalMessage(reason: String, device: String): String = when (reason) {
+    "detached-elsewhere" -> "Still playing on $device. Open it from the Cast bar and reconnect or forget it before casting somewhere else."
+    "link-not-ready" -> "Reconnecting to $device. Try again in a moment."
+    "handoff-busy" -> "$device is still starting or stopping. Try again in a moment."
+    else -> "Couldn't start casting. Try again in a moment."
 }
 
 /** One line for the bar, read only from what the receiver last said. */
@@ -197,6 +209,12 @@ internal fun TouchCastChooser(
                                 liveRegion =
                                     LiveRegionMode.Polite
                             }
+                        )
+                    }
+                    ui.pickRefusal?.let {
+                        Text(
+                            castPickRefusalMessage(it, ui.deviceName ?: "the Cast device"),
+                            modifier = Modifier.testTag("cast:pick-refused").semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                     ui.routes.forEach { route ->
@@ -310,6 +328,8 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
     val ready = cast?.owner?.owner?.kind == "cast" && cast.owner.phase == "active" && cast.commands?.fresh == true
     val paused = observed?.playerState == "paused"
     val returning = cast?.owner?.phase == "returning"
+    // Stop, Close and Forget all end here, and there's nothing on this screen without a viewing: back to where it began.
+    LaunchedEffect(cast == null) { if (cast == null) onBack() }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("touch:cast"),
         verticalArrangement = Arrangement.spacedBy(12.dp)

@@ -134,7 +134,7 @@ internal fun TouchPictureshow(
             },
             onPickCast = { target ->
                 cast.pick(target)
-                if (cast.state.value.blockedReach == null) {
+                if (cast.state.value.blockedReach == null && cast.state.value.pickRefusal == null) {
                     remotePending = null
                     if (castRequest?.local == null) nav.navigate("cast") { launchSingleTop = true }
                 }
@@ -470,7 +470,8 @@ internal fun TouchPictureshow(
                 TouchRemoteScreen(remoteState, remote, onChoose = { chooseRemote(then = null) }, onBack = { nav.popBackStack() })
             }
             composable("cast") {
-                TouchCastScreen(castState, cast, onBack = { nav.popBackStack() })
+                // Only from this screen: Play here may already have opened a player above it.
+                TouchCastScreen(castState, cast, onBack = { if (nav.currentBackStackEntry?.destination?.route == "cast") nav.popBackStack() })
             }
             composable("settings") {
                 state.snapshot.currentAccount?.let { account ->

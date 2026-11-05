@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The Cast SDK brings these for its reconnection service and media notification. CastOptionsProvider turns both off, and the TV build shares this manifest. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <queries>
@@ -26,6 +28,8 @@
         android:theme="@style/Theme.Pictureshow"
         android:usesCleartextTraffic="true"
         tools:ignore="AllowBackup,UnusedAttribute">
+        <service android:name="com.google.android.gms.cast.framework.ReconnectionService" tools:node="remove" />
+        <receiver android:name="com.google.android.gms.cast.framework.media.MediaIntentReceiver" tools:node="remove" />
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="app.pictureshow.CastOptionsProvider" />

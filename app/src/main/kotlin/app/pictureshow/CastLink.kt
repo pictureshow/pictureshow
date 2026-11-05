@@ -59,6 +59,9 @@ internal interface CastLinkListener {
 
     /** The session is gone. */
     fun onEnded()
+
+    /** A connect never succeeded, so there was never a session to lose. */
+    fun onConnectFailed()
     fun onStatus(status: CastStatus)
 }
 
@@ -68,7 +71,9 @@ internal interface CastLink {
     fun setListener(listener: CastLinkListener?)
     fun startDiscovery()
     fun stopDiscovery()
-    fun select(routeId: String)
+
+    /** False if the route is gone, so nothing will ever answer. */
+    fun select(routeId: String): Boolean
 
     /** The route currently joined, from this side of the link: a receiver's status can't say this. */
     fun joinedRoute(): String?
