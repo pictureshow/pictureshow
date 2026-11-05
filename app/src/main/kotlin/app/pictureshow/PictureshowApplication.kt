@@ -64,6 +64,8 @@ class PictureshowApplication : Application() {
                     single { DeviceIdentityStore(get()) }
                     single { PlaybackPreferencesStore(get()) }
                     single<ServerDiscovery> { JvmServerDiscovery() }
+                    // Lazy on purpose: only the touch interface ever resolves it, and it reaches the Cast SDK later still.
+                    single { castSenderHost(this@PictureshowApplication, get(), get()) }
                     single {
                         val name = deviceDisplayName(this@PictureshowApplication)
                         val store = get<DeviceIdentityStore>()
