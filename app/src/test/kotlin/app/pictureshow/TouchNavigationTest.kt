@@ -29,6 +29,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import app.pictureshow.core.Account
@@ -88,6 +89,7 @@ class TouchNavigationTest {
     private val homeAccounts = mutableListOf<String>()
     private val homeSessions = mutableListOf<Account>()
     private val searchSessions = mutableListOf<Account>()
+    private val itemReads = mutableListOf<String>()
     private var persisted: String? = null
     private val accounts = AccountStore(object : TextPersistence {
         override suspend fun read() = persisted
@@ -107,7 +109,10 @@ class TouchNavigationTest {
                 ItemPage(if (kind == SearchKind.MOVIES) listOf(MediaItem(query, "$query result", "Movie")) else emptyList())
             )
         }
-        override suspend fun item(account: Account, id: String) = ClientResult.Success(MediaItem(id, "$id result", "Movie"))
+        override suspend fun item(account: Account, id: String): ClientResult<MediaItem> {
+            itemReads += id
+            return ClientResult.Success(MediaItem(id, "$id result", "Movie"))
+        }
         override suspend fun personItems(account: Account, personId: String, startIndex: Int, limit: Int) = ClientResult.Success(ItemPage())
     }
 
@@ -384,6 +389,31 @@ class TouchNavigationTest {
         compose.onNodeWithText("private-query result").assertDoesNotExist()
         back()
         waitFor("What would you like to watch?")
+    }
+
+    // The arrival read owns the page's budget; a second read at RESUMED would cancel it, and later returns would restart it.
+    @Test
+    fun detailReadsOnceOnArrival() {
+        launch(signedIn = true)
+        compose.onNodeWithText("Search").performClick()
+        compose.onNodeWithTag("touch:search:query").performTextReplacement("arrival")
+        waitForCard("arrival result")
+        compose.onNodeWithContentDescription("arrival result").performClick()
+        compose.waitUntil(5_000) { itemReads.isNotEmpty() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf("arrival"), itemReads) }
+    }
+
+    // Touch used to reload on every RESUMED, which read home twice on arrival; TV keeps its first read and refreshes after a real return.
+    @Test
+    fun homeReadsOnceOnArrivalAndAgainWhenTheViewerComesBack() {
+        launch(signedIn = true)
+        waitFor("What would you like to watch?")
+        compose.runOnIdle { assertEquals(1, homeAccounts.size) }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        compose.waitForIdle()
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.waitUntil(5_000) { homeAccounts.size == 2 }
     }
 
     @Test

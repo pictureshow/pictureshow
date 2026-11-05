@@ -398,16 +398,17 @@ internal fun TouchCatalogDetail(
                                         }
                                 ) {
                                     TouchCatalogArtwork(linkedItem, state.account, false, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
-                                    Column(Modifier.padding(12.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Column(
+                                        Modifier.padding(12.dp).clearAndSetSemantics {},
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
                                         Text(
                                             person.name,
                                             style = MaterialTheme.typography.titleSmall,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        if (credit !=
-                                            null
-                                        ) {
+                                        if (credit != null) {
                                             Text(
                                                 credit,
                                                 style = MaterialTheme.typography.bodySmall,
@@ -470,6 +471,7 @@ internal fun TouchCatalogDetail(
         val failure = page.failure ?: page.writeFailure?.let { "Change failed. $it" }
         if (failure != null) {
             val retrying = page.recovery && page.retryWorking
+            val retryTag = if (page.recovery) "touch:detail:retry" else "touch:detail:write-retry"
             Column(
                 Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().onSizeChanged { bandHeight = it.height }
                     .heightIn(max = pageHeight * 0.5f).background(MaterialTheme.colorScheme.surfaceContainerHighest)
@@ -480,7 +482,7 @@ internal fun TouchCatalogDetail(
                 // Retry comes first, so a long reason can never push the way out off the band.
                 Button(
                     onClick = page.onRetry,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag(if (page.recovery) "touch:detail:retry" else "touch:detail:write-retry").semantics {
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(retryTag).semantics {
                         if (page.recovery) {
                             stateDescription = if (retrying) "Loading item. Please wait." else detailRetryDescription(failure)
                         }

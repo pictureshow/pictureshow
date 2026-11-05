@@ -107,7 +107,9 @@ internal fun rememberTouchDetailPresentation(
 
     // Every loading frame guards commands: taps are captured, so nothing is lost, and nothing acts on stale data.
     val waiting = state.playbackPending || (state.loading && state.error == null)
-    var mutationDataReady by remember { mutableStateOf(!state.loading && !state.playbackPending && state.error == null && state.item != null) }
+    var mutationDataReady by remember {
+        mutableStateOf(!state.loading && !state.playbackPending && state.error == null && state.item != null)
+    }
     var recoveryMessage by remember { mutableStateOf<String?>(null) }
     var pendingExpired by remember { mutableStateOf(false) }
     var expiryReported by remember { mutableStateOf(false) }
@@ -341,8 +343,10 @@ internal fun rememberTouchDetailPresentation(
     val watchedNow = pendingItem?.isWatched == true
     val favoriteNow = pendingItem?.userData?.isFavorite == true
 
-    fun label(target: String, requested: Boolean, pending: String, plain: String = detailPendingPlainLabel(target, known, watchedNow, favoriteNow)) =
-        detailPendingPresentationLabel(heldLabels, requested, captureOpen, plain, pending)
+    fun plain(target: String) = detailPendingPlainLabel(target, known, watchedNow, favoriteNow)
+
+    fun label(target: String, requested: Boolean, pending: String) =
+        detailPendingPresentationLabel(heldLabels, requested, captureOpen, plain(target), pending)
 
     val position = playItem?.userData?.playbackPositionTicks ?: 0L
     val primaryFresh = if (position > 0) resumeLabel(position) else detailHeldActionLabel("primary")
@@ -357,7 +361,7 @@ internal fun rememberTouchDetailPresentation(
         val wording = if (state.item?.isWatched == true) "Mark unwatched" else "Mark watched"
         return when {
             recoveryActive -> detailUnavailableActionLabel("played")
-            !pendingEnabled && waiting -> if (heldLabels) detailUnavailableActionLabel("played") else detailPendingPlainLabel("played", known, watchedNow, favoriteNow)
+            !pendingEnabled && waiting -> if (heldLabels) detailUnavailableActionLabel("played") else plain("played")
             pendingEnabled -> label(
                 "played",
                 "played" in pendingQueued,
@@ -376,7 +380,7 @@ internal fun rememberTouchDetailPresentation(
         val wording = if (state.item?.userData?.isFavorite == true) "Unfavorite" else "Favorite"
         return when {
             recoveryActive -> detailUnavailableActionLabel("favorite")
-            !pendingEnabled && waiting -> if (heldLabels) detailUnavailableActionLabel("favorite") else detailPendingPlainLabel("favorite", known, watchedNow, favoriteNow)
+            !pendingEnabled && waiting -> if (heldLabels) detailUnavailableActionLabel("favorite") else plain("favorite")
             pendingEnabled -> label(
                 "favorite",
                 "favorite" in pendingQueued,
@@ -399,21 +403,27 @@ internal fun rememberTouchDetailPresentation(
         else -> "$name when ready"
     }
 
-    fun remote(target: String, name: String, requested: Boolean, inPlaySlot: Boolean, fromStart: Boolean, freshAction: (MediaItem) -> Unit) =
-        TouchDetailAction(
-            target = target,
-            label = held(name, requested, inPlaySlot && playQueued != null),
-            reserve = listOf(name, "$name when ready", "$name requested"),
-            enabled = if (pendingEnabled) captureOpen && !(inPlaySlot && playQueued != null && !requested) else fresh && playItem != null,
-            state = null,
-            onClick = {
-                when {
-                    pendingEnabled && inPlaySlot -> capturePlay(target, "$name requested") { latestOnPlayOnTv(it, fromStart) }
-                    pendingEnabled -> captureQueue(target, "$name requested", freshAction)
-                    else -> playItem?.let(freshAction)
-                }
+    fun remote(
+        target: String,
+        name: String,
+        requested: Boolean,
+        inPlaySlot: Boolean,
+        fromStart: Boolean,
+        freshAction: (MediaItem) -> Unit
+    ) = TouchDetailAction(
+        target = target,
+        label = held(name, requested, inPlaySlot && playQueued != null),
+        reserve = listOf(name, "$name when ready", "$name requested"),
+        enabled = if (pendingEnabled) captureOpen && !(inPlaySlot && playQueued != null && !requested) else fresh && playItem != null,
+        state = null,
+        onClick = {
+            when {
+                pendingEnabled && inPlaySlot -> capturePlay(target, "$name requested") { latestOnPlayOnTv(it, fromStart) }
+                pendingEnabled -> captureQueue(target, "$name requested", freshAction)
+                else -> playItem?.let(freshAction)
             }
-        )
+        }
+    )
 
     val canFreshPlay = fresh && playItem != null
     val localPlayOpen = captureOpen && (playQueued == null || playQueued == "primary" || playQueued == "from-start")
@@ -423,6 +433,7 @@ internal fun rememberTouchDetailPresentation(
         else -> fresh && currentItem != null && !currentItem.isEmptyContainer
     }
     val favoriteEnabled = if (pendingEnabled) captureOpen else fresh && currentItem != null
+    val stateKnown = fresh && currentItem != null
     val actions = buildList {
         add(
             TouchDetailAction(
@@ -459,7 +470,7 @@ internal fun rememberTouchDetailPresentation(
                     "Watched unavailable"
                 ),
                 enabled = playedEnabled,
-                state = detailActionDescription(if (currentItem?.isWatched == true) "Watched" else "Unwatched", fresh && currentItem != null),
+                state = detailActionDescription(if (currentItem?.isWatched == true) "Watched" else "Unwatched", stateKnown),
                 onClick = { if (pendingEnabled) captureMutation(true) else queueReadyMutation(true) }
             )
         )
@@ -469,7 +480,7 @@ internal fun rememberTouchDetailPresentation(
                 label = favorite(),
                 reserve = listOf("Favorite", "Unfavorite", "Unfavorite when ready", "Favorite change requested", "Favorite unavailable"),
                 enabled = favoriteEnabled,
-                state = detailActionDescription(if (currentItem?.userData?.isFavorite == true) "Favorite" else "Not favorite", fresh && currentItem != null),
+                state = detailActionDescription(if (currentItem?.userData?.isFavorite == true) "Favorite" else "Not favorite", stateKnown),
                 onClick = { if (pendingEnabled) captureMutation(false) else queueReadyMutation(false) }
             )
         )
@@ -521,7 +532,11 @@ internal fun rememberTouchDetailPresentation(
         )
         // Last in the grid: its arrival with fresh resume data moves no other action.
         if (position > 0 || playQueued == "on-tv-start") {
-            add(remote("on-tv-start", "Play on TV from start", playQueued == "on-tv-start", inPlaySlot = true, fromStart = true) { onPlayOnTv(it, true) })
+            add(
+                remote("on-tv-start", "Play on TV from start", playQueued == "on-tv-start", inPlaySlot = true, fromStart = true) {
+                    onPlayOnTv(it, true)
+                }
+            )
         }
     }
 
