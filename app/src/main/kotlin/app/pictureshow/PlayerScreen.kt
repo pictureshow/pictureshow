@@ -1318,7 +1318,7 @@ internal fun PlayerSubtitles(
     }
 }
 
-/** Both directions always remain available: the surface's "scroll" is a 10 s seek or a reveal, never a position. */
 private const val CONTROLS_HIDDEN_FEEDBACK = "Controls hidden"
 
+/** Both directions always remain available: the surface's "scroll" is a 10 s seek or a reveal, never a position. */
 private val ReaderArrowRange = ScrollAxisRange(value = { 1f }, maxValue = { 2f })
