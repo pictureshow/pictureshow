@@ -1095,7 +1095,28 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
     }
 
-    private fun launch(paused: Boolean = false, fontScale: Float? = null, onNext: (MediaItem) -> Unit = {}) {
+    @Test
+    fun playOnOpensTheChooserForThisPlayerAtItsPosition() {
+        val sender = inertCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        compose.onNodeWithTag("touch:play-on").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        compose.runOnIdle {
+            assertTrue(sender.state.value.chooserOpen)
+            val request = requireNotNull(sender.chooserRequest)
+            assertEquals("movie", request.items.single().id)
+            assertEquals(output.position().milliseconds, request.startMs, "where this player is, not where it opened")
+            assertTrue(request.local != null, "a handoff from this player has to be able to stop it")
+        }
+    }
+
+    @Test
+    fun aPlayerWithoutTheSenderOffersNoPlayOn() {
+        launch()
+        compose.onNodeWithTag("touch:stop").assertHasClickAction()
+        compose.onNodeWithTag("touch:play-on").assertDoesNotExist()
+    }
+
+    private fun launch(paused: Boolean = false, fontScale: Float? = null, cast: TouchPlayerCast? = null, onNext: (MediaItem) -> Unit = {}) {
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
             decoder = Decoder(!paused)
@@ -1108,7 +1129,9 @@ class TouchPlayerControlsTest {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, liveFontScale ?: fontScale ?: density.fontScale)) {
-                MaterialTheme(colorScheme = darkColorScheme()) { TouchPlayerContent(account, host) }
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    CompositionLocalProvider(LocalTouchPlayerCast provides cast) { TouchPlayerContent(account, host) }
+                }
             }
         }
     }

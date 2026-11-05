@@ -215,6 +215,13 @@ private class FakeOutput(private val log: MutableList<String>) : CastLocalOutput
     }
 }
 
+/** A real host with nothing behind it, for screens that only need one to exist. */
+internal fun inertCastSender() = CastSenderHost(
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+    FakeEnvironment(mutableListOf()),
+    FakeGateway(mutableListOf())
+) { 0L }
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CastSenderHostTest {
     private val log = mutableListOf<String>()
@@ -496,6 +503,9 @@ class CastSenderHostTest {
         link.sink!!.onStatus(status("idle", positionMs = 0, generation = generation, reason = "cancelled"))
         runCurrent()
         val start = host.state.value.localStart!!
+        assertFalse(host.consumeStartPaused("another item"), "only the player Play here opened")
+        assertTrue(host.consumeStartPaused(ITEM), "the new player starts paused")
+        assertFalse(host.consumeStartPaused(ITEM), "and only once")
         assertEquals(120_000, start.positionMs)
         assertTrue(start.paused)
         assertTrue(gateway.reports.contains("stopped:1200000000"))
@@ -508,6 +518,7 @@ class CastSenderHostTest {
         link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "cancelled"))
         runCurrent()
         assertFalse(host.state.value.localStart!!.paused)
+        assertFalse(host.consumeStartPaused(ITEM), "a viewing that was playing opens playing")
     }
 
     @Test fun receiverFinishingTellsTheViewerAndStartsNothing() = runTest {

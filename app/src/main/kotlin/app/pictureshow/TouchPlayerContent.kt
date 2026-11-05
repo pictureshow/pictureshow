@@ -56,6 +56,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -96,6 +97,8 @@ import app.pictureshow.core.nextEpisodeCardSeconds
 import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.trickplayTile
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal enum class TouchPlayerSheet(val title: String) {
     Audio("Audio"),
@@ -162,9 +165,35 @@ internal fun TouchReservedLabel(label: String, reserve: String, alignment: Align
     }
 }
 
+/** What the player needs to hand off. Only the touch app provides it, so a player without it offers no "Play on". */
+internal class TouchPlayerCast(val cast: CastSenderHost, val remote: RemoteControllerHost)
+
+internal val LocalTouchPlayerCast = staticCompositionLocalOf<TouchPlayerCast?> { null }
+
+/** This player during a Cast handoff. */
+private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalOutput {
+    override suspend fun pauseAndReadPositionMs(): Long {
+        host.output.pause()
+        withTimeoutOrNull(1_000) { while (host.player?.isPlaying == true) delay(20) }
+        return host.output.position().milliseconds
+    }
+
+    override fun release() = host.finish(reason = "cast")
+
+    override fun resume() {
+        host.player?.play()
+    }
+}
+
 @Composable
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
+    val entry = LocalTouchPlayerCast.current
+    val castOutput = remember(host) { PlayerCastOutput(host) }
+    if (entry != null) {
+        DisposableEffect(castOutput) { onDispose { entry.cast.localClosed(castOutput) } }
+        LaunchedEffect(host) { if (entry.cast.consumeStartPaused(host.item.id)) host.output.pause() }
+    }
     val accessible = rememberAccessibilityEnabled()
     // Prepared with the player, as on TV: a sheet that prepared its own would measure its waiting line, then grow.
     val trackMenus = rememberPlayerTrackMenus(
@@ -417,6 +446,27 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                 }
                                 ui.interact()
                             }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape") }
+                        }
+                    }
+                    if (entry != null) {
+                        add { placement ->
+                            TouchBarButton({
+                                val position = host.output.position().milliseconds
+                                entry.cast.openChooser(
+                                    CastPlayRequest(
+                                        listOf(castPlayItem(account.server, host.item)),
+                                        startMs = position,
+                                        paused = paused,
+                                        mediaSourceId = host.state.decision?.mediaSourceId,
+                                        local = castOutput,
+                                        onJellyfinPick = {
+                                            entry.remote.playNow(listOf(host.item.id), position)
+                                            host.finish(reason = "remote")
+                                        }
+                                    )
+                                )
+                                ui.interact()
+                            }, placement.testTag("touch:play-on")) { Text("Play on") }
                         }
                     }
                 }
