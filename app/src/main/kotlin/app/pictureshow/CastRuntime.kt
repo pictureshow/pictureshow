@@ -30,9 +30,13 @@ import app.pictureshow.core.playback.PlaybackStopInfo
 import io.ktor.client.HttpClient
 import java.security.MessageDigest
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 /** Counts how often the app reaches for Cast, so a test can prove the TV interface never does. */
@@ -58,8 +62,17 @@ internal fun castSenderHost(context: Context, http: HttpClient, identity: Device
     )
 }
 
-internal class AndroidCastEnvironment(private val context: Context) : CastEnvironment {
+@OptIn(ExperimentalCoroutinesApi::class)
+private fun castStorageDispatcher() = Dispatchers.IO.limitedParallelism(1)
+
+/**
+ * Writes run one at a time on [storage], in the order they were asked for, so an older one can never land after a newer
+ * one. A commit waits on the disk, which is why none of them happens on the caller's thread.
+ */
+internal class AndroidCastEnvironment(private val context: Context, private val storage: CoroutineDispatcher = castStorageDispatcher()) :
+    CastEnvironment {
     private val stored by lazy { context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE) }
+    private val writes = CoroutineScope(SupervisorJob() + storage)
 
     override val tvInterface: Boolean get() = usesTvInterface(context)
 
@@ -105,31 +118,41 @@ internal class AndroidCastEnvironment(private val context: Context) : CastEnviro
         set(value) = stored.edit { putBoolean("may-be-live", value) }
 
     /** The same app-private storage as the signed-in account's own token, and excluded from backup the same way. */
-    override var sessions: CastStoredSessions
+    override val sessions: CastStoredSessions
         get() = stored.getString("sessions", null)
             ?.let { runCatching { CastStorageJson.decodeFromString(CastStoredSessions.serializer(), it) }.getOrNull() }
             ?: CastStoredSessions()
-        set(value) {
-            stored.edit(commit = true) { putString("sessions", CastStorageJson.encodeToString(CastStoredSessions.serializer(), value)) }
-        }
 
-    override var viewing: CastViewingRecord?
-        get() = stored.getString("viewing", null)
+    override suspend fun saveSessions(value: CastStoredSessions) = withContext(storage) {
+        stored.edit(commit = true) { putString("sessions", CastStorageJson.encodeToString(CastStoredSessions.serializer(), value)) }
+    }
+
+    /** Readers see the latest answer at once, though the disk catches up on [storage]. */
+    private var viewingNow: Lazy<CastViewingRecord?> = lazy {
+        stored.getString("viewing", null)
             ?.let { runCatching { CastStorageJson.decodeFromString(CastViewingRecord.serializer(), it) }.getOrNull() }
-        set(value) {
-            stored.edit(commit = true) {
-                if (value == null) {
-                    remove("viewing")
-                } else {
-                    putString("viewing", CastStorageJson.encodeToString(CastViewingRecord.serializer(), value))
-                }
-            }
+    }
+
+    override val viewing: CastViewingRecord? get() = viewingNow.value
+
+    override suspend fun saveViewing(record: CastViewingRecord) {
+        viewingNow = lazyOf(record)
+        withContext(storage) {
+            stored.edit(commit = true) { putString("viewing", CastStorageJson.encodeToString(CastViewingRecord.serializer(), record)) }
         }
+    }
+
+    /** Losing this write to a process death is safe: a reattach finds the session gone and lets go of the record. */
+    override fun clearViewing() {
+        viewingNow = lazyOf(null)
+        writes.launch { stored.edit(commit = true) { remove("viewing") } }
+    }
 }
 
 private const val CAST_DEVICE_ID_LENGTH = 32
+private val REVOKE_FINAL_STATUSES = setOf(403, 404)
 
-private class ClientCastGateway(private val http: HttpClient, private val identity: DeviceIdentityStore, private val name: String) :
+internal class ClientCastGateway(private val http: HttpClient, private val identity: DeviceIdentityStore, private val name: String) :
     CastMediaGateway {
     private suspend fun clientIdentity() = ClientIdentity(name, identity.getOrCreate(), BuildConfig.VERSION_NAME)
 
@@ -151,10 +174,15 @@ private class ClientCastGateway(private val http: HttpClient, private val identi
         return CastSessionIssue.Issued(issued.value)
     }
 
+    /**
+     * 401 says it's already gone. 403 and 404 are the server's final word that it won't do this: asking again changes nothing,
+     * and waiting would refuse every cast to that receiver until sign-out. If a token did outlive that, the next login
+     * under this device id replaces it (observed on the server). Anything else may be the network, so it stays pending.
+     */
     override suspend fun revokeSession(session: Account): Boolean =
         when (val result = JellyfinClient(http, clientIdentity()).logout(session)) {
             is ClientResult.Success -> true
-            is ClientResult.Failure -> result.error.kind == ErrorKind.INVALID_CREDENTIALS
+            is ClientResult.Failure -> result.error.kind == ErrorKind.INVALID_CREDENTIALS || result.error.status in REVOKE_FINAL_STATUSES
         }
 
     override suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome> =

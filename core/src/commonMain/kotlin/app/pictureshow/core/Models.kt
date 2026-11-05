@@ -38,7 +38,7 @@ enum class ErrorKind {
     LOCAL_STORAGE
 }
 
-data class ClientError(val kind: ErrorKind, val message: String)
+data class ClientError(val kind: ErrorKind, val message: String, val status: Int? = null)
 
 sealed interface ClientResult<out T> {
     data class Success<T>(val value: T) : ClientResult<T>

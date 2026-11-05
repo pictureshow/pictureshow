@@ -16,7 +16,8 @@ private val CAST_SESSION_ENDS = setOf(
     "load-timeout",
     "cancel",
     "play-here-unconfirmed",
-    "foreign-media"
+    "foreign-media",
+    "replaced"
 )
 
 /** The viewer is leaving: the stored session goes whatever generation or sender the caller thinks it has. */
@@ -49,10 +50,11 @@ fun reduceCastSession(state: TemporaryState, event: CastSessionEvent): Temporary
             // Every path that ends a viewing lands here, some of them twice; only the first has anything to end.
             val record = state.records.firstOrNull { it.server == b.server && it.viewer == b.viewer && it.device == b.device }
                 ?: return state.copy(effect = "none", reason = null)
-            // Ending never fails open: the stored record is what's revoked, and a stale caller is reported, not obeyed.
+            // The device id is stable per receiver, so a late end for an older viewing finds the newer viewing's record: it
+            // is reported, not obeyed. The viewer leaving is not about one viewing, so that always acts on what's stored.
             val stale = record.generation != b.generation || record.sender != b.sender
-            val ended = reduceTemporary(state, TemporaryEvent("end", record))
-            if (stale && event.op !in CAST_SESSION_LEAVES) ended.copy(reason = "stale-binding") else ended
+            if (stale && event.op !in CAST_SESSION_LEAVES) return state.copy(effect = "none", reason = "stale-binding")
+            reduceTemporary(state, TemporaryEvent("end", record))
         }
 
         in CAST_SESSION_KEEPS -> state.copy(effect = "keep", reason = null)
@@ -107,7 +109,10 @@ data class CastReattachInput(
     val customData: Map<String, String> = emptyMap(),
     val contentUrl: String? = null,
     /** The route this sender is joined to, from its own side of the link. */
-    val route: String? = null
+    val route: String? = null,
+    val idleReason: String? = null,
+    /** The status before this one was already empty. One empty status with no reason is not an answer. */
+    val emptyBefore: Boolean = false
 )
 
 /** A media URL without its query, which is where the token is. */
@@ -118,7 +123,7 @@ const val CAST_GENERATION_LIMIT: Long = 1L shl 53
 
 @Serializable
 data class CastReattach(
-    /** adopt, ended (nothing is playing there) or foreign (read-only: no controls, no reports). */
+    /** adopt, ended (nothing is playing there), recheck (ask once more) or foreign (read-only: no controls, no reports). */
     val decision: String,
     /** no-record, other-account, route, nonce, generation, entry or url when foreign. */
     val reason: String? = null,
@@ -136,6 +141,7 @@ fun castReattach(input: CastReattachInput): CastReattach {
     if (record.server != input.server || record.viewer != input.viewer) return CastReattach("foreign", "other-account")
     // A missing value on either side is never a match, so empty can't equal empty.
     if (record.route.isBlank() || input.route != record.route) return CastReattach("foreign", "route")
+    if (input.mediaSession < 0 && input.idleReason == null && !input.emptyBefore) return CastReattach("recheck")
     if (input.mediaSession < 0 || input.playerState == "idle") return CastReattach("ended")
     if (input.customData["nonce"] != record.nonce) return CastReattach("foreign", "nonce")
     val claimed = input.customData["generation"]?.toLongOrNull()

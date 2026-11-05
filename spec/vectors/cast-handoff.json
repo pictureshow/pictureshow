@@ -5984,7 +5984,7 @@
       ]
     },
     {
-      "id": "cast-handoff.empty-receiver-ends-the-viewing",
+      "id": "cast-handoff.two-empty-receiver-statuses-end-the-viewing",
       "operation": "cast",
       "state": {
         "owner": {
@@ -6100,6 +6100,28 @@
                 "kind": "cast"
               },
               "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0"
+            }
+          },
+          "expected": {
+            "effect": "request-status",
+            "reason": "unconfirmed-empty",
+            "emptyStatus": true,
+            "owner": {
+              "phase": "active"
+            },
+            "observed": {
+              "ticks": "1000000000"
             }
           }
         },
@@ -7004,6 +7026,1334 @@
           },
           "expected": {
             "reason": "invalid-target"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.one-empty-status-then-media-carries-on",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0"
+            }
+          },
+          "expected": {
+            "effect": "request-status",
+            "emptyStatus": true,
+            "owner": {
+              "phase": "active"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1100000000",
+              "entry": "0:i"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "emptyStatus": false,
+            "owner": {
+              "phase": "active"
+            },
+            "observed": {
+              "ticks": "1100000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0"
+            }
+          },
+          "expected": {
+            "effect": "request-status",
+            "emptyStatus": true,
+            "owner": {
+              "phase": "active"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.an-empty-status-with-a-reason-ends-at-once",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-stopped"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-with-nothing-casting-is-an-ordinary-select",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c3",
+                "generation": "3",
+                "kind": "cast"
+              },
+              "phase": "selecting"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-after-a-failed-handoff-is-an-ordinary-select",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "failed",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        },
+        "recovery": "link-lost"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "recovery": null,
+            "owner": {
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c3",
+                "generation": "3",
+                "kind": "cast"
+              },
+              "phase": "selecting"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-same-receiver-same-item-shows-the-controls",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "show-controls",
+            "reason": "already-casting",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c2",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "candidate": null,
+              "phase": "active"
+            },
+            "observed": {
+              "ticks": "1000000000"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-same-item-goes-by-what-the-receiver-reports",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "5",
+          "entry": "1:k"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "1:k",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "show-controls",
+            "reason": "already-casting"
+          }
+        },
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "replace-on-link"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-same-receiver-other-item-replaces-on-the-same-link",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c3",
+                "generation": "3",
+                "kind": "cast"
+              },
+              "phase": "selecting",
+              "generation": "3"
+            },
+            "cleanup": "none",
+            "mediaSession": null,
+            "observed": null,
+            "effect": "replace-on-link",
+            "link": "connected"
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c3",
+                "generation": "3",
+                "kind": "cast"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "9",
+              "entry": "0:i"
+            }
+          },
+          "expected": {
+            "reason": "stale-observation",
+            "owner": {
+              "phase": "preparing"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "reason": "stale-observation",
+            "owner": {
+              "phase": "preparing"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-another-receiver-replaces-and-leaves-this-link",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "den",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "den",
+                "session": "c3",
+                "generation": "3",
+                "kind": "cast"
+              },
+              "phase": "selecting",
+              "generation": "3"
+            },
+            "cleanup": "none",
+            "mediaSession": null,
+            "observed": null,
+            "effect": "replace-elsewhere",
+            "link": "idle"
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "den",
+                "session": "c3",
+                "generation": "3",
+                "kind": "cast"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-while-detached-same-receiver-same-item-reconnects",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "disconnected",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "idle"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "reconnect",
+            "reason": "already-casting",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c2",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "disconnected"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-while-detached-same-receiver-other-item-joins-and-replaces",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "disconnected",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "idle"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c3",
+                "generation": "3",
+                "kind": "cast"
+              },
+              "phase": "selecting",
+              "generation": "3"
+            },
+            "cleanup": "none",
+            "mediaSession": null,
+            "observed": null,
+            "effect": "replace-rejoin",
+            "link": "idle"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-while-detached-elsewhere-is-refused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "disconnected",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "idle"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "den",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "reason": "detached-elsewhere",
+            "effect": "none",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c2",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "disconnected",
+              "candidate": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-while-the-link-is-suspended-is-refused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "suspended",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "reason": "link-not-ready",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c2",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-while-stopping-is-refused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "returning",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "reason": "handoff-busy",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c2",
+                "generation": "2",
+                "kind": "cast"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pick-during-a-handoff-is-refused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "candidate": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "phase": "connecting",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connecting"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "pick",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c3",
+              "generation": "3",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:j",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "reason": "handoff-busy",
+            "owner": {
+              "candidate": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c2",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "connecting"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.link-failed-during-a-connect-is-its-own-failure",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "candidate": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "phase": "connecting",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connecting"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "link-failed"
+          },
+          "expected": {
+            "link": "lost",
+            "recovery": "connect-failed",
+            "owner": {
+              "phase": "failed",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.link-failed-while-reconnecting-keeps-the-viewing",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "disconnected",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connecting"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "link-failed"
+          },
+          "expected": {
+            "link": "lost",
+            "notice": "connect-failed",
+            "recovery": null,
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c2",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "disconnected"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.link-failed-with-nothing-on-its-way-changes-nothing",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c2",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "active",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          },
+          "generation": "2"
+        },
+        "link": "connected",
+        "mediaSession": "7",
+        "observed": {
+          "mediaSession": "7",
+          "generation": "2",
+          "playerState": "playing",
+          "ticks": "1000000000",
+          "entry": "0:i"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "link-failed"
+          },
+          "expected": {
+            "reason": "stale-link",
+            "link": "connected",
+            "owner": {
+              "phase": "active"
+            }
           }
         }
       ]
