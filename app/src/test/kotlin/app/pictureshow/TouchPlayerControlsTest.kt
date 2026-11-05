@@ -272,6 +272,19 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { assertEquals(1, exits) }
     }
 
+    @Test fun systemBackLeavesAPausedPlayerTheSameWay() {
+        launch(paused = true)
+        compose.onNodeWithTag("touch:open:Audio").performClick()
+        back()
+        compose.onNodeWithTag("touch:sheet:Audio").assertDoesNotExist()
+        compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
+        back()
+        compose.onNodeWithTag("touch:toggle").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, exits) }
+        back()
+        compose.runOnIdle { assertEquals(1, exits) }
+    }
+
     @Test fun subtitleDelayIsBoundedAndResettable() {
         launch()
         decided(PlayMethod.DirectPlay)
