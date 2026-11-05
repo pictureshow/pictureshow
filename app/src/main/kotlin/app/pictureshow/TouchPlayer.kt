@@ -13,12 +13,6 @@ import android.view.ViewTreeObserver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -39,15 +33,9 @@ internal fun TouchPlayer(
     onCurrentItem: (MediaItem) -> Unit = {},
     onExit: () -> Unit
 ) {
-    var current by remember(account.key, item.id) { mutableStateOf(item) }
-    var start by remember(account.key, item.id) { mutableLongStateOf(startMs) }
-    LaunchedEffect(current) { onCurrentItem(current) }
     TouchPlayerWindow()
-    key(current.id) {
-        val host = rememberPlaybackHost(account, current, start, catalog, onNext = { next ->
-            start = next.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000
-            current = next
-        }, onExit = onExit)
+    PlayerViewing(account, item, startMs, onCurrentItem) { current, start, onNext ->
+        val host = rememberPlaybackHost(account, current, start, catalog, onNext = onNext, onExit = onExit)
         TouchPlayerContent(account, host)
     }
 }

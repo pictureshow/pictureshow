@@ -51,7 +51,7 @@ internal fun PlayerConversionNotice(
     val notice = decision?.takeIf { preferences.conversionNotice }?.let {
         ConversionNotice.of(it, subtitleIndex, CONVERSION_NOTICE_DEVICE)
     }
-    ConversionNoticeHost(notice, allowed, modifier, onDetails)
+    ConversionNoticeHost(notice, allowed, modifier, onDetails = onDetails)
 }
 
 /**
@@ -64,7 +64,15 @@ internal fun PlayerConversionNotice(
  * so a screen reader hears it once even when a panel hides it and it comes back.
  */
 @Composable
-internal fun ConversionNoticeHost(notice: ConversionNotice?, allowed: Boolean, modifier: Modifier = Modifier, onDetails: () -> Unit) {
+internal fun ConversionNoticeHost(
+    notice: ConversionNotice?,
+    allowed: Boolean,
+    modifier: Modifier = Modifier,
+    card: @Composable (ConversionNotice, Modifier, Boolean, () -> Unit) -> Unit = { shown, placement, announce, details ->
+        ConversionNoticeCard(shown, placement, announce, details)
+    },
+    onDetails: () -> Unit
+) {
     // 0 waiting, 1 showing, 2 done for this viewing.
     var phase by remember { mutableIntStateOf(0) }
     var shown by remember { mutableStateOf<ConversionNotice?>(null) }
@@ -86,7 +94,7 @@ internal fun ConversionNoticeHost(notice: ConversionNotice?, allowed: Boolean, m
     val current = shown
     // `notice != null` hides it in the same frame the conversion stops, before the effect retires it.
     if (phase == 1 && allowed && current != null && notice != null) {
-        ConversionNoticeCard(current, modifier, announce = !announced, onDetails = onDetails)
+        card(current, modifier, !announced, onDetails)
         DisposableEffect(Unit) { onDispose { announced = true } }
     }
 }

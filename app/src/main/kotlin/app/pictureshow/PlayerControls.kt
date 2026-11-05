@@ -92,6 +92,14 @@ internal fun ControlsAutoHide(
 @Composable
 internal fun playerButtonScale() = ButtonDefaults.scale(focusedScale = if (rememberAccessibilityEnabled()) 1f else 1.1f)
 
+internal fun playbackToggleState(paused: Boolean, showPlayButton: Boolean): String = if (paused) {
+    "Paused"
+} else if (showPlayButton) {
+    "Not playing"
+} else {
+    "Playing"
+}
+
 /** The label names the next action; the state names what playback is doing now. */
 @Composable
 internal fun PlaybackToggle(
@@ -101,13 +109,7 @@ internal fun PlaybackToggle(
     ended: Boolean = false,
     onClick: () -> Unit
 ) {
-    val current = if (paused) {
-        "Paused"
-    } else if (showPlayButton) {
-        "Not playing"
-    } else {
-        "Playing"
-    }
+    val current = playbackToggleState(paused, showPlayButton)
     // The end of the video stops the player, which isn't the viewer pausing. A changed state on the
     // focused button is read aloud, so keep it still until focus moves; a later visit reads the real state.
     // The end sets `ended` in the same main-thread turn that releases the player, so anything the release

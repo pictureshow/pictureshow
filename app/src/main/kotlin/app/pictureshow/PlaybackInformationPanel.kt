@@ -34,7 +34,7 @@ import app.pictureshow.core.playback.PlaybackSpeeds
 
 @Composable
 internal fun SpeedChoices(state: PlaybackSpeedState, transcode: Boolean, onSelect: (Float) -> Unit) {
-    val available = PlaybackSpeeds.choices.filter { PlaybackSpeeds.allowed(it, state.encodedAudio) }
+    val available = availablePlaybackSpeeds(state)
     TrackChoices(
         available.map { (it * 100).toInt() to PlaybackSpeeds.label(it) },
         (state.speed * 100).toInt(),
@@ -47,7 +47,7 @@ internal fun SpeedChoices(state: PlaybackSpeedState, transcode: Boolean, onSelec
             state.message?.takeIf { index == (state.speed * 100).toInt() }?.let { "$label. $it" }
         },
         footer = {
-            Text("Pitch is preserved. Resets to 1× next time.")
+            Text(PLAYBACK_SPEED_NOTE)
             state.message?.let { Text(it) }
             if (transcode) Text(PlaybackSpeeds.TRANSCODE)
         }
@@ -75,24 +75,90 @@ internal fun PlaybackInformationContent(
     }
     Text(PlaybackInformation.method(decision), style = MaterialTheme.typography.titleMedium)
     Text("↑ / ↓ scroll · Back closes", style = MaterialTheme.typography.labelMedium)
-    val source = decision.mediaSource
-    if (decision.method == app.pictureshow.core.playback.PlayMethod.Transcode) {
-        InformationSection("Why the server converts this stream") {
-            PlaybackInformation.reasons(decision, qualityMbps).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+    val tracks = rememberReceivedTracks(player)
+    playbackInformationSections(decision, audioIndex, subtitleIndex, qualityMbps, tracks).forEach { section ->
+        InformationSection(section.title) {
+            section.lines.forEach { line ->
+                if (section.reasons) Text(line, style = MaterialTheme.typography.bodyMedium) else Text(line)
+            }
         }
     }
-    InformationSection("Server-reported media") {
-        Text("Container: ${PlaybackInformation.codec(source.container)}")
-        Text("Total bitrate: ${PlaybackInformation.bitrate(source.bitrate)}")
-        val video = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
-        Text("Video: ${PlaybackInformation.codec(video?.codec)}")
-        Text("Resolution: ${PlaybackInformation.resolution(video?.width, video?.height)}")
-        Text("Video bitrate: ${PlaybackInformation.bitrate(video?.bitRate)}")
-        val audio = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Audio && it.index == audioIndex }
-        Text(if (audioIndex < 0) "Audio: Off" else "Audio: ${PlaybackInformation.codec(audio?.codec)}")
-        if (audioIndex >= 0) Text("Audio bitrate: ${PlaybackInformation.bitrate(audio?.bitRate)}")
-        Text("Subtitles: ${PlaybackInformation.subtitle(source, subtitleIndex)}")
+    Text(
+        PLAYBACK_INFORMATION_NOTE,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.testTag("playback:metadata-note")
+    )
+}
+
+internal const val PLAYBACK_INFORMATION_NOTE =
+    "Server metadata may describe the converted stream. Received formats are read from the player; missing values are not estimated."
+
+internal const val PLAYBACK_SPEED_NOTE = "Pitch is preserved. Resets to 1× next time."
+
+/** What both modes offer in the speed panel: encoded audio can't change rate, so only what it allows is listed. */
+internal fun availablePlaybackSpeeds(state: PlaybackSpeedState): List<Float> =
+    PlaybackSpeeds.choices.filter { PlaybackSpeeds.allowed(it, state.encodedAudio) }
+
+internal data class PlaybackInformationSection(val title: String, val lines: List<String>, val reasons: Boolean = false)
+
+/** PLAY-26's content, in its order: why first, then what the server reports, then what this device received. */
+internal fun playbackInformationSections(
+    decision: PlayDecision,
+    audioIndex: Int,
+    subtitleIndex: Int,
+    qualityMbps: Int?,
+    tracks: Tracks
+): List<PlaybackInformationSection> = buildList {
+    val source = decision.mediaSource
+    if (decision.method == app.pictureshow.core.playback.PlayMethod.Transcode) {
+        add(PlaybackInformationSection("Why the server converts this stream", PlaybackInformation.reasons(decision, qualityMbps), reasons = true))
     }
+    val video = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Video }
+    val audio = source.mediaStreams.firstOrNull { it.type == MediaStreamType.Audio && it.index == audioIndex }
+    add(
+        PlaybackInformationSection(
+            "Server-reported media",
+            buildList {
+                add("Container: ${PlaybackInformation.codec(source.container)}")
+                add("Total bitrate: ${PlaybackInformation.bitrate(source.bitrate)}")
+                add("Video: ${PlaybackInformation.codec(video?.codec)}")
+                add("Resolution: ${PlaybackInformation.resolution(video?.width, video?.height)}")
+                add("Video bitrate: ${PlaybackInformation.bitrate(video?.bitRate)}")
+                add(if (audioIndex < 0) "Audio: Off" else "Audio: ${PlaybackInformation.codec(audio?.codec)}")
+                if (audioIndex >= 0) add("Audio bitrate: ${PlaybackInformation.bitrate(audio?.bitRate)}")
+                add("Subtitles: ${PlaybackInformation.subtitle(source, subtitleIndex)}")
+            }
+        )
+    )
+    add(
+        PlaybackInformationSection(
+            "Stream received by this device",
+            buildList {
+                listOf(C.TRACK_TYPE_VIDEO to "Video", C.TRACK_TYPE_AUDIO to "Audio").forEach { (type, label) ->
+                    val group = tracks.groups.firstOrNull { it.type == type && it.isSelected }
+                    val format = group?.let { selected ->
+                        (0 until selected.length).firstOrNull { selected.isTrackSelected(it) }?.let(selected::getTrackFormat)
+                    }
+                    val codec = when (format?.sampleMimeType) {
+                        "video/avc" -> "H264"
+                        "video/hevc" -> "HEVC"
+                        "video/av01" -> "AV1"
+                        "audio/mp4a-latm" -> "AAC"
+                        else -> format?.codecs ?: format?.sampleMimeType?.substringAfter('/')
+                    }
+                    val rate = format?.averageBitrate?.takeIf { it > 0 } ?: format?.peakBitrate
+                    add("$label: ${PlaybackInformation.codec(codec)}")
+                    if (type == C.TRACK_TYPE_VIDEO) add("Resolution: ${PlaybackInformation.resolution(format?.width, format?.height)}")
+                    add("$label bitrate: ${PlaybackInformation.bitrate(rate)}")
+                }
+            }
+        )
+    )
+}
+
+/** The player's current tracks, following its changes. */
+@Composable
+internal fun rememberReceivedTracks(player: Player?): Tracks {
     var tracks by remember(player) { mutableStateOf(player?.currentTracks ?: Tracks.EMPTY) }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -103,31 +169,7 @@ internal fun PlaybackInformationContent(
         player?.addListener(listener)
         onDispose { player?.removeListener(listener) }
     }
-    InformationSection("Stream received by this device") {
-        listOf(C.TRACK_TYPE_VIDEO to "Video", C.TRACK_TYPE_AUDIO to "Audio").forEach { (type, label) ->
-            val group = tracks.groups.firstOrNull { it.type == type && it.isSelected }
-            val format = group?.let { selected ->
-                (0 until selected.length).firstOrNull { selected.isTrackSelected(it) }?.let(selected::getTrackFormat)
-            }
-            val codec = when (format?.sampleMimeType) {
-                "video/avc" -> "H264"
-                "video/hevc" -> "HEVC"
-                "video/av01" -> "AV1"
-                "audio/mp4a-latm" -> "AAC"
-                else -> format?.codecs ?: format?.sampleMimeType?.substringAfter('/')
-            }
-            val rate = format?.averageBitrate?.takeIf { it > 0 } ?: format?.peakBitrate
-            Text("$label: ${PlaybackInformation.codec(codec)}")
-            if (type == C.TRACK_TYPE_VIDEO) Text("Resolution: ${PlaybackInformation.resolution(format?.width, format?.height)}")
-            Text("$label bitrate: ${PlaybackInformation.bitrate(rate)}")
-        }
-    }
-    Text(
-        "Server metadata may describe the converted stream. Received formats are read " +
-            "from the player; missing values are not estimated.",
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.testTag("playback:metadata-note")
-    )
+    return tracks
 }
 
 @Composable

@@ -12,14 +12,19 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.media3.common.Player
@@ -98,13 +103,17 @@ class TouchPlayerControlsTest {
     }
 
     @Test fun leftAndRightDoubleTapSeekTenSecondsAndClamp() {
-        launch()
+        launch(paused = true)
         compose.onNodeWithTag("touch:gestures").performTouchInput { doubleClick(Offset(width * 0.2f, height * 0.3f)) }
         compose.runOnIdle { assertEquals(10_000, host.position) }
         compose.onNodeWithTag("touch:gestures").performTouchInput { doubleClick(Offset(width * 0.8f, height * 0.3f)) }
         compose.runOnIdle { assertEquals(20_000, host.position) }
-        assertEquals(0, touchSeekTarget(2_000, 60_000, false))
-        assertEquals(60_000, touchSeekTarget(58_000, 60_000, true))
+        compose.onNodeWithTag("touch:scrubber").performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(58_000f)) }
+        compose.onNodeWithTag("touch:gestures").performTouchInput { doubleClick(Offset(width * 0.8f, height * 0.3f)) }
+        compose.runOnIdle { assertEquals(60_000, host.position) }
+        compose.onNodeWithTag("touch:scrubber").performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(2_000f)) }
+        compose.onNodeWithTag("touch:gestures").performTouchInput { doubleClick(Offset(width * 0.2f, height * 0.3f)) }
+        compose.runOnIdle { assertEquals(0, host.position) }
     }
 
     @Test fun scrubberSemanticsCommitsAbsolutePositionToDecoder() {
@@ -114,6 +123,12 @@ class TouchPlayerControlsTest {
             assertEquals(37_000, host.position)
             assertEquals(37_000, decoder.currentPosition)
         }
+    }
+
+    @Test fun quickDoubleTapsAccumulateAgainstTheLastTarget() {
+        launch(paused = true)
+        repeat(2) { compose.onNodeWithTag("touch:gestures").performTouchInput { doubleClick(Offset(width * 0.8f, height * 0.3f)) } }
+        compose.runOnIdle { assertEquals(40_000, decoder.seeks.last()) }
     }
 
     @Test fun scrubberDragPreviewsBeforeCommitAndCommitsOnRelease() {
@@ -189,7 +204,7 @@ class TouchPlayerControlsTest {
         compose.runOnIdle {
             host.position = 50_000
             host.segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
-            host.nextLookup = TouchEpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
+            host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
         }
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
@@ -245,6 +260,7 @@ class TouchPlayerControlsTest {
 
     @Test fun subtitleDelayIsBoundedAndResettable() {
         launch()
+        decided(PlayMethod.DirectPlay)
         compose.onNodeWithTag("touch:open:Subtitles").performClick()
         compose.onNodeWithText("Later").performClick()
         compose.runOnIdle { assertEquals(100, host.subtitleDelayMs) }
@@ -281,16 +297,165 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { assertEquals(25_000, decoder.seeks.last()) }
     }
 
+    @Test fun speedSheetChangesTheViewingSpeedAndTheButtonNamesIt() {
+        launch()
+        compose.onNodeWithText("Speed · 1×").assertIsDisplayed()
+        compose.onNodeWithTag("touch:open:Speed").performClick()
+        compose.onNodeWithText(PLAYBACK_SPEED_NOTE).assertIsDisplayed()
+        compose.onNodeWithTag("touch:speed:150").performClick()
+        compose.onNodeWithTag("touch:sheet:Speed").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1.5f, output.speed.value.speed) }
+        compose.onNodeWithText("Speed · 1.5×").assertIsDisplayed()
+    }
+
+    @Test fun encodedAudioOnlyOffersNormalSpeed() {
+        assertEquals(listOf(1f), availablePlaybackSpeeds(PlaybackSpeedState(encodedAudio = true)))
+        assertTrue(availablePlaybackSpeeds(PlaybackSpeedState()).size > 1)
+    }
+
+    @Test fun playbackInfoSheetCarriesWhyWhatTheServerReportsAndWhatArrived() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.onNodeWithTag("touch:open:Info").performClick()
+        compose.onNodeWithTag("touch:info").assertIsDisplayed()
+        listOf("Why the server converts this stream", "Server-reported media", "Stream received by this device").forEach {
+            compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
+        }
+        compose.onNodeWithText(PLAYBACK_INFORMATION_NOTE).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun playbackInfoExplainsAConversionOnlyWhenThereIsOne() {
+        val sections = { method: PlayMethod ->
+            playbackInformationSections(decision(method), 1, -1, null, androidx.media3.common.Tracks.EMPTY).map { it.title }
+        }
+        assertEquals("Why the server converts this stream", sections(PlayMethod.Transcode).first())
+        assertEquals(listOf("Server-reported media", "Stream received by this device"), sections(PlayMethod.DirectPlay))
+    }
+
+    @Test fun conversionNoticeNamesThisPhoneAndATapOpensPlaybackInfo() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed()
+        compose.onNodeWithText(TOUCH_CONVERSION_NOTICE_ACTION, substring = true).assertIsDisplayed()
+        compose.onNodeWithText("this phone", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("touch:conversion-notice").performClick()
+        compose.onNodeWithTag("touch:sheet:Info").assertIsDisplayed()
+        compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "sw800dp-w800dp-h1280dp-xhdpi")
+    fun conversionNoticeNamesThisTablet() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.onNodeWithText("this tablet", substring = true).assertIsDisplayed()
+    }
+
+    @Test fun conversionNoticeStaysOffWhenDirectPlayOrSwitchedOff() {
+        launch()
+        decided(PlayMethod.DirectPlay)
+        compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+        compose.runOnIdle { host.localPreferences = host.localPreferences.copy(conversionNotice = false) }
+        decided(PlayMethod.Transcode)
+        compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+    }
+
+    @Test fun conversionNoticeLeavesAfterTenSeconds() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(CONVERSION_NOTICE_MS + 500)
+        compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+    }
+
+    @Test fun deferredNextWaitsForPlayWithoutACountdownAndThePlayButtonTakesIt() {
+        var played: MediaItem? = null
+        launch(paused = true, onNext = { played = it })
+        val next = MediaItem("next", "Another episode")
+        compose.runOnIdle {
+            host.advanceReported = true
+            host.deferredNext = next
+        }
+        compose.onNodeWithTag("next:play").assertIsDisplayed()
+        compose.onNodeWithText("Next episode · ", substring = true).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(20_000)
+        compose.runOnIdle { assertEquals(null, played, "A deferred next never starts itself") }
+        compose.onNodeWithTag("touch:toggle").performClick()
+        compose.runOnIdle { assertEquals(next, played) }
+    }
+
+    @Test fun readerGetsSeekActionsWithoutShowingControlsAndNamedSteps() {
+        launch()
+        compose.onNodeWithContentDescription("Back 10 seconds").assertHasClickAction()
+        compose.onNodeWithContentDescription("Forward 10 seconds").assertHasClickAction()
+        compose.onNodeWithTag("touch:gestures").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        val actions = compose.onNodeWithTag("touch:gestures").fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        assertEquals(listOf("Back 10 seconds", "Forward 10 seconds"), actions.map { it.label })
+        compose.runOnIdle { assertTrue(actions.first().action!!()) }
+        compose.runOnIdle { assertTrue(decoder.seeks.last() in 10_000..12_000, "A step moves from where playback really is") }
+    }
+
+    @Test fun scrubberSpeaksThePositionInWordsAndNeverPerTick() {
+        launch(paused = true)
+        val spoken = { compose.onNodeWithTag("touch:scrubber").fetchSemanticsNode().config[SemanticsProperties.StateDescription] }
+        compose.waitForIdle()
+        val first = spoken()
+        assertEquals(spokenPlaybackPosition(20_000, 60_000), first)
+        compose.runOnIdle { host.position = 21_000 }
+        compose.waitForIdle()
+        assertEquals(first, spoken(), "A paused clock's tick must not change what the reader hears")
+    }
+
+    @Test fun readerHearsTheNextEpisodeArriveAndCanActOnIt() {
+        var plays = 0
+        var cancels = 0
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                TouchNextEpisodeCard("Another episode", 12, false, { plays++ }, { cancels++ }, announcement = "Season 1, Episode 2, Another episode")
+            }
+        }
+        compose.onNodeWithContentDescription("Next episode, Season 1, Episode 2, Another episode").assert(
+            androidx.compose.ui.test.SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
+        )
+        compose.onNodeWithContentDescription("Play next episode, Season 1, Episode 2, Another episode").performClick()
+        compose.onNodeWithContentDescription("Cancel next episode").performClick()
+        compose.runOnIdle { assertEquals(1 to 1, plays to cancels) }
+    }
+
+    @Test fun errorCardSaysWhenProgressCouldNotBeSaved() {
+        launch()
+        compose.runOnIdle {
+            host.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false, error = "Playback failed", reportError = "Offline"))
+        }
+        compose.onNodeWithText("Could not save progress: Offline").assertIsDisplayed()
+    }
+
+    private fun decision(method: PlayMethod) = PlayDecision(
+        "movie",
+        MediaSourceInfo(id = "source"),
+        method,
+        "https://example.test/video",
+        emptyMap(),
+        "session",
+        if (method == PlayMethod.Transcode) listOf("VideoCodecNotSupported") else emptyList()
+    )
+
+    private fun decided(method: PlayMethod) {
+        compose.runOnIdle { host.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false, decision = decision(method))) }
+        compose.waitForIdle()
+    }
+
     private fun back() {
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
     }
 
-    private fun launch(paused: Boolean = false) {
+    private fun launch(paused: Boolean = false, onNext: (MediaItem) -> Unit = {}) {
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
             decoder = Decoder(!paused)
-            host = PlaybackHostState(MediaItem("movie", "A film"), 20_000, output, {}, { exits++ })
+            host = PlaybackHostState(MediaItem("movie", "A film"), 20_000, output, onNext, { exits++ })
             host.playerSource = androidx.compose.runtime.mutableStateOf(decoder)
             host.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false))
             host.duration = 60_000
