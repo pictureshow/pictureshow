@@ -312,7 +312,7 @@ private fun observe(s: CastState, event: CastEvent): CastState {
         return when {
             waiting -> s.copy(reason = "stale-observation")
             s.stop == "sent" || s.stop == "unknown" -> stopConfirmed(s)
-            else -> receiverEnded(s, "receiver-stopped", null)
+            else -> receiverEnded(s, endedNotice(o.idleReason), null)
         }
     }
     if (o.generation != target.generation) {
@@ -321,7 +321,7 @@ private fun observe(s: CastState, event: CastEvent): CastState {
             older || waiting -> s.copy(reason = "stale-observation")
             s.stop == "sent" || s.stop == "unknown" -> stopConfirmed(s)
             // Someone else loaded their media on this receiver: this viewing is over, and that media isn't ours to show.
-            else -> receiverEnded(s, "receiver-taken", null)
+            else -> receiverEnded(s, if (idle) endedNotice(o.idleReason) else "receiver-taken", null)
         }
     }
     // Session ids rise. An older one is a status from before; a newer one under this generation is this same viewing,

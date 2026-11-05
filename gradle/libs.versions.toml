@@ -12,6 +12,9 @@ media3 = "1.11.1"
 okhttp = "5.5.0"
 
 [libraries]
+# 22.3.1 declares minSdk 23, the app's own; 23.x needs 24.
+play-services-cast-framework = { module = "com.google.android.gms:play-services-cast-framework", version = "22.3.1" }
+mediarouter = { module = "androidx.mediarouter:mediarouter", version = "1.8.1" }
 play-billing = { module = "com.android.billingclient:billing", version = "9.1.0" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }

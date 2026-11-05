@@ -75,6 +75,8 @@ androidComponents.onVariants { variant ->
 dependencies {
     implementation(project(":core"))
     implementation(libs.play.billing)
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.mediarouter)
     implementation(libs.tvprovider)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)

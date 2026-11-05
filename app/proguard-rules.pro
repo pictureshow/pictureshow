@@ -3,3 +3,5 @@
 -keep class androidx.media3.decoder.ffmpeg.FfmpegLibrary { public static *; }
 -keep class androidx.media3.decoder.ffmpeg.FfmpegDecoder { *; }
 -keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }
+# The Cast SDK reads this class name from the manifest.
+-keep class app.pictureshow.CastOptionsProvider { public <init>(); }
