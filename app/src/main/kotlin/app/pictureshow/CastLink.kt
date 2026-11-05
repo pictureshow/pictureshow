@@ -46,7 +46,8 @@ internal data class CastStatus(
     val queue: List<String> = emptyList(),
     val commands: List<String> = emptyList()
 ) {
-    override fun toString() = "CastStatus(mediaSession=$mediaSession, playerState=$playerState, idleReason=$idleReason, positionMs=$positionMs)"
+    override fun toString() =
+        "CastStatus(mediaSession=$mediaSession, playerState=$playerState, idleReason=$idleReason, positionMs=$positionMs)"
 }
 
 internal interface CastLinkListener {

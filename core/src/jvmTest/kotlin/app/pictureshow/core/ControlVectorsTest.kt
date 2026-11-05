@@ -63,7 +63,8 @@ import kotlinx.serialization.json.put
 /** Frozen traces: exact typed values at explicit projections, no record/update mode. */
 class ControlVectorsTest {
     private val json = Json { encodeDefaults = true }
-    private val suites = setOf("session-owner", "session-command", "queue-edit", "queue-order", "playback-mode", "cast-handoff", "cast-capability")
+    private val suites =
+        setOf("session-owner", "session-command", "queue-edit", "queue-order", "playback-mode", "cast-handoff", "cast-capability")
 
     @Test fun sessionOwner() = run("session-owner")
 
@@ -151,32 +152,45 @@ class ControlVectorsTest {
         "owner" -> json.encodeToJsonElement(
             reduceOwner(json.decodeFromJsonElement<OwnerState>(state), json.decodeFromJsonElement<OwnerEvent>(event))
         )
+
         "temporary" -> json.encodeToJsonElement(
             reduceTemporary(json.decodeFromJsonElement<TemporaryState>(state), json.decodeFromJsonElement<TemporaryEvent>(event))
         )
+
         "command" -> json.encodeToJsonElement(
             reduceCommand(json.decodeFromJsonElement<CommandState>(state), json.decodeFromJsonElement<CommandEvent>(event))
         )
+
         "queue" -> json.encodeToJsonElement(
             reduceQueue(json.decodeFromJsonElement<QueueState>(state), json.decodeFromJsonElement<QueueEvent>(event))
         )
+
         "store" -> json.encodeToJsonElement(
             reduceQueueStore(json.decodeFromJsonElement<QueueStoreState>(state), json.decodeFromJsonElement<QueueStoreEvent>(event))
         )
+
         "transfer" -> json.encodeToJsonElement(
             reduceTransfer(json.decodeFromJsonElement<TransferState>(state), json.decodeFromJsonElement<TransferEvent>(event))
         )
+
         "mode" -> json.encodeToJsonElement(
             reduceMode(json.decodeFromJsonElement<ModeState>(state), json.decodeFromJsonElement<ModeEvent>(event))
         )
+
         "cast" -> json.encodeToJsonElement(
             reduceCast(json.decodeFromJsonElement<CastState>(state), json.decodeFromJsonElement<CastEvent>(event))
         )
+
         "capability" -> json.encodeToJsonElement(castCapability(json.decodeFromJsonElement<CastCapabilityInput>(event)))
+
         "controls" -> json.encodeToJsonElement(castControls(json.decodeFromJsonElement<CastControlsInput>(event)))
+
         "reach" -> json.encodeToJsonElement(castReach(json.decodeFromJsonElement<CastReachInput>(event)))
+
         "profile" -> PlaybackJson.encodeToJsonElement(DeviceProfile.serializer(), castDeviceProfile())
+
         "media" -> castMediaProjection(event.jsonObject)
+
         else -> error("Unknown control vector operation: $operation")
     }
 

@@ -108,6 +108,7 @@ private fun withToken(url: String, token: String): String {
 /** The receiver needs the content type up front; it can't take it from a file name on these URLs. */
 fun castContentType(decision: PlayDecision): String = when {
     decision.method == PlayMethod.Transcode -> "application/x-mpegURL"
+
     else -> when (decision.mediaSource.container?.substringBefore(',')?.lowercase()) {
         "webm" -> "video/webm"
         "mp3" -> "audio/mpeg"

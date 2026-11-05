@@ -98,11 +98,8 @@ internal class AndroidCastEnvironment(private val context: Context) : CastEnviro
 /** The SDK's own minimum, kept as data so a future version's higher floor shows up as a state and not as a crash. */
 internal const val CAST_MIN_SDK = 23
 
-private class ClientCastGateway(
-    private val http: HttpClient,
-    private val identity: DeviceIdentityStore,
-    private val name: String
-) : CastMediaGateway {
+private class ClientCastGateway(private val http: HttpClient, private val identity: DeviceIdentityStore, private val name: String) :
+    CastMediaGateway {
     private suspend fun client() = PlaybackClient(http, ClientIdentity(name, identity.getOrCreate(), BuildConfig.VERSION_NAME))
 
     override suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome> =
@@ -139,7 +136,12 @@ private class ClientCastGateway(
     override suspend fun reportStopped(account: Account, report: CastReport) {
         client().reportStopped(
             account,
-            PlaybackStopInfo(itemId = report.itemId, mediaSourceId = report.mediaSourceId, playSessionId = report.playSessionId, positionTicks = report.positionTicks)
+            PlaybackStopInfo(
+                itemId = report.itemId,
+                mediaSourceId = report.mediaSourceId,
+                playSessionId = report.playSessionId,
+                positionTicks = report.positionTicks
+            )
         )
     }
 

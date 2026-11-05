@@ -91,11 +91,17 @@ internal fun castStatusLine(ui: CastUi): String? {
     val observed = cast.observed
     return when {
         cast.owner.candidate != null -> "Starting on $device…"
+
         cast.owner.owner.kind != "cast" -> null
+
         cast.owner.phase == "returning" -> "Stopping on $device…"
+
         cast.owner.phase == "disconnected" -> "$device: not connected"
+
         cast.link == "suspended" -> "$device: reconnecting…"
+
         observed == null -> "$device: checking…"
+
         else -> buildString {
             append(device).append(": ")
             append(ui.title ?: "Playing")
@@ -109,7 +115,9 @@ internal fun castStatusLine(ui: CastUi): String? {
 
 internal fun Context.openAppSettings() {
     runCatching {
-        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 }
 
@@ -148,8 +156,12 @@ internal fun TouchCastChooser(
                 }
                 when {
                     remote.listing -> Text("Looking for TVs…")
+
                     remote.listFailed && remote.targets.isEmpty() -> Text("Couldn't reach the server. Check your connection and try again.")
-                    remote.targets.isEmpty() -> Text("No Pictureshow TVs are available. Open Pictureshow on your TV and sign in, then try again.")
+
+                    remote.targets.isEmpty() -> Text(
+                        "No Pictureshow TVs are available. Open Pictureshow on your TV and sign in, then try again."
+                    )
                 }
                 remote.targets.forEach { target ->
                     OutlinedButton(
@@ -168,7 +180,13 @@ internal fun TouchCastChooser(
                         Text(it, modifier = Modifier.testTag("cast:capability").semantics { liveRegion = LiveRegionMode.Polite })
                     }
                     ui.blockedReach?.let {
-                        Text(castReachMessage(it.category), modifier = Modifier.testTag("cast:reach").semantics { liveRegion = LiveRegionMode.Polite })
+                        Text(
+                            castReachMessage(it.category),
+                            modifier = Modifier.testTag("cast:reach").semantics {
+                                liveRegion =
+                                    LiveRegionMode.Polite
+                            }
+                        )
                     }
                     ui.routes.forEach { route ->
                         OutlinedButton(
@@ -182,17 +200,24 @@ internal fun TouchCastChooser(
                         }
                     }
                     when (ui.capability.state) {
-                        "services-update-required" -> TextButton(onClick = context::openPlayServicesListing, Modifier.heightIn(min = 48.dp)) {
+                        "services-update-required" -> TextButton(
+                            onClick = context::openPlayServicesListing,
+                            Modifier.heightIn(min = 48.dp)
+                        ) {
                             Text("Update Google Play services")
                         }
+
                         "permission-denied" -> TextButton(onClick = context::openAppSettings, Modifier.heightIn(min = 48.dp)) {
                             Text("Open app settings")
                         }
+
                         "viewer-disabled" -> TextButton(
                             onClick = { onSetCastEnabled(true) },
                             Modifier.heightIn(min = 48.dp).testTag("cast:enable")
                         ) { Text("Turn on Google Cast") }
+
                         "os-too-old", "browser-unsupported", "services-missing" -> Unit
+
                         else -> TextButton(
                             onClick = { onSetCastEnabled(false) },
                             Modifier.heightIn(min = 48.dp).testTag("cast:disable")
@@ -239,18 +264,21 @@ internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
     }
     when {
         cast.owner.candidate != null -> dialog("cast:starting", "Starting on $device…", null, "Cancel" to host::cancel)()
+
         cast.owner.phase == "failed" -> dialog(
             "cast:failed",
             castRecoveryMessage(cast.recovery, device),
             "Resume here" to { host.resumeHere() },
             "Close" to host::dismiss
         )()
+
         cast.owner.phase == "return-uncertain" -> dialog(
             "cast:stop-unknown",
             "$device hasn't confirmed it stopped, so it may still be playing.",
             "Try again" to host::retryStop,
             "Play here anyway" to { host.resumeHere(confirmed = true) }
         )()
+
         cast.owner.phase == "return-ready" && cast.stopPurpose == "ended" -> dialog(
             "cast:ended",
             castNoticeMessage(cast.notice, device) ?: "Playback ended on $device.",
@@ -280,12 +308,15 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
         ui.title?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
         when {
             cast == null -> Text("Nothing is casting.")
+
             cast.owner.phase == "disconnected" -> {
                 Text(castNoticeMessage(cast.notice, device) ?: "This device isn't connected to $device.")
                 Button(onClick = host::reconnect, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:reconnect")) { Text("Reconnect") }
                 TextButton(onClick = host::dismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Forget it") }
             }
+
             observed == null -> Text("Checking what $device is doing…")
+
             else -> {
                 val position = remoteClock(observed.ticks)
                 val line = when {
@@ -340,9 +371,15 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
                 }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = host::stop, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:stop")) { Text("Stop casting") }
-                OutlinedButton(onClick = host::playHere, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:play-here")) { Text("Play here") }
-                OutlinedButton(onClick = host::disconnect, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:disconnect")) { Text("Disconnect") }
+                OutlinedButton(onClick = host::stop, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:stop")) {
+                    Text("Stop casting")
+                }
+                OutlinedButton(onClick = host::playHere, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:play-here")) {
+                    Text("Play here")
+                }
+                OutlinedButton(onClick = host::disconnect, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:disconnect")) {
+                    Text("Disconnect")
+                }
             }
         }
         if (returning) Text("Stopping on $device…")
