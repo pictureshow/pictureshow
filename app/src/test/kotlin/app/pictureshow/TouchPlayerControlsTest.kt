@@ -433,7 +433,8 @@ class TouchPlayerControlsTest {
     @Test fun errorCardSaysWhenProgressCouldNotBeSaved() {
         launch()
         compose.runOnIdle {
-            host.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false, error = "Playback failed", reportError = "Offline"))
+            val failed = PlaybackState(preparing = false, error = "Playback failed", reportError = "Offline")
+            host.stateSource = androidx.compose.runtime.mutableStateOf(failed)
         }
         compose.onNodeWithText("Could not save progress: Offline").assertIsDisplayed()
     }
@@ -449,7 +450,10 @@ class TouchPlayerControlsTest {
     )
 
     private fun decided(method: PlayMethod) {
-        compose.runOnIdle { host.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false, decision = decision(method))) }
+        compose.runOnIdle {
+            val state = PlaybackState(preparing = false, decision = decision(method))
+            host.stateSource = androidx.compose.runtime.mutableStateOf(state)
+        }
         compose.waitForIdle()
     }
 
