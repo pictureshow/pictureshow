@@ -38,6 +38,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** CAT-08..13 in touch form: a finger tap during the wait, no focus or key queue. */
@@ -159,6 +160,44 @@ class TouchDetailPendingTest {
         assertEquals("Watched", page.label("played"))
         page.settle(2_000)
         assertEquals("Mark watched when ready", page.label("played"))
+    }
+
+    // The heading a returning viewer sees stays put; what the fresh read adds comes below it.
+    @Test fun aFreshReadAddsBelowTheFrozenRouteHeader() {
+        val page = Page(pending(item = null))
+        val corrected = film.copy(name = "Corrected name", overview = "Fresh overview")
+        page.state = pending(corrected, loading = false).copy(readSucceeded = true)
+        page.settle()
+        compose.onNodeWithText("Invented film").assertExists()
+        compose.onNodeWithText("Corrected name").assertDoesNotExist()
+        page.state = fresh(corrected)
+        page.settle()
+        compose.onNodeWithText("Invented film").assertExists()
+        compose.onNodeWithText("More details").assertExists()
+        compose.onNodeWithText("Corrected name").assertExists()
+    }
+
+    @Test fun theFirstArrivalShowsTheRouteCardWhileItsReadRuns() {
+        val page = Page(CatalogDetailState(account, loading = true))
+        compose.onNodeWithText("Invented film").assertExists()
+        assertEquals("Play", page.label("primary"))
+    }
+
+    // Real text measurement: a narrow cell wraps "when ready" wording, and the reserved wording keeps the rows still.
+    @Config(qualifiers = "w280dp-h900dp-port-xhdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun aLongerLabelDoesNotMoveTheGridOnANarrowPhone() {
+        val page = Page(pending())
+        val start = page.bounds()
+        page.settle(2_000)
+        assertEquals("Mark watched when ready", page.label("played"))
+        assertEquals(start, page.bounds())
+        page.tap("from-start")
+        assertEquals(start, page.bounds())
+        page.state = fresh(resumable)
+        page.settle()
+        assertEquals(start, page.bounds())
     }
 
     // CAT-09
