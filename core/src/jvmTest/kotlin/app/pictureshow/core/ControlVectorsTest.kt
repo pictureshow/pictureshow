@@ -7,6 +7,8 @@ import app.pictureshow.core.control.CastCapabilityInput
 import app.pictureshow.core.control.CastControlsInput
 import app.pictureshow.core.control.CastEvent
 import app.pictureshow.core.control.CastReachInput
+import app.pictureshow.core.control.CastReattachInput
+import app.pictureshow.core.control.CastSessionEvent
 import app.pictureshow.core.control.CastState
 import app.pictureshow.core.control.CommandEvent
 import app.pictureshow.core.control.CommandState
@@ -28,6 +30,8 @@ import app.pictureshow.core.control.castControls
 import app.pictureshow.core.control.castDeviceProfile
 import app.pictureshow.core.control.castMediaUrl
 import app.pictureshow.core.control.castReach
+import app.pictureshow.core.control.castReattach
+import app.pictureshow.core.control.reduceCastSession
 import app.pictureshow.core.control.castSubtitles
 import app.pictureshow.core.control.reduceCast
 import app.pictureshow.core.control.reduceCommand
@@ -64,7 +68,7 @@ import kotlinx.serialization.json.put
 class ControlVectorsTest {
     private val json = Json { encodeDefaults = true }
     private val suites =
-        setOf("session-owner", "session-command", "queue-edit", "queue-order", "playback-mode", "cast-handoff", "cast-capability")
+        setOf("session-owner", "session-command", "queue-edit", "queue-order", "playback-mode", "cast-handoff", "cast-capability", "cast-session")
 
     @Test fun sessionOwner() = run("session-owner")
 
@@ -79,6 +83,8 @@ class ControlVectorsTest {
     @Test fun castHandoff() = run("cast-handoff")
 
     @Test fun castCapability() = run("cast-capability")
+
+    @Test fun castSession() = run("cast-session")
 
     @Test fun everyPackagedSuiteHasAnExecutorAndUnknownOperationsFail() {
         val directory = File(requireNotNull(javaClass.classLoader.getResource("control-vectors")).toURI())
@@ -180,6 +186,12 @@ class ControlVectorsTest {
         "cast" -> json.encodeToJsonElement(
             reduceCast(json.decodeFromJsonElement<CastState>(state), json.decodeFromJsonElement<CastEvent>(event))
         )
+
+        "session" -> json.encodeToJsonElement(
+            reduceCastSession(json.decodeFromJsonElement<TemporaryState>(state), json.decodeFromJsonElement<CastSessionEvent>(event))
+        )
+
+        "reattach" -> json.encodeToJsonElement(castReattach(json.decodeFromJsonElement<CastReattachInput>(event)))
 
         "capability" -> json.encodeToJsonElement(castCapability(json.decodeFromJsonElement<CastCapabilityInput>(event)))
 

@@ -28,9 +28,10 @@ class CastSourceIsolationTest {
 
     @Test fun onlyTheAdapterImportsTheSdk() {
         val importers = sources.filter { file ->
-            file.readLines().any { line ->
+            val imports = file.readLines().any { line ->
                 line.startsWith("import com.google.android.gms.") || line.startsWith("import androidx.mediarouter")
-            } || file.readText().let { "com.google.android.gms.cast" in it && file.name != "GmsCastLink.kt" }
+            }
+            imports || ("com.google.android.gms.cast" in file.readText() && file.name != "GmsCastLink.kt")
         }.map { it.name }
         assertEquals(listOf("GmsCastLink.kt"), importers)
     }
