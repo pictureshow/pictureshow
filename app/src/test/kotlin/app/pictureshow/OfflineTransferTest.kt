@@ -96,6 +96,19 @@ class OfflineTransferTest {
     }
 
     @Test
+    fun `a sign-in page in place of media leaves the partial alone`() {
+        val target = folder.newFile()
+        target.writeBytes(ByteArray(300_000) { 9 })
+        val ledger = Ledger()
+        val page = "<html>Sign in</html>".toByteArray()
+        val answer = answer(200, ByteArrayInputStream(page), page.size.toLong(), "Content-Type" to "text/html; charset=utf-8")
+        val result = run(answer, ledger, target, stored)
+        assertTrue(result is OfflineTransferResult.Interrupted)
+        assertEquals(300_000L, target.length())
+        assertEquals(0L, ledger.discarded)
+    }
+
+    @Test
     fun `a 200 on resume starts over instead of appending`() {
         val target = folder.newFile()
         target.writeBytes(ByteArray(300_000) { 9 })

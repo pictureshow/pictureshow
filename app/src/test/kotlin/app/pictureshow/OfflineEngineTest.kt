@@ -11,6 +11,7 @@ import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
+import app.pictureshow.core.offline.OFFLINE_PART_SUFFIX
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
 import app.pictureshow.core.offline.offlineEntryId
@@ -70,6 +71,18 @@ class OfflineEngineTest {
     private var offAfterNextCut = false
 
     @Volatile
+    private var portalAfterNextCut = false
+
+    @Volatile
+    private var portal = false
+
+    @Volatile
+    private var networkThrows = false
+
+    @Volatile
+    private var freeThrows = false
+
+    @Volatile
     private var downloadsAlwaysDrop = false
 
     private lateinit var serverInfo: Server
@@ -88,6 +101,7 @@ class OfflineEngineTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 requests += request
                 if (serverOff) return MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
+                if (portal) return MockResponse().setHeader("Content-Type", "text/html").setBody("<html>Sign in to Wi-Fi</html>")
                 val path = request.path.orEmpty().substringBefore('?')
                 return when {
                     path.startsWith("/Users/") && path.contains("/Items/") -> json(itemJson(path.substringAfterLast('/')))
@@ -125,8 +139,11 @@ class OfflineEngineTest {
         )
     }
 
+    private var restoreCrashHandler: () -> Unit = {}
+
     @After
     fun tearDown() {
+        restoreCrashHandler()
         hold = false
         scopes.forEach { it.cancel() }
         server.shutdown()
@@ -138,6 +155,7 @@ class OfflineEngineTest {
     private fun download(request: RecordedRequest): MockResponse {
         if (downloadsAlwaysDrop) return MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
         if (offAfterNextCut) serverOff = true
+        if (portalAfterNextCut) portal = true
         if (hold) return MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
         val range = request.getHeader("Range")
         val start = range?.removePrefix("bytes=")?.removeSuffix("-")?.toInt() ?: 0
@@ -168,8 +186,14 @@ class OfflineEngineTest {
             },
             http = offlineOkHttp(),
             apiClient = okhttp3.OkHttpClient(),
-            networkState = { network },
-            freeBytes = { free },
+            networkState = {
+                check(!networkThrows) { "network" }
+                network
+            },
+            freeBytes = {
+                check(!freeThrows) { "free" }
+                free
+            },
             quotaBytes = { 1000L * 1024 * 1024 * 1024 },
             retryDelayMs = { 1 },
             unreachableDelayMs = { restMs },
@@ -534,6 +558,62 @@ class OfflineEngineTest {
         engine.enqueue(viewerA, item("1"), choice("1"))
         engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
         assertEquals("network", engine.entry(viewerA, "1")?.job?.failure)
+    }
+
+    @Test
+    fun `a sign-in page answering in place of the server means waiting, with the partial kept`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        restMs = 200
+        cutAt = 400_000
+        portalAfterNextCut = true
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        val part = File(mediaFile(engine, viewerA, "1").path + OFFLINE_PART_SUFFIX)
+        assertArrayEquals(media.copyOf(part.length().toInt()), part.readBytes())
+        assertTrue(part.length() > 0)
+        portalAfterNextCut = false
+        cutAt = null
+        portal = false
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertArrayEquals(media, mediaFile(engine, viewerA, "1").readBytes())
+    }
+
+    @Test
+    fun `something unexpected ends one attempt where the viewer can retry it, not the app`() = runBlocking<Unit> {
+        val crashes = caughtCrashes()
+        signIn(viewerA)
+        val engine = started()
+        freeThrows = true
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
+        assertEquals("internal", engine.entry(viewerA, "1")?.job?.failure)
+        assertEquals(emptyList<Throwable>(), crashes.toList())
+        freeThrows = false
+        engine.retry(viewerA.key, entryId("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `an exception in the engine's background work reaches nobody's crash handler`() = runBlocking<Unit> {
+        val crashes = caughtCrashes()
+        signIn(viewerA)
+        val engine = started()
+        networkThrows = true
+        engine.networkChanged()
+        delay(200)
+        networkThrows = false
+        assertEquals(emptyList<Throwable>(), crashes.toList())
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    private fun caughtCrashes(): MutableList<Throwable> {
+        val crashes = CopyOnWriteArrayList<Throwable>()
+        val before = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, error -> crashes += error }
+        restoreCrashHandler = { Thread.setDefaultUncaughtExceptionHandler(before) }
+        return crashes
     }
 
     @Test

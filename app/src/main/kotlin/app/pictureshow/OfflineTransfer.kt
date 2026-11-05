@@ -96,6 +96,10 @@ internal class OfflineResourceTransfer(private val http: OfflineHttp, private va
         }
         response.use {
             if (response.status == 401 || response.status == 403) return@withContext OfflineTransferResult.Failed("unauthorized")
+            // A Wi-Fi sign-in page or proxy, not media. Saving it would cost the partial and pass off a page as a file.
+            if (response.header("Content-Type").orEmpty().startsWith("text/html", ignoreCase = true)) {
+                return@withContext OfflineTransferResult.Interrupted("network")
+            }
             val decision = offlineResumeDecision(
                 partial,
                 stored,

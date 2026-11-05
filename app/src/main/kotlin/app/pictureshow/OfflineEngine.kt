@@ -42,6 +42,7 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,9 +53,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 
 internal data class OfflineLiveProgress(val received: Long, val total: Long?)
 
@@ -83,6 +86,7 @@ internal interface OfflineForeground {
 }
 
 private const val OFFLINE_RETRIES = 3
+private const val OFFLINE_LOG = "PictureshowOffline"
 private const val OFFLINE_STORAGE_MARGIN = 16L * 1024 * 1024
 
 internal class OfflineEngine(
@@ -98,8 +102,13 @@ internal class OfflineEngine(
     private val retryDelayMs: (Int) -> Long = { attempt -> 5_000L * (1L shl (attempt * 2)) },
     private val unreachableDelayMs: (Int) -> Long = { tries -> minOf(300_000L, 5_000L shl tries.coerceAtMost(6)) },
     private val storageRecheckMs: Long = 30_000L,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
+    /** Background work here must never take the app down with it, and a viewer may be in the middle of a film. */
+    private val scope = scope + CoroutineExceptionHandler { _, error ->
+        if (error is Error) throw error
+        android.util.Log.w(OFFLINE_LOG, "Offline work ended: ${error.javaClass.simpleName}")
+    }
     internal val files = OfflineFiles(context.noBackupFilesDir)
     private val mutex = Mutex()
     private val mutableLibraries = MutableStateFlow(emptyMap<String, OfflineLibrary>())
@@ -565,6 +574,10 @@ internal class OfflineEngine(
             throw e
         } catch (e: IOException) {
             networkLost(key, entryId)
+        } catch (e: Exception) {
+            // Whatever it was ends this one attempt where the viewer can see it and press Retry.
+            android.util.Log.w(OFFLINE_LOG, "Offline attempt ended: ${e.javaClass.simpleName}")
+            fail(key, entryId, attempt, "internal")
         } finally {
             withContext(kotlinx.coroutines.NonCancellable) {
                 cleanup?.invoke()
@@ -775,6 +788,9 @@ internal class OfflineEngine(
         } catch (e: OfflineApiException) {
             true
         } catch (e: IOException) {
+            false
+        } catch (e: SerializationException) {
+            // A sign-in page or proxy answered. That isn't this server.
             false
         }
     }
