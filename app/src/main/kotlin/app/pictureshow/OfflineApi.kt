@@ -81,7 +81,15 @@ internal data class OfflineApiItem(
     @SerialName("MediaSources") val sources: List<OfflineApiSource> = emptyList()
 ) {
     fun candidate(): OfflineCandidate = sources.firstOrNull().let { source ->
-        OfflineCandidate(id, type, source?.isInfinite == true, source?.size, source?.bitrate, runtimeTicks ?: source?.runtimeTicks, canDownload)
+        OfflineCandidate(
+            id,
+            type,
+            source?.isInfinite == true,
+            source?.size,
+            source?.bitrate,
+            runtimeTicks ?: source?.runtimeTicks,
+            canDownload
+        )
     }
 }
 
@@ -97,13 +105,19 @@ private data class OfflineApiPolicy(
 )
 
 @Serializable
-private data class OfflineApiUser(@SerialName("Id") val id: String = "", @SerialName("Policy") val policy: OfflineApiPolicy = OfflineApiPolicy())
+private data class OfflineApiUser(
+    @SerialName("Id") val id: String = "",
+    @SerialName("Policy") val policy: OfflineApiPolicy = OfflineApiPolicy()
+)
 
 @Serializable
 private data class OfflineApiInitiate(@SerialName("Code") val code: String = "", @SerialName("Secret") val secret: String = "")
 
 @Serializable
-private data class OfflineApiAuth(@SerialName("AccessToken") val token: String? = null, @SerialName("User") val user: OfflineApiUser? = null)
+private data class OfflineApiAuth(
+    @SerialName("AccessToken") val token: String? = null,
+    @SerialName("User") val user: OfflineApiUser? = null
+)
 
 internal class OfflineApiException(val status: Int) : IOException("HTTP $status")
 
@@ -118,16 +132,17 @@ internal class OfflineApi(private val client: OkHttpClient, private val identity
             request.query.forEach { (name, value) -> addQueryParameter(name, value) }
         }.build().toString()
 
-    private suspend fun call(url: String, authorization: String, body: String? = null, method: String? = null): String = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).header("Authorization", authorization).apply {
-            if (body != null) post(body.toRequestBody("application/json".toMediaType()))
-            if (method != null) method(method, null)
-        }.build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw OfflineApiException(response.code)
-            response.body.string()
+    private suspend fun call(url: String, authorization: String, body: String? = null, method: String? = null): String =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder().url(url).header("Authorization", authorization).apply {
+                if (body != null) post(body.toRequestBody("application/json".toMediaType()))
+                if (method != null) method(method, null)
+            }.build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw OfflineApiException(response.code)
+                response.body.string()
+            }
         }
-    }
 
     private fun interactive(account: Account) = AuthorizationHeader.build(identity.forAccount(account), account.accessToken)
 
@@ -172,7 +187,11 @@ internal class OfflineApi(private val client: OkHttpClient, private val identity
             write.positionTicks?.let { put("PlaybackPositionTicks", it) }
             write.played?.let { put("Played", it) }
         }
-        call("${account.server.url.trimEnd('/')}/UserItems/$itemId/UserData?userId=${account.user.id}", interactive(account), body.toString())
+        call(
+            "${account.server.url.trimEnd('/')}/UserItems/$itemId/UserData?userId=${account.user.id}",
+            interactive(account),
+            body.toString()
+        )
     }
 
     /** Stops a conversion we walked away from. Best effort. */
@@ -199,7 +218,9 @@ internal class OfflineApi(private val client: OkHttpClient, private val identity
             put("Username", account.user.name)
             put("Pw", password)
         }
-        return authResult(call("${account.server.url.trimEnd('/')}/Users/AuthenticateByName", authorization(deviceId, null), body.toString()))
+        return authResult(
+            call("${account.server.url.trimEnd('/')}/Users/AuthenticateByName", authorization(deviceId, null), body.toString())
+        )
     }
 
     private fun authResult(text: String): Pair<String, String> {

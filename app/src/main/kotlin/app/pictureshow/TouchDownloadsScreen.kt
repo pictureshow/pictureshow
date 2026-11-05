@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -56,20 +58,39 @@ private fun TouchSection(title: String) {
 }
 
 @Composable
-internal fun OfflineDownloadsTouchScreen(account: Account, offline: Boolean, onPlay: (OfflineEntry) -> Unit, onStorage: () -> Unit, onOnline: () -> Unit, onBack: (() -> Unit)?) {
+internal fun OfflineDownloadsTouchScreen(
+    account: Account,
+    offline: Boolean,
+    onPlay: (OfflineEntry) -> Unit,
+    onStorage: () -> Unit,
+    onOnline: () -> Unit,
+    onBack: (() -> Unit)?
+) {
     val view = rememberOfflineDownloads(account, onPlay)
     val controller = view.controller
     val sections = view.sections
-    TouchPage("Downloads", onBack) {
+    OfflineTouchPage("Downloads", onBack) {
         Text(
-            sections.capBytes?.let { "${offlineBytes(sections.usedBytes)} of ${offlineBytes(it)} used" } ?: "${offlineBytes(sections.usedBytes)} used",
+            sections.capBytes?.let { "${offlineBytes(sections.usedBytes)} of ${offlineBytes(it)} used" }
+                ?: "${offlineBytes(sections.usedBytes)} used",
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (view.network == OfflineNetwork.none) Text("No connection. Everything saved below still plays.")
-        OutlinedButton(onClick = onStorage, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("downloads:storage")) { Text("Storage and Wi-Fi") }
-        if (offline) OutlinedButton(onClick = onOnline, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("downloads:online")) { Text("Open the library") }
+        OutlinedButton(onClick = onStorage, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("downloads:storage")) {
+            Text("Storage and Wi-Fi")
+        }
+        if (offline) {
+            OutlinedButton(
+                onClick = onOnline,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("downloads:online")
+            ) {
+                Text("Open the library")
+            }
+        }
         if (view.library.recoverable) {
-            Text("This list was saved by a newer version of Pictureshow or couldn't be read. Nothing was deleted. Update the app to get it back.")
+            Text(
+                "This list was saved by a newer version of Pictureshow or couldn't be read. Nothing was deleted. Update the app to get it back."
+            )
         }
         if (view.library.needsPassword) OfflinePasswordTouch(controller)
         view.conflicts.keys.forEach { itemId ->
@@ -81,9 +102,16 @@ internal fun OfflineDownloadsTouchScreen(account: Account, offline: Boolean, onP
             }
         }
         if (sections.isEmpty && !view.library.recoverable) {
-            Text("Nothing downloaded yet. Open a movie or an episode and choose Download.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Nothing downloaded yet. Open a movie or an episode and choose Download.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        listOf("In progress" to sections.active, "Needs attention" to sections.failed, "Ready to watch" to sections.ready).forEach { (title, rows) ->
+        listOf(
+            "In progress" to sections.active,
+            "Needs attention" to sections.failed,
+            "Ready to watch" to sections.ready
+        ).forEach { (title, rows) ->
             if (rows.isNotEmpty()) {
                 TouchSection(title)
                 rows.forEach { OfflineRowTouch(account, it, controller) }
@@ -91,7 +119,6 @@ internal fun OfflineDownloadsTouchScreen(account: Account, offline: Boolean, onP
         }
     }
 }
-
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -109,13 +136,29 @@ private fun OfflineRowTouch(account: Account, row: OfflineRow, controller: Offli
             row.fraction?.let { fraction -> LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth()) }
             row.entry.warning?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             if (row.notDownloaded.isNotEmpty()) {
-                Text("Not downloaded: ${row.notDownloaded.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Not downloaded: ${row.notDownloaded.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             if (confirming) {
-                Text(if (row.entry.job.phase == OfflinePhase.ready) "Delete this download from this device?" else "Stop and delete this download?")
+                Text(
+                    if (row.entry.job.phase ==
+                        OfflinePhase.ready
+                    ) {
+                        "Delete this download from this device?"
+                    } else {
+                        "Stop and delete this download?"
+                    }
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { controller.confirm = null }, modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:cancel")) { Text("Cancel") }
-                    Button(onClick = { controller.confirmed(emptyList()) }, modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:confirm")) { Text("Delete") }
+                    OutlinedButton(onClick = {
+                        controller.confirm = null
+                    }, modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:cancel")) { Text("Cancel") }
+                    Button(onClick = {
+                        controller.confirmed(emptyList())
+                    }, modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:confirm")) { Text("Delete") }
                 }
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -158,11 +201,17 @@ internal fun OfflineStorageTouchScreen(account: Account, onBack: () -> Unit) {
     var confirmAll by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
     val preview = manifest.watchedPreview(rememberOfflineWatched(account, manifest.entries))
-    TouchPage("Storage and Wi-Fi", onBack) {
-        Text("Limit for this viewer: ${manifest.budget.capBytes?.let(::offlineBytes) ?: "not set. Choose one to download."}. Used: ${offlineBytes(manifest.budget.usedBytes)}.")
+    OfflineTouchPage("Storage and Wi-Fi", onBack) {
+        Text(
+            "Limit for this viewer: ${manifest.budget.capBytes?.let(
+                ::offlineBytes
+            ) ?: "not set. Choose one to download."}. Used: ${offlineBytes(manifest.budget.usedBytes)}."
+        )
         offlineCapSteps(android.os.StatFs(engine.files.root.parentFile!!.path).totalBytes).forEach { step ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                RadioButton(selected = manifest.budget.capBytes == step, onClick = { controller.setCap(step) }, modifier = Modifier.testTag("storage:cap:$step"))
+                RadioButton(selected = manifest.budget.capBytes == step, onClick = {
+                    controller.setCap(step)
+                }, modifier = Modifier.testTag("storage:cap:$step"))
                 Text(offlineBytes(step))
             }
         }
@@ -183,28 +232,42 @@ internal fun OfflineStorageTouchScreen(account: Account, onBack: () -> Unit) {
                 }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Remove") }
             }
         } else {
-            OutlinedButton(onClick = { showPreview = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Review what would go") }
+            OutlinedButton(onClick = {
+                showPreview = true
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Review what would go") }
         }
         if (confirmAll) {
             Text("Delete all ${manifest.entries.size} downloads for this viewer?")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { confirmAll = false }, modifier = Modifier.heightIn(min = 48.dp).testTag("storage:cancel-all")) { Text("Cancel") }
+                OutlinedButton(onClick = {
+                    confirmAll = false
+                }, modifier = Modifier.heightIn(min = 48.dp).testTag("storage:cancel-all")) { Text("Cancel") }
                 Button(onClick = {
                     confirmAll = false
                     controller.deleteEntries(manifest.entries.map(OfflineEntry::id))
                 }, modifier = Modifier.heightIn(min = 48.dp).testTag("storage:confirm-all")) { Text("Delete all") }
             }
         } else if (manifest.entries.isNotEmpty()) {
-            OutlinedButton(onClick = { confirmAll = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("storage:delete-all")) { Text("Delete all downloads") }
+            OutlinedButton(onClick = {
+                confirmAll = true
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("storage:delete-all")) { Text("Delete all downloads") }
         }
     }
 }
 
 @Composable
-internal fun OfflineDownloadTouchScreen(account: Account, itemId: String, seriesId: String?, seasonId: String?, title: String, onDone: () -> Unit, onBack: () -> Unit) {
+internal fun OfflineDownloadTouchScreen(
+    account: Account,
+    itemId: String,
+    seriesId: String?,
+    seasonId: String?,
+    title: String,
+    onDone: () -> Unit,
+    onBack: () -> Unit
+) {
     val controller = rememberOfflinePreview(account, itemId, seriesId, seasonId, title)
     val askForNotifications = rememberOfflineNotificationAsk()
-    TouchPage("Download $title", onBack) {
+    OfflineTouchPage("Download $title", onBack) {
         when (val state = controller.state) {
             OfflinePreviewState.Loading -> Text("Checking what can be downloaded…")
             is OfflinePreviewState.Unavailable -> TouchMessage(state.message)
@@ -227,7 +290,17 @@ internal fun OfflineDownloadTouchScreen(account: Account, itemId: String, series
                 if (state.preview.items.size > 1) {
                     TouchSection("Episodes")
                     state.preview.items.forEach { episode ->
-                        TouchCheck((episode.episodeNumber?.let { "$it. " } ?: "") + episode.name, episode.id in controller.episodes, "download:episode:${episode.id}") { controller.toggleEpisode(episode.id) }
+                        TouchCheck(
+                            (
+                                episode.episodeNumber?.let {
+                                    "$it. "
+                                } ?: ""
+                                ) + episode.name,
+                            episode.id in controller.episodes,
+                            "download:episode:${episode.id}"
+                        ) {
+                            controller.toggleEpisode(episode.id)
+                        }
                     }
                 }
                 if (controller.preset == OfflinePreset.original) {
@@ -236,12 +309,19 @@ internal fun OfflineDownloadTouchScreen(account: Account, itemId: String, series
                 } else {
                     TouchSection("Audio, up to $OFFLINE_MAX_CONVERTED_AUDIO")
                     controller.sourceTracks("Audio").forEach { track ->
-                        TouchCheck(track.displayTitle ?: track.language ?: "Track ${track.index}", track.index in controller.audio, "download:audio:${track.index}") { controller.toggleAudio(track.index) }
+                        TouchCheck(
+                            track.displayTitle ?: track.language ?: "Track ${track.index}",
+                            track.index in controller.audio,
+                            "download:audio:${track.index}"
+                        ) {
+                            controller.toggleAudio(track.index)
+                        }
                     }
                     TouchSection("Subtitles, up to $OFFLINE_MAX_CONVERTED_SUBTITLES")
                     controller.sourceTracks("Subtitle").forEach { track ->
                         TouchCheck(
-                            (track.displayTitle ?: track.language ?: "Track ${track.index}") + if (track.isText) "" else ". Picture subtitles can't be converted.",
+                            (track.displayTitle ?: track.language ?: "Track ${track.index}") +
+                                if (track.isText) "" else ". Picture subtitles can't be converted.",
                             track.index in controller.subtitles,
                             "download:subtitle:${track.index}",
                             track.isText
@@ -250,11 +330,23 @@ internal fun OfflineDownloadTouchScreen(account: Account, itemId: String, series
                 }
                 val estimate = state.preview.choices.firstOrNull { it.preset == controller.preset }?.estimateBytes
                 val count = controller.selectedItems().size.coerceAtLeast(1)
-                Text(offlineSizeText(controller.selectedItems(), controller.preset) { estimate?.let { total -> total / state.preview.items.size.coerceAtLeast(count) } })
-                TouchCheck("Can use mobile data for this", controller.cellular, "download:cellular") { controller.cellular = !controller.cellular }
+                Text(
+                    offlineSizeText(controller.selectedItems(), controller.preset) {
+                        estimate?.let { total ->
+                            total /
+                                state.preview.items.size.coerceAtLeast(count)
+                        }
+                    }
+                )
+                TouchCheck("Can use mobile data for this", controller.cellular, "download:cellular") {
+                    controller.cellular =
+                        !controller.cellular
+                }
                 TouchAction(
                     "Download",
-                    !controller.started && controller.selectedItems().isNotEmpty() && state.preview.choices.any { it.preset == controller.preset && it.available }
+                    !controller.started &&
+                        controller.selectedItems().isNotEmpty() &&
+                        state.preview.choices.any { it.preset == controller.preset && it.available }
                 ) {
                     askForNotifications()
                     controller.start(onDone)
@@ -270,4 +362,10 @@ private fun TouchCheck(label: String, checked: Boolean, tag: String, enabled: Bo
         Checkbox(checked = checked, onCheckedChange = { onClick() }, enabled = enabled, modifier = Modifier.testTag(tag))
         Text(label)
     }
+}
+
+/** The normal page, with this screen's test tags readable from outside the process. */
+@Composable
+private fun OfflineTouchPage(title: String, onBack: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
+    Box(Modifier.semantics { testTagsAsResourceId = true }) { TouchPage(title, onBack, content) }
 }

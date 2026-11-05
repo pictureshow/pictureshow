@@ -53,20 +53,29 @@ internal fun offlineBuildEntry(item: OfflineApiItem, choice: OfflineChoice, sequ
     val tracks = mutableListOf<OfflineTrack>()
     fun subtitleResource(stream: OfflineApiStream): String {
         val id = "subtitle-${stream.index}"
-        resources += OfflineResource(id, OfflineResourceRole.subtitle, "$id.vtt", required = true, serverStreamIndex = stream.index, mimeType = "text/vtt")
+        resources +=
+            OfflineResource(
+                id,
+                OfflineResourceRole.subtitle,
+                "$id.vtt",
+                required = true,
+                serverStreamIndex = stream.index,
+                mimeType = "text/vtt"
+            )
         return id
     }
-    fun track(stream: OfflineApiStream, kind: String, resourceId: String?, available: Boolean, codec: String? = stream.codec) = OfflineTrack(
-        stream.index,
-        kind,
-        stream.label(),
-        stream.language,
-        stream.isDefault,
-        stream.isForced,
-        codec,
-        resourceId,
-        available
-    )
+    fun track(stream: OfflineApiStream, kind: String, resourceId: String?, available: Boolean, codec: String? = stream.codec) =
+        OfflineTrack(
+            stream.index,
+            kind,
+            stream.label(),
+            stream.language,
+            stream.isDefault,
+            stream.isForced,
+            codec,
+            resourceId,
+            available
+        )
     when {
         choice.preset == OfflinePreset.original -> {
             val extension = source?.container?.substringBefore(',')?.lowercase()?.filter(Char::isLetterOrDigit)?.ifBlank { null } ?: "bin"
@@ -89,7 +98,14 @@ internal fun offlineBuildEntry(item: OfflineApiItem, choice: OfflineChoice, sequ
                     stream.index == muxed -> tracks += track(stream, "audio", null, true, "aac")
                     stream.index in selected -> {
                         val id = "audio-${stream.index}"
-                        resources += OfflineResource(id, OfflineResourceRole.audio, "$id.m4a", serverStreamIndex = stream.index, mimeType = "audio/mp4")
+                        resources +=
+                            OfflineResource(
+                                id,
+                                OfflineResourceRole.audio,
+                                "$id.m4a",
+                                serverStreamIndex = stream.index,
+                                mimeType = "audio/mp4"
+                            )
                         tracks += track(stream, "audio", id, true, "aac")
                     }
                     else -> tracks += track(stream, "audio", null, false)
@@ -148,7 +164,14 @@ internal fun OfflineEntry.requestFor(resource: OfflineResource, deviceId: String
             preset.isConvertedVideo -> offlineVideoRequest(itemId, source, preset, resource.serverStreamIndex, deviceId, playSessionId)
             else -> offlineAudioRequest(itemId, sourceId, preset, deviceId, playSessionId)
         }
-        OfflineResourceRole.audio -> offlineSidecarAudioRequest(itemId, source, preset, resource.serverStreamIndex ?: 0, deviceId, playSessionId)
+        OfflineResourceRole.audio -> offlineSidecarAudioRequest(
+            itemId,
+            source,
+            preset,
+            resource.serverStreamIndex ?: 0,
+            deviceId,
+            playSessionId
+        )
         OfflineResourceRole.subtitle -> offlineSubtitleRequest(itemId, source, resource.serverStreamIndex ?: 0)
         OfflineResourceRole.artwork -> OfflineRequest("/Items/$itemId/Images/Primary", listOf("maxWidth" to "480", "format" to "Jpg"))
     }
@@ -157,4 +180,3 @@ internal fun OfflineEntry.requestFor(resource: OfflineResource, deviceId: String
 /** Server conversions are the fragmented ones that need an index written after the transfer. */
 internal fun OfflineEntry.needsIndex(resource: OfflineResource): Boolean = preset != OfflinePreset.original &&
     (resource.role == OfflineResourceRole.media || resource.role == OfflineResourceRole.audio)
-

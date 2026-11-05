@@ -1678,7 +1678,14 @@ fun CatalogDetail(
                                         fromStartFocus = fromStartFocus,
                                         onDownload = onDownload?.let { open ->
                                             {
-                                                open(item, state.selectedSeasonId, state.seasons.firstOrNull { it.id == state.selectedSeasonId }?.name)
+                                                open(
+                                                    item,
+                                                    state.selectedSeasonId,
+                                                    state.seasons.firstOrNull {
+                                                        it.id ==
+                                                            state.selectedSeasonId
+                                                    }?.name
+                                                )
                                             }
                                         },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null)
@@ -1723,7 +1730,14 @@ fun CatalogDetail(
                                         fromStartFocus = fromStartFocus,
                                         onDownload = onDownload?.let { open ->
                                             {
-                                                open(item, state.selectedSeasonId, state.seasons.firstOrNull { it.id == state.selectedSeasonId }?.name)
+                                                open(
+                                                    item,
+                                                    state.selectedSeasonId,
+                                                    state.seasons.firstOrNull {
+                                                        it.id ==
+                                                            state.selectedSeasonId
+                                                    }?.name
+                                                )
                                             }
                                         },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null)
@@ -2563,7 +2577,9 @@ private fun DetailActions(
         }
         if (onDownload != null && pending == null) {
             key("download") {
-                Button(onClick = { if (!blocked) onDownload() }, enabled = !blocked, modifier = Modifier.testTag("detail:download")) { Text("Download") }
+                Button(onClick = {
+                    if (!blocked) onDownload()
+                }, enabled = !blocked, modifier = Modifier.testTag("detail:download")) { Text("Download") }
             }
         }
         if (stableLayout) {

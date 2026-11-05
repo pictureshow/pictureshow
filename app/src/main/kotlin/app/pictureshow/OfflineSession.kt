@@ -33,7 +33,11 @@ internal sealed interface OfflineSetToken {
 }
 
 /** The download set's own device and token (CTRL-11): the interactive sign-in is never written into a job. */
-internal class OfflineSessionOwner(private val file: File, private val api: OfflineApi, private val installationDeviceId: suspend () -> String) {
+internal class OfflineSessionOwner(
+    private val file: File,
+    private val api: OfflineApi,
+    private val installationDeviceId: suspend () -> String
+) {
     private val mutex = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -54,7 +58,11 @@ internal class OfflineSessionOwner(private val file: File, private val api: Offl
     suspend fun token(account: Account, password: String? = null): OfflineSetToken = mutex.withLock {
         val wanted = binding(account, 0)
         var saved = load()
-        val existing = saved.state.records.firstOrNull { it.server == wanted.server && it.viewer == wanted.viewer && it.device == wanted.device }
+        val existing = saved.state.records.firstOrNull {
+            it.server == wanted.server &&
+                it.viewer == wanted.viewer &&
+                it.device == wanted.device
+        }
         if (existing?.phase == "active") {
             val token = saved.tokens[existing.secretRef]
             if (token != null) return OfflineSetToken.Ready(existing.device, token)
@@ -136,24 +144,50 @@ internal class OfflineSessionOwner(private val file: File, private val api: Offl
         var saved = load()
         val phase = saved.state.records.firstOrNull { it.device == binding.device }?.phase
         if (phase == "pending-persist") {
-            saved = saved.copy(state = reduceTemporary(saved.state, TemporaryEvent("persisted", saved.state.records.first { it.device == binding.device })))
+            saved =
+                saved.copy(
+                    state = reduceTemporary(
+                        saved.state,
+                        TemporaryEvent(
+                            "persisted",
+                            saved.state.records.first {
+                                it.device ==
+                                    binding.device
+                            }
+                        )
+                    )
+                )
             save(saved)
         } else if (phase == "pending-revoke") {
-            saved = saved.copy(state = reduceTemporary(saved.state, TemporaryEvent("reconnect", saved.state.records.first { it.device == binding.device })))
+            saved =
+                saved.copy(
+                    state = reduceTemporary(
+                        saved.state,
+                        TemporaryEvent(
+                            "reconnect",
+                            saved.state.records.first {
+                                it.device ==
+                                    binding.device
+                            }
+                        )
+                    )
+                )
             save(saved)
         }
         val record = saved.state.records.firstOrNull { it.device == binding.device } ?: return
         val token = saved.tokens[record.secretRef]
         val server = saved.servers[record.server]
-        val ok = token == null || server == null || try {
-            api.logout(server, record.device, token)
-            true
-        } catch (e: OfflineApiException) {
-            // An already-dead token is revoked.
-            e.status == 401
-        } catch (e: IOException) {
-            false
-        }
+        val ok = token == null ||
+            server == null ||
+            try {
+                api.logout(server, record.device, token)
+                true
+            } catch (e: OfflineApiException) {
+                // An already-dead token is revoked.
+                e.status == 401
+            } catch (e: IOException) {
+                false
+            }
         val after = reduceTemporary(saved.state, TemporaryEvent(if (ok) "logout-ok" else "logout-failed", record))
         val erase = after.effect == "erase-secret"
         save(saved.copy(state = after, tokens = if (erase) saved.tokens - record.secretRef.orEmpty() else saved.tokens))

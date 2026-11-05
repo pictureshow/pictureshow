@@ -85,7 +85,11 @@ class OfflineFmp4Test {
         val source = Fmp4Builder.file()
         listOf(1, 3, 7, 16, 4096).forEach { chunk ->
             val output = spaced(source, chunk)
-            assertEquals("chunk $chunk", listOf("ftyp", "moov", "free", "moof", "mdat", "moof", "mdat", "moof", "mdat"), Fmp4Builder.topLevel(output))
+            assertEquals(
+                "chunk $chunk",
+                listOf("ftyp", "moov", "free", "moof", "mdat", "moof", "mdat", "moof", "mdat"),
+                Fmp4Builder.topLevel(output)
+            )
             assertEquals(source.size + OFFLINE_INDEX_PLACEHOLDER_BYTES, output.size)
         }
     }

@@ -111,8 +111,7 @@ internal class OfflineDownloadsView(
     val conflicts: Map<String, OfflineConflict>,
     val network: OfflineNetwork
 ) {
-    fun conflictTitle(itemId: String): String =
-        library.manifest.entries.firstOrNull { it.itemId == itemId }?.labels?.title ?: "A download"
+    fun conflictTitle(itemId: String): String = library.manifest.entries.firstOrNull { it.itemId == itemId }?.labels?.title ?: "A download"
 }
 
 @Composable
@@ -160,7 +159,14 @@ internal class OfflinePreviewController(
             if (next is OfflinePreviewState.Ready) {
                 episodes = next.preview.items.map(OfflineApiItem::id).toSet()
                 val first = next.preview.items.first().sources.firstOrNull()?.streams.orEmpty()
-                audio = setOfNotNull((first.firstOrNull { it.type == "Audio" && it.isDefault } ?: first.firstOrNull { it.type == "Audio" })?.index)
+                audio =
+                    setOfNotNull(
+                        (
+                            first.firstOrNull {
+                                it.type == "Audio" && it.isDefault
+                            } ?: first.firstOrNull { it.type == "Audio" }
+                            )?.index
+                    )
                 preset = next.preview.choices.firstOrNull { it.available }?.preset ?: OfflinePreset.original
             }
             state = next
@@ -221,7 +227,13 @@ internal class OfflinePreviewController(
 }
 
 @Composable
-internal fun rememberOfflinePreview(account: Account, itemId: String, seriesId: String?, seasonId: String?, title: String): OfflinePreviewController {
+internal fun rememberOfflinePreview(
+    account: Account,
+    itemId: String,
+    seriesId: String?,
+    seasonId: String?,
+    title: String
+): OfflinePreviewController {
     val engine: OfflineEngine = koinInject()
     val http: HttpClient = koinInject()
     val identity: DeviceIdentityStore = koinInject()
@@ -243,22 +255,46 @@ internal suspend fun offlineApiFor(context: Context, identity: DeviceIdentitySto
 )
 
 /** Asks the normal decision whether this device could play the original as it is (OFF-02). Null when it can, or unknown. */
-private suspend fun offlineOriginalWarning(context: Context, http: HttpClient, identity: DeviceIdentityStore, account: Account, itemId: String?): String? {
+private suspend fun offlineOriginalWarning(
+    context: Context,
+    http: HttpClient,
+    identity: DeviceIdentityStore,
+    account: Account,
+    itemId: String?
+): String? {
     itemId ?: return null
     val probe = DeviceCapabilityProbe(context)
     return try {
-        val clientIdentity = ClientIdentity(deviceDisplayName(context), account.deviceId?.takeIf(String::isNotBlank) ?: identity.getOrCreate(), BuildConfig.VERSION_NAME)
-        val gateway = ServerPlaybackGateway(PlaybackClient(http, clientIdentity), account, itemId, probe::snapshot, null) { ClientResult.Success(Unit) }
+        val clientIdentity = ClientIdentity(
+            deviceDisplayName(context),
+            account.deviceId?.takeIf(String::isNotBlank) ?: identity.getOrCreate(),
+            BuildConfig.VERSION_NAME
+        )
+        val gateway =
+            ServerPlaybackGateway(PlaybackClient(http, clientIdentity), account, itemId, probe::snapshot, null) {
+                ClientResult.Success(Unit)
+            }
         val decision = ((gateway.prepare(PlaybackRequest()) as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return null
         decision.playSessionId?.takeIf { decision.method == PlayMethod.Transcode }?.let { gateway.stopEncoding(it) }
-        if (decision.method == PlayMethod.DirectPlay) null else "This device may not play the original without the server converting it. It might not play once you're offline."
+        if (decision.method ==
+            PlayMethod.DirectPlay
+        ) {
+            null
+        } else {
+            "This device may not play the original without the server converting it. It might not play once you're offline."
+        }
     } finally {
         probe.close()
     }
 }
 
 /** Where a cold start lands: Downloads when there's no network and something saved to watch. */
-internal suspend fun offlineColdStartDestination(destination: String, engine: OfflineEngine, accountKey: String?, network: OfflineNetwork): String {
+internal suspend fun offlineColdStartDestination(
+    destination: String,
+    engine: OfflineEngine,
+    accountKey: String?,
+    network: OfflineNetwork
+): String {
     if (destination != "home" || accountKey == null || network != OfflineNetwork.none) return destination
     val library = engine.ready()[accountKey] ?: return destination
     return if (library.recoverable || library.manifest.entries.any { it.job.phase == OfflinePhase.ready }) "downloads" else destination
@@ -287,7 +323,9 @@ internal fun rememberOfflineNotificationAsk(): () -> Unit {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     return remember(context, launcher) {
         {
-            if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
                 launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }

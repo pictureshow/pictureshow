@@ -21,6 +21,7 @@ import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflineResource
 import app.pictureshow.core.offline.OfflineUserData
 import app.pictureshow.core.offline.OfflineVerifyInput
+import app.pictureshow.core.offline.commit
 import app.pictureshow.core.offline.commitReady
 import app.pictureshow.core.offline.discard
 import app.pictureshow.core.offline.offlineAdmit
@@ -32,8 +33,6 @@ import app.pictureshow.core.offline.offlineEntryDir
 import app.pictureshow.core.offline.offlineEntryId
 import app.pictureshow.core.offline.offlineSafePath
 import app.pictureshow.core.offline.offlineVerify
-import app.pictureshow.core.offline.commit
-import app.pictureshow.core.offline.committedBytes
 import app.pictureshow.core.offline.reconcile
 import app.pictureshow.core.offline.reduceOfflineJob
 import app.pictureshow.core.offline.release
@@ -68,6 +67,7 @@ internal data class OfflineLibrary(
     val progress: Map<String, OfflineLiveProgress> = emptyMap()
 )
 
+@Suppress("ktlint:standard:enum-entry-name-case", "EnumEntryName")
 internal enum class OfflineNetwork { none, metered, unmetered }
 
 /** Wi-Fi-only by default; the per-job override is the only way past it (OFF-06a). */
@@ -183,7 +183,9 @@ internal class OfflineEngine(
         val reconciled = manifest.reconcile(files.inventory(key))
         reconciled.deletePaths.filter(::offlineSafePath).forEach { File(files.mediaDir(key), it).delete() }
         val capped = if (reconciled.manifest.budget.capBytes == null) {
-            reconciled.manifest.copy(budget = reconciled.manifest.budget.copy(capBytes = offlineDefaultCap(quotaBytes(files.accountDir(key)))))
+            reconciled.manifest.copy(
+                budget = reconciled.manifest.budget.copy(capBytes = offlineDefaultCap(quotaBytes(files.accountDir(key))))
+            )
         } else {
             reconciled.manifest
         }
@@ -246,7 +248,8 @@ internal class OfflineEngine(
 
     suspend fun delete(key: String, entryId: String) = job(key, entryId, OfflineJobEvent("delete"))
 
-    suspend fun setCellular(key: String, entryId: String, allowed: Boolean) = job(key, entryId, OfflineJobEvent("set-cellular", cellularAllowed = allowed))
+    suspend fun setCellular(key: String, entryId: String, allowed: Boolean) =
+        job(key, entryId, OfflineJobEvent("set-cellular", cellularAllowed = allowed))
 
     suspend fun deleteMany(key: String, entryIds: List<String>) = entryIds.forEach { delete(key, it) }
 
@@ -280,7 +283,9 @@ internal class OfflineEngine(
                 all + (account.key to library.copy(needsPassword = result is OfflineSetToken.NeedsPassword))
             }
             if (result is OfflineSetToken.Ready) {
-                library(account.key)?.manifest?.entries?.filter { it.job.phase == OfflinePhase.failed && it.job.failure == "needs-password" }
+                library(account.key)?.manifest?.entries?.filter {
+                    it.job.phase == OfflinePhase.failed && it.job.failure == "needs-password"
+                }
                     ?.forEach { eventLocked(account.key, it.id, OfflineJobEvent("retry")) }
                 pumpLocked()
             }
@@ -371,7 +376,11 @@ internal class OfflineEngine(
                     if (current.id != entryId) {
                         current
                     } else {
-                        current.copy(resources = current.resources.map { it.copy(complete = false, bytes = null, sha256 = null, validator = null) })
+                        current.copy(
+                            resources = current.resources.map {
+                                it.copy(complete = false, bytes = null, sha256 = null, validator = null)
+                            }
+                        )
                     }
                 }
             )
@@ -399,8 +408,11 @@ internal class OfflineEngine(
         eventLocked(key, entryId, OfflineJobEvent("deleted"))
     }
 
-    private fun activeCount(manifest: OfflineManifest) =
-        manifest.entries.count { it.job.phase == OfflinePhase.preparing || it.job.phase == OfflinePhase.transferring || it.job.phase == OfflinePhase.verifying }
+    private fun activeCount(manifest: OfflineManifest) = manifest.entries.count {
+        it.job.phase == OfflinePhase.preparing ||
+            it.job.phase == OfflinePhase.transferring ||
+            it.job.phase == OfflinePhase.verifying
+    }
 
     private fun pumpLocked() {
         val network = networkState()
@@ -421,7 +433,9 @@ internal class OfflineEngine(
     private fun publishForeground() {
         val titles = mutableLibraries.value.values.flatMap { library ->
             library.manifest.entries.filter {
-                it.job.phase == OfflinePhase.preparing || it.job.phase == OfflinePhase.transferring || it.job.phase == OfflinePhase.verifying
+                it.job.phase == OfflinePhase.preparing ||
+                    it.job.phase == OfflinePhase.transferring ||
+                    it.job.phase == OfflinePhase.verifying
             }.map { it.labels.title }
         }
         foreground.update(titles)
@@ -442,7 +456,10 @@ internal class OfflineEngine(
                 val allowed = offlineNetworkAllows(network, manifest.wifiOnly, entry.job.cellularAllowed)
                 if (entry.job.phase == OfflinePhase.waitingNetwork && allowed) {
                     eventLocked(key, entry.id, OfflineJobEvent("network-back"))
-                } else if (!allowed && entry.job.phase in listOf(OfflinePhase.preparing, OfflinePhase.transferring, OfflinePhase.verifying, OfflinePhase.queued)) {
+                } else if (!allowed &&
+                    entry.job.phase in
+                    listOf(OfflinePhase.preparing, OfflinePhase.transferring, OfflinePhase.verifying, OfflinePhase.queued)
+                ) {
                     eventLocked(key, entry.id, OfflineJobEvent("network-lost"))
                 }
             }
@@ -468,7 +485,9 @@ internal class OfflineEngine(
             mutex.withLock {
                 lastAccountKeys.forEach { key ->
                     library(key)?.manifest?.entries?.filter {
-                        it.job.phase == OfflinePhase.preparing || it.job.phase == OfflinePhase.transferring || it.job.phase == OfflinePhase.verifying
+                        it.job.phase == OfflinePhase.preparing ||
+                            it.job.phase == OfflinePhase.transferring ||
+                            it.job.phase == OfflinePhase.verifying
                     }?.forEach { eventLocked(key, it.id, OfflineJobEvent("network-lost")) }
                 }
             }
@@ -552,7 +571,19 @@ internal class OfflineEngine(
     }
 
     private fun updateResourceLocked(key: String, entryId: String, resourceId: String, change: (OfflineResource) -> OfflineResource) =
-        updateEntryLocked(key, entryId) { entry -> entry.copy(resources = entry.resources.map { if (it.id == resourceId) change(it) else it }) }
+        updateEntryLocked(key, entryId) { entry ->
+            entry.copy(
+                resources = entry.resources.map {
+                    if (it.id ==
+                        resourceId
+                    ) {
+                        change(it)
+                    } else {
+                        it
+                    }
+                }
+            )
+        }
 
     private suspend fun networkLost(key: String, entryId: String) {
         mutex.withLock { eventLocked(key, entryId, OfflineJobEvent("network-lost")) }

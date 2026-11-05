@@ -68,7 +68,12 @@ class OfflineTransferTest {
     fun `a whole body lands whole, with every byte cleared first`() {
         val target = File(folder.root, "a/media.part")
         val ledger = Ledger()
-        val result = run(answer(200, ByteArrayInputStream(whole), whole.size.toLong(), "Last-Modified" to "Mon", "Accept-Ranges" to "bytes"), ledger, target)
+        val result =
+            run(
+                answer(200, ByteArrayInputStream(whole), whole.size.toLong(), "Last-Modified" to "Mon", "Accept-Ranges" to "bytes"),
+                ledger,
+                target
+            )
         assertTrue(result is OfflineTransferResult.Complete)
         assertArrayEquals(whole, target.readBytes())
         assertEquals(whole.size.toLong(), ledger.committed)
@@ -106,7 +111,13 @@ class OfflineTransferTest {
         val target = folder.newFile()
         val partial = ByteArray(300_000) { 9 }
         target.writeBytes(partial)
-        val http = answer(206, ByteArrayInputStream(whole), 400_000, "Content-Range" to "bytes 300000-699999/700000", "Last-Modified" to "Tue")
+        val http = answer(
+            206,
+            ByteArrayInputStream(whole),
+            400_000,
+            "Content-Range" to "bytes 300000-699999/700000",
+            "Last-Modified" to "Tue"
+        )
         val result = run(http, Ledger(), target, stored)
         assertFalse(result is OfflineTransferResult.Complete)
         assertTrue("partial was appended to", target.length() <= partial.size)
@@ -116,7 +127,13 @@ class OfflineTransferTest {
     fun `a wrong offset never appends`() {
         val target = folder.newFile()
         target.writeBytes(ByteArray(300_000) { 9 })
-        val http = answer(206, ByteArrayInputStream(whole), 400_000, "Content-Range" to "bytes 299000-699999/700000", "Last-Modified" to "Mon")
+        val http = answer(
+            206,
+            ByteArrayInputStream(whole),
+            400_000,
+            "Content-Range" to "bytes 299000-699999/700000",
+            "Last-Modified" to "Mon"
+        )
         assertFalse(run(http, Ledger(), target, stored) is OfflineTransferResult.Complete)
         assertTrue(target.length() <= 300_000)
     }

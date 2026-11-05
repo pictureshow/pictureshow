@@ -37,13 +37,24 @@ internal fun offlineDownloadRoute(item: MediaItem, seasonId: String?, seasonName
     return when {
         item.type in listOf("Movie", "Episode", "Video") -> offlineRoute(item.id, null, null, item.name)
         item.type in listOf("Series", "Season") && seasonId != null && series != null ->
-            offlineRoute(seasonId, series, seasonId, listOfNotNull(item.seriesName ?: item.name.takeIf { item.type == "Series" }, seasonName).joinToString(", "))
+            offlineRoute(
+                seasonId,
+                series,
+                seasonId,
+                listOfNotNull(
+                    item.seriesName ?: item.name.takeIf {
+                        item.type == "Series"
+                    },
+                    seasonName
+                ).joinToString(", ")
+            )
         else -> null
     }
 }
 
-private fun offlineRoute(item: String, series: String?, season: String?, title: String) =
-    "download?item=${Uri.encode(item)}&series=${Uri.encode(series.orEmpty())}&season=${Uri.encode(season.orEmpty())}&title=${Uri.encode(title)}"
+private fun offlineRoute(item: String, series: String?, season: String?, title: String) = "download?item=${Uri.encode(
+    item
+)}&series=${Uri.encode(series.orEmpty())}&season=${Uri.encode(season.orEmpty())}&title=${Uri.encode(title)}"
 
 private val previewArguments = listOf(
     navArgument("item") { type = NavType.StringType },
@@ -77,13 +88,19 @@ private fun NavController.openLibrary() = navigate("home") {
 
 /** Everything the local player needs, loaded with no network. */
 @Composable
-private fun OfflineLocalPlayer(account: Account?, entryId: String, onGone: () -> Unit, content: @Composable (Account, MediaItem, Long) -> Unit) {
+private fun OfflineLocalPlayer(
+    account: Account?,
+    entryId: String,
+    onGone: () -> Unit,
+    content: @Composable (Account, MediaItem, Long) -> Unit
+) {
     val engine: OfflineEngine = koinInject()
     var ready by remember { mutableStateOf<Triple<OfflineEntry, OfflinePlaybackBinding, Long>?>(null) }
     LaunchedEffect(entryId) {
         val current = account ?: return@LaunchedEffect onGone()
-        val entry = engine.ready()[current.key]?.manifest?.entries?.firstOrNull { it.id == entryId }?.takeIf { it.job.phase == OfflinePhase.ready }
-            ?: return@LaunchedEffect onGone()
+        val entry =
+            engine.ready()[current.key]?.manifest?.entries?.firstOrNull { it.id == entryId }?.takeIf { it.job.phase == OfflinePhase.ready }
+                ?: return@LaunchedEffect onGone()
         val media = entry.resources.firstOrNull { it.role == OfflineResourceRole.media } ?: return@LaunchedEffect onGone()
         val store = engine.progressStore(current)
         val file = { path: String -> engine.files.resource(current.key, entry.id, path) }

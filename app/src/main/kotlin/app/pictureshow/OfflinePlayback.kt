@@ -35,7 +35,9 @@ import java.io.File
 /** The local file's side of a normal player: same session, same controls, no server (OFF-11). */
 internal class OfflinePlaybackBinding(val gateway: PlaybackGateway, private val sidecars: List<File>) {
     fun output(context: Context, server: Server, title: String): Media3PlaybackOutput =
-        Media3PlaybackOutput(context, server, title, DefaultDataSource.Factory(context), sourceWrapper = { OfflineMergingFactory(context, it, sidecars) })
+        Media3PlaybackOutput(context, server, title, DefaultDataSource.Factory(context), sourceWrapper = {
+            OfflineMergingFactory(context, it, sidecars)
+        })
 }
 
 /** Provided by the local player route only; online playback reads null and nothing changes for it. */
@@ -47,9 +49,12 @@ internal class OfflineMergingFactory(
     private val base: MediaSource.Factory,
     private val sidecars: List<File>
 ) : MediaSource.Factory {
-    override fun setDrmSessionManagerProvider(provider: DrmSessionManagerProvider): MediaSource.Factory = apply { base.setDrmSessionManagerProvider(provider) }
+    override fun setDrmSessionManagerProvider(provider: DrmSessionManagerProvider): MediaSource.Factory =
+        apply { base.setDrmSessionManagerProvider(provider) }
 
-    override fun setLoadErrorHandlingPolicy(policy: LoadErrorHandlingPolicy): MediaSource.Factory = apply { base.setLoadErrorHandlingPolicy(policy) }
+    override fun setLoadErrorHandlingPolicy(policy: LoadErrorHandlingPolicy): MediaSource.Factory = apply {
+        base.setLoadErrorHandlingPolicy(policy)
+    }
 
     override fun getSupportedTypes(): IntArray = base.supportedTypes
 
@@ -140,7 +145,13 @@ internal fun offlineSourceInfo(entry: OfflineEntry, size: Long, resourceFile: (S
 internal fun OfflineEntry.playerItem(): MediaItem = MediaItem(
     id = itemId,
     name = labels.title,
-    type = if (kind == OfflineMediaKind.episode) "Episode" else if (kind == OfflineMediaKind.audio) "Audio" else "Movie",
+    type = if (kind == OfflineMediaKind.episode) {
+        "Episode"
+    } else if (kind == OfflineMediaKind.audio) {
+        "Audio"
+    } else {
+        "Movie"
+    },
     overview = labels.overview,
     productionYear = labels.year,
     runTimeTicks = runtimeTicks,
@@ -155,4 +166,6 @@ internal fun OfflineEntry.playerItem(): MediaItem = MediaItem(
 internal fun OfflineEntry.sidecarAudio(file: (String) -> File): List<File> = tracks
     .filter { it.type == "audio" && it.available && it.resourceId != null }
     .sortedBy { it.serverIndex }
-    .mapNotNull { track -> resources.firstOrNull { it.id == track.resourceId && it.role == OfflineResourceRole.audio }?.let { file(it.path) } }
+    .mapNotNull { track ->
+        resources.firstOrNull { it.id == track.resourceId && it.role == OfflineResourceRole.audio }?.let { file(it.path) }
+    }

@@ -132,7 +132,11 @@ class OfflineEngineTest {
         val end = cutAt?.takeIf { range == null } ?: media.size
         val response = headers.setBody(Buffer().write(media, start, end - start))
         if (slow) response.throttleBody(16_384, 100, java.util.concurrent.TimeUnit.MILLISECONDS)
-        if (end != media.size) response.setHeader("Content-Length", media.size - start).setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+        if (end !=
+            media.size
+        ) {
+            response.setHeader("Content-Length", media.size - start).setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+        }
         return response
     }
 
@@ -163,7 +167,9 @@ class OfflineEngineTest {
         "Title $id",
         "Movie",
         userData = OfflineApiUserData(),
-        sources = listOf(OfflineApiSource("s$id", "etag", "mkv", size, streams = listOf(OfflineApiStream(0, "Video"), OfflineApiStream(1, "Audio"))))
+        sources = listOf(
+            OfflineApiSource("s$id", "etag", "mkv", size, streams = listOf(OfflineApiStream(0, "Video"), OfflineApiStream(1, "Audio")))
+        )
     )
 
     private val original = OfflinePreset.original
@@ -179,7 +185,10 @@ class OfflineEngineTest {
 
     private suspend fun started(): OfflineEngine = engine().also { it.start().join() }
 
-    private fun OfflineEngine.entry(account: Account, id: String) = libraries.value[account.key]?.manifest?.entries?.firstOrNull { it.id == entryId(id) }
+    private fun OfflineEngine.entry(account: Account, id: String) = libraries.value[account.key]?.manifest?.entries?.firstOrNull {
+        it.id ==
+            entryId(id)
+    }
 
     private fun mediaFile(engine: OfflineEngine, account: Account, id: String): File {
         val entry = engine.entry(account, id)!!
@@ -328,7 +337,12 @@ class OfflineEngineTest {
         assertTrue(bytesB.exists())
         assertArrayEquals(media, bytesB.readBytes())
         withTimeout(10_000) {
-            while (requests.none { it.path == "/Sessions/Logout" && it.getHeader("Authorization").orEmpty().contains("set-viewer-a") }) delay(5)
+            while (requests.none {
+                    it.path == "/Sessions/Logout" && it.getHeader("Authorization").orEmpty().contains("set-viewer-a")
+                }
+            ) {
+                delay(5)
+            }
         }
         assertFalse(requests.any { it.path == "/Sessions/Logout" && it.getHeader("Authorization").orEmpty().contains("set-viewer-b") })
         assertFalse(requests.any { it.path == "/Sessions/Logout" && it.getHeader("Authorization").orEmpty().contains("token-") })

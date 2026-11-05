@@ -35,6 +35,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -74,7 +75,14 @@ internal fun offlineArtwork(accountKey: String, entry: OfflineEntry): File? {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun OfflineDownloadsTvScreen(account: Account, offline: Boolean, onPlay: (OfflineEntry) -> Unit, onStorage: () -> Unit, onOnline: () -> Unit, onBack: () -> Unit) {
+internal fun OfflineDownloadsTvScreen(
+    account: Account,
+    offline: Boolean,
+    onPlay: (OfflineEntry) -> Unit,
+    onStorage: () -> Unit,
+    onOnline: () -> Unit,
+    onBack: () -> Unit
+) {
     val view = rememberOfflineDownloads(account, onPlay)
     val controller = view.controller
     val sections = view.sections
@@ -82,7 +90,7 @@ internal fun OfflineDownloadsTvScreen(account: Account, offline: Boolean, onPlay
     BackHandler(controller.confirm != null) { controller.confirm = null }
     BackHandler(controller.confirm == null, onBack)
     LazyColumn(
-        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp),
+        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics { testTagsAsResourceId = true },
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item(key = "top") { Box(Modifier.height(24.dp)) }
@@ -90,7 +98,8 @@ internal fun OfflineDownloadsTvScreen(account: Account, offline: Boolean, onPlay
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Downloads", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
                 Text(
-                    sections.capBytes?.let { "${offlineBytes(sections.usedBytes)} of ${offlineBytes(it)} used" } ?: "${offlineBytes(sections.usedBytes)} used",
+                    sections.capBytes?.let { "${offlineBytes(sections.usedBytes)} of ${offlineBytes(it)} used" }
+                        ?: "${offlineBytes(sections.usedBytes)} used",
                     color = OfflineMuted
                 )
                 if (view.network == OfflineNetwork.none) Text("No connection. Everything saved below still plays.", color = OfflineMuted)
@@ -98,7 +107,9 @@ internal fun OfflineDownloadsTvScreen(account: Account, offline: Boolean, onPlay
         }
         item(key = "buttons") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onStorage, modifier = Modifier.focusRequester(first).testTag("downloads:storage")) { Text("Storage and Wi-Fi") }
+                Button(onClick = onStorage, modifier = Modifier.focusRequester(first).testTag("downloads:storage")) {
+                    Text("Storage and Wi-Fi")
+                }
                 if (offline) Button(onClick = onOnline, modifier = Modifier.testTag("downloads:online")) { Text("Open the library") }
             }
         }
@@ -159,10 +170,22 @@ private fun OfflineRowTv(account: Account, row: OfflineRow, controller: OfflineD
             if (row.notDownloaded.isNotEmpty()) Text("Not downloaded: ${row.notDownloaded.joinToString(", ")}", color = OfflineMuted)
             if (confirming) {
                 val cancel = remember { FocusRequester() }
-                Text(if (row.entry.job.phase == app.pictureshow.core.offline.OfflinePhase.ready) "Delete this download from this device?" else "Stop and delete this download?")
+                Text(
+                    if (row.entry.job.phase ==
+                        app.pictureshow.core.offline.OfflinePhase.ready
+                    ) {
+                        "Delete this download from this device?"
+                    } else {
+                        "Stop and delete this download?"
+                    }
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { controller.confirm = null }, modifier = Modifier.focusRequester(cancel).testTag("downloads:cancel")) { Text("Cancel") }
-                    Button(onClick = { controller.confirmed(emptyList()) }, modifier = Modifier.testTag("downloads:confirm")) { Text("Delete") }
+                    Button(onClick = {
+                        controller.confirm = null
+                    }, modifier = Modifier.focusRequester(cancel).testTag("downloads:cancel")) { Text("Cancel") }
+                    Button(onClick = {
+                        controller.confirmed(emptyList())
+                    }, modifier = Modifier.testTag("downloads:confirm")) { Text("Delete") }
                 }
                 LaunchedEffect(Unit) { runCatching { cancel.requestFocus() } }
             } else {
@@ -210,15 +233,19 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
     var showPreview by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
     LazyColumn(
-        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp),
+        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics { testTagsAsResourceId = true },
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item(key = "top") { Box(Modifier.height(24.dp)) }
-        item(key = "heading") { Text("Storage and Wi-Fi", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() }) }
+        item(key = "heading") {
+            Text("Storage and Wi-Fi", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+        }
         item(key = "limit") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Limit for this viewer: ${manifest.budget.capBytes?.let(::offlineBytes) ?: "not set. Choose one to download."}. Used: ${offlineBytes(manifest.budget.usedBytes)}."
+                    "Limit for this viewer: ${manifest.budget.capBytes?.let(
+                        ::offlineBytes
+                    ) ?: "not set. Choose one to download."}. Used: ${offlineBytes(manifest.budget.usedBytes)}."
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     offlineCapSteps(android.os.StatFs(engine.files.root.parentFile!!.path).totalBytes).forEachIndexed { index, step ->
@@ -232,7 +259,13 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
         }
         item(key = "wifi") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(if (manifest.wifiOnly) "Downloads use Wi-Fi or Ethernet only." else "Downloads can use any connection, including mobile data.")
+                Text(
+                    if (manifest.wifiOnly) {
+                        "Downloads use Wi-Fi or Ethernet only."
+                    } else {
+                        "Downloads can use any connection, including mobile data."
+                    }
+                )
                 Button(onClick = { controller.setWifiOnly(!manifest.wifiOnly) }, modifier = Modifier.testTag("storage:wifi")) {
                     Text(if (manifest.wifiOnly) "Allow any connection" else "Use Wi-Fi only")
                 }
@@ -265,7 +298,9 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
                     Text("Delete all ${manifest.entries.size} downloads for this viewer?")
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         val cancel = remember { FocusRequester() }
-                        Button(onClick = { confirmAll = false }, modifier = Modifier.focusRequester(cancel).testTag("storage:cancel-all")) { Text("Cancel") }
+                        Button(onClick = {
+                            confirmAll = false
+                        }, modifier = Modifier.focusRequester(cancel).testTag("storage:cancel-all")) { Text("Cancel") }
                         Button(onClick = {
                             confirmAll = false
                             controller.deleteEntries(manifest.entries.map(OfflineEntry::id))
@@ -273,7 +308,9 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
                         LaunchedEffect(Unit) { runCatching { cancel.requestFocus() } }
                     }
                 } else if (manifest.entries.isNotEmpty()) {
-                    Button(onClick = { confirmAll = true }, modifier = Modifier.testTag("storage:delete-all")) { Text("Delete all downloads") }
+                    Button(onClick = {
+                        confirmAll = true
+                    }, modifier = Modifier.testTag("storage:delete-all")) { Text("Delete all downloads") }
                 }
             }
         }
@@ -284,16 +321,26 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
 }
 
 @Composable
-internal fun OfflineDownloadTvScreen(account: Account, itemId: String, seriesId: String?, seasonId: String?, title: String, onDone: () -> Unit, onBack: () -> Unit) {
+internal fun OfflineDownloadTvScreen(
+    account: Account,
+    itemId: String,
+    seriesId: String?,
+    seasonId: String?,
+    title: String,
+    onDone: () -> Unit,
+    onBack: () -> Unit
+) {
     val controller = rememberOfflinePreview(account, itemId, seriesId, seasonId, title)
     val first = remember { FocusRequester() }
     BackHandler(onBack = onBack)
     LazyColumn(
-        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp),
+        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics { testTagsAsResourceId = true },
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(key = "top") { Box(Modifier.height(24.dp)) }
-        item(key = "heading") { Text("Download $title", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() }) }
+        item(key = "heading") {
+            Text("Download $title", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+        }
         when (val state = controller.state) {
             OfflinePreviewState.Loading -> item(key = "loading") { Text("Checking what can be downloaded…") }
             is OfflinePreviewState.Unavailable -> {
@@ -310,10 +357,19 @@ internal fun OfflineDownloadTvScreen(account: Account, itemId: String, seriesId:
                         Button(
                             onClick = { controller.preset = choice.preset },
                             enabled = choice.available,
-                            modifier = (if (index == 0) Modifier.focusRequester(first) else Modifier).testTag("download:preset:${choice.preset}")
+                            modifier = (
+                                if (index ==
+                                    0
+                                ) {
+                                    Modifier.focusRequester(first)
+                                } else {
+                                    Modifier
+                                }
+                                ).testTag("download:preset:${choice.preset}")
                         ) {
                             Text(
-                                (if (controller.preset == choice.preset && choice.available) "✓ " else "") + offlinePresetLabel(choice.preset) +
+                                (if (controller.preset == choice.preset && choice.available) "✓ " else "") +
+                                    offlinePresetLabel(choice.preset) +
                                     if (choice.available) "" else ". " + offlinePresetUnavailable(choice.reason)
                             )
                         }
@@ -323,8 +379,13 @@ internal fun OfflineDownloadTvScreen(account: Account, itemId: String, seriesId:
                 if (state.preview.items.size > 1) {
                     item(key = "episodes") { Text("Episodes", style = MaterialTheme.typography.titleMedium) }
                     items(state.preview.items, key = { "episode:" + it.id }) { episode ->
-                        Button(onClick = { controller.toggleEpisode(episode.id) }, modifier = Modifier.testTag("download:episode:${episode.id}")) {
-                            Text((if (episode.id in controller.episodes) "✓ " else "") + (episode.episodeNumber?.let { "$it. " } ?: "") + episode.name)
+                        Button(onClick = {
+                            controller.toggleEpisode(episode.id)
+                        }, modifier = Modifier.testTag("download:episode:${episode.id}")) {
+                            Text(
+                                (if (episode.id in controller.episodes) "✓ " else "") + (episode.episodeNumber?.let { "$it. " } ?: "") +
+                                    episode.name
+                            )
                         }
                     }
                 }
@@ -334,11 +395,18 @@ internal fun OfflineDownloadTvScreen(account: Account, itemId: String, seriesId:
                 } else {
                     item(key = "audio") { Text("Audio, up to $OFFLINE_MAX_CONVERTED_AUDIO", style = MaterialTheme.typography.titleMedium) }
                     items(controller.sourceTracks("Audio"), key = { "audio:" + it.index }) { track ->
-                        Button(onClick = { controller.toggleAudio(track.index) }, modifier = Modifier.testTag("download:audio:${track.index}")) {
-                            Text((if (track.index in controller.audio) "✓ " else "") + (track.displayTitle ?: track.language ?: "Track ${track.index}"))
+                        Button(onClick = {
+                            controller.toggleAudio(track.index)
+                        }, modifier = Modifier.testTag("download:audio:${track.index}")) {
+                            Text(
+                                (if (track.index in controller.audio) "✓ " else "") +
+                                    (track.displayTitle ?: track.language ?: "Track ${track.index}")
+                            )
                         }
                     }
-                    item(key = "subs") { Text("Subtitles, up to $OFFLINE_MAX_CONVERTED_SUBTITLES", style = MaterialTheme.typography.titleMedium) }
+                    item(key = "subs") {
+                        Text("Subtitles, up to $OFFLINE_MAX_CONVERTED_SUBTITLES", style = MaterialTheme.typography.titleMedium)
+                    }
                     items(controller.sourceTracks("Subtitle"), key = { "subtitle:" + it.index }) { track ->
                         Button(
                             onClick = { controller.toggleSubtitle(track.index) },
@@ -346,7 +414,8 @@ internal fun OfflineDownloadTvScreen(account: Account, itemId: String, seriesId:
                             modifier = Modifier.testTag("download:subtitle:${track.index}")
                         ) {
                             Text(
-                                (if (track.index in controller.subtitles) "✓ " else "") + (track.displayTitle ?: track.language ?: "Track ${track.index}") +
+                                (if (track.index in controller.subtitles) "✓ " else "") +
+                                    (track.displayTitle ?: track.language ?: "Track ${track.index}") +
                                     if (track.isText) "" else ". Picture subtitles can't be converted."
                             )
                         }
@@ -355,17 +424,33 @@ internal fun OfflineDownloadTvScreen(account: Account, itemId: String, seriesId:
                 item(key = "size") {
                     val estimate = state.preview.choices.firstOrNull { it.preset == controller.preset }?.estimateBytes
                     val count = controller.selectedItems().size.coerceAtLeast(1)
-                    Text(offlineSizeText(controller.selectedItems(), controller.preset) { estimate?.let { total -> total / state.preview.items.size.coerceAtLeast(count) } })
+                    Text(
+                        offlineSizeText(controller.selectedItems(), controller.preset) {
+                            estimate?.let { total ->
+                                total /
+                                    state.preview.items.size.coerceAtLeast(count)
+                            }
+                        }
+                    )
                 }
                 item(key = "cellular") {
                     Button(onClick = { controller.cellular = !controller.cellular }, modifier = Modifier.testTag("download:cellular")) {
-                        Text(if (controller.cellular) "✓ Can use mobile data for this" else "Wi-Fi only for this. Select to allow mobile data.")
+                        Text(
+                            if (controller.cellular) {
+                                "✓ Can use mobile data for this"
+                            } else {
+                                "Wi-Fi only for this. Select to allow mobile data."
+                            }
+                        )
                     }
                 }
                 item(key = "start") {
                     Button(
                         onClick = { controller.start(onDone) },
-                        enabled = !controller.started && controller.selectedItems().isNotEmpty() && state.preview.choices.any { it.preset == controller.preset && it.available },
+                        enabled =
+                        !controller.started &&
+                            controller.selectedItems().isNotEmpty() &&
+                            state.preview.choices.any { it.preset == controller.preset && it.available },
                         modifier = Modifier.testTag("download:start")
                     ) { Text("Download") }
                 }

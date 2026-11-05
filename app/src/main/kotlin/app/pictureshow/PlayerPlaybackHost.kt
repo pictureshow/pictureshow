@@ -232,7 +232,11 @@ internal fun rememberPlaybackHostState(
     remote: RemoteTargetHost? = null
 ): PlaybackHostState {
     val context = LocalContext.current
-    val output = remember { providedOutput ?: Media3PlaybackOutput(context, account.server, item.name) }
+    val offline = LocalOfflinePlayback.current
+    val output = remember {
+        providedOutput ?: offline?.output(context, account.server, item.name)
+            ?: Media3PlaybackOutput(context, account.server, item.name)
+    }
     val latestNext by rememberUpdatedState(onNext)
     val latestExit by rememberUpdatedState(onExit)
     val host = remember { PlaybackHostState(item, startMs, output, { latestNext(it) }, { latestExit() }, remote) }
@@ -344,6 +348,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val http: HttpClient = koinInject()
     val identity: DeviceIdentityStore = koinInject()
     val preferences: PlaybackPreferencesStore = koinInject()
+    val offline = LocalOfflinePlayback.current
     val output = host.output
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
@@ -373,7 +378,8 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 val client = PlaybackClient(http, clientIdentity)
                 extras = PlaybackExtrasClient(http, clientIdentity) { message -> Log.i("NextEpisode", message) }
                 tiles = TrickplayCache(http, account, clientIdentity, item.id)
-                val captionsEnabled = offline == null && (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
+                val captionsEnabled =
+                    offline == null && (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
                 val configuration = if (captionsEnabled) {
                     (UserConfigurationClient(http, clientIdentity).configuration(account) as? ClientResult.Success)?.value
                 } else {
@@ -389,7 +395,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         java.util.UUID.randomUUID().toString(),
                         0
                     ),
-                    ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
+                    offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
                         catalog.completePlayback(account, item.id, report)
                     },
                     MetadataPlaybackOutput(output) { playbackMetadata(metadata) },

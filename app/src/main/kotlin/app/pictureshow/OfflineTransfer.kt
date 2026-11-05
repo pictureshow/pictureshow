@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import app.pictureshow.core.offline.OFFLINE_INDEX_PLACEHOLDER_BYTES
 import app.pictureshow.core.offline.OfflineResponse
 import app.pictureshow.core.offline.OfflineValidator
 import app.pictureshow.core.offline.offlineBodyEnd
@@ -13,11 +14,10 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
-import app.pictureshow.core.offline.OFFLINE_INDEX_PLACEHOLDER_BYTES
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -156,7 +156,11 @@ internal class OfflineResourceTransfer(private val http: OfflineHttp, private va
                 return true
             }
             try {
-                if (spacer != null && !room(OFFLINE_CHUNK_BYTES.toLong() + OFFLINE_INDEX_PLACEHOLDER_BYTES)) return OfflineTransferResult.NoBudget
+                if (spacer != null &&
+                    !room(OFFLINE_CHUNK_BYTES.toLong() + OFFLINE_INDEX_PLACEHOLDER_BYTES)
+                ) {
+                    return OfflineTransferResult.NoBudget
+                }
                 while (true) {
                     coroutineContext.ensureActive()
                     val read = body.read(buffer)

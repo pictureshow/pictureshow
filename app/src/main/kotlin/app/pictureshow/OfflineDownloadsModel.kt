@@ -145,7 +145,9 @@ internal fun offlineSections(library: OfflineLibrary, network: OfflineNetwork): 
             entry.labels.title,
             offlineSubtitle(entry),
             offlineStatus(entry.job, live, manifest.wifiOnly, network, entry.committedBytes()),
-            live?.total?.takeIf { it > 0 && entry.job.phase == OfflinePhase.transferring }?.let { (live.received.toFloat() / it).coerceIn(0f, 1f) },
+            live?.total?.takeIf {
+                it > 0 && entry.job.phase == OfflinePhase.transferring
+            }?.let { (live.received.toFloat() / it).coerceIn(0f, 1f) },
             offlineActions(entry.job, manifest.wifiOnly),
             entry.tracks.filter { !it.available }.map { "${it.label} (${it.type})" }
         )
@@ -191,7 +193,9 @@ internal fun offlineSizeText(items: List<OfflineApiItem>, preset: OfflinePreset,
     if (preset == OfflinePreset.original) {
         return when {
             selection.unknownCount == count -> "$countText. Size not known."
-            selection.unknownCount > 0 -> "$countText. At least ${offlineBytes(selection.knownBytes)}, ${selection.unknownCount} of unknown size."
+            selection.unknownCount > 0 -> "$countText. At least ${offlineBytes(
+                selection.knownBytes
+            )}, ${selection.unknownCount} of unknown size."
             else -> "$countText, ${offlineBytes(selection.knownBytes)}"
         }
     }
@@ -216,9 +220,22 @@ internal fun offlinePreviewChoices(policy: OfflinePolicy, items: List<OfflineApi
 }
 
 /** Loads what a preview needs; the failure text is what the viewer sees. */
-internal suspend fun offlineLoadPreview(api: OfflineApi, account: Account, itemId: String, seriesId: String?, seasonId: String?, title: String): OfflinePreviewState = try {
+internal suspend fun offlineLoadPreview(
+    api: OfflineApi,
+    account: Account,
+    itemId: String,
+    seriesId: String?,
+    seasonId: String?,
+    title: String
+): OfflinePreviewState = try {
     val policy = api.policy(account)
-    val items = if (seriesId != null && seasonId != null) api.seasonEpisodes(account, seriesId, seasonId) else listOf(api.item(account, itemId))
+    val items = if (seriesId != null &&
+        seasonId != null
+    ) {
+        api.seasonEpisodes(account, seriesId, seasonId)
+    } else {
+        listOf(api.item(account, itemId))
+    }
     if (items.isEmpty()) {
         OfflinePreviewState.Unavailable("Nothing here to download.")
     } else {

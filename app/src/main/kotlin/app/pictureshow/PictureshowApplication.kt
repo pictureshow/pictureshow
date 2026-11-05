@@ -68,7 +68,13 @@ class PictureshowApplication : Application() {
                         OfflineEngine(
                             this@PictureshowApplication,
                             get(),
-                            { app.pictureshow.core.ClientIdentity(deviceDisplayName(this@PictureshowApplication), store.getOrCreate(), BuildConfig.VERSION_NAME) },
+                            {
+                                app.pictureshow.core.ClientIdentity(
+                                    deviceDisplayName(this@PictureshowApplication),
+                                    store.getOrCreate(),
+                                    BuildConfig.VERSION_NAME
+                                )
+                            },
                             AndroidOfflineForeground(this@PictureshowApplication)
                         )
                     }

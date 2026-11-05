@@ -16,7 +16,8 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class OfflineWebvttTest {
-    private val body = "WEBVTT\n\nRegion: id:subtitle width:80% lines:3 regionanchor:50%,100% viewportanchor:50%,90%\n\n00:00:01.000 --> 00:00:30.000 region:subtitle line:90%\nEnglish external subtitle one\n"
+    private val body = "WEBVTT\n\nRegion: id:subtitle width:80% lines:3 regionanchor:50%,100% viewportanchor:50%,90%\n\n" +
+        "00:00:01.000 --> 00:00:30.000 region:subtitle line:90%\nEnglish external subtitle one\n"
 
     private fun cues(bytes: ByteArray): List<CuesWithTiming> {
         val out = mutableListOf<CuesWithTiming>()

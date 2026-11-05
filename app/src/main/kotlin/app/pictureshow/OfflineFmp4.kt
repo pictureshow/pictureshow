@@ -67,9 +67,8 @@ internal class Fmp4Spacer(private val out: OutputStream) {
     }
 }
 
-private fun ByteArray.be32(at: Int): Long =
-    ((this[at].toLong() and 0xff) shl 24) or ((this[at + 1].toLong() and 0xff) shl 16) or
-        ((this[at + 2].toLong() and 0xff) shl 8) or (this[at + 3].toLong() and 0xff)
+private fun ByteArray.be32(at: Int): Long = ((this[at].toLong() and 0xff) shl 24) or ((this[at + 1].toLong() and 0xff) shl 16) or
+    ((this[at + 2].toLong() and 0xff) shl 8) or (this[at + 3].toLong() and 0xff)
 
 private fun ByteArray.be64(at: Int): Long = (be32(at) shl 32) or be32(at + 4)
 

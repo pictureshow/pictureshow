@@ -21,7 +21,8 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class OfflineDownloadsModelTest {
-    private fun job(phase: OfflinePhase, failure: String? = null, cap: Boolean = false) = OfflineJob(phase, failure = failure, pausedByCap = cap)
+    private fun job(phase: OfflinePhase, failure: String? = null, cap: Boolean = false) =
+        OfflineJob(phase, failure = failure, pausedByCap = cap)
 
     @Test
     fun `percent appears only with a known total`() {
@@ -122,7 +123,12 @@ class OfflineDownloadsModelTest {
             job = job(phase)
         )
         val manifest = app.pictureshow.core.offline.OfflineManifest(
-            entries = listOf(entry("a", OfflinePhase.ready), entry("b", OfflinePhase.paused), entry("c", OfflinePhase.failed), entry("d", OfflinePhase.missing))
+            entries = listOf(
+                entry("a", OfflinePhase.ready),
+                entry("b", OfflinePhase.paused),
+                entry("c", OfflinePhase.failed),
+                entry("d", OfflinePhase.missing)
+            )
         )
         val sections = offlineSections(OfflineLibrary(manifest), OfflineNetwork.none)
         assertEquals(listOf("a"), sections.ready.map { it.title })
