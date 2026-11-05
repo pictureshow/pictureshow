@@ -62,9 +62,15 @@ class CastStartupTest {
 
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
 
+    /** Robolectric's mode shadow ignores the television qualifier, so the application starts again as a TV. */
     @Test
-    @Config(qualifiers = "television")
     fun tvStartupBuildsNoSenderAndNoLink() {
+        val application = ApplicationProvider.getApplicationContext<PictureshowApplication>()
+        shadowOf(application.getSystemService(UiModeManager::class.java)).setCurrentModeType(Configuration.UI_MODE_TYPE_TELEVISION)
+        stopKoin()
+        CastRuntime.hostBuilds = 0
+        CastRuntime.linkBuilds = 0
+        application.onCreate()
         assertTrue(usesTvInterface(context), "this test proves nothing unless the app is in its TV interface")
         assertEquals(0, CastRuntime.hostBuilds)
         assertEquals(0, CastRuntime.linkBuilds)
