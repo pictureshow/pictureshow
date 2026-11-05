@@ -66,6 +66,12 @@ class OfflineEngineTest {
     private var restMs = 1L
     private var recheckMs = 30_000L
 
+    @Volatile
+    private var offAfterNextCut = false
+
+    @Volatile
+    private var downloadsAlwaysDrop = false
+
     private lateinit var serverInfo: Server
     private lateinit var viewerA: Account
     private lateinit var viewerB: Account
@@ -130,6 +136,8 @@ class OfflineEngineTest {
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
 
     private fun download(request: RecordedRequest): MockResponse {
+        if (downloadsAlwaysDrop) return MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
+        if (offAfterNextCut) serverOff = true
         if (hold) return MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
         val range = request.getHeader("Range")
         val start = range?.removePrefix("bytes=")?.removeSuffix("-")?.toInt() ?: 0
@@ -500,6 +508,32 @@ class OfflineEngineTest {
         engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
         serverOff = false
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `a server that dies mid-transfer means waiting, and the download finishes by itself when it returns`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        restMs = 200
+        cutAt = 400_000
+        offAfterNextCut = true
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        offAfterNextCut = false
+        cutAt = null
+        serverOff = false
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertArrayEquals(media, mediaFile(engine, viewerA, "1").readBytes())
+    }
+
+    @Test
+    fun `a server that answers while its transfers keep dropping ends in failed with Retry`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        downloadsAlwaysDrop = true
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
+        assertEquals("network", engine.entry(viewerA, "1")?.job?.failure)
     }
 
     @Test

@@ -749,7 +749,12 @@ internal class OfflineEngine(
                         return false
                     }
                     if (tries >= OFFLINE_RETRIES) {
-                        fail(key, entryId, attempt, result.reason)
+                        // A server that stopped answering comes back on its own. One that answers and keeps dropping won't.
+                        if (serverAnswers(key, entry.itemId, api)) {
+                            fail(key, entryId, attempt, result.reason)
+                        } else {
+                            networkLost(key, entryId)
+                        }
                         return false
                     }
                     delay(retryDelayMs(tries))
@@ -759,6 +764,20 @@ internal class OfflineEngine(
     }
 
     private fun current(key: String) = account(key)
+
+    private suspend fun serverAnswers(key: String, itemId: String, api: OfflineApi): Boolean {
+        val viewer = current(key) ?: return true
+        return try {
+            api.item(viewer, itemId)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: OfflineApiException) {
+            true
+        } catch (e: IOException) {
+            false
+        }
+    }
 
     private suspend fun verify(key: String, entryId: String, attempt: Long, current: Account, api: OfflineApi) {
         val entry = entryOrNull(key, entryId) ?: return
