@@ -17,6 +17,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -28,6 +29,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -552,7 +554,69 @@ class SeekReturnFocusTest {
     }
 
     /** rc30: two utterance ids on each hide. The app announces nothing: one focus move and one change of the node's description. */
-    @Test fun hidingTheControlsMovesFocusAndChangesOneDescriptionAndAnnouncesNothing() {
+    /**
+     * rc31: TalkBack read "Controls hidden" from the description change and again from the focus it moved
+     * to the same node, whenever its queue reached the change after the focus had landed.
+     */
+    @Test fun hidingTheControlsLeavesOnlyTheFocusMoveToSpeak() {
+        val sent = recordEventsReachingTheReader()
+        spokenServiceEnabled()
+        launch(true)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle { sent.clear() }
+        hideControls()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithContentDescription("Controls hidden").assertIsFocused()
+        compose.runOnIdle {
+            assertTrue(sent.none { it.startsWith("TYPE_ANNOUNCEMENT") }, sent.toString())
+            assertEquals(1, sent.count { it.startsWith("TYPE_VIEW_FOCUSED") }, sent.toString())
+            assertEquals(0, sent.count { "desc=Controls hidden" in it }, sent.toString())
+            assertEquals(1, playbackLines().count { it == "controls-hidden description-event suppressed" })
+        }
+    }
+
+    /** With focus already on the surface nothing moves, so the description change is the only thing that can speak. */
+    @Test fun aHideThatMovesNoFocusKeepsTheDescriptionChange() {
+        val sent = recordEventsReachingTheReader()
+        spokenServiceEnabled()
+        launch(true)
+        hideControls()
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        compose.onNodeWithTag("player:surface").performTouchInput { click() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("player:surface").assertIsFocused()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle { sent.clear() }
+        hideControls()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle {
+            assertEquals(0, sent.count { it.startsWith("TYPE_VIEW_FOCUSED") }, sent.toString())
+            assertEquals(1, sent.count { "desc=Controls hidden" in it }, sent.toString())
+        }
+    }
+
+    @Test fun withoutAReaderAHideFiltersNothing() {
+        launch(false)
+        compose.onNodeWithTag("player:surface").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) {
+            check(it())
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("An episode").fetchSemanticsNodes().isEmpty() }
+        compose.runOnIdle {
+            val parent = host.parent as android.view.ViewGroup
+            val event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED).apply {
+                contentChangeTypes = AccessibilityEvent.CONTENT_CHANGE_TYPE_CONTENT_DESCRIPTION
+                contentDescription = "Controls hidden"
+            }
+            val delegate = androidx.core.view.ViewCompat.getAccessibilityDelegate(parent)
+            assertTrue(delegate == null || delegate.onRequestSendAccessibilityEvent(parent, host, event))
+            assertTrue(playbackLines().none { it == "controls-hidden description-event suppressed" })
+        }
+    }
+
+    private fun recordEventsReachingTheReader(): MutableList<String> {
         val sent = mutableListOf<String>()
         val content = compose.activity.findViewById<android.view.ViewGroup>(android.R.id.content)
         androidx.core.view.ViewCompat.setAccessibilityDelegate(
@@ -569,18 +633,7 @@ class SeekReturnFocusTest {
                 }
             }
         )
-        spokenServiceEnabled()
-        launch(true)
-        compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(1_000)
-        compose.runOnIdle { sent.clear() }
-        hideControls()
-        compose.mainClock.advanceTimeBy(1_000)
-        compose.runOnIdle {
-            assertTrue(sent.none { it.startsWith("TYPE_ANNOUNCEMENT") }, sent.toString())
-            assertEquals(1, sent.count { it.startsWith("TYPE_VIEW_FOCUSED") }, sent.toString())
-            assertEquals(1, sent.count { "desc=Controls hidden" in it }, sent.toString())
-        }
+        return sent
     }
 
     /** Compose sends accessibility events only when a service is enabled; the manager's enabled flag isn't enough. */

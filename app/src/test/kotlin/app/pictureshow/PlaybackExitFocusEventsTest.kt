@@ -69,6 +69,39 @@ class PlaybackExitFocusEventsTest {
         assertEquals(2, forwarded.size)
     }
 
+    private fun descriptionEvent(description: String?, changes: Int = AccessibilityEvent.CONTENT_CHANGE_TYPE_CONTENT_DESCRIPTION) =
+        AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED).apply {
+            contentChangeTypes = changes
+            contentDescription = description
+        }
+
+    @Test fun aDescriptionTheFocusMoveWillSpeakIsHeldBackFromTheOwnedHostOnly() {
+        val filtering = PlaybackExitFocusDelegate(original, child, descriptionSpokenByFocus = { "Controls hidden" }) { false }
+        assertFalse(filtering.onRequestSendAccessibilityEvent(parent, child, descriptionEvent("Controls hidden")))
+        assertTrue(forwarded.isEmpty())
+        assertTrue(filtering.onRequestSendAccessibilityEvent(parent, View(context), descriptionEvent("Controls hidden")))
+        assertEquals(1, forwarded.size)
+    }
+
+    @Test fun otherContentChangesFromTheOwnedHostAreForwarded() {
+        val filtering = PlaybackExitFocusDelegate(original, child, descriptionSpokenByFocus = { "Controls hidden" }) { false }
+        val others = listOf(
+            descriptionEvent("Playing"),
+            descriptionEvent(null),
+            descriptionEvent("Controls hidden", AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE),
+            descriptionEvent("Controls hidden", AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION),
+            AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED).apply { contentDescription = "Controls hidden" }
+        )
+        others.forEach { assertTrue(filtering.onRequestSendAccessibilityEvent(parent, child, it)) }
+        assertEquals(others.size, forwarded.size)
+    }
+
+    @Test fun withNoDescriptionToHoldBackTheChangeIsForwarded() {
+        val filtering = PlaybackExitFocusDelegate(original, child) { false }
+        assertTrue(filtering.onRequestSendAccessibilityEvent(parent, child, descriptionEvent("Controls hidden")))
+        assertEquals(1, forwarded.size)
+    }
+
     @Test fun anotherWindowStateEventFromTheOwnedHostIsForwarded() {
         val filtering = PlaybackExitFocusDelegate(original, child, closingPane = { true }) { false }
         val changes = listOf(

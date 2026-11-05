@@ -183,6 +183,7 @@ internal fun PlayerItemScreen(
     val setupError by host::setupError
     var controls by remember { mutableStateOf(false) }
     var controlsFeedback by remember { mutableStateOf<String?>(null) }
+    var focusSpeaksControlsHidden by remember { mutableStateOf(false) }
     var controlsHeight by remember { mutableStateOf(240.dp) }
     val density = LocalDensity.current
     var controlsTop by remember { mutableStateOf<Int?>(null) }
@@ -251,7 +252,11 @@ internal fun PlayerItemScreen(
             else -> null
         }
     }
-    PlaybackExitFocusEvents(openerReturnTag != null || (accessibleControls && restoringSeekFocus), suppressClosingPane = accessibleControls)
+    PlaybackExitFocusEvents(
+        openerReturnTag != null || (accessibleControls && restoringSeekFocus),
+        suppressClosingPane = accessibleControls,
+        descriptionSpokenByFocus = { CONTROLS_HIDDEN_FEEDBACK.takeIf { focusSpeaksControlsHidden } }
+    )
     val readerOpenerOnly: (String) -> Modifier = { tag ->
         if (openerReturnTag != null && openerReturnTag != tag) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
     }
@@ -326,8 +331,10 @@ internal fun PlayerItemScreen(
             }
             controls -> {
                 controls = false
-                if (accessibleControls) controlsFeedback = "Controls hidden"
-                rootFocus.requestFocus()
+                if (accessibleControls) controlsFeedback = CONTROLS_HIDDEN_FEEDBACK
+                val focusMoves = !rootFocused
+                val focused = rootFocus.requestFocus()
+                focusSpeaksControlsHidden = accessibleControls && focusMoves && focused
             }
             else -> finish(reason = "back")
         }
@@ -341,7 +348,12 @@ internal fun PlayerItemScreen(
             focusControls = false
         }
     }
-    LaunchedEffect(controls) { if (controls) controlsFeedback = null }
+    LaunchedEffect(controls) {
+        if (controls) {
+            controlsFeedback = null
+            focusSpeaksControlsHidden = false
+        }
+    }
     // A touch on the conversion notice reveals controls first, so Playback info has a real opener to return to.
     LaunchedEffect(conversionDetailsRequested, controls) {
         if (conversionDetailsRequested && controls) {
@@ -969,6 +981,8 @@ internal fun PlayerSubtitles(
         }
     }
 }
+
+private const val CONTROLS_HIDDEN_FEEDBACK = "Controls hidden"
 
 /** Both directions always remain available: the surface's "scroll" is a 10 s seek or a reveal, never a position. */
 private val ReaderArrowRange = ScrollAxisRange(value = { 1f }, maxValue = { 2f })
