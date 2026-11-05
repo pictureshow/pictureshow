@@ -25,6 +25,7 @@ import {
     endPosition,
     activeSegment,
     nextTrigger,
+    nextCountdown,
     nextAdjacency,
     imageUrl,
     chapterImageUrl,
@@ -708,6 +709,17 @@ for (const file of files) {
                         break;
                     case "next-trigger":
                         value = nextTrigger(i.durationMs, i.segments);
+                        break;
+                    case "next-countdown":
+                        value = nextCountdown(
+                            i.wallSeconds,
+                            i.creditsCountdown,
+                            i.mediaLeftMs,
+                            i.speed,
+                            i.autoPlay,
+                            i.ended,
+                            i.suspended,
+                        );
                         break;
                     case "next-adjacency":
                         value = nextAdjacency(i.item, i.items)?.Id ?? null;

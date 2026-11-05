@@ -3,6 +3,7 @@
  */
 package app.pictureshow.core
 
+import kotlin.math.ceil
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -71,6 +72,26 @@ fun creditsStartMs(durationMs: Long, segments: List<MediaSegment>): Long? = segm
 fun nextEpisodeTriggerMs(durationMs: Long, segments: List<MediaSegment>): Long? {
     if (durationMs <= 0) return null
     return creditsStartMs(durationMs, segments) ?: (durationMs - 10_000).coerceAtLeast(0)
+}
+
+/**
+ * The number a next card shows, or null when its countdown is not running (TOUCH-13). A credits count is wall-clock
+ * seconds until the physical end comes first; with no credits the card waits for the end. Either way the number is
+ * real time at the current speed.
+ */
+fun nextEpisodeCardSeconds(
+    wallSeconds: Long,
+    creditsCountdown: Boolean,
+    mediaLeftMs: Long,
+    speed: Double,
+    autoPlay: Boolean,
+    ended: Boolean,
+    suspended: Boolean
+): Long? {
+    if (!autoPlay || (suspended && !ended)) return null
+    if (mediaLeftMs <= 0 || speed <= 0.0) return wallSeconds
+    val toEnd = ceil(mediaLeftMs / speed / 1_000.0).toLong()
+    return if (creditsCountdown) minOf(wallSeconds, toEnd) else toEnd
 }
 
 data class TrickplayTile(val info: TrickplayInfo, val sheet: Int, val column: Int, val row: Int)

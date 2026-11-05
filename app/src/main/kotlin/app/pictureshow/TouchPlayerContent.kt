@@ -90,10 +90,10 @@ import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.displayRuntimeMillis
+import app.pictureshow.core.nextEpisodeCardSeconds
 import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.trickplayTile
-import kotlin.math.ceil
 
 internal enum class TouchPlayerSheet(val title: String) {
     Audio("Audio"),
@@ -136,16 +136,6 @@ private const val TOUCH_SEEK_STEP_MS = 10_000L
 /** One width for the action column, so a card arriving or leaving never moves Cancel or Skip. */
 private val TOUCH_ACTIONS_WIDTH = 360.dp
 
-/**
- * What a running next card says. The credits count is ten wall-clock seconds (PLAY-25), but the physical end moves on
- * first when less media than that is left, so it never promises longer than the playback rate allows. The time to the
- * physical end is media time, which the host has already worked out.
- */
-internal fun touchNextCountdownSeconds(wallSeconds: Long, creditsCountdown: Boolean, mediaLeftMs: Long, speed: Float): Long {
-    if (!creditsCountdown || mediaLeftMs <= 0 || speed <= 0f) return wallSeconds
-    return minOf(wallSeconds, ceil(mediaLeftMs / speed.toDouble() / 1_000.0).toLong())
-}
-
 /** The label takes the room of its widest wording, at any font scale, so its neighbours never move when it changes. */
 @Composable
 private fun TouchReservedLabel(label: String, reserve: String) {
@@ -187,6 +177,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     var controlsTop by remember { mutableStateOf<Int?>(null) }
     var noticeBounds by remember { mutableStateOf<Rect?>(null) }
     var actionsLeft by remember { mutableFloatStateOf(Float.MAX_VALUE) }
+    var actionsHeight by remember { mutableIntStateOf(0) }
+    var heldNoticeGap by remember { mutableStateOf(0.dp) }
     var playerTop by remember { mutableStateOf(0) }
     val controlsVisible = ui.visible && ui.sheet == null && host.error == null && !host.switching
     val actionsVisible = ui.sheet == null && host.error == null && !host.switching
@@ -386,7 +378,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 }
                 if (this@BoxWithConstraints.maxWidth < 600.dp) {
                     // Transport and exit on one line, then fixed columns: a break never falls where the width runs out.
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    // A very large font moves Stop to its own line instead of squeezing it.
+                    FlowRow(Modifier.fillMaxWidth()) {
                         toggle()
                         Spacer(Modifier.width(8.dp))
                         back()
@@ -421,13 +414,19 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         }
         if (host.error == null && !host.switching) {
             // A narrow window can't hold the notice and the action column side by side, so the column waits below it.
-            val belowNotice = noticeBounds?.takeIf { it.right > actionsLeft }
+            val noticeGap = noticeBounds?.takeIf { it.right > actionsLeft }
                 ?.let { with(density) { it.height.toDp() + 12.dp } } ?: 0.dp
+            // Whatever is showing keeps its place when the notice ends; the gap closes once the column is empty.
+            val belowNotice = if (actionsHeight > 0) maxOf(noticeGap, heldNoticeGap) else noticeGap
+            SideEffect { heldNoticeGap = belowNotice }
             // One anchor in every state: a tap aimed at Cancel lands on Cancel whether or not the controls just appeared.
             Column(
                 Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(top = belowNotice)
                     .padding(12.dp).width(TOUCH_ACTIONS_WIDTH.coerceAtMost(this@BoxWithConstraints.maxWidth - 24.dp))
-                    .onGloballyPositioned { actionsLeft = it.boundsInRoot().left },
+                    .onGloballyPositioned {
+                        actionsLeft = it.boundsInRoot().left
+                        actionsHeight = it.size.height
+                    },
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -454,17 +453,19 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             autoPlay = autoPlay,
                             visible = actionsVisible,
                             card = { seconds, play, cancel ->
-                                // A number shows only while it is really running (TOUCH-13); the same rule the host counts by.
-                                val running = autoPlay && (host.ended || !suspended)
+                                val shown = nextEpisodeCardSeconds(
+                                    seconds,
+                                    creditsCountdown,
+                                    host.duration.takeIf { it > 0 }?.let { (it - host.position).coerceAtLeast(0) } ?: 0,
+                                    speed.speed.toDouble(),
+                                    autoPlay,
+                                    host.ended,
+                                    suspended
+                                )
                                 TouchNextEpisodeCard(
                                     next.name,
-                                    touchNextCountdownSeconds(
-                                        seconds,
-                                        creditsCountdown,
-                                        host.duration.takeIf { it > 0 }?.let { (it - host.position).coerceAtLeast(0) } ?: 0,
-                                        speed.speed
-                                    ),
-                                    running,
+                                    shown ?: 0,
+                                    shown != null,
                                     play,
                                     cancel,
                                     announcement = catalogAnnouncement(next),

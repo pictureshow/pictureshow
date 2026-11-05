@@ -75,6 +75,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.text
@@ -288,7 +289,8 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
         Box {
             OutlinedButton(
                 onClick = { expanded = true },
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("touch:sort")
+                    .touchMenuButton(expanded, "Show sort options") { expanded = true },
                 border = touchOutlineBorder(),
                 contentPadding = PaddingValues(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
             ) {
@@ -719,6 +721,15 @@ private fun TouchDetailActionButton(action: TouchDetailAction, modifier: Modifie
     }
 }
 
+/** A button that opens a menu says so: a reader hears whether it is open and what a double tap will do. */
+private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, open: () -> Unit) = semantics {
+    stateDescription = if (expanded) "Expanded" else "Collapsed"
+    onClick(label = openLabel) {
+        open()
+        true
+    }
+}
+
 /** The TV's four actions behind one control. Its wording follows whichever request was accepted. */
 @Composable
 private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Modifier) {
@@ -729,7 +740,8 @@ private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Mod
         OutlinedButton(
             onClick = { expanded = true },
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth().fillMaxHeight().heightIn(min = 48.dp).testTag("touch:detail:tv"),
+            modifier = Modifier.fillMaxWidth().fillMaxHeight().heightIn(min = 48.dp).testTag("touch:detail:tv")
+                .touchMenuButton(expanded, "Show TV actions") { expanded = true },
             contentPadding = PaddingValues(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             border = touchOutlineBorder(enabled),
             colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
@@ -752,7 +764,9 @@ private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Mod
                     } else {
                         null
                     },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:${action.target}")
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:${action.target}").semantics {
+                        action.state?.let { stateDescription = it }
+                    }
                 )
             }
         }

@@ -176,6 +176,14 @@ runtime. Otherwise trigger at `max(durationMs - 10000, 0)`. Malformed/implausibl
 This operation establishes eligibility timing; UI pause, cancellation, auto-play configuration, countdown, and
 physical playback-end guards are specified in the feature manifest.
 
+## `next-countdown`
+
+Input: integers `wallSeconds` and `mediaLeftMs`, number `speed`, booleans `creditsCountdown`, `autoPlay`, `ended`,
+`suspended`. Expected is the integer a touch next card shows, or null for no number. Null when `autoPlay` is false, or
+when `suspended` and not `ended`. A nonpositive `mediaLeftMs` or `speed` keeps `wallSeconds`. Otherwise
+`toEnd = ceil(mediaLeftMs / speed / 1000)`, and the result is `min(wallSeconds, toEnd)` with a credits countdown and
+`toEnd` without one. See TOUCH-13.
+
 ## `next-adjacency`
 
 Input: a Jellyfin `item` and an `items` array representing the mocked server adjacency response. Expected is the next

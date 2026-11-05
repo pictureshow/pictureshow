@@ -27,10 +27,12 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -418,6 +420,15 @@ class ApplicationParityVectorsTest {
                     "next-trigger" -> nextEpisodeTriggerMs(
                         input.getValue("durationMs").jsonPrimitive.long,
                         Json.decodeFromJsonElement(input.getValue("segments"))
+                    )?.let(::JsonPrimitive) ?: JsonNull
+                    "next-countdown" -> nextEpisodeCardSeconds(
+                        input.getValue("wallSeconds").jsonPrimitive.long,
+                        input.getValue("creditsCountdown").jsonPrimitive.boolean,
+                        input.getValue("mediaLeftMs").jsonPrimitive.long,
+                        input.getValue("speed").jsonPrimitive.double,
+                        input.getValue("autoPlay").jsonPrimitive.boolean,
+                        input.getValue("ended").jsonPrimitive.boolean,
+                        input.getValue("suspended").jsonPrimitive.boolean
                     )?.let(::JsonPrimitive) ?: JsonNull
                     "next-adjacency" -> nextAdjacency(input, StandardTestDispatcher(testScheduler))
                     "user-configuration" -> userConfiguration(input)

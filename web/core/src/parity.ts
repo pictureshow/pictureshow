@@ -308,6 +308,20 @@ export function activeSegment(
             .sort((a, b) => a.StartTicks - b.StartTicks)[0] ?? null
     );
 }
+export function nextCountdown(
+    wallSeconds: number,
+    creditsCountdown: boolean,
+    mediaLeftMs: number,
+    speed: number,
+    autoPlay: boolean,
+    ended: boolean,
+    suspended: boolean,
+): number | null {
+    if (!autoPlay || (suspended && !ended)) return null;
+    if (mediaLeftMs <= 0 || speed <= 0) return wallSeconds;
+    const toEnd = Math.ceil(mediaLeftMs / speed / 1000);
+    return creditsCountdown ? Math.min(wallSeconds, toEnd) : toEnd;
+}
 export function nextTrigger(
     durationMs: number,
     segments: Segment[],

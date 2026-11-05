@@ -11,8 +11,10 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
@@ -33,6 +35,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
@@ -503,12 +506,19 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("next:play").assertIsDisplayed()
     }
 
-    @Test fun nextCardNeverPromisesMoreThanTheMediaLeft() {
-        assertEquals(10, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 60_000, speed = 1f))
-        assertEquals(2, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 2_000, speed = 1f))
-        assertEquals(1, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 2_000, speed = 2f))
-        assertEquals(10, touchNextCountdownSeconds(10, creditsCountdown = true, mediaLeftMs = 0, speed = 1f), "duration unknown")
-        assertEquals(7, touchNextCountdownSeconds(7, creditsCountdown = false, mediaLeftMs = 2_000, speed = 2f), "already media time")
+    // TOUCH-13, at the call site: with no credits the number is real time at the current speed, not media time.
+    @Test fun aNoCreditsCardCountsRealTimeAtTwiceSpeed() {
+        launch()
+        compose.onNodeWithTag("touch:open:Speed").performClick()
+        settled()
+        compose.onNodeWithTag("touch:speed:200").performScrollTo().performClick()
+        settled()
+        compose.runOnIdle {
+            host.position = 52_000
+            host.nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("next", "Another episode")))
+        }
+        settled()
+        compose.onNodeWithText("Next episode · 4 s left").assertIsDisplayed()
     }
 
     // Tablet B1: a tap aimed at Cancel lands on Cancel, whatever else is happening.
@@ -556,6 +566,40 @@ class TouchPlayerControlsTest {
         assertTrue(bounds("touch:conversion-notice").bottom <= bounds("next:card").top)
     }
 
+    // TOUCH-13: Cancel never moves, across the notice's end too.
+    @Test fun theNoticeEndingLeavesTheNextCardWhereItIs() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.runOnIdle { host.deferredNext = MediaItem("next", "Another episode") }
+        settled()
+        val cancel = bounds("next:cancel")
+        compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(CONVERSION_NOTICE_MS + 100)
+        compose.waitForIdle()
+        compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+        assertEquals(cancel, bounds("next:cancel"))
+    }
+
+    @Test fun theNoticeGapClosesOnceTheColumnIsEmpty() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.runOnIdle {
+            host.segments = listOf(MediaSegment("intro", SegmentType.Intro, 150_000_000, 300_000_000))
+        }
+        settled()
+        val held = bounds("touch:skip")
+        assertTrue(bounds("touch:conversion-notice").bottom <= held.top)
+        compose.mainClock.advanceTimeBy(CONVERSION_NOTICE_MS + 100)
+        compose.waitForIdle()
+        assertEquals(held, bounds("touch:skip"), "Skip keeps its place when the notice ends")
+        compose.runOnIdle { host.position = 40_000 }
+        settled()
+        compose.onNodeWithTag("touch:skip").assertDoesNotExist()
+        compose.runOnIdle { host.position = 20_000 }
+        settled()
+        assertTrue(bounds("touch:skip").top < held.top, "the next Skip starts at the top")
+    }
+
     // Phone B9: the most used control moves nothing when it changes.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
@@ -586,6 +630,24 @@ class TouchPlayerControlsTest {
         val first = bounds("touch:open:Subtitles").left - bounds("touch:open:Audio").left
         val second = bounds("touch:open:Chapters").left - bounds("touch:open:Subtitles").left
         assertEquals(first.value, second.value, 1f, "equal cells")
+    }
+
+    // TOUCH-03: at a large font nothing in the transport is squeezed or pushed off the panel.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w320dp-h700dp-port-xhdpi")
+    @Test
+    fun aLargeFontKeepsTheTransportWhole() {
+        launch(fontScale = 1.5f)
+        settled()
+        val panel = bounds("touch:panel")
+        val transport = listOf("touch:toggle", "touch:back10", "touch:forward10", "touch:stop").map(::bounds)
+        transport.forEach {
+            assertTrue(it.left >= panel.left && it.right <= panel.right, "inside the panel: $it")
+            assertTrue(it.right - it.left >= 48.dp, "a whole target: $it")
+        }
+        val stop = bounds("touch:stop")
+        assertTrue(stop.bottom - stop.top < 56.dp, "Stop stays on one line: $stop")
+        transport.zipWithNext { a, b -> assertTrue(a.right <= b.left || a.bottom <= b.top, "no overlap: $a $b") }
     }
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -648,8 +710,8 @@ class TouchPlayerControlsTest {
         assertEquals((title.top + title.bottom).value / 2, (done.top + done.bottom).value / 2, 1f)
     }
 
-    // Check 2 of the design review: the background latch belongs to one viewing; Play now starts the next one playing.
-    @Test fun playNowAfterABackgroundReturnStartsTheNextEpisodeUnlatched() {
+    // Check 2: guards the one route the latch could cross, a shared output. Whether the player really plays is a device fact.
+    @Test fun aNewViewingDoesNotShareTheBackgroundLatch() {
         val hosts = mutableListOf<PlaybackHostState>()
         val first = MediaItem("first", "First episode")
         val next = MediaItem("next", "Next episode")
@@ -700,7 +762,7 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
     }
 
-    private fun launch(paused: Boolean = false, onNext: (MediaItem) -> Unit = {}) {
+    private fun launch(paused: Boolean = false, fontScale: Float? = null, onNext: (MediaItem) -> Unit = {}) {
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
             decoder = Decoder(!paused)
@@ -710,7 +772,12 @@ class TouchPlayerControlsTest {
             host.duration = 60_000
             host.metadata = host.item.copy(chapters = listOf(Chapter(0, "Opening"), Chapter(300_000_000, "Middle")))
         }
-        compose.setContent { MaterialTheme(colorScheme = darkColorScheme()) { TouchPlayerContent(account, host) } }
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale ?: density.fontScale)) {
+                MaterialTheme(colorScheme = darkColorScheme()) { TouchPlayerContent(account, host) }
+            }
+        }
     }
 
     private class Decoder(playing: Boolean) : SimpleBasePlayer(Looper.getMainLooper()) {

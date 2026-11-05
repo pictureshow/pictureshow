@@ -2267,6 +2267,186 @@
       "source": "web/core/src/parity.test.ts; zero is a valid credits boundary"
     },
     {
+      "id": "next-countdown.credits-wall-clock",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 7,
+        "creditsCountdown": true,
+        "mediaLeftMs": 60000,
+        "speed": 1,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 7,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.credits-end-comes-first",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 10,
+        "creditsCountdown": true,
+        "mediaLeftMs": 2000,
+        "speed": 1,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 2,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.credits-end-comes-first-at-double",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 10,
+        "creditsCountdown": true,
+        "mediaLeftMs": 2000,
+        "speed": 2,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 1,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.no-credits-real-time-at-double",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 10,
+        "creditsCountdown": false,
+        "mediaLeftMs": 10000,
+        "speed": 2,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 5,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.no-credits-real-time-at-half",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 5,
+        "creditsCountdown": false,
+        "mediaLeftMs": 5000,
+        "speed": 0.5,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 10,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.no-credits-rounds-up",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 7,
+        "creditsCountdown": false,
+        "mediaLeftMs": 6500,
+        "speed": 1,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 7,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.no-credits-at-1.75",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 10,
+        "creditsCountdown": false,
+        "mediaLeftMs": 10000,
+        "speed": 1.75,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 6,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.duration-unknown-keeps-the-count",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 10,
+        "creditsCountdown": true,
+        "mediaLeftMs": 0,
+        "speed": 1,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": 10,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.paused-shows-no-number",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 7,
+        "creditsCountdown": true,
+        "mediaLeftMs": 60000,
+        "speed": 1,
+        "autoPlay": true,
+        "ended": false,
+        "suspended": true
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.background-return-shows-no-number",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 7,
+        "creditsCountdown": true,
+        "mediaLeftMs": 60000,
+        "speed": 1,
+        "autoPlay": false,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.reader-mode-shows-no-number",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 7,
+        "creditsCountdown": false,
+        "mediaLeftMs": 5000,
+        "speed": 1,
+        "autoPlay": false,
+        "ended": false,
+        "suspended": false
+      },
+      "expected": null,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
+      "id": "next-countdown.ended-counts-while-suspended",
+      "operation": "next-countdown",
+      "input": {
+        "wallSeconds": 3,
+        "creditsCountdown": true,
+        "mediaLeftMs": 0,
+        "speed": 1,
+        "autoPlay": true,
+        "ended": true,
+        "suspended": true
+      },
+      "expected": 3,
+      "source": "core/src/commonTest/kotlin/app/pictureshow/core/PlaybackExtrasTest.kt"
+    },
+    {
       "id": "detail.empty.successful-empty-season",
       "operation": "detail-empty",
       "input": {

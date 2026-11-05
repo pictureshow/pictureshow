@@ -76,9 +76,12 @@ class TouchParitySettingsTest {
     // Catalog T10: the whole row toggles, and it is one named switch.
     @Test fun aSettingsSwitchTogglesFromItsWholeRow() {
         settings()
-        compose.onNodeWithText("Audio passthrough").performScrollTo().performClick()
+        val row = compose.onNodeWithTag("touch:settings:passthrough")
+        val before = row.performScrollTo().fetchSemanticsNode().config[SemanticsProperties.ToggleableState]
+        compose.onNodeWithText("Audio passthrough").performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag("touch:settings:passthrough").assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+        row.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+        assertTrue(before != row.fetchSemanticsNode().config[SemanticsProperties.ToggleableState], "the label's tap toggled the value")
     }
 
     @Test fun conversionNoticeSitsDirectlyAfterAudioPassthrough() {

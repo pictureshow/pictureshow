@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -377,6 +378,20 @@ class TouchDetailPendingTest {
         assertEquals("Start requested", page.label("from-start"))
         assertEquals("Play", page.label("primary"))
         compose.onNodeWithTag("touch:detail:primary").assertIsNotEnabled()
+        val config = compose.onNodeWithTag("touch:detail:primary").fetchSemanticsNode().config
+        assertEquals("Disabled, another play is already requested", config[SemanticsProperties.StateDescription])
+    }
+
+    // P2-4: a reader hears a menu, not a plain button.
+    @Test fun theTvControlSaysItOpensAMenu() {
+        val page = Page(pending())
+        val control = compose.onNodeWithTag("touch:detail:tv").performScrollTo()
+        val config = control.fetchSemanticsNode().config
+        assertEquals("Collapsed", config[SemanticsProperties.StateDescription])
+        assertEquals("Show TV actions", config[SemanticsActions.OnClick].label)
+        control.performClick()
+        page.settle(400)
+        assertEquals("Expanded", compose.onNodeWithTag("touch:detail:tv").fetchSemanticsNode().config[SemanticsProperties.StateDescription])
     }
 
     // Catalog B7: the reason reads first and Retry stays pinned beside it.

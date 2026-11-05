@@ -56,6 +56,9 @@ private const val NO_EPISODES = "No playable episodes are available."
 private const val CHANGES_LATER = "Changes will be available when loading finishes."
 private const val RELOAD_FIRST = "Reload the item before changing it."
 
+/** Why a Play is disabled once another was accepted: the label keeps its plain name, so a reader hears the reason here. */
+private const val TOUCH_OTHER_PLAY_REQUESTED = "Disabled, another play is already requested"
+
 /** One slot of the action grid. [reserve] holds every wording it can take, so a label change never moves a neighbor. */
 internal data class TouchDetailAction(
     val target: String,
@@ -418,7 +421,7 @@ internal fun rememberTouchDetailPresentation(
         label = held(name, requested, inPlaySlot && playQueued != null),
         reserve = listOf(name, "$name when ready", "$name requested"),
         enabled = if (pendingEnabled) captureOpen && !(inPlaySlot && playQueued != null && !requested) else fresh && playItem != null,
-        state = null,
+        state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && inPlaySlot && playQueued != null && !requested },
         requested = requested,
         onClick = {
             when {
@@ -453,7 +456,7 @@ internal fun rememberTouchDetailPresentation(
                 // The longest resume wording stands in for any position, so fresh data arriving moves nothing.
                 reserve = listOf("Play", "Resume from 0:00:00", primaryFresh, "Play when ready", "Play requested", "Play unavailable"),
                 enabled = if (pendingEnabled) playOpen("primary") else canFreshPlay,
-                state = null,
+                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && playQueued != null && playQueued != "primary" },
                 requested = pendingEnabled && playQueued == "primary",
                 onClick = {
                     if (pendingEnabled) {
@@ -518,7 +521,7 @@ internal fun rememberTouchDetailPresentation(
                     "Start unavailable"
                 ),
                 enabled = if (pendingEnabled) playOpen("from-start") else canFreshPlay,
-                state = null,
+                state = TOUCH_OTHER_PLAY_REQUESTED.takeIf { pendingEnabled && playQueued != null && playQueued != "from-start" },
                 requested = pendingEnabled && playQueued == "from-start",
                 // CAT: a resume-only action; the returning layout keeps its place until the fresh position is known.
                 visible = (returning && waiting) || recoveryActive || position > 0 || pendingPosition > 0 || playQueued == "from-start",
