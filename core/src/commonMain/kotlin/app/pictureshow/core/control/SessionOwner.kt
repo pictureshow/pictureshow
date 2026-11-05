@@ -202,7 +202,10 @@ fun reduceTemporary(state: TemporaryState, event: TemporaryEvent): TemporaryStat
             )
         }
         "use" -> if (record.phase == "active") s.copy(effect = "use") else s.copy(reason = "cleanup-required")
-        "end" -> if (record.secretRef == null) {
+        // Already on its way out, or already waiting for its issue: going back would lose a logout in flight and keep the secret.
+        "end" -> if (record.phase in listOf("cancelled-creating", "pending-persist", "revoking", "pending-revoke")) {
+            s
+        } else if (record.secretRef == null) {
             // An in-flight issue must settle before its slot can be reused.
             update(record.copy(phase = "cancelled-creating"), "await-issue")
         } else {

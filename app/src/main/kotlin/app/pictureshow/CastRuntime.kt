@@ -14,8 +14,12 @@ import android.os.SystemClock
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.ClientResult
+import app.pictureshow.core.ErrorKind
+import app.pictureshow.core.JellyfinClient
 import app.pictureshow.core.control.CastReceiverFormats
 import app.pictureshow.core.control.CastSenderVpn
+import app.pictureshow.core.control.CastStoredSessions
+import app.pictureshow.core.control.CastViewingRecord
 import app.pictureshow.core.control.castDeviceProfile
 import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackClient
@@ -23,10 +27,12 @@ import app.pictureshow.core.playback.PlaybackProgressInfo
 import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PlaybackStopInfo
 import io.ktor.client.HttpClient
+import java.security.MessageDigest
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.serialization.json.Json
 
 /** Counts how often the app reaches for Cast, so a test can prove the TV interface never does. */
 internal object CastRuntime {
@@ -39,6 +45,7 @@ internal object CastRuntime {
 private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
 private const val LOCAL_NETWORK_TARGET = 37
 private const val PREFERENCES = "cast-sender"
+private val CastStorageJson = Json { ignoreUnknownKeys = true }
 
 internal fun castSenderHost(context: Context, http: HttpClient, identity: DeviceIdentityStore): CastSenderHost {
     CastRuntime.hostBuilds += 1
@@ -93,14 +100,63 @@ internal class AndroidCastEnvironment(private val context: Context) : CastEnviro
     override var mayBeLive: Boolean
         get() = stored.getBoolean("may-be-live", false)
         set(value) = stored.edit().putBoolean("may-be-live", value).apply()
+
+    /** The same app-private storage as the signed-in account's own token, and excluded from backup the same way. */
+    override var sessions: CastStoredSessions
+        get() = stored.getString("sessions", null)
+            ?.let { runCatching { CastStorageJson.decodeFromString(CastStoredSessions.serializer(), it) }.getOrNull() }
+            ?: CastStoredSessions()
+        set(value) {
+            stored.edit().putString("sessions", CastStorageJson.encodeToString(CastStoredSessions.serializer(), value)).commit()
+        }
+
+    override var viewing: CastViewingRecord?
+        get() = stored.getString("viewing", null)
+            ?.let { runCatching { CastStorageJson.decodeFromString(CastViewingRecord.serializer(), it) }.getOrNull() }
+        set(value) {
+            val edit = stored.edit()
+            if (value ==
+                null
+            ) {
+                edit.remove("viewing")
+            } else {
+                edit.putString("viewing", CastStorageJson.encodeToString(CastViewingRecord.serializer(), value))
+            }
+            edit.commit()
+        }
 }
 
 /** The SDK's own minimum, kept as data so a future version's higher floor shows up as a state and not as a crash. */
 internal const val CAST_MIN_SDK = 23
+private const val CAST_DEVICE_ID_LENGTH = 32
 
 private class ClientCastGateway(private val http: HttpClient, private val identity: DeviceIdentityStore, private val name: String) :
     CastMediaGateway {
-    private suspend fun client() = PlaybackClient(http, ClientIdentity(name, identity.getOrCreate(), BuildConfig.VERSION_NAME))
+    private suspend fun clientIdentity() = ClientIdentity(name, identity.getOrCreate(), BuildConfig.VERSION_NAME)
+
+    private suspend fun client() = PlaybackClient(http, clientIdentity())
+
+    override suspend fun sessionDevice(account: Account, route: String): String {
+        val seed = listOf(identity.getOrCreate(), route, account.server.id, account.user.id).joinToString("|")
+        val digest = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray())
+        return "cast-" + digest.joinToString("") { "%02x".format(it) }.take(CAST_DEVICE_ID_LENGTH)
+    }
+
+    /** The server issues it under its own device, on the viewer's approval; no password is kept or asked for. */
+    override suspend fun provisionSession(account: Account, deviceId: String): CastSessionIssue {
+        val server = JellyfinClient(http, clientIdentity())
+        val enabled = server.quickConnectEnabled(account.server)
+        if ((enabled as? ClientResult.Success)?.value == false) return CastSessionIssue.QuickConnectOff
+        if (enabled is ClientResult.Failure) return CastSessionIssue.Failed
+        val issued = server.renewDevice(account, deviceId) as? ClientResult.Success ?: return CastSessionIssue.Failed
+        return CastSessionIssue.Issued(issued.value)
+    }
+
+    override suspend fun revokeSession(session: Account): Boolean =
+        when (val result = JellyfinClient(http, clientIdentity()).logout(session)) {
+            is ClientResult.Success -> true
+            is ClientResult.Failure -> result.error.kind == ErrorKind.INVALID_CREDENTIALS
+        }
 
     override suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome> =
         client().prepareFor(

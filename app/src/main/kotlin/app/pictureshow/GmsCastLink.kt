@@ -227,6 +227,8 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
         mutableRoutes.value = emptyList()
     }
 
+    override fun joinedRoute(): String? = router.selectedRoute.id
+
     override fun select(routeId: String) {
         router.routes.firstOrNull { it.id == routeId }?.let(router::selectRoute)
     }

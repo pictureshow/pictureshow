@@ -14,23 +14,33 @@ import app.pictureshow.core.control.CastEvent
 import app.pictureshow.core.control.CastObservation
 import app.pictureshow.core.control.CastReach
 import app.pictureshow.core.control.CastReachInput
+import app.pictureshow.core.control.CastReattachInput
 import app.pictureshow.core.control.CastSenderVpn
+import app.pictureshow.core.control.CastSessionEvent
 import app.pictureshow.core.control.CastState
+import app.pictureshow.core.control.CastStoredSessions
 import app.pictureshow.core.control.CastTrack
+import app.pictureshow.core.control.CastViewedItem
+import app.pictureshow.core.control.CastViewingRecord
 import app.pictureshow.core.control.ControlIntent
 import app.pictureshow.core.control.OwnerState
+import app.pictureshow.core.control.TemporarySession
 import app.pictureshow.core.control.ViewingIdentity
 import app.pictureshow.core.control.castCapability
 import app.pictureshow.core.control.castContentType
 import app.pictureshow.core.control.castControls
 import app.pictureshow.core.control.castMediaUrl
 import app.pictureshow.core.control.castReach
+import app.pictureshow.core.control.castReattach
 import app.pictureshow.core.control.castReattachState
 import app.pictureshow.core.control.castSubtitles
+import app.pictureshow.core.control.castUrlBase
 import app.pictureshow.core.control.reduceCast
+import app.pictureshow.core.control.reduceCastSession
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.PlayOutcome
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -46,6 +56,9 @@ private const val MS_TO_TICKS = 10_000L
 
 /** The reducer only compares this for sameness; it is never sent anywhere. */
 private const val LOCAL_DEVICE = "this-device"
+
+/** The reducer compares this for sameness. There is one sender per install, and it is never sent anywhere. */
+private const val SESSION_SENDER = "this-sender"
 internal const val CAST_LOAD_TIMEOUT_MS = 30_000L
 internal const val CAST_STOP_TIMEOUT_MS = 5_000L
 internal const val CAST_COMMAND_TIMEOUT_MS = 5_000L
@@ -87,8 +100,25 @@ internal data class CastUi(
     val localStart: CastLocalStart? = null
 )
 
-/** The server access a sender needs: negotiate for the receiver, and report on the receiver's behalf. */
+internal sealed interface CastSessionIssue {
+    data class Issued(val session: Account) : CastSessionIssue
+
+    /** The server has Quick Connect off, so there's no session to give the receiver. */
+    data object QuickConnectOff : CastSessionIssue
+    data object Failed : CastSessionIssue
+}
+
+/**
+ * The server access a sender needs: a session of the receiver's own, negotiating for the receiver, and reporting on its
+ * behalf. Everything but [provisionSession] is called with that session, never with the viewer's.
+ */
 internal interface CastMediaGateway {
+    /** Stable for one receiver, server and viewer, and never the viewer's own: logging in under that one logs the viewer out. */
+    suspend fun sessionDevice(account: Account, route: String): String
+    suspend fun provisionSession(account: Account, deviceId: String): CastSessionIssue
+
+    /** True once the session is gone, including when the server says it already was. */
+    suspend fun revokeSession(session: Account): Boolean
     suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome>
     suspend fun reportStart(account: Account, report: CastReport)
     suspend fun reportProgress(account: Account, report: CastReport)
@@ -117,6 +147,10 @@ internal interface CastEnvironment {
 
     /** Whether a receiver may still be playing for us, so that returning to the app is worth a reattach. */
     var mayBeLive: Boolean
+
+    /** Written before the session is used or the load is sent, so a process death can't lose what has to be revoked. */
+    var sessions: CastStoredSessions
+    var viewing: CastViewingRecord?
 }
 
 /**
@@ -148,6 +182,16 @@ internal class CastSenderHost(
     private var localSerial = 0L
     private var discovery = "idle"
     private var prepared: Map<String, PlayDecision> = emptyMap()
+
+    /** A failed process death mid-issue leaves a record with nothing to revoke; the stable device id replaces whatever it got. */
+    private var sessions = environment.sessions.let { stored ->
+        stored.copy(state = stored.state.copy(records = stored.state.records.filter { it.secretRef != null }))
+    }
+    private var session: Account? = null
+    private var sessionBinding: TemporarySession? = null
+    private var viewing: CastViewingRecord? = null
+    private var retiring: CastViewingRecord? = null
+    private var restoreJob: Job? = null
     private var loadedUrls: Map<String, String> = emptyMap()
     private var reported: CastReport? = null
     private var localAlive = false
@@ -160,19 +204,189 @@ internal class CastSenderHost(
         val usable = next?.takeUnless { it.expired }
         if (usable?.key == account?.key) {
             account = usable
+            if (usable != null) retryRevocations()
             return
         }
-        // A receiver doesn't follow an account change, so the old viewing is left there, and left alone.
-        if (cast?.owner?.owner?.kind == "cast") link?.endSession(false)
+        // A receiver doesn't follow an account change, and its media belongs to the viewer who left: it stops here.
+        val trigger = if (usable == null) "sign-out" else "viewer-change"
+        stopForAccountChange(usable, trigger)
         account = usable
         clear()
+        if (usable != null) retryRevocations()
+    }
+
+    private fun stopForAccountChange(next: Account?, trigger: String) {
+        val state = cast
+        val reporter = session
+        val active = state?.owner?.let { it.candidate?.kind == "cast" || it.owner.kind == "cast" } == true
+        val last = reportFor().takeIf { active && state?.owner?.owner?.kind == "cast" }
+        val stored = viewing ?: environment.viewing
+        val leaving = stored?.takeIf { next == null || it.server != next.server.id || it.viewer != next.user.id }
+        when {
+            active && state?.link == "connected" -> {
+                if (loadStarted || state.owner.owner.kind == "cast") link?.stop { }
+                link?.endSession(stopReceiver = true)
+            }
+
+            active && stored != null -> rejoinToStop(stored)
+
+            leaving != null && environment.services() == "ok" -> rejoinToStop(leaving)
+        }
+        if (active || leaving != null) {
+            environment.mayBeLive = false
+            environment.viewing = null
+            viewing = null
+        }
+        session = null
+        sessionBinding = null
+        val records = sessions.state.records.filter { active || next == null || it.server != next.server.id || it.viewer != next.user.id }
+        scope.launch {
+            if (reporter != null && last != null) {
+                gateway.reportStopped(reporter, last)
+                last.playSessionId?.let { gateway.stopEncoding(reporter, it) }
+            }
+            records.forEach { endRecord(it, trigger) }
+        }
+    }
+
+    /**
+     * Revoking doesn't stop a receiver that plays the file directly: the server serves that route without a token. Joining
+     * is the only way to reach it, and only media still carrying this viewing's nonce gets stopped.
+     */
+    private fun rejoinToStop(record: CastViewingRecord) {
+        retiring = record
+        val current = ensureLink()
+        current.startDiscovery()
+        scope.launch {
+            val found = withTimeoutOrNull(CAST_SEARCH_MS) { current.routes.first { routes -> routes.any { it.id == record.route } } }
+            if (found != null) current.select(record.route) else retiring = null
+            current.stopDiscovery()
+        }
+    }
+
+    private fun applySession(event: CastSessionEvent): String {
+        val next = reduceCastSession(sessions.state, event)
+        sessions = sessions.copy(state = next)
+        environment.sessions = sessions
+        return next.effect
+    }
+
+    /** Ends one session: durably marked first, then logged out, and kept as pending if the server can't be reached. */
+    private suspend fun endRecord(record: TemporarySession, trigger: String) {
+        if (applySession(CastSessionEvent(trigger, record)) != "persist-revocation") return
+        if (applySession(CastSessionEvent("persisted", record)) == "logout") logout(record)
+    }
+
+    private suspend fun logout(record: TemporarySession) {
+        val ref = sessions.state.records.firstOrNull { it.device == record.device && it.server == record.server }?.secretRef
+        val secret = ref?.let(sessions.secrets::get)
+        val gone = secret == null || gateway.revokeSession(secret)
+        applySession(CastSessionEvent(if (gone) "logout-ok" else "logout-failed", record))
+        if (gone && ref != null) {
+            sessions = sessions.copy(secrets = sessions.secrets - ref)
+            environment.sessions = sessions
+        }
+    }
+
+    /** Pending revocations go first whenever the server may be back, and before any new session under that identity. */
+    private fun retryRevocations() {
+        val pending = sessions.state.records.filter { it.phase in listOf("pending-persist", "revoking", "pending-revoke") }
+        if (pending.isEmpty()) return
+        scope.launch { pending.forEach { resumeRevocation(it) } }
+    }
+
+    private suspend fun resumeRevocation(record: TemporarySession) {
+        val op = if (record.phase == "pending-persist") "persisted" else "reconnect"
+        if (applySession(CastSessionEvent(op, record)) == "logout") logout(record)
+    }
+
+    /** A session for this viewing, or null with the failure already dispatched. The old viewing's sessions end first. */
+    private suspend fun provision(active: Account, target: ViewingIdentity): Account? {
+        sessions.state.records.toList().forEach { old ->
+            if (old.phase == "active") endRecord(old, "viewer-change") else resumeRevocation(old)
+        }
+        val deviceId = gateway.sessionDevice(active, target.device)
+        val binding = TemporarySession(active.server.id, active.user.id, deviceId, SESSION_SENDER, target.generation)
+        if (applySession(CastSessionEvent("provision", binding)) != "provision") {
+            // Offline revocation still owed, or otherwise refused: never a second session and never the viewer's own token.
+            dispatch(CastEvent("load-failed", recovery = "server-unreachable"))
+            return null
+        }
+        sessionBinding = binding
+        when (val issue = gateway.provisionSession(active, deviceId)) {
+            is CastSessionIssue.Issued -> {
+                val ref = UUID.randomUUID().toString()
+                sessions = sessions.copy(secrets = sessions.secrets + (ref to issue.session))
+                environment.sessions = sessions
+                val effect = applySession(CastSessionEvent("issued", binding, issue.session.user.id, ref))
+                if (effect == "use") return issue.session
+                if (effect == "persist-revocation" && applySession(CastSessionEvent("persisted", binding)) == "logout") logout(binding)
+                return null
+            }
+
+            CastSessionIssue.QuickConnectOff -> settleUnissued(binding, "quick-connect-off")
+
+            CastSessionIssue.Failed -> settleUnissued(binding, "server-unreachable")
+        }
+        return null
+    }
+
+    private fun settleUnissued(binding: TemporarySession, recovery: String) {
+        sessions = sessions.copy(
+            state = sessions.state.copy(
+                records = sessions.state.records.filterNot { it.device == binding.device && it.server == binding.server }
+            )
+        )
+        environment.sessions = sessions
+        sessionBinding = null
+        if (cast?.owner?.candidate?.generation == binding.generation) dispatch(CastEvent("load-failed", recovery = recovery))
+    }
+
+    private fun endCurrentSession(trigger: String) {
+        val record = sessionBinding
+        session = null
+        sessionBinding = null
+        viewing = null
+        environment.viewing = null
+        if (record != null) scope.launch { endRecord(record, trigger) }
     }
 
     /** Returning to the app reattaches only if a viewing may still be running; otherwise nothing wakes the SDK. */
     fun setForeground(value: Boolean) {
-        if (!value || environment.tvInterface || !environment.mayBeLive || account == null || cast != null) return
+        if (!value || environment.tvInterface || account == null) return
+        retryRevocations()
+        if (!environment.mayBeLive || cast != null) return
         if (environment.services() != "ok" || !environment.enabled) return
         ensureLink()
+        // Without a session to resume there's nothing to wait for. The viewing is still offered, so it can still be ended.
+        restoreJob?.cancel()
+        restoreJob = scope.launch {
+            delay(CAST_SEARCH_MS)
+            if (cast == null && !awaitingReattach) restoreDetached()
+        }
+    }
+
+    private fun restoreDetached() {
+        val active = account ?: return
+        val record = environment.viewing ?: return
+        if (record.server != active.server.id || record.viewer != active.user.id || !adopt(record)) return
+        val entry = record.items.firstOrNull()?.entry
+        val state = castReattachState(ownerOf(record), localIdentity(active, record.generation), ControlIntent(entry = entry))
+        mutable.update { it.copy(cast = state, title = record.title, deviceName = record.deviceName) }
+    }
+
+    private fun ownerOf(record: CastViewingRecord) =
+        ViewingIdentity(record.server, record.viewer, record.route, record.session, record.generation, "cast")
+
+    /** Takes this viewing up again only if its own session is still there to report with. */
+    private fun adopt(record: CastViewingRecord): Boolean {
+        val binding = sessions.state.records.firstOrNull { it.device == record.device && it.phase == "active" } ?: return false
+        val secret = binding.secretRef?.let(sessions.secrets::get) ?: return false
+        session = secret
+        sessionBinding = binding
+        viewing = record
+        generation = maxOf(generation, record.generation)
+        return true
     }
 
     fun openChooser(playRequest: CastPlayRequest?) {
@@ -286,6 +500,7 @@ internal class CastSenderHost(
         prepared = emptyMap()
         loadedUrls = emptyMap()
         reported = null
+        viewing = null
         lastStatus = null
         loadStarted = false
         localAlive = playRequest.local != null
@@ -378,10 +593,14 @@ internal class CastSenderHost(
         val startMs = state.owner.intent.ticks / MS_TO_TICKS
         val serial = target.generation
         scope.launch {
+            val temporary = provision(active, target) ?: return@launch
+            if (cast?.owner?.candidate?.generation != serial) return@launch endCurrentSession("cancel")
+            session = temporary
+            val nonce = UUID.randomUUID().toString()
             val items = mutableListOf<CastLoadItem>()
             val decisions = mutableMapOf<String, PlayDecision>()
             playRequest.items.forEachIndexed { index, item ->
-                val outcome = gateway.prepare(active, item.id, playRequest, if (index == playRequest.startIndex) startMs else 0)
+                val outcome = gateway.prepare(temporary, item.id, playRequest, if (index == playRequest.startIndex) startMs else 0)
                 if (cast?.owner?.candidate?.generation != serial) return@launch
                 val decision = ((outcome as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision
                 if (decision == null) {
@@ -391,9 +610,34 @@ internal class CastSenderHost(
                 }
                 val entry = entryId(index, item.id)
                 decisions[entry] = decision
-                items += loadItem(active, target, item, entry, decision)
+                items += loadItem(temporary, target, item, entry, decision, nonce)
             }
             prepared = decisions
+            val record = CastViewingRecord(
+                nonce = nonce,
+                server = active.server.id,
+                viewer = active.user.id,
+                route = target.device,
+                device = temporary.deviceId.orEmpty(),
+                session = target.session,
+                generation = target.generation,
+                items = playRequest.items.mapIndexed { index, item ->
+                    val entry = entryId(index, item.id)
+                    val decision = decisions.getValue(entry)
+                    CastViewedItem(
+                        entry,
+                        item.id,
+                        decision.mediaSourceId,
+                        decision.playSessionId,
+                        decision.method.name,
+                        castUrlBase(castMediaUrl(decision, temporary.accessToken))
+                    )
+                },
+                title = playRequest.items.getOrNull(playRequest.startIndex)?.title,
+                deviceName = mutable.value.deviceName
+            )
+            viewing = record
+            environment.viewing = record
             loadedUrls = items.associate { it.url to (it.customData["entry"] ?: "") }
             loadStarted = true
             val current = link ?: return@launch dispatch(CastEvent("load-failed"))
@@ -407,37 +651,35 @@ internal class CastSenderHost(
         }
     }
 
+    /**
+     * Only what a reattach compares goes in custom data: anything on the receiver's network can read it, and can write it
+     * too, so nothing is ever taken from it.
+     */
     private fun loadItem(
-        active: Account,
+        temporary: Account,
         target: ViewingIdentity,
         item: CastPlayItem,
         entry: String,
-        decision: PlayDecision
+        decision: PlayDecision,
+        nonce: String
     ): CastLoadItem {
-        val tracks = castSubtitles(active.server, decision, active.accessToken).map {
+        val tracks = castSubtitles(temporary.server, decision, temporary.accessToken).map {
             CastLoadTrack(it.trackId.toLong(), it.label, it.language, it.url)
         }
         return CastLoadItem(
-            url = castMediaUrl(decision, active.accessToken),
+            url = castMediaUrl(decision, temporary.accessToken),
             contentType = castContentType(decision),
             title = item.title,
             imageUrl = item.imageUrl,
             durationMs = item.durationMs,
             live = item.live,
             tracks = tracks,
-            customData = buildMap {
-                put("app", "pictureshow")
-                put("generation", target.generation.toString())
-                put("server", target.server)
-                put("viewer", target.viewer)
-                put("device", target.device)
-                put("session", target.session)
-                put("entry", entry)
-                put("item", item.id)
-                put("method", decision.method.name)
-                decision.mediaSourceId?.let { put("source", it) }
-                decision.playSessionId?.let { put("playSession", it) }
-            }
+            customData = mapOf(
+                "app" to "pictureshow",
+                "nonce" to nonce,
+                "generation" to target.generation.toString(),
+                "entry" to entry
+            )
         )
     }
 
@@ -446,10 +688,12 @@ internal class CastSenderHost(
         loadTimer?.cancel()
         val sent = loadStarted
         loadStarted = false
-        val current = link ?: return
-        if (sent) current.stop { }
-        if (cast?.link != "lost") current.endSession(stopReceiver = true)
         environment.mayBeLive = false
+        link?.let { current ->
+            if (sent) current.stop { }
+            if (cast?.link != "lost") current.endSession(stopReceiver = true)
+        }
+        endCurrentSession("load-failed")
     }
 
     private fun released() {
@@ -457,7 +701,7 @@ internal class CastSenderHost(
         request?.local?.release()
         localAlive = false
         request = null
-        val active = account
+        val active = session
         val report = reportFor()
         reported = report
         if (active != null && report != null) scope.launch { gateway.reportStart(active, report) }
@@ -479,30 +723,27 @@ internal class CastSenderHost(
         val after = reduceCast(before, CastEvent("report", sequence = ++reportSequence))
         mutable.update { it.copy(cast = after) }
         if (after.effect != "report") return
-        val active = account ?: return
+        val active = session ?: return
         val value = reportFor() ?: return
         reported = value
         scope.launch { gateway.reportProgress(active, value) }
     }
 
-    /** The current entry's report, read from the receiver's own status. */
+    /** The current entry's report: position and pause from the receiver's status, and what it's about from our own record. */
     private fun reportFor(): CastReport? {
         val observed = cast?.observed ?: return reported
         val entry = observed.entry ?: cast?.owner?.intent?.entry
-        val decision = prepared[entry] ?: prepared.values.firstOrNull()
-        return if (decision != null) {
-            CastReport(
-                decision.itemId,
-                decision.mediaSourceId,
-                decision.playSessionId,
-                decision.method,
-                observed.ticks,
-                observed.playerState == "paused"
-            )
+        val items = viewing?.items.orEmpty()
+        val item = items.firstOrNull { it.entry == entry } ?: items.firstOrNull()
+        val paused = observed.playerState == "paused"
+        return if (item != null) {
+            CastReport(item.itemId, item.mediaSourceId, item.playSessionId, playMethod(item.method), observed.ticks, paused)
         } else {
-            reported?.copy(positionTicks = observed.ticks, paused = observed.playerState == "paused")
+            reported?.copy(positionTicks = observed.ticks, paused = paused)
         }
     }
+
+    private fun playMethod(name: String) = runCatching { PlayMethod.valueOf(name) }.getOrDefault(PlayMethod.DirectPlay)
 
     private fun sendCommand() {
         val state = cast ?: return
@@ -541,7 +782,7 @@ internal class CastSenderHost(
         reportJob?.cancel()
         commandTimer?.cancel()
         environment.mayBeLive = false
-        cleanup(state.returnTicks)
+        cleanup(state.returnTicks, if (state.stopPurpose == "ended") "receiver-ended" else "stop-confirmed")
         link?.endSession(stopReceiver = state.notice != "receiver-taken")
         if (state.stopPurpose == "here" && state.owner.phase == "return-ready") {
             account?.let { dispatch(CastEvent("resume-here", identity = localIdentity(it, nextGeneration()))) }
@@ -550,16 +791,23 @@ internal class CastSenderHost(
         }
     }
 
-    private fun cleanup(ticks: Long?) {
-        val active = account ?: return
+    /** The last report and the encoder go out under the session, which is only revoked after them. */
+    private fun cleanup(ticks: Long?, trigger: String) {
+        val reporter = session
+        val record = sessionBinding
         val last = reportFor()?.let { it.copy(positionTicks = ticks ?: it.positionTicks) }
         val serial = cast?.owner?.generation
+        session = null
+        sessionBinding = null
+        viewing = null
+        environment.viewing = null
         scope.launch {
-            if (last != null) {
-                gateway.reportStopped(active, last)
-                last.playSessionId?.let { gateway.stopEncoding(active, it) }
+            if (reporter != null && last != null) {
+                gateway.reportStopped(reporter, last)
+                last.playSessionId?.let { gateway.stopEncoding(reporter, it) }
             }
             if (cast?.owner?.generation == serial) dispatch(CastEvent("cleanup-done"))
+            record?.let { endRecord(it, trigger) }
         }
     }
 
@@ -579,7 +827,7 @@ internal class CastSenderHost(
         // The choice to play here despite a Stop nobody confirmed: the viewer took responsibility, so tidy up now.
         if (state.stop == "unknown") {
             environment.mayBeLive = false
-            cleanup(state.returnTicks)
+            cleanup(state.returnTicks, "play-here-unconfirmed")
             link?.endSession(stopReceiver = true)
         }
         val output = request?.local.takeIf { localAlive }
@@ -661,12 +909,18 @@ internal class CastSenderHost(
     /** The viewer read the message and wants nothing more from this handoff. */
     fun dismiss() {
         environment.mayBeLive = false
+        endCurrentSession("forget")
         clear()
     }
 
     override fun onConnecting() = dispatch(CastEvent("link-connecting"))
 
     override fun onConnected(deviceName: String?) {
+        restoreJob?.cancel()
+        if (retiring != null) {
+            link?.requestStatus()
+            return
+        }
         if (deviceName != null) mutable.update { it.copy(deviceName = deviceName) }
         if (cast == null) {
             awaitingReattach = true
@@ -692,6 +946,24 @@ internal class CastSenderHost(
     }
 
     override fun onStatus(status: CastStatus) {
+        retiring?.let { record ->
+            retiring = null
+            val ours = castReattach(
+                CastReattachInput(
+                    record,
+                    record.server,
+                    record.viewer,
+                    status.mediaSession,
+                    status.playerState,
+                    status.customData,
+                    status.contentUrl,
+                    link?.joinedRoute()
+                )
+            ).decision == "adopt"
+            if (ours) link?.stop { }
+            link?.endSession(stopReceiver = ours)
+            return
+        }
         lastStatus = status
         if (cast == null) {
             if (awaitingReattach) reattach(status)
@@ -704,50 +976,71 @@ internal class CastSenderHost(
         if (before != null && after != null && before != after) report()
     }
 
-    /** After a process death: this is ours only if the receiver's media says it is, and only for this viewer. */
+    /** After a process death: ours only if what the receiver shows is what we stored, and what we report comes from that. */
     private fun reattach(status: CastStatus) {
         awaitingReattach = false
         val active = account ?: return
-        val data = status.customData
-        val value = data["generation"]?.toLongOrNull()
-        if (status.mediaSession < 0 ||
-            status.playerState == "idle" ||
-            value == null ||
-            data["server"] != active.server.id ||
-            data["viewer"] != active.user.id
-        ) {
-            environment.mayBeLive = false
-            link?.endSession(stopReceiver = false)
+        val record = environment.viewing
+        val answer = castReattach(
+            CastReattachInput(
+                record,
+                active.server.id,
+                active.user.id,
+                status.mediaSession,
+                status.playerState,
+                status.customData,
+                status.contentUrl,
+                link?.joinedRoute()
+            )
+        )
+        val entry = answer.entry
+        if (answer.decision != "adopt" || record == null || entry == null || !adopt(record)) {
+            leaveReceiver(record, if (answer.decision == "ended") "receiver-ended" else "foreign-media")
             return
         }
-        generation = maxOf(generation, value)
-        val owner = ViewingIdentity(active.server.id, active.user.id, data["device"].orEmpty(), data["session"].orEmpty(), value, "cast")
-        val local = localIdentity(active, value)
-        val entry = data["entry"]
-        val itemId = data["item"].orEmpty()
+        val item = record.items.first { it.entry == entry }
         reported = CastReport(
-            itemId,
-            data["source"],
-            data["playSession"],
-            runCatching { PlayMethod.valueOf(data["method"].orEmpty()) }.getOrDefault(PlayMethod.DirectPlay),
+            item.itemId,
+            item.mediaSourceId,
+            item.playSessionId,
+            playMethod(item.method),
             status.positionMs * MS_TO_TICKS,
             status.playerState == "paused"
         )
-        val state =
-            castReattachState(owner, local, ControlIntent(entry = entry, ticks = status.positionMs * MS_TO_TICKS, queue = status.queue))
-        mutable.update { it.copy(cast = state, title = status.title) }
+        val intent = ControlIntent(entry = entry, ticks = status.positionMs * MS_TO_TICKS, queue = record.items.map { it.entry })
+        val state = castReattachState(ownerOf(record), localIdentity(active, record.generation), intent)
+        mutable.update { it.copy(cast = state, title = record.title ?: status.title) }
         dispatch(CastEvent("link-connected"))
         dispatch(CastEvent("observe", observation = observation(status), nowMs = nowMs()))
         startReporting()
     }
 
-    /** The generation comes from the media itself. If a receiver drops custom data, the URL we loaded still identifies it. */
+    /** Not ours: nothing is controlled or reported, and a session we still hold for a viewing that's gone is revoked. */
+    private fun leaveReceiver(record: CastViewingRecord?, trigger: String) {
+        environment.mayBeLive = false
+        environment.viewing = null
+        link?.endSession(stopReceiver = false)
+        val stored = sessions.state.records.filter { record != null && it.device == record.device }
+        scope.launch { stored.forEach { endRecord(it, trigger) } }
+    }
+
+    /**
+     * Whether media is ours is decided by this viewing's nonce, or by the URL we loaded if a receiver drops custom data.
+     * Other media can claim any generation it likes: without those it reads as not ours. The rest of a claim is ignored.
+     */
     private fun observation(status: CastStatus): CastObservation {
         val target = cast?.owner?.candidate ?: cast?.owner?.owner
+        val ours = viewing?.let { record ->
+            status.customData["nonce"] == record.nonce &&
+                (status.contentUrl == null || record.items.any { it.url == castUrlBase(status.contentUrl) })
+        } == true
         val entryFromUrl = status.contentUrl?.let(loadedUrls::get)
-        val stamped = status.customData["generation"]?.toLongOrNull()
-            ?: target?.generation?.takeIf { entryFromUrl != null }
-            ?: -1
+        val stamped = when {
+            ours -> status.customData["generation"]?.toLongOrNull() ?: target?.generation ?: -1
+            entryFromUrl != null -> target?.generation ?: -1
+            else -> -1
+        }
+        val claimedEntry = status.customData["entry"].takeIf { entry -> ours && viewing?.items?.any { it.entry == entry } == true }
         return CastObservation(
             mediaSession = status.mediaSession,
             generation = stamped,
@@ -755,7 +1048,7 @@ internal class CastSenderHost(
             idleReason = status.idleReason,
             ticks = status.positionMs * MS_TO_TICKS,
             durationTicks = status.durationMs?.let { it * MS_TO_TICKS },
-            entry = status.customData["entry"] ?: entryFromUrl,
+            entry = claimedEntry ?: entryFromUrl,
             activeTracks = status.activeTracks,
             queue = status.queue,
             commands = status.commands
