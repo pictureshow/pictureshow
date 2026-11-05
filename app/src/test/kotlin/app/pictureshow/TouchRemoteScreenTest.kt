@@ -11,10 +11,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import app.pictureshow.core.Account
@@ -127,6 +135,54 @@ class TouchRemoteScreenTest {
     @Config(qualifiers = "w320dp-h2400dp-port-xhdpi")
     @Test
     fun noControlMovesAtALargeFontInANarrowWindow() = assertNothingMoves(1.5f)
+
+    private fun show(state: RemoteControllerUi, onBack: () -> Unit = {}) {
+        compose.setContent { MaterialTheme { TouchRemoteScreen(state, host, {}, onBack) } }
+        compose.waitForIdle()
+    }
+
+    private val selected = SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+    private val unselected = SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)
+
+    // The catalog's own Back, on the catalog's page margin, rather than an outlined pill of its own.
+    @Test fun backIsTheCatalogsOnTheCatalogsMargin() {
+        var backs = 0
+        show(attached(null)) { backs++ }
+        val back = compose.onNodeWithTag("touch:back")
+        back.assertTextContains("‹ Back")
+        assertEquals(20f, back.getBoundsInRoot().left.value, 0.5f)
+        assertEquals(20f, compose.onNodeWithTag("remote:previous").getBoundsInRoot().left.value, 0.5f)
+        back.performClick()
+        compose.waitForIdle()
+        assertEquals(1, backs)
+    }
+
+    // "Off" drawn as disabled read as unavailable, at 2.6:1, when it was the current choice.
+    @Test fun theCurrentTrackIsSelectedNotDisabled() {
+        show(attached(null, now.copy(audio = 1, subtitle = null)))
+        compose.onNodeWithText("Off").performScrollTo().assert(selected).assertIsEnabled()
+        compose.onNodeWithText("Spanish").performScrollTo().assert(unselected).assertIsEnabled()
+    }
+
+    @Test fun theCurrentTrackStaysSelectedWhileCommandsCannotGo() {
+        show(attached(null, now.copy(audio = 1, subtitle = null), fresh = false))
+        compose.onNodeWithText("Off").performScrollTo().assert(selected).assertIsEnabled()
+        compose.onNodeWithText("Spanish").performScrollTo().assert(unselected).assertIsNotEnabled()
+    }
+
+    @Test fun choosingATrackMovesNothing() {
+        var state by mutableStateOf(attached(null, now.copy(audio = 1, subtitle = null)))
+        compose.setContent { MaterialTheme { TouchRemoteScreen(state, host, {}, {}) } }
+        compose.waitForIdle()
+        val tracks = listOf("Off", "Spanish")
+        fun places() = (bounds().toList() + tracks.map { it to compose.onNodeWithText(it).getBoundsInRoot() })
+        val before = places()
+        compose.runOnIdle { state = attached(null, now.copy(audio = 2, subtitle = 3)) }
+        compose.waitForIdle()
+        assertEquals(before, places())
+        compose.onNodeWithText("Off").assert(unselected)
+        compose.onNodeWithText("Spanish").assert(selected)
+    }
 
     @Test fun everyStatusWordingHasItsRoomReserved() {
         listOf("next", "queue", "seek").forEach { op ->

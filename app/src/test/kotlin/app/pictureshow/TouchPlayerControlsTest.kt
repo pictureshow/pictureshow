@@ -6,6 +6,8 @@
 package app.pictureshow
 
 import android.app.Application
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Looper
 import androidx.activity.ComponentActivity
@@ -13,7 +15,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -824,6 +831,165 @@ class TouchPlayerControlsTest {
             host.stateSource = androidx.compose.runtime.mutableStateOf(state)
         }
         compose.waitForIdle()
+    }
+
+    // TOUCH-10: on a large screen the lock left the whole player in a band across the display.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "sw800dp-w800dp-h1280dp-port-mdpi")
+    @Test
+    fun aLargeScreenOffersNoOrientationToggle() {
+        launch()
+        settled()
+        compose.onNodeWithTag("touch:orientation").assertDoesNotExist()
+        compose.onNodeWithTag("touch:open:Speed").assertExists()
+    }
+
+    @Config(qualifiers = "sw360dp-w360dp-h780dp-port-xxhdpi")
+    @Test
+    fun aPhoneKeepsItsToggle() {
+        launch()
+        settled()
+        compose.onNodeWithTag("touch:orientation").performClick()
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+    }
+
+    private fun playerWindow(smallestWidth: Int, before: Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED): PlayerWindowProbe {
+        compose.runOnIdle { compose.activity.requestedOrientation = before }
+        val probe = PlayerWindowProbe(smallestWidth)
+        compose.setContent {
+            if (probe.showing) {
+                val base = LocalConfiguration.current
+                val configuration = remember(base, probe.smallestWidth) {
+                    Configuration(base).apply { smallestScreenWidthDp = probe.smallestWidth }
+                }
+                CompositionLocalProvider(LocalConfiguration provides configuration) { TouchPlayerWindow() }
+            }
+        }
+        compose.waitForIdle()
+        return probe
+    }
+
+    private class PlayerWindowProbe(smallestWidth: Int) {
+        var showing by mutableStateOf(true)
+        var smallestWidth by mutableStateOf(smallestWidth)
+    }
+
+    @Test fun aPhonePlayerRequestsLandscapeAndGivesBackWhatWasThereOnExit() {
+        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_SENSOR)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.showing = false }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR, compose.activity.requestedOrientation)
+    }
+
+    @Test fun aLargeScreenPlayerRequestsNothingOnTheWayInOrOut() {
+        val probe = playerWindow(600, ActivityInfo.SCREEN_ORIENTATION_SENSOR)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.showing = false }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR, compose.activity.requestedOrientation)
+    }
+
+    // A foldable keeps the same player across the fold, so the rule has to follow the window while it plays.
+    @Test fun unfoldingMidPlayHandsTheLockBackAndFoldingTakesItUpAgain() {
+        val probe = playerWindow(360)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.smallestWidth = 673 }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.smallestWidth = 360 }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.showing = false }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    private fun optionBounds() = (
+        TouchPlayerSheet.entries.map { "touch:open:$it" } + "touch:orientation"
+        ).map(::bounds)
+
+    /** Transport and Stop on one line, every option on the next one, its text starting on Pause's edge. */
+    private fun assertTwoLines() {
+        val toggle = bounds("touch:toggle")
+        val stop = bounds("touch:stop")
+        val middle = (toggle.top + toggle.bottom) / 2
+        listOf("touch:back10", "touch:forward10", "touch:stop").forEach {
+            assertEquals(middle.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
+        }
+        assertEquals(bounds("touch:panel").right.value - 16f, stop.right.value, 1f, "Stop at the far end")
+        val options = optionBounds()
+        options.forEach { assertEquals(options[0].top.value, it.top.value, 0.5f, "one line: $options") }
+        assertTrue(options[0].top >= toggle.bottom, "options below the transport: ${options[0]} $toggle")
+        assertEquals(toggle.left.value, options[0].left.value + 8f, 1f, "first option's text on Pause's edge")
+        options.zipWithNext { a, b -> assertTrue(a.right <= b.left, "no overlap: $a $b") }
+        assertTrue(options.last().right <= stop.right + 8.dp, "on the panel: ${options.last()}")
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun aRowThatDoesNotFitTakesTwoLinesWithNothingOrphaned() {
+        launch()
+        settled()
+        assertTwoLines()
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun aLargerFontTakesTwoLinesAtAPhonesLandscapeWidth() {
+        launch(fontScale = 1.3f)
+        settled()
+        assertTwoLines()
+    }
+
+    // The choice is what fits, not the window's width: the same window holds one line at 1x and two at 1.8x.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w1000dp-h500dp-land-xhdpi")
+    @Test
+    fun theSameWindowChoosesByTheFontScale() {
+        launch()
+        settled()
+        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
+        optionBounds().forEach { assertEquals(row.value, ((it.top + it.bottom) / 2).value, 1f, "$it") }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w1000dp-h500dp-land-xhdpi")
+    @Test
+    fun theSameWindowAtALargeFontTakesTwoLines() {
+        launch(fontScale = 1.8f)
+        settled()
+        val options = optionBounds()
+        assertTrue(options[0].top >= bounds("touch:toggle").bottom, "two lines at 1.8x: ${options[0]}")
+    }
+
+    // A title with no chapters needs less room, so it keeps the single line a chaptered title has to give up.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun aTitleWithNoChaptersCountsInTheFit() {
+        launch()
+        settled()
+        val spare = bounds("touch:stop").left - bounds("touch:forward10").right - 32.dp
+        val options = optionBounds()
+        val chapters = bounds("touch:open:Chapters")
+        val needed = options.last().right - options.first().left
+        val withoutChapters = needed - (chapters.right - chapters.left) - 4.dp
+        assertTrue(needed > spare && withoutChapters <= spare, "fixture must straddle the fit: $needed $withoutChapters $spare")
+        compose.runOnIdle { host.metadata = host.item.copy(chapters = emptyList()) }
+        settled()
+        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
+        assertEquals(row.value, bounds("touch:open:Audio").let { (it.top + it.bottom) / 2 }.value, 1f, "one line again")
+    }
+
+    @Test fun optionLinesKeepToTheRoomAndLeaveNoOptionAlone() {
+        assertEquals(listOf(listOf(0, 1, 2)), touchOptionLines(listOf(100, 100, 100), 320, 4))
+        assertEquals(listOf(listOf(0, 1), listOf(2)), touchOptionLines(listOf(150, 150, 400), 400, 4), "too wide to pair")
+        assertEquals(listOf(listOf(0), listOf(1, 2)), touchOptionLines(listOf(100, 100, 100), 210, 4))
+        assertEquals(listOf(listOf(0, 1), listOf(2, 3), listOf(4, 5)), touchOptionLines(List(6) { 100 }, 210, 4))
     }
 
     private fun back() {

@@ -9,14 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +36,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
@@ -125,43 +125,37 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
     val now = target?.now?.takeIf { attached }
     val problem = remoteProblem(controller?.phase)
     val status = remoteCommandStatus(controller, host.now())
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("touch:remote"),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back") }
-        }
-        Text(
-            target?.let(::remoteTargetLabel) ?: "Remote",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() }
-        )
-        if (problem != null) {
-            Text(problem, modifier = Modifier.testTag("remote:problem").semantics { liveRegion = LiveRegionMode.Polite })
-            val replacement = state.targets.firstOrNull { it.session == controller?.replacement && it.device == target?.device }
-            if (controller?.phase == "target-restarted" && replacement != null) {
-                Button(onClick = { host.attach(replacement) }, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:reconnect")) {
-                    Text("Reconnect")
+    TouchPage(target?.let(::remoteTargetLabel) ?: "Remote", onBack) {
+        Column(
+            modifier = Modifier.fillMaxWidth().testTag("touch:remote"),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (problem != null) {
+                Text(problem, modifier = Modifier.testTag("remote:problem").semantics { liveRegion = LiveRegionMode.Polite })
+                val replacement = state.targets.firstOrNull { it.session == controller?.replacement && it.device == target?.device }
+                if (controller?.phase == "target-restarted" && replacement != null) {
+                    Button(onClick = { host.attach(replacement) }, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:reconnect")) {
+                        Text("Reconnect")
+                    }
                 }
             }
-        }
-        if (target == null) {
-            Button(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:choose")) { Text("Choose a TV") }
-            return@Column
-        }
-        RemoteStatusSlot(status, attached, ready, now == null)
-        now?.let { RemoteTransport(it, ready, host) }
-        if ("MoveUp" in target.commands) RemoteDpad(ready, host)
-        if ("SendString" in target.commands) RemoteText(ready, host)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { host.detach() },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("remote:disconnect").semantics {
-                    contentDescription = "Disconnect this phone. Playback on the TV continues."
-                }
-            ) { Text("Disconnect") }
-            OutlinedButton(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp)) { Text("Choose another TV") }
+            if (target == null) {
+                Button(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:choose")) { Text("Choose a TV") }
+                return@Column
+            }
+            RemoteStatusSlot(status, attached, ready, now == null)
+            now?.let { RemoteTransport(it, ready, host) }
+            if ("MoveUp" in target.commands) RemoteDpad(ready, host)
+            if ("SendString" in target.commands) RemoteText(ready, host)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { host.detach() },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("remote:disconnect").semantics {
+                        contentDescription = "Disconnect this phone. Playback on the TV continues."
+                    }
+                ) { Text("Disconnect") }
+                OutlinedButton(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp)) { Text("Choose another TV") }
+            }
         }
     }
 }
@@ -242,13 +236,28 @@ private fun RemoteTransport(now: RemoteNowPlaying, ready: Boolean, host: RemoteC
     }
 }
 
+/**
+ * The current choice is a filled state rather than a disabled one, whether or not commands can go yet: it is the answer to
+ * "what is on", not an option that's unavailable. Both states keep one width, so a change of track moves nothing (REM-04).
+ */
 @Composable
 private fun RemoteTrackButton(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled && !selected,
-        modifier = Modifier.heightIn(min = 48.dp).semantics { stateDescription = if (selected) "Selected" else "Not selected" }
-    ) { Text(label) }
+    if (selected) {
+        FilledTonalButton(
+            onClick = {},
+            modifier = Modifier.heightIn(min = 48.dp).semantics { this.selected = true }
+        ) { Text(label) }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                this.selected = false
+                stateDescription = "Not selected"
+            },
+            border = touchOutlineBorder(enabled)
+        ) { Text(label) }
+    }
 }
 
 @Composable

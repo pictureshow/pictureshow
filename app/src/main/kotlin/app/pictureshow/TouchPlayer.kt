@@ -47,19 +47,26 @@ internal fun Context.playerActivity(): Activity? = when (this) {
 }
 
 @Composable
-private fun TouchPlayerWindow() {
+internal fun TouchPlayerWindow() {
     val activity = LocalContext.current.playerActivity()
     val configuration = LocalConfiguration.current
     val containerSize = LocalWindowInfo.current.containerSize
+    // Its own effect, keyed on the rule: unfolding mid-play hands the lock back, and folding takes it up again (TOUCH-10).
+    val locksOrientation = touchPlayerLocksOrientation(configuration.smallestScreenWidthDp)
+    DisposableEffect(activity, locksOrientation) {
+        val orientation = activity?.requestedOrientation.takeIf { locksOrientation }
+        if (locksOrientation) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        onDispose {
+            if (orientation != null) activity?.requestedOrientation = orientation
+        }
+    }
     DisposableEffect(activity) {
         val window = activity?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
-        val orientation = activity?.requestedOrientation
         val behavior = controller?.systemBarsBehavior
         val bars = window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
         val statusVisible = bars?.isVisible(WindowInsetsCompat.Type.statusBars()) ?: true
         val navigationVisible = bars?.isVisible(WindowInsetsCompat.Type.navigationBars()) ?: true
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
         controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller?.hide(WindowInsetsCompat.Type.systemBars())
         // Dialogs and background/foreground transitions can reveal bars on the same activity.
@@ -69,7 +76,6 @@ private fun TouchPlayerWindow() {
         window?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener(focusListener)
         onDispose {
             window?.decorView?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focusListener)
-            if (orientation != null) activity?.requestedOrientation = orientation
             if (behavior != null) controller?.systemBarsBehavior = behavior
             if (statusVisible) {
                 controller?.show(

@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -106,6 +107,12 @@ internal enum class TouchPlayerSheet(val title: String) {
 
 /** What the viewer calls this device; PLAY-27 names it in the conversion notice. */
 internal fun touchDeviceNoun(smallestWidthDp: Int): String = if (smallestWidthDp >= 600) "this tablet" else "this phone"
+
+/**
+ * A phone's player opens landscape and offers the toggle. A large screen follows the device and offers neither: asked to
+ * lock, it can hold the player in a band across the display instead of rotating (TOUCH-10).
+ */
+internal fun touchPlayerLocksOrientation(smallestWidthDp: Int): Boolean = smallestWidthDp < 600
 
 /** Same wording as web's touch line (PLAY-27): the note is the path to Playback info. */
 internal const val TOUCH_CONVERSION_NOTICE_ACTION = "Tap this note for details and fixes."
@@ -183,6 +190,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     }
     val activity = LocalContext.current.playerActivity()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val locksOrientation = touchPlayerLocksOrientation(LocalConfiguration.current.smallestScreenWidthDp)
     val resources = LocalResources.current
     val density = LocalDensity.current
     var controlsHeight by remember { mutableIntStateOf(0) }
@@ -389,15 +397,17 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             }
                         }
                     }
-                    add { placement ->
-                        TouchBarButton({
-                            activity?.requestedOrientation = if (landscape) {
-                                ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
-                            } else {
-                                ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-                            }
-                            ui.interact()
-                        }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape") }
+                    if (locksOrientation) {
+                        add { placement ->
+                            TouchBarButton({
+                                activity?.requestedOrientation = if (landscape) {
+                                    ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+                                } else {
+                                    ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+                                }
+                                ui.interact()
+                            }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape") }
+                        }
                     }
                 }
                 if (this@BoxWithConstraints.maxWidth < 600.dp) {
@@ -420,18 +430,18 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         }
                     }
                 } else {
-                    // Three groups: transport, options, and Stop at the far end, since it exits at once.
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        toggle()
-                        Spacer(Modifier.width(8.dp))
-                        back()
-                        forward()
-                        Spacer(Modifier.width(16.dp))
-                        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            options.forEach { option -> option(Modifier) }
-                        }
-                        stop()
-                    }
+                    TouchWideControls(
+                        transport = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                toggle()
+                                Spacer(Modifier.width(8.dp))
+                                back()
+                                forward()
+                            }
+                        },
+                        options = options,
+                        stop = stop
+                    )
                 }
                 host.state.reportError?.let { Text("Could not save progress: $it", color = Color.White) }
             }
@@ -528,6 +538,91 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             ui.sheet = null
             ui.interact()
         }, onSeek = host::seekTo)
+    }
+}
+
+/**
+ * Lines for the options, each a list of indexes. Greedy, except that no option is left alone on the last line when the
+ * line above can spare one: only a very large font on a narrow window gets here.
+ */
+internal fun touchOptionLines(widths: List<Int>, room: Int, gap: Int): List<List<Int>> {
+    val lines = mutableListOf<MutableList<Int>>()
+    var used = 0
+    widths.forEachIndexed { index, width ->
+        if (lines.isEmpty() || used + gap + width > room) {
+            lines.add(mutableListOf(index))
+            used = width
+        } else {
+            lines.last().add(index)
+            used += gap + width
+        }
+    }
+    val last = lines.last()
+    val above = lines.getOrNull(lines.size - 2)
+    if (last.size == 1 && above != null && above.size > 1 && widths[above.last()] + gap + widths[last[0]] <= room) {
+        last.add(0, above.removeAt(above.lastIndex))
+    }
+    return lines
+}
+
+/**
+ * Three groups on one line when all of them fit at their natural size: transport, options, and Stop at the far end, since
+ * it exits at once. Otherwise transport and Stop, then the options on a line of their own with their text on Pause's edge,
+ * as in the portrait panel. Measured, so the font scale, the title having chapters and the safe insets all count, and a
+ * reserved label keeps the choice from flipping when the speed or Play/Pause changes.
+ */
+@Composable
+private fun TouchWideControls(
+    transport: @Composable () -> Unit,
+    options: List<@Composable (Modifier) -> Unit>,
+    stop: @Composable () -> Unit
+) {
+    Layout(
+        contents = listOf(transport, { options.forEach { it(Modifier) } }, stop),
+        modifier = Modifier.fillMaxWidth().testTag("touch:wide-controls")
+    ) { (transportSlot, optionSlots, stopSlot), constraints ->
+        val natural = constraints.copy(minWidth = 0, minHeight = 0)
+        val transportBox = transportSlot.single().measure(natural)
+        val optionBoxes = optionSlots.map { it.measure(natural) }
+        val stopBox = stopSlot.single().measure(natural)
+        val width = constraints.maxWidth
+        val optionGap = 4.dp.roundToPx()
+        val groupGap = 16.dp.roundToPx()
+        val optionsWidth = optionBoxes.sumOf { it.width } + optionGap * (optionBoxes.size - 1)
+        val oneLine = transportBox.width + groupGap + optionsWidth + groupGap + stopBox.width <= width
+        val mainHeight = maxOf(transportBox.height, stopBox.height, if (oneLine) optionBoxes.maxOf { it.height } else 0)
+        val textInset = 8.dp.roundToPx()
+        val lines = if (oneLine) {
+            emptyList()
+        } else {
+            // The options' text, not their target, starts on Pause's edge, so a line has the inset's extra room at each end.
+            touchOptionLines(optionBoxes.map { it.width }, width + textInset * 2, optionGap).map { line -> line.map(optionBoxes::get) }
+        }
+        val lineGap = 4.dp.roundToPx()
+        val height = mainHeight + lines.sumOf { line -> lineGap + line.maxOf { it.height } }
+        layout(width, height) {
+            transportBox.placeRelative(0, (mainHeight - transportBox.height) / 2)
+            stopBox.placeRelative(width - stopBox.width, (mainHeight - stopBox.height) / 2)
+            if (oneLine) {
+                var x = transportBox.width + groupGap
+                optionBoxes.forEach {
+                    it.placeRelative(x, (mainHeight - it.height) / 2)
+                    x += it.width + optionGap
+                }
+            } else {
+                var y = mainHeight
+                lines.forEach { line ->
+                    y += lineGap
+                    val lineHeight = line.maxOf { it.height }
+                    var x = -textInset
+                    line.forEach {
+                        it.placeRelative(x, y + (lineHeight - it.height) / 2)
+                        x += it.width + optionGap
+                    }
+                    y += lineHeight
+                }
+            }
+        }
     }
 }
 
