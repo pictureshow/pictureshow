@@ -1,0 +1,4181 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-outbox",
+ "cases": [
+  {
+   "id": "offline-outbox.viewing-creates",
+   "operation": "outbox",
+   "state": null,
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "1",
+      "positionTicks": "500",
+      "base": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.viewing-without-identity-has-no-record",
+   "operation": "outbox",
+   "state": null,
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "positionTicks": "5"
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": "no-entry"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.later-position-same-sequence-updates",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "1",
+      "positionTicks": "600",
+      "base": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "600",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.new-viewing-keeps-original-base",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "2",
+      "positionTicks": "700",
+      "base": {
+       "positionTicks": "999",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "2",
+       "positionTicks": "700",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.older-sequence-is-ignored",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "5",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "4",
+      "positionTicks": "900",
+      "base": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "5",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "old-sequence"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.synced-record-takes-the-event-base",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": null,
+    "played": null,
+    "phase": "synced",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "2",
+      "positionTicks": "700",
+      "base": {
+       "positionTicks": "555",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "555",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "2",
+       "positionTicks": "700",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.viewing-of-other-account-is-refused",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "2",
+      "positionTicks": "7",
+      "base": {
+       "positionTicks": "1",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u2",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "other-account"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.viewing-of-other-item-is-refused",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "2",
+      "positionTicks": "7",
+      "base": {
+       "positionTicks": "1",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i2"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "other-item"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.completed-zeroes-position-and-keeps-base",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "completed"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "0",
+       "played": true,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.played-intent-true-keeps-position",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "played-intent",
+      "played": true
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": true,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.explicit-unplayed-zeroes-position",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": true,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "played-intent",
+      "played": false
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "0",
+       "played": false,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.played-intent-creates-with-identity",
+   "operation": "outbox",
+   "state": null,
+   "steps": [
+    {
+     "event": {
+      "op": "played-intent",
+      "played": false,
+      "base": {
+       "positionTicks": "100",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "sequence": "3",
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": true,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "3",
+       "positionTicks": "0",
+       "played": false,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.reconnect-reads-first",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reconnect",
+      "server": "srv",
+      "viewer": "u1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.reconnect-as-other-viewer-is-denied",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reconnect",
+      "server": "srv",
+      "viewer": "u2"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "other-account"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.reconnect-to-other-server-is-denied",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reconnect",
+      "server": "s2",
+      "viewer": "u1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "other-account"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.reconnect-with-no-record",
+   "operation": "outbox",
+   "state": null,
+   "steps": [
+    {
+     "event": {
+      "op": "reconnect",
+      "server": "srv",
+      "viewer": "u1"
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": "no-entry"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.base-equals-writes-only-dirty-position",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 3,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "500",
+       "played": null
+      },
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "write-result",
+      "status": 204
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "readback",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "500",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.base-equals-writes-only-dirty-played",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": null,
+    "played": true,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": null,
+       "played": true,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": null,
+        "played": true
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": null,
+       "played": true
+      },
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "write-result",
+      "status": 204
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": null,
+       "played": true,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": null,
+        "played": true
+       }
+      },
+      "effect": "readback",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "0",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.position-not-dirty-is-not-compared",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": null,
+    "played": true,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "777",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": null,
+       "played": true,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": null,
+        "played": true
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": null,
+       "played": true
+      },
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.played-not-dirty-is-not-compared",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "500",
+       "played": null
+      },
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.base-differs-server-wins-with-private-record",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "300",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "dismiss-conflict"
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.played-differs-server-wins",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "0",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": null,
+    "played": false,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "0",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "0",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": null,
+       "played": false,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "0",
+        "serverPlayed": true,
+        "localPositionTicks": null,
+        "localPlayed": false,
+        "fields": [
+         "played"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.played-already-applied-unplayed",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "0",
+     "played": true,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": null,
+    "played": false,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "0",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.played-already-applied-played",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "50",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "2",
+    "positionTicks": null,
+    "played": true,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "50",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.repeated-write-same-value-does-not-write",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": true,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "500",
+       "played": true,
+       "playCount": 4,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.position-current-equals-desired-while-played-writes",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": true,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "500",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": true,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": null,
+        "played": true
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": null,
+       "played": true
+      },
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.unknown-ack-reads-before-retry",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "write-result",
+      "status": null
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "500",
+       "played": null
+      },
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.server-error-reads-before-retry",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "write-result",
+      "status": 500
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.redirect-status-is-not-success",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "write-result",
+      "status": 300
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.edge-2xx-is-success",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "write-result",
+      "status": 299
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "readback",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "write-result",
+      "status": 200
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "readback",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.write-result-outside-writing",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "write-result",
+      "status": 204
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.readback-outside-writing",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "500",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.crash-in-writing-reads-then-acks-if-applied",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "500",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.crash-in-writing-reads-then-writes-if-not-applied",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "500",
+       "played": null
+      },
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.crash-in-writing-reads-then-conflicts-if-moved",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "300",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.process-restart-outside-writing-does-nothing",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.process-restart-no-record",
+   "operation": "outbox",
+   "state": null,
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.mixed-writes-eligible-and-records-conflict",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": true,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "300",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": true,
+       "phase": "writing",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": true,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": {
+        "positionTicks": null,
+        "played": true
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": null,
+       "played": true
+      },
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "write-result",
+      "status": 204
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": true,
+       "phase": "writing",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": true,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": {
+        "positionTicks": null,
+        "played": true
+       }
+      },
+      "effect": "readback",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "0",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": true,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": true,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.mixed-the-other-way",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": false,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": false,
+       "phase": "writing",
+       "conflict": {
+        "serverPositionTicks": "100",
+        "serverPlayed": true,
+        "localPositionTicks": "500",
+        "localPlayed": false,
+        "fields": [
+         "played"
+        ]
+       },
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "500",
+       "played": null
+      },
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.both-conflict-names-both-fields",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": false,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "300",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": false,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": true,
+        "localPositionTicks": "500",
+        "localPlayed": false,
+        "fields": [
+         "position",
+         "played"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.readback-did-not-hold-becomes-conflict",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "500",
+       "played": null
+      },
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "write-result",
+      "status": 204
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "readback",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "100",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.readback-played-did-not-hold",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "0",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": null,
+    "played": true,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": null,
+     "played": true
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "0",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "0",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": null,
+       "played": true,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "0",
+        "serverPlayed": false,
+        "localPositionTicks": null,
+        "localPlayed": true,
+        "fields": [
+         "played"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.readback-failure-adds-to-held-conflict",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": true,
+    "phase": "writing",
+    "conflict": {
+     "serverPositionTicks": "300",
+     "serverPlayed": false,
+     "localPositionTicks": "500",
+     "localPlayed": true,
+     "fields": [
+      "position"
+     ]
+    },
+    "writing": {
+     "positionTicks": null,
+     "played": true
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "300",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": true,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": true,
+        "fields": [
+         "position",
+         "played"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.readback-without-recorded-write-compares-dirty-non-conflicting",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": true,
+    "phase": "writing",
+    "conflict": {
+     "serverPositionTicks": "300",
+     "serverPlayed": false,
+     "localPositionTicks": "500",
+     "localPlayed": true,
+     "fields": [
+      "position"
+     ]
+    },
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "300",
+       "played": true,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": true,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": true,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "ack",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.viewing-during-write-is-not-a-failed-write",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "writing",
+    "conflict": null,
+    "writing": {
+     "positionTicks": "500",
+     "played": null
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "2",
+      "positionTicks": "800",
+      "base": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "2",
+       "positionTicks": "800",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "500",
+        "played": null
+       }
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "500",
+       "played": false,
+       "playCount": 1,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "500",
+        "played": false,
+        "playCount": 1,
+        "lastPlayedDate": null
+       },
+       "sequence": "2",
+       "positionTicks": "800",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "500",
+       "played": false,
+       "playCount": 1,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "500",
+        "played": false,
+        "playCount": 1,
+        "lastPlayedDate": null
+       },
+       "sequence": "2",
+       "positionTicks": "800",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "800",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "800",
+       "played": null
+      },
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.conflict-holds-until-a-newer-viewing",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "3",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "conflict",
+    "conflict": {
+     "serverPositionTicks": "300",
+     "serverPlayed": false,
+     "localPositionTicks": "500",
+     "localPlayed": null,
+     "fields": [
+      "position"
+     ]
+    },
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "3",
+      "positionTicks": "900",
+      "base": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "3",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "conflict"
+     }
+    },
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "4",
+      "positionTicks": "900",
+      "base": {
+       "positionTicks": "300",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "300",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "4",
+       "positionTicks": "900",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.conflict-clear-drops-the-old-played-intent",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "3",
+    "positionTicks": "500",
+    "played": true,
+    "phase": "conflict",
+    "conflict": {
+     "serverPositionTicks": "300",
+     "serverPlayed": false,
+     "localPositionTicks": "500",
+     "localPlayed": true,
+     "fields": [
+      "position"
+     ]
+    },
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "viewing",
+      "sequence": "4",
+      "positionTicks": "900",
+      "base": {
+       "positionTicks": "300",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      },
+      "server": "srv",
+      "viewer": "u1",
+      "itemId": "i1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "300",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "4",
+       "positionTicks": "900",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.conflict-ignores-other-local-changes",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "conflict",
+    "conflict": {
+     "serverPositionTicks": "300",
+     "serverPlayed": false,
+     "localPositionTicks": "500",
+     "localPlayed": null,
+     "fields": [
+      "position"
+     ]
+    },
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "completed"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "conflict"
+     }
+    },
+    {
+     "event": {
+      "op": "played-intent",
+      "played": true
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "conflict"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.conflict-is-not-re-evaluated-by-a-read",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "conflict",
+    "conflict": {
+     "serverPositionTicks": "300",
+     "serverPlayed": false,
+     "localPositionTicks": "500",
+     "localPlayed": null,
+     "fields": [
+      "position"
+     ]
+    },
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reconnect",
+      "server": "srv",
+      "viewer": "u1"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "read",
+      "write": null,
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "100",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "300",
+        "serverPlayed": false,
+        "localPositionTicks": "500",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "conflict"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.dismiss-only-in-conflict",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "100",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "500",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "dismiss-conflict"
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "100",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "500",
+       "played": null,
+       "phase": "dirty",
+       "conflict": null,
+       "writing": null
+      },
+      "effect": "none",
+      "write": null,
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.ticks-compare-exactly-above-2-to-the-53",
+   "operation": "outbox",
+   "state": {
+    "server": "srv",
+    "viewer": "u1",
+    "itemId": "i1",
+    "base": {
+     "positionTicks": "9007199254740992",
+     "played": false,
+     "playCount": 0,
+     "lastPlayedDate": null
+    },
+    "sequence": "1",
+    "positionTicks": "9007199254740993",
+    "played": null,
+    "phase": "dirty",
+    "conflict": null,
+    "writing": null
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "9007199254740992",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "9007199254740992",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "9007199254740993",
+       "played": null,
+       "phase": "writing",
+       "conflict": null,
+       "writing": {
+        "positionTicks": "9007199254740993",
+        "played": null
+       }
+      },
+      "effect": "write",
+      "write": {
+       "positionTicks": "9007199254740993",
+       "played": null
+      },
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "9007199254740991",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": {
+       "server": "srv",
+       "viewer": "u1",
+       "itemId": "i1",
+       "base": {
+        "positionTicks": "9007199254740992",
+        "played": false,
+        "playCount": 0,
+        "lastPlayedDate": null
+       },
+       "sequence": "1",
+       "positionTicks": "9007199254740993",
+       "played": null,
+       "phase": "conflict",
+       "conflict": {
+        "serverPositionTicks": "9007199254740991",
+        "serverPlayed": false,
+        "localPositionTicks": "9007199254740993",
+        "localPlayed": null,
+        "fields": [
+         "position"
+        ]
+       },
+       "writing": null
+      },
+      "effect": "conflict",
+      "write": null,
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.no-record-stays-gone",
+   "operation": "outbox",
+   "state": null,
+   "steps": [
+    {
+     "event": {
+      "op": "server-state",
+      "current": {
+       "positionTicks": "1",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": "no-entry"
+     }
+    },
+    {
+     "event": {
+      "op": "write-result",
+      "status": 204
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": "no-entry"
+     }
+    },
+    {
+     "event": {
+      "op": "readback",
+      "current": {
+       "positionTicks": "1",
+       "played": false,
+       "playCount": 0,
+       "lastPlayedDate": null
+      }
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": "no-entry"
+     }
+    },
+    {
+     "event": {
+      "op": "dismiss-conflict"
+     },
+     "expected": {
+      "entry": null,
+      "effect": "none",
+      "write": null,
+      "ignored": "no-entry"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.download-set-token-lifecycle",
+   "operation": "download-set",
+   "state": {
+    "records": [],
+    "effect": "none"
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "create",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "creating",
+        "secretRef": null
+       }
+      ],
+      "effect": "provision",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "issued",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      },
+      "returnedViewer": "u1",
+      "secretRef": "ref"
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "active",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "use",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "use",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "active",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "use",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "end",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "pending-persist",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "persist-revocation",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "persisted",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "revoking",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "logout",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "logout-failed",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "pending-revoke",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "pending",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "create",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "pending-revoke",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "none",
+      "reason": "cleanup-required"
+     }
+    },
+    {
+     "event": {
+      "op": "use",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "pending-revoke",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "none",
+      "reason": "cleanup-required"
+     }
+    },
+    {
+     "event": {
+      "op": "reconnect",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "revoking",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "logout",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "logout-ok",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [],
+      "effect": "erase-secret",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "create",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "creating",
+        "secretRef": null
+       }
+      ],
+      "effect": "provision",
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.download-set-sign-out-before-issue",
+   "operation": "download-set",
+   "state": {
+    "records": [],
+    "effect": "none"
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "create",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "creating",
+        "secretRef": null
+       }
+      ],
+      "effect": "provision",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "end",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      }
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "cancelled-creating",
+        "secretRef": null
+       }
+      ],
+      "effect": "await-issue",
+      "reason": null
+     }
+    },
+    {
+     "event": {
+      "op": "issued",
+      "binding": {
+       "server": "srv",
+       "viewer": "u1",
+       "device": "pictureshow-dl-x",
+       "sender": "dl",
+       "generation": "1"
+      },
+      "returnedViewer": "u1",
+      "secretRef": "ref"
+     },
+     "expected": {
+      "records": [
+       {
+        "server": "srv",
+        "viewer": "u1",
+        "device": "pictureshow-dl-x",
+        "sender": "dl",
+        "generation": "1",
+        "phase": "pending-persist",
+        "secretRef": "ref"
+       }
+      ],
+      "effect": "persist-revocation",
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-empty",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": ""
+     },
+     "expected": {
+      "hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-abc",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "abc"
+     },
+     "expected": {
+      "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-nist-448",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+     },
+     "expected": {
+      "hex": "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-nist-896",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+     },
+     "expected": {
+      "hex": "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-padding-55",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     },
+     "expected": {
+      "hex": "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-padding-56",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     },
+     "expected": {
+      "hex": "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-padding-64",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     },
+     "expected": {
+      "hex": "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.sha256-utf8",
+   "operation": "sha256",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "text": "caf\u00e9"
+     },
+     "expected": {
+      "hex": "850f7dc43910ff890f8879c0ed26fe697c93a067ad93a7d50f466a7028a9bf4e"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.device-basic",
+   "operation": "device",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "installationDeviceId": "inst",
+      "serverId": "srv",
+      "userId": "u1"
+     },
+     "expected": {
+      "device": "pictureshow-dl-0d1a7df598fb381335d03b5e999f40f0"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.device-other-viewer",
+   "operation": "device",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "installationDeviceId": "inst",
+      "serverId": "srv",
+      "userId": "u2"
+     },
+     "expected": {
+      "device": "pictureshow-dl-8ee378a035e26b293936b5dc3bea7249"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.device-other-server",
+   "operation": "device",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "installationDeviceId": "inst",
+      "serverId": "s2",
+      "userId": "u1"
+     },
+     "expected": {
+      "device": "pictureshow-dl-65dd5ac3410f7f4df5c6743b769a17f8"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.device-other-install",
+   "operation": "device",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "installationDeviceId": "i2",
+      "serverId": "srv",
+      "userId": "u1"
+     },
+     "expected": {
+      "device": "pictureshow-dl-3f54e3d3e9d39909b02fd4ec6ad04431"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.device-no-field-run-together",
+   "operation": "device",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "installationDeviceId": "ab",
+      "serverId": "c",
+      "userId": "d"
+     },
+     "expected": {
+      "device": "pictureshow-dl-1e8937e355807742dbbfefeaad0aef56"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-outbox.device-no-field-run-together-2",
+   "operation": "device",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "installationDeviceId": "a",
+      "serverId": "bc",
+      "userId": "d"
+     },
+     "expected": {
+      "device": "pictureshow-dl-702f90638317c6b719064288228a8f77"
+     }
+    }
+   ]
+  }
+ ]
+}

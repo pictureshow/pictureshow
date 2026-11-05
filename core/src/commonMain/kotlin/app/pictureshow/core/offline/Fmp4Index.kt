@@ -35,7 +35,10 @@ private fun typeAt(bytes: ByteArray, at: Int): String = (0 until 4).map { bytes[
  * Reads one top-level box header at bytes[0..]; null if incomplete or if the size can't be a box (a declared size smaller than its own
  * header would never advance a reader). size 0 (to EOF) -> -1. 64-bit sizes handled.
  */
-fun fmp4BoxHeader(bytes: ByteArray, length: Int): Pair<String, Long>? = headerAt(bytes, 0, length.coerceAtMost(bytes.size))?.let { it.type to it.size }
+fun fmp4BoxHeader(bytes: ByteArray, length: Int): Pair<String, Long>? = headerAt(bytes, 0, length.coerceAtMost(bytes.size))?.let {
+    it.type to
+        it.size
+}
 
 private class Header(val type: String, val size: Long, val headerBytes: Int)
 
@@ -119,7 +122,8 @@ private fun trunDuration(bytes: ByteArray, trun: Child, defaultDuration: Long): 
     var at = trun.start + 8
     if (flags and 0x1 != 0L) at += 4
     if (flags and 0x4 != 0L) at += 4
-    val sampleBytes = 4 + (if (flags and 0x200 != 0L) 4 else 0) + (if (flags and 0x400 != 0L) 4 else 0) + (if (flags and 0x800 != 0L) 4 else 0)
+    val sampleBytes =
+        4 + (if (flags and 0x200 != 0L) 4 else 0) + (if (flags and 0x400 != 0L) 4 else 0) + (if (flags and 0x800 != 0L) 4 else 0)
     if (at + count * sampleBytes > trun.end) throw IndexOutOfBoundsException()
     var sum = 0L
     repeat(count.toInt()) {
@@ -181,7 +185,9 @@ fun fmp4IndexBoxes(track: Fmp4Track, fragments: List<Fmp4Fragment>, maxBytes: In
         out.putBoxHeader(0, maxBytes, "free")
         return out
     }
-    fragments.zipWithNext { a, b -> require(a.moofOffset + a.totalSize == b.moofOffset) { "Fragments are not contiguous at ${b.moofOffset}" } }
+    fragments.zipWithNext { a, b ->
+        require(a.moofOffset + a.totalSize == b.moofOffset) { "Fragments are not contiguous at ${b.moofOffset}" }
+    }
     val fit = (maxBytes - SIDX_HEADER_BYTES) / SIDX_REFERENCE_BYTES
     val remainder = (maxBytes - SIDX_HEADER_BYTES) % SIDX_REFERENCE_BYTES
     val capacity = minOf(MAX_REFERENCES, if (remainder in 1 until FREE_HEADER_BYTES) fit - 1 else fit)

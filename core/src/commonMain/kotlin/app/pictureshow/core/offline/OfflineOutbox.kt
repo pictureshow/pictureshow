@@ -90,7 +90,11 @@ private fun newEntry(event: OfflineOutboxEvent): OfflineOutboxEntry? = OfflineOu
  * again from its own base, because the conflict already told the viewer what the server holds. A synced record's server was current, so it
  * takes the event's base too. Any other record keeps its original base.
  */
-private fun localChange(entry: OfflineOutboxEntry?, event: OfflineOutboxEvent, apply: (OfflineOutboxEntry) -> OfflineOutboxEntry): OfflineOutboxResult {
+private fun localChange(
+    entry: OfflineOutboxEntry?,
+    event: OfflineOutboxEvent,
+    apply: (OfflineOutboxEntry) -> OfflineOutboxEntry
+): OfflineOutboxResult {
     val record = entry ?: newEntry(event) ?: return OfflineOutboxResult(null, ignored = "no-entry")
     if (event.server != null && event.server != record.server || event.viewer != null && event.viewer != record.viewer) {
         return record.ignore("other-account")
@@ -253,5 +257,7 @@ fun offlineSha256Hex(bytes: ByteArray): String {
         }
         for (i in 0 until 8) h[i] += v[i]
     }
-    return h.joinToString("") { word -> (0 until 4).joinToString("") { i -> (word ushr (24 - 8 * i) and 0xff).toString(16).padStart(2, '0') } }
+    return h.joinToString("") { word ->
+        (0 until 4).joinToString("") { i -> (word ushr (24 - 8 * i) and 0xff).toString(16).padStart(2, '0') }
+    }
 }

@@ -127,7 +127,11 @@ data class OfflineVerifyResult(val ok: Boolean, val reason: String? = null)
 
 fun offlineVerify(input: OfflineVerifyInput): OfflineVerifyResult = when {
     input.expectedBytes != null && input.expectedBytes != input.actualBytes -> OfflineVerifyResult(false, "length")
-    input.expectedSha256 != null && !input.expectedSha256.equals(input.actualSha256, ignoreCase = true) -> OfflineVerifyResult(false, "hash")
+    input.expectedSha256 != null &&
+        !input.expectedSha256.equals(
+            input.actualSha256,
+            ignoreCase = true
+        ) -> OfflineVerifyResult(false, "hash")
     differs(input.sourceETagBefore, input.sourceETagNow) -> OfflineVerifyResult(false, "source-changed")
     else -> OfflineVerifyResult(true)
 }

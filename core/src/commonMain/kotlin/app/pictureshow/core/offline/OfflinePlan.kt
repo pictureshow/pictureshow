@@ -3,7 +3,12 @@
  */
 package app.pictureshow.core.offline
 
-data class OfflinePolicy(val enableDownloads: Boolean, val enablePlayback: Boolean, val videoTranscoding: Boolean, val audioTranscoding: Boolean)
+data class OfflinePolicy(
+    val enableDownloads: Boolean,
+    val enablePlayback: Boolean,
+    val videoTranscoding: Boolean,
+    val audioTranscoding: Boolean
+)
 
 data class OfflineCandidate(
     val itemId: String,
@@ -66,15 +71,23 @@ fun offlinePresets(policy: OfflinePolicy, candidate: OfflineCandidate, qualified
  * items. knownBytes sums exact sizes and estimates; estimated says whether any item is estimated or unknown; unknownCount counts those
  * with neither.
  */
-data class OfflineSelection(val itemIds: List<String>, val skipped: List<String>, val knownBytes: Long, val estimated: Boolean, val unknownCount: Int)
+data class OfflineSelection(
+    val itemIds: List<String>,
+    val skipped: List<String>,
+    val knownBytes: Long,
+    val estimated: Boolean,
+    val unknownCount: Int
+)
 
 fun offlineSelect(items: List<OfflineCandidate>, preset: OfflinePreset): OfflineSelection {
     val (taken, skipped) = items.distinctBy { it.itemId }.partition { item ->
-        !item.isLive() && item.canDownload != false && when {
-            preset.isVideo -> item.type in VIDEO_TYPES
-            preset.isAudio -> item.type == "Audio"
-            else -> true
-        }
+        !item.isLive() &&
+            item.canDownload != false &&
+            when {
+                preset.isVideo -> item.type in VIDEO_TYPES
+                preset.isAudio -> item.type == "Audio"
+                else -> true
+            }
     }
     var known = 0L
     var estimated = false

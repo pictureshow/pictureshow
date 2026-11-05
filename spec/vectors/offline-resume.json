@@ -1,0 +1,1657 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-resume",
+ "cases": [
+  {
+   "id": "offline-resume.range-no-partial",
+   "operation": "range-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 0,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      }
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.range-no-validator",
+   "operation": "range-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "validator": null
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.range-no-total",
+   "operation": "range-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": null
+      }
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.range-total-without-identity",
+   "operation": "range-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "validator": {
+       "lastModified": null,
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      }
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.range-source-etag-alone-is-not-usable",
+   "operation": "range-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "validator": {
+       "lastModified": null,
+       "etag": null,
+       "sourceETag": "s",
+       "totalBytes": 1000
+      }
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.range-last-modified",
+   "operation": "range-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      }
+     },
+     "expected": {
+      "header": "bytes=10-"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.range-etag",
+   "operation": "range-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "validator": {
+       "lastModified": null,
+       "etag": "e",
+       "sourceETag": null,
+       "totalBytes": 1000
+      }
+     },
+     "expected": {
+      "header": "bytes=10-"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-200-fresh",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 0,
+      "stored": null,
+      "response": {
+       "status": 200,
+       "contentLength": 1000,
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 0,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-200-fresh-chunked-conversion-has-no-validator",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 0,
+      "stored": null,
+      "response": {
+       "status": 200,
+       "acceptRanges": "none"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": {
+       "lastModified": null,
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": null
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-200-with-partial-restarts-with-this-body",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 200,
+       "contentLength": 1000,
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": "no-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-resume-matches",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000",
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 10,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-resume-etag-and-source-match",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": "e",
+       "sourceETag": "s",
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000",
+       "etag": "e",
+       "sourceETag": "s"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 10,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": "e",
+       "sourceETag": "s",
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-validator-absent-on-response-is-not-a-change",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": "e",
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 10,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": "e",
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-validator-absent-on-stored-is-adopted",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000",
+       "etag": "new"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 10,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": "new",
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-wrong-offset",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 11-999/1000",
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-offset"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-offset-before-total",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 11-1998/1999",
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-offset"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-wrong-total",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-1998/1999",
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-total"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-star-total-with-partial",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/*",
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-total"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-no-stored-validator",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": null,
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-total"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-last-modified-changed",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000",
+       "lastModified": "Thu, 22 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "validator-changed"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-etag-changed",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": null,
+       "etag": "e",
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000",
+       "etag": "f"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "validator-changed"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-source-etag-changed",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": "s",
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-999/1000",
+       "sourceETag": "t"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "validator-changed"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-missing-content-range",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "invalid-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-junk-content-range",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes ten-999/1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "invalid-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-end-before-start",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-9/1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "invalid-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-end-past-total",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-1000/1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "invalid-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-other-unit",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "items 10-999/1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "invalid-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-unsatisfied-form",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes */1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "invalid-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-overflowing-number",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 10-99999999999999999999/99999999999999999999"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "invalid-range"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-from-zero-with-no-partial",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 0,
+      "stored": null,
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 0-999/1000",
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 0,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-from-zero-unknown-total",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 0,
+      "stored": null,
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 0-999/*"
+      }
+     },
+     "expected": {
+      "action": "append",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": {
+       "lastModified": null,
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": null
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-206-not-from-zero-with-no-partial",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 0,
+      "stored": null,
+      "response": {
+       "status": 206,
+       "contentRange": "bytes 5-999/1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-offset"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-416-already-complete",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 1000,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 416,
+       "contentRange": "bytes */1000",
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "complete",
+      "offset": 1000,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-416-no-validators-on-response",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 1000,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 416,
+       "contentRange": "bytes */1000"
+      }
+     },
+     "expected": {
+      "action": "complete",
+      "offset": 1000,
+      "totalBytes": 1000,
+      "validator": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-416-file-shrank",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 1000,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 416,
+       "contentRange": "bytes */900"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-unsatisfiable"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-416-total-disagrees-with-stored",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 1000,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1200
+      },
+      "response": {
+       "status": 416,
+       "contentRange": "bytes */1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-unsatisfiable"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-416-validator-changed",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 1000,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 416,
+       "contentRange": "bytes */1000",
+       "lastModified": "Thu, 22 Oct 2026 07:28:00 GMT"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-unsatisfiable"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-416-no-content-range",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 1000,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 416
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-unsatisfiable"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-416-no-stored-validator",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 1000,
+      "stored": null,
+      "response": {
+       "status": 416,
+       "contentRange": "bytes */1000"
+      }
+     },
+     "expected": {
+      "action": "restart",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "range-unsatisfiable"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-401-fails",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 401
+      }
+     },
+     "expected": {
+      "action": "fail",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "denied"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-403-fails",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 403
+      }
+     },
+     "expected": {
+      "action": "fail",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "denied"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-404-fails",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 404
+      }
+     },
+     "expected": {
+      "action": "fail",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "gone"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-410-fails",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 410
+      }
+     },
+     "expected": {
+      "action": "fail",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "server-410"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-500-fails",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 500
+      }
+     },
+     "expected": {
+      "action": "fail",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "server-500"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-503-fails",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 503
+      }
+     },
+     "expected": {
+      "action": "fail",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "server-503"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.decision-204-fails",
+   "operation": "decision",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 10,
+      "stored": {
+       "lastModified": "Wed, 21 Oct 2026 07:28:00 GMT",
+       "etag": null,
+       "sourceETag": null,
+       "totalBytes": 1000
+      },
+      "response": {
+       "status": 204
+      }
+     },
+     "expected": {
+      "action": "fail",
+      "offset": 0,
+      "totalBytes": null,
+      "validator": null,
+      "reason": "server-204"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.body-end-complete",
+   "operation": "body-end",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "receivedBytes": 10,
+      "totalBytes": 10,
+      "cleanEof": true
+     },
+     "expected": {
+      "action": "complete"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.body-end-complete-even-if-socket-died-after",
+   "operation": "body-end",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "receivedBytes": 10,
+      "totalBytes": 10,
+      "cleanEof": false
+     },
+     "expected": {
+      "action": "complete"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.body-end-truncated",
+   "operation": "body-end",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "receivedBytes": 9,
+      "totalBytes": 10,
+      "cleanEof": true
+     },
+     "expected": {
+      "action": "truncated"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.body-end-truncated-unclean",
+   "operation": "body-end",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "receivedBytes": 9,
+      "totalBytes": 10,
+      "cleanEof": false
+     },
+     "expected": {
+      "action": "truncated"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.body-end-overrun",
+   "operation": "body-end",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "receivedBytes": 11,
+      "totalBytes": 10,
+      "cleanEof": true
+     },
+     "expected": {
+      "action": "overrun"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.body-end-unknown-clean",
+   "operation": "body-end",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "receivedBytes": 9,
+      "totalBytes": null,
+      "cleanEof": true
+     },
+     "expected": {
+      "action": "unknown-length-complete"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.body-end-unknown-interrupted",
+   "operation": "body-end",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "receivedBytes": 9,
+      "totalBytes": null,
+      "cleanEof": false
+     },
+     "expected": {
+      "action": "truncated"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-all-match",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-length",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 9,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": false,
+      "reason": "length"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-unknown-length-passes",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": null,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-hash",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": false,
+      "reason": "hash"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-hash-case-insensitive",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-no-expected-hash",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": null,
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-source-changed",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "t"
+     },
+     "expected": {
+      "ok": false,
+      "reason": "source-changed"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-offline-at-verify-does-not-fail",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": null
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-no-before-does-not-fail",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": null,
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-length-reported-before-hash",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 9,
+      "expectedBytes": 10,
+      "actualSha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s"
+     },
+     "expected": {
+      "ok": false,
+      "reason": "length"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-hash-reported-before-source",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "t"
+     },
+     "expected": {
+      "ok": false,
+      "reason": "hash"
+     }
+    }
+   ]
+  }
+ ]
+}

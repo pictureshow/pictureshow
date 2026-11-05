@@ -7,7 +7,19 @@ import kotlinx.serialization.Serializable
 
 @Suppress("ktlint:standard:enum-entry-name-case", "EnumEntryName")
 @Serializable
-enum class OfflinePhase { queued, waitingNetwork, waitingStorage, preparing, transferring, verifying, ready, paused, failed, missing, deleting }
+enum class OfflinePhase {
+    queued,
+    waitingNetwork,
+    waitingStorage,
+    preparing,
+    transferring,
+    verifying,
+    ready,
+    paused,
+    failed,
+    missing,
+    deleting
+}
 
 @Serializable
 data class OfflineJob(
@@ -72,19 +84,40 @@ fun reduceOfflineJob(job: OfflineJob, event: OfflineJobEvent): OfflineJobResult 
         } else {
             wrongPhase
         }
-        "network-back" -> if (job.phase == OfflinePhase.waitingNetwork) OfflineJobResult(job.copy(phase = OfflinePhase.queued)) else wrongPhase
-        "storage-denied" -> if (job.phase == OfflinePhase.preparing || job.phase == OfflinePhase.transferring || job.phase == OfflinePhase.queued) {
+        "network-back" -> if (job.phase ==
+            OfflinePhase.waitingNetwork
+        ) {
+            OfflineJobResult(job.copy(phase = OfflinePhase.queued))
+        } else {
+            wrongPhase
+        }
+        "storage-denied" -> if (job.phase == OfflinePhase.preparing ||
+            job.phase == OfflinePhase.transferring ||
+            job.phase == OfflinePhase.queued
+        ) {
             OfflineJobResult(job.copy(phase = OfflinePhase.waitingStorage), stop)
         } else {
             wrongPhase
         }
-        "storage-available" -> if (job.phase == OfflinePhase.waitingStorage) OfflineJobResult(job.copy(phase = OfflinePhase.queued)) else wrongPhase
+        "storage-available" -> if (job.phase ==
+            OfflinePhase.waitingStorage
+        ) {
+            OfflineJobResult(job.copy(phase = OfflinePhase.queued))
+        } else {
+            wrongPhase
+        }
         "pause" -> if (ran || job.phase in PAUSABLE_IDLE) {
             OfflineJobResult(job.copy(phase = OfflinePhase.paused, attempt = job.attempt + 1, pausedByCap = event.reason == "cap"), stop)
         } else {
             wrongPhase
         }
-        "resume" -> if (job.phase == OfflinePhase.paused) OfflineJobResult(job.copy(phase = OfflinePhase.queued, pausedByCap = false)) else wrongPhase
+        "resume" -> if (job.phase ==
+            OfflinePhase.paused
+        ) {
+            OfflineJobResult(job.copy(phase = OfflinePhase.queued, pausedByCap = false))
+        } else {
+            wrongPhase
+        }
         "delete" -> if (job.phase == OfflinePhase.deleting) {
             OfflineJobResult(job, listOf("delete-owned"))
         } else {
@@ -92,7 +125,13 @@ fun reduceOfflineJob(job: OfflineJob, event: OfflineJobEvent): OfflineJobResult 
         }
         "deleted" -> if (job.phase == OfflinePhase.deleting) OfflineJobResult(null) else wrongPhase
         "fail" -> if (ran) OfflineJobResult(job.copy(phase = OfflinePhase.failed, failure = event.reason), stop) else wrongPhase
-        "retry" -> if (job.phase == OfflinePhase.failed) OfflineJobResult(job.copy(phase = OfflinePhase.queued, failure = null)) else wrongPhase
+        "retry" -> if (job.phase ==
+            OfflinePhase.failed
+        ) {
+            OfflineJobResult(job.copy(phase = OfflinePhase.queued, failure = null))
+        } else {
+            wrongPhase
+        }
         "process-restart" -> when {
             ran -> OfflineJobResult(job.copy(phase = OfflinePhase.queued, attempt = job.attempt + 1))
             job.phase == OfflinePhase.deleting -> OfflineJobResult(job, listOf("delete-owned"))
