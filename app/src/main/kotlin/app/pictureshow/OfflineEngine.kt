@@ -269,11 +269,6 @@ internal class OfflineEngine(
         applyNetworkLocked()
     }
 
-    suspend fun setAutoClean(key: String, enabled: Boolean) = mutex.withLock {
-        val manifest = library(key)?.manifest ?: return@withLock
-        saveLocked(key, manifest.copy(autoCleanWatched = enabled))
-    }
-
     /** The viewer typed the password this server needs because Quick Connect is off. It's not kept. */
     suspend fun providePassword(account: Account, password: String): Boolean {
         val result = sessions().token(account, password)

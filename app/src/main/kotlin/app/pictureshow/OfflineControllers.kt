@@ -95,10 +95,6 @@ internal class OfflineDownloadsController(
         scope.launch { engine.deleteMany(account.key, ids) }
     }
 
-    fun setAutoClean(value: Boolean) {
-        scope.launch { engine.setAutoClean(account.key, value) }
-    }
-
     fun providePassword(password: String) {
         scope.launch { engine.providePassword(account, password) }
     }
