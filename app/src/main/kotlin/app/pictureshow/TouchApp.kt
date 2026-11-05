@@ -289,7 +289,7 @@ internal fun TouchPictureshow(
                                 profile.verify()
                                 vm.reload()
                             },
-                            onResume = vm::reload,
+                            onResume = vm::resumed,
                             librariesOnly = destination == "libraries"
                         )
                     }
@@ -372,7 +372,8 @@ internal fun TouchPictureshow(
                         val screen by vm.state.collectAsStateWithLifecycle()
                         LaunchedEffect(entry) {
                             entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                                vm.reload()
+                                // The model's arrival read and a deliberate Retry own the budget; this only refreshes a real return.
+                                vm.resumed()
                                 awaitCancellation()
                             }
                         }
@@ -383,19 +384,7 @@ internal fun TouchPictureshow(
                             vm::played,
                             vm::favorite,
                             vm::reload,
-                            onPlay = { playable, resume ->
-                                nav.navigate(
-                                    playerRoute(
-                                        playable,
-                                        if (resume) {
-                                            playable.userData.playbackPositionTicks.coerceAtLeast(0) /
-                                                10_000
-                                        } else {
-                                            0
-                                        }
-                                    )
-                                )
-                            },
+                            onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) },
                             // Without a position the TV applies this viewer's own resume, which is newer than this screen.
                             onPlayOnTv = { playable, fromStart ->
                                 chooseRemote { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
@@ -414,7 +403,9 @@ internal fun TouchPictureshow(
                                     chooseRemote { remote.queue(listOf(playable.id), next = false) }
                                 }
                             },
-                            onBack = { nav.popBackStack() }
+                            onBack = { nav.popBackStack() },
+                            origin = item,
+                            onPlayedRequest = vm::playedRequested
                         )
                     }
                 }
@@ -445,10 +436,12 @@ internal fun TouchPictureshow(
                         { nav.navigate("accounts") },
                         { nav.navigate("about") },
                         { nav.navigate("supporter") },
-                        onRemote = { nav.navigate("remote") }
+                        onRemote = { nav.navigate("remote") },
+                        onThisDevice = { nav.navigate("this-device") }
                     )
                 }
             }
+            composable("this-device") { TouchThisDevice(koinInject()) { nav.popBackStack() } }
             composable("about") { TouchAbout({ nav.navigate("licenses") }, { nav.popBackStack() }) }
             composable("licenses") {
                 val libraries = remember { readLicenseCatalog(context) }

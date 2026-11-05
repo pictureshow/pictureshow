@@ -4,6 +4,8 @@
 package app.pictureshow
 
 import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,12 +21,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -32,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
@@ -47,9 +53,11 @@ internal fun TouchSettings(
     onAbout: () -> Unit,
     onSupport: () -> Unit,
     onBack: (() -> Unit)? = null,
-    onRemote: () -> Unit = {}
+    onRemote: () -> Unit = {},
+    onThisDevice: () -> Unit = {}
 ) {
     val local = state.local
+    val device = touchDeviceName(LocalConfiguration.current.smallestScreenWidthDp)
     val configuration = state.configuration
     val ready = !state.loading && !state.saving && configuration != null
     TouchPage("Settings", onBack) {
@@ -76,6 +84,25 @@ internal fun TouchSettings(
             )
         }
         Text("Audio output accepts: $acceptedAudio", style = MaterialTheme.typography.bodySmall)
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text("Conversion notice", modifier = Modifier.weight(1f))
+            Switch(
+                checked = local.conversionNotice,
+                onCheckedChange = { checked -> onLocal { it.copy(conversionNotice = checked) } },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("touch:settings:conversion-notice").semantics {
+                    contentDescription = "Conversion notice"
+                    stateDescription = if (local.conversionNotice) "On" else "Off"
+                }
+            )
+        }
+        Text(
+            "Shows a short note when the server has to convert a video for ${device.replaceFirstChar(Char::lowercase)}.",
+            style = MaterialTheme.typography.bodySmall
+        )
         TouchChoice("Subtitle size", local.subtitleSize, SubtitleSize.entries, { settingLabel(it.name) }) { value ->
             onLocal { it.copy(subtitleSize = value) }
         }
@@ -116,9 +143,60 @@ internal fun TouchSettings(
         }, ready) { onServer("SubtitleMode", it) }
         TouchMessage(state.error)
         if (state.error != null) TouchAction("Retry", !state.saving, onRetry)
+        TouchHeading("Troubleshooting")
+        TouchAction(device, onClick = onThisDevice)
         TouchHeading("Pictureshow")
         TouchAction(stringResource(R.string.supporter_title), onClick = onSupport)
         TouchAction("About Pictureshow", onClick = onAbout)
+    }
+}
+
+/** The same width split Android itself documents for tablets; TV uses its own screen. */
+internal fun touchDeviceName(smallestWidthDp: Int): String = if (smallestWidthDp >= 600) "This tablet" else "This phone"
+
+/** The TV report in touch form: same capture and privacy (capabilities only), named for this device. */
+@Composable
+internal fun TouchThisDevice(
+    preferences: PlaybackPreferencesStore,
+    capture: suspend (Context, PlaybackPreferences) -> ThisTvReport = ::captureThisTv,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val device = touchDeviceName(LocalConfiguration.current.smallestScreenWidthDp)
+    var report by remember { mutableStateOf<ThisTvReport?>(null) }
+    var error by remember { mutableStateOf(false) }
+    var generation by remember { mutableIntStateOf(0) }
+    var showJson by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(generation) {
+        error = false
+        try {
+            report = capture(context, preferences.read())
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            error = true
+        }
+    }
+    TouchPage(device, onBack) {
+        Text("Reported capabilities, not a playback benchmark. Shared diagnostics contain no account or server information.")
+        TouchAction("Refresh capabilities") { generation++ }
+        val captured = report
+        if (captured != null) {
+            TouchAction("Share diagnostics and profile JSON") {
+                context.startActivity(Intent.createChooser(thisTvShareIntent(captured, device), "Share $device"))
+            }
+            TouchAction(if (showJson) "Hide device profile JSON" else "View device profile JSON") { showJson = !showJson }
+            SelectionContainer {
+                Text(
+                    if (showJson) captured.profileJson else captured.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("touch:this-device:report")
+                )
+            }
+        } else if (!error) {
+            Text("Reading device capabilities…")
+        }
+        TouchMessage("Could not read capabilities. Select Refresh to try again.".takeIf { error })
     }
 }
 

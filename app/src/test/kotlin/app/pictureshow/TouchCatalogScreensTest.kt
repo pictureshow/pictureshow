@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -25,6 +26,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.MediaPerson
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
+import app.pictureshow.core.resumeLabel
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import org.junit.Rule
@@ -101,27 +103,32 @@ class TouchCatalogScreensTest {
                 }, {})
             }
         }
-        compose.onNodeWithTag("touch:detail:play").performScrollTo().performClick()
+        compose.onNodeWithTag("touch:detail:primary").performScrollTo().performClick()
         assertEquals(true, resume)
         compose.onNodeWithText("Play from start").performScrollTo().performClick()
         assertEquals(false, resume)
     }
 
-    @Test fun pendingPlaybackHidesStaleResumeAndThenRevealsFreshActions() {
-        var state by mutableStateOf(CatalogDetailState(account, movie, loading = false, playbackPending = true))
+    @Test fun pendingPlaybackKeepsThePageAndWithholdsStaleResumeUntilFresh() {
+        // The page used to be hidden here (a recorded gap against CAT-08); the controls now stay, without the stale resume.
+        val resumable = movie.copy(userData = ItemUserData(playbackPositionTicks = 300_000_000))
+        var state by mutableStateOf(CatalogDetailState(account, resumable, loading = false, playbackPending = true))
         compose.setContent { MaterialTheme { TouchCatalogDetail(state, {}, {}, {}, {}, {}, { _, _ -> }, {}) } }
         compose.onNodeWithText("Saving progress…").assertExists()
-        compose.onNodeWithTag("touch:detail:play").assertDoesNotExist()
+        compose.onNodeWithTag("touch:detail:primary").assertIsEnabled().assertTextEquals("Play")
         compose.runOnIdle { state = state.copy(playbackPending = false) }
-        compose.onNodeWithTag("touch:detail:play").assertIsEnabled()
+        compose.onNodeWithTag("touch:detail:primary").assertIsEnabled().assertTextEquals(resumeLabel(300_000_000))
     }
 
     @Test fun emptySeriesCannotPlayOrBeMarkedWatched() {
         val series = MediaItem("series", "A Series", "Series", childCount = 0)
         compose.setContent {
-            MaterialTheme { TouchCatalogDetail(CatalogDetailState(account, series, loading = false), {}, {}, {}, {}, {}, { _, _ -> }, {}) }
+            MaterialTheme {
+                val empty = CatalogDetailState(account, series, loading = false, readSucceeded = true)
+                TouchCatalogDetail(empty, {}, {}, {}, {}, {}, { _, _ -> }, {})
+            }
         }
-        compose.onNodeWithTag("touch:detail:play").assertIsNotEnabled()
+        compose.onNodeWithTag("touch:detail:primary").assertIsNotEnabled()
         compose.onNodeWithText("Mark watched").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("No episodes are available.").performScrollTo().assertExists()
     }

@@ -3,21 +3,27 @@
  */
 package app.pictureshow
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -27,6 +33,8 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,14 +48,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -56,6 +69,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -64,13 +78,14 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.HomeRow
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.MediaPerson
+import app.pictureshow.core.detailReadBandText
+import app.pictureshow.core.detailRetryDescription
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.imageUrl
-import app.pictureshow.core.isEmptyContainer
 import app.pictureshow.core.isWatched
 import app.pictureshow.core.progress
-import app.pictureshow.core.resumeLabel
 import app.pictureshow.core.runtimeLabel
+import app.pictureshow.core.showDetailEmptyState
 import coil3.compose.AsyncImage
 
 @Composable
@@ -236,7 +251,7 @@ private fun TouchCatalogSort(state: CatalogGridState, onSort: (String, Boolean) 
     }
 }
 
-/** Match TV's playback choice while withholding stale progress during a report/read handoff. */
+/** TV's playback choice, withholding a stale target until the report and every dependent read settle. */
 internal fun touchDetailPlayItem(state: CatalogDetailState): MediaItem? {
     if (state.playbackPending || state.loading || state.error != null && state.item == null) return null
     return when (val item = state.item) {
@@ -250,7 +265,6 @@ internal fun touchDetailPlayItem(state: CatalogDetailState): MediaItem? {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TouchCatalogDetail(
     state: CatalogDetailState,
@@ -263,206 +277,270 @@ internal fun TouchCatalogDetail(
     onBack: () -> Unit,
     onPlayOnTv: (MediaItem, Boolean) -> Unit = { _, _ -> },
     onPlayNext: (MediaItem) -> Unit = {},
-    onAddToQueue: (MediaItem) -> Unit = {}
+    onAddToQueue: (MediaItem) -> Unit = {},
+    origin: MediaItem? = null,
+    onPlayedRequest: () -> Unit = {}
 ) {
-    val item = state.item.takeUnless { state.playbackPending }
-    val playable = touchDetailPlayItem(state)
+    val page = rememberTouchDetailPresentation(
+        state,
+        origin,
+        onPlayed,
+        onFavorite,
+        onRetry,
+        onPlay,
+        onPlayOnTv,
+        onPlayNext,
+        onAddToQueue,
+        onPlayedRequest
+    )
+    // Back abandons at once, before the navigation transition has released this composition.
+    val leave = {
+        page.abandon()
+        onBack()
+    }
+    BackHandler(onBack = leave)
+    val item = page.header
     val shortWindow = isShortTouchWindow()
-    LazyColumn(
-        state = rememberLazyListState(),
-        modifier = Modifier.fillMaxSize().testTag("touch:detail"),
-        contentPadding = PaddingValues(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        item(key = "body") {
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                TouchBack(onBack)
-                TouchCatalogError(state.error, onRetry)
-                if (state.playbackPending) {
-                    TouchCatalogLoading(if (state.playbackReportFinished) "Loading item…" else "Saving progress…")
-                } else if (item == null && state.loading) {
-                    TouchCatalogLoading("Loading item…")
-                }
-                if (item != null) {
-                    BoxWithConstraints {
-                        val information: @Composable () -> Unit = {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                TouchCatalogHeading(item.name)
-                                if (item.type == "Episode") Text(listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "))
-                                val metadata = listOfNotNull(
-                                    item.productionYear?.toString(),
-                                    item.officialRating,
-                                    item.communityRating?.let(::communityRatingLabel),
-                                    runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank)
-                                )
-                                if (metadata.isNotEmpty()) {
-                                    Text(
-                                        metadata.joinToString(" · "),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+    val density = LocalDensity.current
+    var bandHeight by remember { mutableIntStateOf(0) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val pageHeight = maxHeight
+        LazyColumn(
+            state = rememberLazyListState(),
+            modifier = Modifier.fillMaxSize().testTag("touch:detail"),
+            // The bottom band covers the page without moving it; this keeps the page's end reachable above it.
+            contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp + with(density) { bandHeight.toDp() }),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            item(key = "body") {
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TouchBack(leave)
+                    if (item != null) {
+                        BoxWithConstraints {
+                            val information: @Composable () -> Unit = {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    TouchCatalogHeading(item.name)
+                                    if (item.type == "Episode") Text(listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "))
+                                    val metadata = listOfNotNull(
+                                        item.productionYear?.toString(),
+                                        item.officialRating,
+                                        item.communityRating?.let(::communityRatingLabel),
+                                        runtimeLabel(item.runTimeTicks).takeIf(String::isNotBlank)
                                     )
-                                }
-                                if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
-                                    FlowRow(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Button(
-                                            onClick = { playable?.let { onPlay(it, it.userData.playbackPositionTicks > 0) } },
-                                            enabled = playable != null && !state.busy,
-                                            modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play")
-                                        ) {
-                                            Text(playable?.userData?.playbackPositionTicks?.takeIf { it > 0 }?.let(::resumeLabel) ?: "Play")
-                                        }
-                                        if (playable?.userData?.playbackPositionTicks?.let { it > 0 } == true) {
-                                            OutlinedButton(onClick = {
-                                                onPlay(playable, false)
-                                            }, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp)) {
-                                                Text("Play from start")
-                                            }
-                                        }
-                                        OutlinedButton(
-                                            onClick = { playable?.let { onPlayOnTv(it, false) } },
-                                            enabled = playable != null && !state.busy,
-                                            modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play-on-tv")
-                                        ) { Text("Play on TV") }
-                                        if ((playable?.userData?.playbackPositionTicks ?: 0L) > 0L) {
-                                            OutlinedButton(
-                                                onClick = { playable?.let { onPlayOnTv(it, true) } },
-                                                enabled = !state.busy,
-                                                modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play-on-tv-start")
-                                            ) { Text("Play on TV from start") }
-                                        }
-                                        OutlinedButton(
-                                            onClick = { playable?.let(onPlayNext) },
-                                            enabled = playable != null && !state.busy,
-                                            modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:play-next")
-                                        ) { Text("Play next on TV") }
-                                        OutlinedButton(
-                                            onClick = { playable?.let(onAddToQueue) },
-                                            enabled = playable != null && !state.busy,
-                                            modifier = Modifier.heightIn(min = 48.dp).testTag("touch:detail:add-to-queue")
-                                        ) { Text("Add to TV queue") }
-                                        OutlinedButton(
-                                            onClick = onFavorite,
-                                            enabled = !state.busy && !state.loading,
-                                            modifier = Modifier.heightIn(min = 48.dp).semantics {
-                                                stateDescription = if (item.userData.isFavorite) "Favorite" else "Not favorite"
-                                            }
-                                        ) { Text(if (item.userData.isFavorite) "Remove favorite" else "Favorite") }
-                                        OutlinedButton(
-                                            onClick = onPlayed,
-                                            enabled = !state.busy && !state.loading && !item.isEmptyContainer,
-                                            modifier = Modifier.heightIn(min = 48.dp).semantics {
-                                                stateDescription =
-                                                    if (item.isWatched) "Watched" else "Unwatched"
-                                            }
-                                        ) { Text(if (item.isWatched) "Mark unwatched" else "Mark watched") }
-                                    }
-                                }
-                                item.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
-                                if (item.genres.isNotEmpty()) {
-                                    Text(
-                                        item.genres.joinToString(" · "),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                        if (maxWidth >= 720.dp || shortWindow && maxWidth >= 520.dp) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                                TouchCatalogArtwork(
-                                    item,
-                                    state.account,
-                                    false,
-                                    Modifier.width(if (shortWindow) 140.dp else 200.dp).aspectRatio(2f / 3f),
-                                    contentScale = ContentScale.Fit
-                                )
-                                Box(Modifier.weight(1f)) { information() }
-                            }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                                val backdrop = item.takeIf { it.backdropImageTags.isEmpty() && it.parentBackdropImageTags.isEmpty() }
-                                    ?: item.copy(imageTags = emptyMap())
-                                TouchCatalogArtwork(backdrop, state.account, true, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
-                                information()
-                            }
-                        }
-                    }
-                    if (state.loading) TouchCatalogLoading("Loading episodes…")
-                }
-            }
-        }
-        val people = item?.people.orEmpty().filter { it.id.isNotBlank() }.distinctBy(MediaPerson::id)
-        if (people.isNotEmpty()) {
-            item(key = "people") {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TouchCatalogHeading("Cast & crew", Modifier.padding(horizontal = 20.dp), section = true)
-                    LazyRow(
-                        state = rememberLazyListState(),
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(people, key = MediaPerson::id) { person ->
-                            val linkedItem = person.touchPersonItem()
-                            val credit = person.role?.takeIf(String::isNotBlank) ?: person.type?.takeIf(String::isNotBlank)
-                            Card(
-                                onClick = { onOpen(linkedItem) },
-                                modifier = Modifier.width(136.dp).heightIn(min = 48.dp)
-                                    .testTag("touch:person:${person.id}").semantics(mergeDescendants = true) {
-                                        contentDescription = listOfNotNull(person.name, credit).joinToString(", ")
-                                    }
-                            ) {
-                                TouchCatalogArtwork(linkedItem, state.account, false, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
-                                Column(Modifier.padding(12.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        person.name,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    if (credit !=
-                                        null
-                                    ) {
+                                    if (metadata.isNotEmpty()) {
                                         Text(
-                                            credit,
-                                            style = MaterialTheme.typography.bodySmall,
+                                            metadata.joinToString(" · "),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                    if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
+                                        TouchDetailActionGrid(page.actions)
+                                    }
+                                    item.overview?.takeIf(String::isNotBlank)?.let { Text(it) }
+                                    if (item.genres.isNotEmpty()) {
+                                        Text(
+                                            item.genres.joinToString(" · "),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (page.additions.isNotEmpty()) {
+                                        Text(
+                                            "More details",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.semantics { heading() }
+                                        )
+                                        page.additions.forEach { Text(it) }
+                                    }
+                                }
+                            }
+                            if (maxWidth >= 720.dp || shortWindow && maxWidth >= 520.dp) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                    TouchCatalogArtwork(
+                                        item,
+                                        state.account,
+                                        false,
+                                        Modifier.width(if (shortWindow) 140.dp else 200.dp).aspectRatio(2f / 3f),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                    Box(Modifier.weight(1f)) { information() }
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                                    val backdrop = item.takeIf { it.backdropImageTags.isEmpty() && it.parentBackdropImageTags.isEmpty() }
+                                        ?: item.copy(imageTags = emptyMap())
+                                    TouchCatalogArtwork(backdrop, state.account, true, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                                    information()
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-        if (item?.type == "Series" && state.nextUp.isNotEmpty()) {
-            item(key = "next") { TouchCatalogShelf("Next up", state.nextUp, state.account, true, onOpen) }
-        }
-        if (item?.type == "Series" && state.seasons.isNotEmpty()) {
-            item(key = "seasons") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TouchCatalogHeading("Seasons", Modifier.padding(horizontal = 20.dp), section = true)
-                    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(state.seasons, key = MediaItem::id) { season ->
-                            FilterChip(
-                                selected = season.id == state.selectedSeasonId,
-                                onClick = { onSeason(season) },
-                                label = { Text(season.name) },
-                                modifier = Modifier.heightIn(min = 48.dp)
-                            )
+            // The frozen header can be a route card, which has no credits: the fresh read's credits still appear.
+            val people = (state.item ?: item)?.people.orEmpty().filter { it.id.isNotBlank() }.distinctBy(MediaPerson::id)
+            if (people.isNotEmpty()) {
+                item(key = "people") {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TouchCatalogHeading("Cast & crew", Modifier.padding(horizontal = 20.dp), section = true)
+                        LazyRow(
+                            state = rememberLazyListState(),
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(people, key = MediaPerson::id) { person ->
+                                val linkedItem = person.touchPersonItem()
+                                val credit = person.role?.takeIf(String::isNotBlank) ?: person.type?.takeIf(String::isNotBlank)
+                                Card(
+                                    onClick = { onOpen(linkedItem) },
+                                    modifier = Modifier.width(136.dp).heightIn(min = 48.dp)
+                                        .testTag("touch:person:${person.id}").semantics(mergeDescendants = true) {
+                                            contentDescription = listOfNotNull(person.name, credit).joinToString(", ")
+                                        }
+                                ) {
+                                    TouchCatalogArtwork(linkedItem, state.account, false, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                                    Column(
+                                        Modifier.padding(12.dp).clearAndSetSemantics {},
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            person.name,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (credit != null) {
+                                            Text(
+                                                credit,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-        if (item?.type in listOf("Series", "Season")) {
-            if (state.episodes.isNotEmpty()) {
+            if (item?.type == "Series" && state.nextUp.isNotEmpty()) {
+                item(key = "next") { TouchCatalogShelf("Next up", state.nextUp, state.account, true, onOpen) }
+            }
+            if (item?.type == "Series" && state.seasons.isNotEmpty()) {
+                item(key = "seasons") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TouchCatalogHeading("Seasons", Modifier.padding(horizontal = 20.dp), section = true)
+                        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(state.seasons, key = MediaItem::id) { season ->
+                                FilterChip(
+                                    selected = season.id == state.selectedSeasonId,
+                                    onClick = { onSeason(season) },
+                                    label = { Text(season.name) },
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (item?.type in listOf("Series", "Season") && state.episodes.isNotEmpty()) {
                 item(key = "episodes") { TouchCatalogShelf("Episodes", state.episodes, state.account, true, onOpen) }
-            } else if (!state.loading && state.error == null) {
+            }
+            if (
+                showDetailEmptyState(
+                    item?.type,
+                    state.loading,
+                    state.readSucceeded,
+                    state.readFailed,
+                    state.episodes.size,
+                    state.seasons.size
+                )
+            ) {
                 item(key = "empty") { Text("No episodes are available.", modifier = Modifier.padding(horizontal = 20.dp)) }
             }
         }
+        // Both overlays have no layout footprint: status and failure cannot move the action under a finger.
+        page.status?.let { status ->
+            Text(
+                status,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 20.dp).widthIn(max = maxWidth * 0.6f)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small)
+                    .padding(horizontal = 12.dp, vertical = 8.dp).testTag("touch:detail:status")
+            )
+        }
+        val failure = page.failure ?: page.writeFailure?.let { "Change failed. $it" }
+        if (failure != null) {
+            val retrying = page.recovery && page.retryWorking
+            val retryTag = if (page.recovery) "touch:detail:retry" else "touch:detail:write-retry"
+            Column(
+                Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().onSizeChanged { bandHeight = it.height }
+                    .heightIn(max = pageHeight * 0.5f).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp)
+                    .testTag("touch:detail:recovery"),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Retry comes first, so a long reason can never push the way out off the band.
+                Button(
+                    onClick = page.onRetry,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(retryTag).semantics {
+                        if (page.recovery) {
+                            stateDescription = if (retrying) "Loading item. Please wait." else detailRetryDescription(failure)
+                        }
+                    }
+                ) { Text(if (retrying) "Retrying…" else "Retry") }
+                Text(
+                    if (page.recovery) detailReadBandText(retrying, failure) else failure,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag(if (page.recovery) "touch:detail:read-error" else "touch:detail:write-error")
+                )
+            }
+        } else {
+            SideEffect { bandHeight = 0 }
+        }
+        // Spoken through one hidden, always-present polite region: a new node would not announce its first text.
+        Text(
+            page.cue,
+            modifier = Modifier.align(Alignment.TopStart).size(1.dp).alpha(0f).testTag("touch:detail:cue").semantics {
+                liveRegion = LiveRegionMode.Polite
+            }
+        )
+    }
+}
+
+/** Equal cells, each as tall as its longest wording: pending, requested and fresh labels never reflow the grid. */
+@Composable
+private fun TouchDetailActionGrid(actions: List<TouchDetailAction>) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth >= 600.dp) 4 else 2
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            actions.chunked(columns).forEach { row ->
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { action -> TouchDetailActionButton(action, Modifier.weight(1f).fillMaxHeight()) }
+                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TouchDetailActionButton(action: TouchDetailAction, modifier: Modifier) {
+    val content: @Composable RowScope.() -> Unit = {
+        Box(contentAlignment = Alignment.Center) {
+            action.reserve.forEach { wording ->
+                Text(wording, textAlign = TextAlign.Center, modifier = Modifier.alpha(0f).clearAndSetSemantics {})
+            }
+            Text(action.label, textAlign = TextAlign.Center)
+        }
+    }
+    val sized = modifier.heightIn(min = 48.dp).testTag("touch:detail:${action.target}").semantics {
+        action.state?.let { stateDescription = it }
+    }
+    val padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+    if (action.target == "primary") {
+        Button(onClick = action.onClick, enabled = action.enabled, modifier = sized, contentPadding = padding, content = content)
+    } else {
+        OutlinedButton(onClick = action.onClick, enabled = action.enabled, modifier = sized, contentPadding = padding, content = content)
     }
 }
 

@@ -79,9 +79,9 @@ internal suspend fun captureThisTv(context: Context, preferences: PlaybackPrefer
     )
 }
 
-internal fun thisTvShareIntent(report: ThisTvReport): Intent = Intent(Intent.ACTION_SEND).apply {
+internal fun thisTvShareIntent(report: ThisTvReport, deviceName: String = "This TV"): Intent = Intent(Intent.ACTION_SEND).apply {
     type = "text/plain"
-    putExtra(Intent.EXTRA_SUBJECT, "Pictureshow · This TV")
+    putExtra(Intent.EXTRA_SUBJECT, "Pictureshow · $deviceName")
     putExtra(Intent.EXTRA_TEXT, report.sharedText)
 }
 

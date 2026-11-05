@@ -23,12 +23,18 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.HomeRow
@@ -59,9 +65,20 @@ internal fun TouchSearchScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (!shortInput) TouchCatalogHeading("Search")
+            // A recent search sets the text from outside the keyboard. The caret goes after it, as on TV.
+            var field by remember { mutableStateOf(TextFieldValue(state.query, TextRange(state.query.length))) }
+            var seenQuery by remember { mutableStateOf(state.query) }
+            if (state.query != seenQuery) {
+                seenQuery = state.query
+                if (state.query != field.text) field = TextFieldValue(state.query, TextRange(state.query.length))
+            }
             OutlinedTextField(
-                value = state.query,
-                onValueChange = onQuery,
+                value = field,
+                onValueChange = {
+                    val changed = it.text != field.text
+                    field = it
+                    if (changed) onQuery(it.text)
+                },
                 label = { Text("Search your library") },
                 placeholder = { Text("Movies, shows, people…") },
                 singleLine = true,
