@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.core.content.edit
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.ClientResult
@@ -61,7 +62,9 @@ internal class AndroidCastEnvironment(private val context: Context) : CastEnviro
     private val stored by lazy { context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE) }
 
     override val tvInterface: Boolean get() = usesTvInterface(context)
-    override val osSupported: Boolean get() = Build.VERSION.SDK_INT >= CAST_MIN_SDK
+
+    /** The Cast SDK's floor is the app's own minimum, so every install qualifies. */
+    override val osSupported: Boolean get() = true
 
     /** Only reached once the viewer has opened the chooser or a viewing may be live. */
     override fun services(): String = castServicesState(context)
@@ -95,11 +98,11 @@ internal class AndroidCastEnvironment(private val context: Context) : CastEnviro
 
     override var enabled: Boolean
         get() = stored.getBoolean("enabled", true)
-        set(value) = stored.edit().putBoolean("enabled", value).apply()
+        set(value) = stored.edit { putBoolean("enabled", value) }
 
     override var mayBeLive: Boolean
         get() = stored.getBoolean("may-be-live", false)
-        set(value) = stored.edit().putBoolean("may-be-live", value).apply()
+        set(value) = stored.edit { putBoolean("may-be-live", value) }
 
     /** The same app-private storage as the signed-in account's own token, and excluded from backup the same way. */
     override var sessions: CastStoredSessions
@@ -107,27 +110,23 @@ internal class AndroidCastEnvironment(private val context: Context) : CastEnviro
             ?.let { runCatching { CastStorageJson.decodeFromString(CastStoredSessions.serializer(), it) }.getOrNull() }
             ?: CastStoredSessions()
         set(value) {
-            stored.edit().putString("sessions", CastStorageJson.encodeToString(CastStoredSessions.serializer(), value)).commit()
+            stored.edit(commit = true) { putString("sessions", CastStorageJson.encodeToString(CastStoredSessions.serializer(), value)) }
         }
 
     override var viewing: CastViewingRecord?
         get() = stored.getString("viewing", null)
             ?.let { runCatching { CastStorageJson.decodeFromString(CastViewingRecord.serializer(), it) }.getOrNull() }
         set(value) {
-            val edit = stored.edit()
-            if (value ==
-                null
-            ) {
-                edit.remove("viewing")
-            } else {
-                edit.putString("viewing", CastStorageJson.encodeToString(CastViewingRecord.serializer(), value))
+            stored.edit(commit = true) {
+                if (value == null) {
+                    remove("viewing")
+                } else {
+                    putString("viewing", CastStorageJson.encodeToString(CastViewingRecord.serializer(), value))
+                }
             }
-            edit.commit()
         }
 }
 
-/** The SDK's own minimum, kept as data so a future version's higher floor shows up as a state and not as a crash. */
-internal const val CAST_MIN_SDK = 23
 private const val CAST_DEVICE_ID_LENGTH = 32
 
 private class ClientCastGateway(private val http: HttpClient, private val identity: DeviceIdentityStore, private val name: String) :
