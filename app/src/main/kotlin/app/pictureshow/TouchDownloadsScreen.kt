@@ -203,6 +203,7 @@ internal fun OfflineStorageTouchScreen(account: Account, onBack: () -> Unit) {
 @Composable
 internal fun OfflineDownloadTouchScreen(account: Account, itemId: String, seriesId: String?, seasonId: String?, title: String, onDone: () -> Unit, onBack: () -> Unit) {
     val controller = rememberOfflinePreview(account, itemId, seriesId, seasonId, title)
+    val askForNotifications = rememberOfflineNotificationAsk()
     TouchPage("Download $title", onBack) {
         when (val state = controller.state) {
             OfflinePreviewState.Loading -> Text("Checking what can be downloaded…")
@@ -254,7 +255,10 @@ internal fun OfflineDownloadTouchScreen(account: Account, itemId: String, series
                 TouchAction(
                     "Download",
                     !controller.started && controller.selectedItems().isNotEmpty() && state.preview.choices.any { it.preset == controller.preset && it.available }
-                ) { controller.start(onDone) }
+                ) {
+                    askForNotifications()
+                    controller.start(onDone)
+                }
             }
         }
     }

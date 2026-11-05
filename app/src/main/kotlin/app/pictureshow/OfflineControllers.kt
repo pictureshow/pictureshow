@@ -3,7 +3,12 @@
  */
 package app.pictureshow
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -243,7 +248,7 @@ private suspend fun offlineOriginalWarning(context: Context, http: HttpClient, i
     val probe = DeviceCapabilityProbe(context)
     return try {
         val clientIdentity = ClientIdentity(deviceDisplayName(context), account.deviceId?.takeIf(String::isNotBlank) ?: identity.getOrCreate(), BuildConfig.VERSION_NAME)
-        val gateway = ServerPlaybackGateway(PlaybackClient(http, clientIdentity), account, itemId, probe::snapshot, null) {}
+        val gateway = ServerPlaybackGateway(PlaybackClient(http, clientIdentity), account, itemId, probe::snapshot, null) { ClientResult.Success(Unit) }
         val decision = ((gateway.prepare(PlaybackRequest()) as? ClientResult.Success)?.value as? PlayOutcome.Play)?.decision ?: return null
         decision.playSessionId?.takeIf { decision.method == PlayMethod.Transcode }?.let { gateway.stopEncoding(it) }
         if (decision.method == PlayMethod.DirectPlay) null else "This device may not play the original without the server converting it. It might not play once you're offline."
@@ -271,3 +276,20 @@ internal fun rememberOfflineWatched(account: Account, entries: List<OfflineEntry
 
 internal suspend fun offlineStartRoute(destination: String, engine: OfflineEngine?, accountKey: String?, context: Context): String =
     engine?.let { offlineColdStartDestination(destination, it, accountKey, measuredNetwork(context)) } ?: destination
+
+/**
+ * Asks once for the permission the progress notification needs on Android 13 and later (touch only: a TV has no
+ * notification shade). The answer changes nothing about the download: it still runs and Downloads still shows it.
+ */
+@Composable
+internal fun rememberOfflineNotificationAsk(): () -> Unit {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    return remember(context, launcher) {
+        {
+            if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+}

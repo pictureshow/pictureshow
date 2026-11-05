@@ -21,7 +21,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.Ticks
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflineResourceRole
@@ -96,7 +95,7 @@ private fun OfflineLocalPlayer(account: Account?, entryId: String, onGone: () ->
             store.newSequence(),
             engine::syncSoon
         )
-        ready = Triple(entry, OfflinePlaybackBinding(gateway, entry.sidecarAudio(file)), store.resumeTicks(entry.itemId) / Ticks.PER_MILLISECOND)
+        ready = Triple(entry, OfflinePlaybackBinding(gateway, entry.sidecarAudio(file)), store.resumeTicks(entry.itemId) / 10_000)
     }
     val loaded = ready ?: return
     val current = account ?: return

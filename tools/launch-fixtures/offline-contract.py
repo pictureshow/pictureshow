@@ -15,7 +15,7 @@ def check(name, passed, observed=None):
 
 def client(user, device=None):
     api = API(url, device or f'offline-contract-{uuid.uuid4().hex[:8]}')
-    api.login(json.loads(vault(credential(version, user))))
+    api.login(vault(credential(version, user)))
     return api
 
 def boxes(path):
@@ -96,13 +96,19 @@ try:
     # OFF-05: captions saved separately, both external and embedded text.
     for stream in [s for s in source['MediaStreams'] if s['Type'] == 'Subtitle']:
         code, h, got = fetch(viewer, f"/Videos/{item['Id']}/{source['Id']}/Subtitles/{stream['Index']}/0/Stream.vtt", dest=work / f"sub{stream['Index']}.vtt")
-        text = (work / f"sub{stream['Index']}.vtt").read_text(errors='replace')
-        check(f"subtitle-{stream.get('Language')}-{'ext' if stream.get('IsExternal') else 'emb'}-vtt", code == 200 and text.startswith('WEBVTT') and '-->' in text, code)
+        raw = (work / f"sub{stream['Index']}.vtt").read_bytes()
+        # 10.10 and 10.11 answer with a UTF-8 byte order mark before WEBVTT; 12 doesn't. Clients must take either.
+        text = raw.removeprefix(b'\xef\xbb\xbf').decode(errors='replace')
+        check(f"subtitle-{stream.get('Language')}-{'ext' if stream.get('IsExternal') else 'emb'}-vtt", code == 200 and text.startswith('WEBVTT') and '-->' in text, {'status': code, 'bom': raw.startswith(b'\xef\xbb\xbf')})
 
     # OFF-02: every compatible preset is finite, independently playable and made of what the player can index.
     target = convert['MediaSources'][0]
     audios = [s for s in target['MediaStreams'] if s['Type'] == 'Audio']
     check('convert-fixture-has-two-languages', len(audios) >= 2 and audios[0].get('Language') != audios[1].get('Language'))
+    # Captions of the file that needs conversion, the same request a converted download makes.
+    for stream in [s for s in target['MediaStreams'] if s['Type'] == 'Subtitle']:
+        code, _, got = fetch(viewer, f"/Videos/{convert['Id']}/{target['Id']}/Subtitles/{stream['Index']}/0/Stream.vtt", dest=work / f"csub{stream['Index']}.vtt")
+        check(f"convert-subtitle-{stream.get('Language')}-vtt", code == 200 and got > 0, {'status': code, 'bytes': got})
     results = {}
     presets = [] if args.skip_transcode else [('video720', 720, 4000000), ('video1080', 1080, 8000000)]
     for name, height, rate in presets:
@@ -125,6 +131,20 @@ try:
         code, _ = viewer.req('DELETE', '/Videos/ActiveEncodings', query={'deviceId': viewer.device, 'playSessionId': session})
         check(f'{name}-cleanup', code < 300, code)
     if presets:
+        # A preset's height is a real limit: 1080p source, 720 comes back 720.
+        large = find(viewer, 'Scope Offline Large')
+        check('large-fixture-present', large is not None)
+        for name, height, rate in presets:
+            session = uuid.uuid4().hex
+            big = large['MediaSources'][0]
+            query = {'mediaSourceId': big['Id'], 'playSessionId': session, 'deviceId': viewer.device, 'videoCodec': 'h264', 'audioCodec': 'aac', 'maxHeight': height, 'videoBitRate': rate,
+                     'audioBitRate': 128000, 'maxAudioChannels': 2, 'subtitleMethod': 'Drop', 'static': 'false', 'enableAutoStreamCopy': 'false', 'allowVideoStreamCopy': 'false',
+                     'allowAudioStreamCopy': 'false', 'container': 'mp4'}
+            dest = work / f'{name}-large.mp4'
+            code, _, got = fetch(viewer, f"/Videos/{large['Id']}/stream.mp4", query, dest=dest)
+            video = next((s for s in (probe(dest) if code == 200 else {}).get('streams', []) if s['codec_type'] == 'video'), {})
+            check(f'{name}-height-is-the-limit', code == 200 and video.get('height') == height and decodes(str(dest)), {'status': code, 'height': video.get('height'), 'bytes': got})
+            viewer.req('DELETE', '/Videos/ActiveEncodings', query={'deviceId': viewer.device, 'playSessionId': session})
         # Same request stopped midway: an interruption restarts from zero and cleanup frees the encoder.
         session = uuid.uuid4().hex
         query = {'mediaSourceId': target['Id'], 'playSessionId': session, 'deviceId': viewer.device, 'videoCodec': 'h264', 'audioCodec': 'aac', 'maxHeight': 720, 'videoBitRate': 4000000,
