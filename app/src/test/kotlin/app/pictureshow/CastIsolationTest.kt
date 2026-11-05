@@ -37,7 +37,8 @@ class CastSourceIsolationTest {
 
     /** The files a TV walks through at startup. If one of these names the sender, this fails. */
     @Test fun theTvPathDoesNotNameTheSender() {
-        val tvPath = listOf("MainActivity.kt", "PlayerScreen.kt", "PlayerPlaybackHost.kt", "InterfaceMode.kt", "WatchNext.kt", "WatchNextRuntime.kt")
+        val tvPath =
+            listOf("MainActivity.kt", "PlayerScreen.kt", "PlayerPlaybackHost.kt", "InterfaceMode.kt", "WatchNext.kt", "WatchNextRuntime.kt")
         val offending = sources.filter { it.name in tvPath && ("CastSenderHost" in it.readText() || "GmsCastLink" in it.readText()) }
         assertEquals(emptyList(), offending.map { it.name })
     }
@@ -84,7 +85,10 @@ class CastStartupTest {
         println("merged providers: $providers")
         assertFalse(providers.any { "cast" in it.lowercase() }, providers.toString())
         val metadata = context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA).metaData
-        assertEquals("app.pictureshow.CastOptionsProvider", metadata.getString("com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"))
+        assertEquals(
+            "app.pictureshow.CastOptionsProvider",
+            metadata.getString("com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME")
+        )
     }
 }
 

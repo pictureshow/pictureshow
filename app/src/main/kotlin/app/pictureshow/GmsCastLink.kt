@@ -57,9 +57,11 @@ class CastOptionsProvider : OptionsProvider {
 internal fun castServicesState(context: Context): String = runCatching {
     when (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)) {
         ConnectionResult.SUCCESS -> "ok"
+
         ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED,
         ConnectionResult.SERVICE_UPDATING,
         ConnectionResult.SERVICE_DISABLED -> "update-required"
+
         else -> "missing"
     }
 }.getOrDefault("missing")
@@ -95,15 +97,21 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     }
 
     private val sessions = object : SessionManagerListener<CastSession> {
-        override fun onSessionStarting(session: CastSession) { listener?.onConnecting() }
+        override fun onSessionStarting(session: CastSession) {
+            listener?.onConnecting()
+        }
         override fun onSessionStarted(session: CastSession, id: String) = connected(session)
         override fun onSessionStartFailed(session: CastSession, error: Int) = ended()
         override fun onSessionEnding(session: CastSession) = Unit
         override fun onSessionEnded(session: CastSession, error: Int) = ended()
-        override fun onSessionResuming(session: CastSession, id: String) { listener?.onConnecting() }
+        override fun onSessionResuming(session: CastSession, id: String) {
+            listener?.onConnecting()
+        }
         override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) = connected(session)
         override fun onSessionResumeFailed(session: CastSession, error: Int) = ended()
-        override fun onSessionSuspended(session: CastSession, reason: Int) { listener?.onSuspended() }
+        override fun onSessionSuspended(session: CastSession, reason: Int) {
+            listener?.onSuspended()
+        }
     }
 
     init {

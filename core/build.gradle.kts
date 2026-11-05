@@ -50,7 +50,16 @@ tasks.register<Sync>("serverCompatRuntime") {
 
 // Run the repository parity contract as part of ordinary :core:jvmTest (and check).
 tasks.named<ProcessResources>("jvmTestProcessResources") {
-    val controlSuites = listOf("session-owner.json", "session-command.json", "queue-edit.json", "queue-order.json", "playback-mode.json", "cast-handoff.json", "cast-capability.json")
+    val controlSuites =
+        listOf(
+            "session-owner.json",
+            "session-command.json",
+            "queue-edit.json",
+            "queue-order.json",
+            "playback-mode.json",
+            "cast-handoff.json",
+            "cast-capability.json"
+        )
     val remoteSuites = listOf(
         "remote-targets.json",
         "remote-wire.json",

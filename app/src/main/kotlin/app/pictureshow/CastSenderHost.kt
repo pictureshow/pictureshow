@@ -65,7 +65,13 @@ internal class CastPlayRequest(
     val local: CastLocalOutput? = null
 )
 
-internal data class CastPlayItem(val id: String, val title: String, val imageUrl: String? = null, val durationMs: Long? = null, val live: Boolean = false)
+internal data class CastPlayItem(
+    val id: String,
+    val title: String,
+    val imageUrl: String? = null,
+    val durationMs: Long? = null,
+    val live: Boolean = false
+)
 
 internal data class CastLocalStart(val itemId: String, val positionMs: Long, val paused: Boolean, val serial: Long)
 
@@ -401,7 +407,13 @@ internal class CastSenderHost(
         }
     }
 
-    private fun loadItem(active: Account, target: ViewingIdentity, item: CastPlayItem, entry: String, decision: PlayDecision): CastLoadItem {
+    private fun loadItem(
+        active: Account,
+        target: ViewingIdentity,
+        item: CastPlayItem,
+        entry: String,
+        decision: PlayDecision
+    ): CastLoadItem {
         val tracks = castSubtitles(active.server, decision, active.accessToken).map {
             CastLoadTrack(it.trackId.toLong(), it.label, it.language, it.url)
         }
@@ -479,7 +491,14 @@ internal class CastSenderHost(
         val entry = observed.entry ?: cast?.owner?.intent?.entry
         val decision = prepared[entry] ?: prepared.values.firstOrNull()
         return if (decision != null) {
-            CastReport(decision.itemId, decision.mediaSourceId, decision.playSessionId, decision.method, observed.ticks, observed.playerState == "paused")
+            CastReport(
+                decision.itemId,
+                decision.mediaSourceId,
+                decision.playSessionId,
+                decision.method,
+                observed.ticks,
+                observed.playerState == "paused"
+            )
         } else {
             reported?.copy(positionTicks = observed.ticks, paused = observed.playerState == "paused")
         }
@@ -714,7 +733,8 @@ internal class CastSenderHost(
             status.positionMs * MS_TO_TICKS,
             status.playerState == "paused"
         )
-        val state = castReattachState(owner, local, ControlIntent(entry = entry, ticks = status.positionMs * MS_TO_TICKS, queue = status.queue))
+        val state =
+            castReattachState(owner, local, ControlIntent(entry = entry, ticks = status.positionMs * MS_TO_TICKS, queue = status.queue))
         mutable.update { it.copy(cast = state, title = status.title) }
         dispatch(CastEvent("link-connected"))
         dispatch(CastEvent("observe", observation = observation(status), nowMs = nowMs()))
