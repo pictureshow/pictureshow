@@ -408,7 +408,10 @@ internal fun TouchPictureshow(
                             },
                             onBack = { nav.popBackStack() },
                             origin = item,
-                            onPlayedRequest = vm::playedRequested
+                            onPlayedRequest = vm::playedRequested,
+                            onDownload = { shown, season, seasonName ->
+                                offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
+                            }
                         )
                     }
                 }
@@ -440,7 +443,8 @@ internal fun TouchPictureshow(
                         { nav.navigate("about") },
                         { nav.navigate("supporter") },
                         onRemote = { nav.navigate("remote") },
-                        onThisDevice = { nav.navigate("this-device") }
+                        onThisDevice = { nav.navigate("this-device") },
+                        onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                     )
                 }
             }

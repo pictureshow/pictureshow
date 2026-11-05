@@ -52,7 +52,8 @@ internal fun TouchSettings(
     onSupport: () -> Unit,
     onBack: (() -> Unit)? = null,
     onRemote: () -> Unit = {},
-    onThisDevice: () -> Unit = {}
+    onThisDevice: () -> Unit = {},
+    onDownloads: () -> Unit = {}
 ) {
     val local = state.local
     val device = touchDeviceName(LocalConfiguration.current.smallestScreenWidthDp)
@@ -62,6 +63,7 @@ internal fun TouchSettings(
         TouchSection {
             TouchNavRow("Accounts", onClick = onAccounts)
             TouchNavRow("Remote for a TV", onClick = onRemote)
+            TouchNavRow("Downloads", onClick = onDownloads)
         }
         TouchSection(
             "Playback on ${device.replaceFirstChar(Char::lowercase)}",

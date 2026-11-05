@@ -357,7 +357,8 @@ internal fun TouchCatalogDetail(
     onPlayNext: (MediaItem) -> Unit = {},
     onAddToQueue: (MediaItem) -> Unit = {},
     origin: MediaItem? = null,
-    onPlayedRequest: () -> Unit = {}
+    onPlayedRequest: () -> Unit = {},
+    onDownload: ((MediaItem, String?, String?) -> Unit)? = null
 ) {
     val page = rememberTouchDetailPresentation(
         state,
@@ -415,6 +416,21 @@ internal fun TouchCatalogDetail(
                                     }
                                     if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
                                         TouchDetailActionGrid(page.actions)
+                                        // Under the grid, so it moves none of the actions the grid holds still.
+                                        if (onDownload != null) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val season = if (item.type == "Season") {
+                                                        item
+                                                    } else {
+                                                        state.seasons.firstOrNull { it.id == state.selectedSeasonId }
+                                                    }
+                                                    onDownload(item, season?.id, season?.name)
+                                                },
+                                                enabled = !state.busy && !state.loading,
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:detail:download")
+                                            ) { Text("Download") }
+                                        }
                                     }
                                     item.overview?.takeIf(String::isNotBlank)?.let { Text(it, Modifier.widthIn(max = 640.dp)) }
                                     if (item.genres.isNotEmpty()) {
