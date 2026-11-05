@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,6 +67,8 @@ import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.trickplayTile
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import org.koin.compose.koinInject
 
 internal enum class TouchPlayerSheet { Audio, Subtitles, Chapters }
 
@@ -95,9 +98,29 @@ internal class TouchControlsState {
 internal fun touchSeekTarget(position: Long, duration: Long, forward: Boolean): Long =
     (position + if (forward) 10_000 else -10_000).coerceIn(0, duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
 
+/** This player during a Cast handoff. */
+private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalOutput {
+    override suspend fun pauseAndReadPositionMs(): Long {
+        host.output.pause()
+        withTimeoutOrNull(1_000) { while (host.player?.isPlaying == true) delay(20) }
+        return host.output.position().milliseconds
+    }
+
+    override fun release() = host.finish(reason = "cast")
+
+    override fun resume() {
+        host.player?.play()
+    }
+}
+
 @Composable
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
+    val cast: CastSenderHost = koinInject()
+    val remote: RemoteControllerHost = koinInject()
+    val castOutput = remember(host) { PlayerCastOutput(host) }
+    DisposableEffect(castOutput) { onDispose { cast.localClosed(castOutput) } }
+    LaunchedEffect(host) { if (cast.consumeStartPaused(host.item.id)) host.output.pause() }
     val accessible = rememberAccessibilityEnabled()
     val playback = rememberPlayerPlayback(host.player, onPause = {
         ui.visible = true
@@ -243,6 +266,22 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             if (landscape) ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
                         ui.interact()
                     }) { Text(if (landscape) "Portrait" else "Landscape") }
+                    TextButton(onClick = {
+                        val position = host.output.position().milliseconds
+                        cast.openChooser(
+                            CastPlayRequest(
+                                listOf(castPlayItem(account.server, host.item)),
+                                startMs = position,
+                                paused = playback.paused,
+                                mediaSourceId = host.state.decision?.mediaSourceId,
+                                local = castOutput,
+                                onJellyfinPick = {
+                                    remote.playNow(listOf(host.item.id), position)
+                                    host.finish(reason = "remote")
+                                }
+                            )
+                        )
+                    }, Modifier.testTag("touch:play-on")) { Text("Play on") }
                     TextButton(onClick = { host.finish(reason = "stop-button") }, Modifier.testTag("touch:stop")) { Text("Stop") }
                 }
                 host.state.reportError?.let { Text("Could not save progress: $it", color = Color.White) }
