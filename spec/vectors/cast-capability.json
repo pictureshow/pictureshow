@@ -1,0 +1,802 @@
+{
+  "schemaVersion": 1,
+  "suite": "cast-capability",
+  "cases": [
+    {
+      "id": "cast-capability.tv-interface-keeps-the-sdk-out",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "surface": "tv"
+          },
+          "expected": {
+            "state": "tv-interface",
+            "visible": false,
+            "canDiscover": false,
+            "jellyfinRemote": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.os-too-old",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "osSupported": false
+          },
+          "expected": {
+            "state": "os-too-old",
+            "visible": true,
+            "canDiscover": false,
+            "jellyfinRemote": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.browser-unsupported",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "surface": "browser",
+            "browserSupported": false
+          },
+          "expected": {
+            "state": "browser-unsupported",
+            "canDiscover": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.services-absent-does-not-crash-or-hide-jellyfin",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "services": "missing"
+          },
+          "expected": {
+            "state": "services-missing",
+            "canDiscover": false,
+            "jellyfinRemote": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.services-need-update",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "services": "update-required"
+          },
+          "expected": {
+            "state": "services-update-required",
+            "canDiscover": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.viewer-turned-it-off",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "viewerEnabled": false,
+            "targets": 3
+          },
+          "expected": {
+            "state": "viewer-disabled",
+            "canDiscover": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.local-network-refused",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "localNetworkAllowed": false
+          },
+          "expected": {
+            "state": "permission-denied",
+            "canDiscover": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.idle-until-the-chooser-opens",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "state": "idle",
+            "canDiscover": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.searching",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "discovery": "searching"
+          },
+          "expected": {
+            "state": "searching",
+            "canDiscover": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.searched-and-found-nothing",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "discovery": "finished"
+          },
+          "expected": {
+            "state": "no-targets",
+            "canDiscover": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.targets-win-over-the-search-state",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "discovery": "searching",
+            "targets": 1
+          },
+          "expected": {
+            "state": "ready",
+            "canDiscover": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.tv-beats-every-other-block",
+      "operation": "capability",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "surface": "tv",
+            "services": "missing",
+            "viewerEnabled": false
+          },
+          "expected": {
+            "state": "tv-interface"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.vod-with-everything",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "pause",
+              "seek",
+              "stop",
+              "volume",
+              "tracks"
+            ],
+            "durationTicks": "72000000000"
+          },
+          "expected": {
+            "pause": true,
+            "seek": true,
+            "stop": true,
+            "volume": true,
+            "volumeReason": null,
+            "timeline": "vod",
+            "seekStartTicks": "0",
+            "seekEndTicks": "72000000000"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.fixed-volume-receiver-says-why",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "pause",
+              "stop"
+            ],
+            "durationTicks": "1"
+          },
+          "expected": {
+            "volume": false,
+            "volumeReason": "receiver-fixed-volume",
+            "seek": false,
+            "seekStartTicks": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.unknown-duration-is-live-never-zero-length",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "seek"
+            ]
+          },
+          "expected": {
+            "timeline": "live",
+            "seek": false,
+            "seekEndTicks": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.zero-duration-is-live",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "seek"
+            ],
+            "durationTicks": "0"
+          },
+          "expected": {
+            "timeline": "live",
+            "seek": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.live-window-bounds-seek",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "seek"
+            ],
+            "live": true,
+            "durationTicks": "500",
+            "seekableStartTicks": "100",
+            "seekableEndTicks": "400"
+          },
+          "expected": {
+            "timeline": "live",
+            "seek": true,
+            "seekStartTicks": "100",
+            "seekEndTicks": "400"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.empty-live-window-can-not-seek",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "seek"
+            ],
+            "live": true,
+            "seekableStartTicks": "100",
+            "seekableEndTicks": "100"
+          },
+          "expected": {
+            "seek": false,
+            "seekStartTicks": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.unavailable-track-can-not-read-as-selected",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [
+              "tracks"
+            ],
+            "tracks": [
+              {
+                "id": 4,
+                "type": "subtitle",
+                "label": "English"
+              },
+              {
+                "id": 5,
+                "type": "subtitle",
+                "label": "Forced",
+                "available": false
+              }
+            ],
+            "activeTracks": [
+              5
+            ]
+          },
+          "expected": {
+            "tracks": [
+              {
+                "id": 4,
+                "type": "subtitle",
+                "label": "English",
+                "selectable": true,
+                "selected": false
+              },
+              {
+                "id": 5,
+                "type": "subtitle",
+                "label": "Forced",
+                "selectable": false,
+                "selected": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.selected-comes-from-the-receiver",
+      "operation": "controls",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "commands": [],
+            "tracks": [
+              {
+                "id": 4,
+                "type": "subtitle",
+                "label": "English"
+              }
+            ],
+            "activeTracks": [
+              4
+            ]
+          },
+          "expected": {
+            "tracks": [
+              {
+                "id": 4,
+                "type": "subtitle",
+                "label": "English",
+                "selectable": false,
+                "selected": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.loopback-can-not-reach",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://127.0.0.1:8096"
+          },
+          "expected": {
+            "category": "loopback",
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.localhost-can-not-reach",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://localhost:8096/jf"
+          },
+          "expected": {
+            "category": "loopback",
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.ipv6-loopback",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://[::1]:8096"
+          },
+          "expected": {
+            "category": "loopback",
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.link-local-can-not-reach",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://169.254.1.2:8096"
+          },
+          "expected": {
+            "category": "link-local",
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.vpn-route-can-not-reach",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://10.8.0.5:8096",
+            "vpn": {
+              "active": true,
+              "ranges": [
+                "10.8.0.0/24"
+              ]
+            }
+          },
+          "expected": {
+            "category": "sender-vpn",
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.cgnat-overlay-while-on-vpn",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://100.64.1.1:8096",
+            "vpn": {
+              "active": true
+            }
+          },
+          "expected": {
+            "category": "sender-vpn",
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.cgnat-without-a-vpn-is-not-judged",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://100.64.1.1:8096"
+          },
+          "expected": {
+            "category": "public-http",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.name-on-a-vpn-may-not-reach",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "https://media.example.org",
+            "vpn": {
+              "active": true
+            }
+          },
+          "expected": {
+            "category": "vpn-possible",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.address-outside-the-vpn-route",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://192.0.2.1:8096",
+            "vpn": {
+              "active": true,
+              "ranges": [
+                "10.8.0.0/24"
+              ]
+            }
+          },
+          "expected": {
+            "category": "public-http",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.private-http",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://172.31.1.2:8096"
+          },
+          "expected": {
+            "category": "private-http",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.private-class-b",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://172.16.0.2:8096"
+          },
+          "expected": {
+            "category": "private-http",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.not-private-class-b",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://172.32.0.2:8096"
+          },
+          "expected": {
+            "category": "public-http",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.private-https",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "https://10.1.2.3"
+          },
+          "expected": {
+            "category": "private-https",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.lan-name",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "http://media.lan:8096"
+          },
+          "expected": {
+            "category": "private-http",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.public-https",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "https://media.example.org/jf"
+          },
+          "expected": {
+            "category": "public-https",
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.not-a-url",
+      "operation": "reach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "baseUrl": "media"
+          },
+          "expected": {
+            "category": "invalid",
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.profile-is-the-receiver-table",
+      "operation": "profile",
+      "state": {},
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "Name": "Pictureshow Cast receiver",
+            "MaxStreamingBitrate": 20000000,
+            "DirectPlayProfiles": [
+              {
+                "Container": "mp4,m4v",
+                "AudioCodec": "aac,mp3",
+                "VideoCodec": "h264",
+                "Type": "Video"
+              }
+            ],
+            "SubtitleProfiles": [
+              {
+                "Format": "vtt",
+                "Method": "External"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.direct-media-carries-the-token-for-the-receiver-only",
+      "operation": "media",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "serverUrl": "http://server.example/jf",
+            "itemId": "i",
+            "token": "t k",
+            "method": "DirectPlay",
+            "url": "http://server.example/jf/Videos/i/stream?static=true&ApiKey=old",
+            "source": {
+              "Id": "src",
+              "Container": "mp4",
+              "MediaStreams": [
+                {
+                  "Type": "Subtitle",
+                  "Index": 3,
+                  "IsTextSubtitleStream": true,
+                  "DisplayTitle": "English",
+                  "Language": "eng",
+                  "Codec": "srt"
+                },
+                {
+                  "Type": "Subtitle",
+                  "Index": 4,
+                  "IsTextSubtitleStream": false,
+                  "DisplayTitle": "Forced",
+                  "Codec": "pgssub"
+                },
+                {
+                  "Type": "Video",
+                  "Index": 0,
+                  "Codec": "h264"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "url": "http://server.example/jf/Videos/i/stream?static=true&ApiKey=t%20k",
+            "contentType": "video/mp4",
+            "subtitles": [
+              {
+                "trackId": 4,
+                "streamIndex": 3,
+                "label": "English",
+                "language": "eng",
+                "url": "http://server.example/jf/Videos/i/src/Subtitles/3/0/Stream.vtt?ApiKey=t%20k"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-capability.transcode-is-hls",
+      "operation": "media",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "serverUrl": "http://server.example/jf",
+            "itemId": "i",
+            "token": "t",
+            "method": "Transcode",
+            "url": "http://server.example/jf/videos/i/master.m3u8?MediaSourceId=src",
+            "source": {
+              "Id": "src",
+              "Container": "mkv"
+            }
+          },
+          "expected": {
+            "url": "http://server.example/jf/videos/i/master.m3u8?MediaSourceId=src&ApiKey=t",
+            "contentType": "application/x-mpegURL",
+            "subtitles": []
+          }
+        }
+      ]
+    }
+  ]
+}

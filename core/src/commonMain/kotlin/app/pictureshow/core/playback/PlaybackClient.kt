@@ -64,8 +64,44 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         itemId: String,
         capabilities: DeviceCapabilities,
         playback: PlaybackRequest = PlaybackRequest()
+    ): ClientResult<PlayOutcome> =
+        negotiate(account, itemId, playbackInfoRequest(account, capabilities, playback), playback)
+
+    /**
+     * The same negotiation for an output that isn't this device, such as a Cast receiver: [profile] is that output's
+     * own, and this device's decoders play no part in it.
+     */
+    suspend fun prepareFor(
+        account: Account,
+        itemId: String,
+        profile: DeviceProfile,
+        maxStreamingBitrate: Int,
+        playback: PlaybackRequest = PlaybackRequest()
+    ): ClientResult<PlayOutcome> = negotiate(
+        account,
+        itemId,
+        PlaybackInfoRequest(
+            userId = account.user.id,
+            maxStreamingBitrate = maxStreamingBitrate,
+            startTimeTicks = Ticks.of(playback.startPosition),
+            audioStreamIndex = playback.audioStreamIndex,
+            subtitleStreamIndex = playback.subtitleStreamIndex,
+            mediaSourceId = playback.mediaSourceId,
+            deviceProfile = profile,
+            enableDirectPlay = playback.enableDirectPlay,
+            enableDirectStream = playback.enableDirectStream,
+            allowVideoStreamCopy = playback.allowVideoStreamCopy,
+            allowAudioStreamCopy = playback.allowAudioStreamCopy
+        ),
+        playback
+    )
+
+    private suspend fun negotiate(
+        account: Account,
+        itemId: String,
+        body: PlaybackInfoRequest,
+        playback: PlaybackRequest
     ): ClientResult<PlayOutcome> {
-        val body = playbackInfoRequest(account, capabilities, playback)
         var info = playbackInfo(account, itemId, body)
         var boundSourceId = playback.mediaSourceId
         // Jellyfin 12 applies explicit track indices only to a bound MediaSourceId. The first

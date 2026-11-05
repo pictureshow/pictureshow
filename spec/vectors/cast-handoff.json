@@ -1,0 +1,6736 @@
+{
+  "schemaVersion": 1,
+  "suite": "cast-handoff",
+  "cases": [
+    {
+      "id": "cast-handoff.local-pause-comes-before-the-load-and-ready-commits",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation",
+            "owner": {
+              "phase": "preparing",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1200000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "intent": {
+                "ticks": "1200000000"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "loading",
+              "ticks": "0"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "not-ready",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "buffering",
+              "ticks": "1200000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "not-ready",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1300000000",
+              "durationTicks": "72000000000",
+              "entry": "0:i"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "recovery": null,
+            "mediaSession": "7",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true,
+              "durationTicks": "72000000000",
+              "observed": {
+                "ticks": "1300000000",
+                "paused": false,
+                "entry": "0:i"
+              }
+            },
+            "observed": {
+              "playerState": "playing",
+              "ticks": "1300000000"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.load-can-not-precede-the-local-pause",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-target",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.position-outside-tolerance-keeps-local-owner",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1150000001"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "position-outside-tolerance",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "849999999"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "position-outside-tolerance",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "paused",
+              "ticks": "1150000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.older-generation-status-is-dropped",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "1",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "-1",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.load-refused-leaves-a-paused-local-resume",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "load-failed",
+            "recovery": "unsupported-media"
+          },
+          "expected": {
+            "effect": "resume-here",
+            "recovery": "unsupported-media",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "phase": "failed",
+              "candidate": null,
+              "intent": {
+                "paused": true
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation",
+            "owner": {
+              "phase": "failed"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "phone",
+              "session": "p3",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "effect": "play-local",
+            "recovery": null,
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p3",
+                "generation": "3",
+                "kind": "local"
+              },
+              "phase": "active",
+              "intent": {
+                "paused": false,
+                "ticks": "1000000000"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.load-failed-default-recovery",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "load-failed"
+          },
+          "expected": {
+            "recovery": "receiver-load-failed",
+            "owner": {
+              "phase": "failed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-never-ready-times-out",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "load-timeout"
+          },
+          "expected": {
+            "effect": "resume-here",
+            "recovery": "receiver-timeout",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "phase": "failed",
+              "intent": {
+                "paused": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-idle-error-fails-the-handoff",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "error"
+            }
+          },
+          "expected": {
+            "effect": "resume-here",
+            "recovery": "receiver-load-failed",
+            "owner": {
+              "phase": "failed",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-idle-interrupted-fails-the-handoff",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "not-ready",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "interrupted"
+            }
+          },
+          "expected": {
+            "effect": "resume-here",
+            "recovery": "receiver-interrupted",
+            "owner": {
+              "phase": "failed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.cancel-from-selecting",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "cancel"
+          },
+          "expected": {
+            "effect": "resume-here",
+            "recovery": "cancelled",
+            "owner": {
+              "phase": "failed",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              },
+              "candidate": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.link-lost-during-handoff",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-lost"
+          },
+          "expected": {
+            "link": "lost",
+            "effect": "resume-here",
+            "recovery": "link-lost",
+            "owner": {
+              "phase": "failed",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p",
+                "generation": "1",
+                "kind": "local"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.older-media-session-dropped-newer-rebinds",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "6",
+              "generation": "2",
+              "playerState": "paused",
+              "ticks": "1"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation",
+            "observed": {
+              "ticks": "1000000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "8",
+              "generation": "2",
+              "playerState": "paused",
+              "ticks": "2000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": null,
+            "mediaSession": "8",
+            "observed": {
+              "ticks": "2000000000"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.pause-confirms-only-when-the-receiver-says-so",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "pause",
+            "id": "1",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "send-command",
+            "commands": {
+              "pending": {
+                "id": "1",
+                "operation": "pause",
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            },
+            "nowMs": "200"
+          },
+          "expected": {
+            "effect": "none",
+            "commands": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "paused",
+              "ticks": "1000000000"
+            },
+            "nowMs": "300"
+          },
+          "expected": {
+            "effect": "none",
+            "commands": {
+              "pending": {
+                "result": "confirmed"
+              },
+              "observed": {
+                "paused": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.buffering-never-confirms-pause",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "pause",
+            "id": "1",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "send-command"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "buffering",
+              "ticks": "1000000000"
+            },
+            "nowMs": "200"
+          },
+          "expected": {
+            "effect": "none",
+            "commands": {
+              "pending": {
+                "result": "sent"
+              },
+              "observed": {
+                "paused": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.seek-confirms-near-its-target-and-shows-the-real-position",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "seek-absolute",
+            "entry": "2000000000",
+            "id": "1",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "send-command",
+            "commands": {
+              "seekTarget": "2000000000",
+              "pending": {
+                "ticks": "2000000000",
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            },
+            "nowMs": "200"
+          },
+          "expected": {
+            "effect": "none",
+            "commands": {
+              "pending": {
+                "result": "sent"
+              },
+              "seekTarget": "2000000000"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "2040000000"
+            },
+            "nowMs": "300"
+          },
+          "expected": {
+            "effect": "none",
+            "commands": {
+              "pending": {
+                "result": "confirmed"
+              },
+              "seekTarget": null,
+              "observed": {
+                "ticks": "2040000000"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.command-timeout-asks-the-receiver-and-disables-commands",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "pause",
+            "id": "1",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "send-command"
+          }
+        },
+        {
+          "event": {
+            "op": "command-timeout",
+            "id": "1",
+            "nowMs": "5100"
+          },
+          "expected": {
+            "effect": "request-status",
+            "commands": {
+              "fresh": false,
+              "pending": {
+                "result": "unknown"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "play",
+            "id": "2",
+            "nowMs": "5200"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "refresh-required"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "paused",
+              "ticks": "1100000000"
+            },
+            "nowMs": "5300"
+          },
+          "expected": {
+            "effect": "none",
+            "commands": {
+              "fresh": true,
+              "observed": {
+                "paused": true,
+                "ticks": "1100000000"
+              },
+              "pending": {
+                "result": "unknown"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.command-rejected-matches-its-own-id",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "pause",
+            "id": "2",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "send-command"
+          }
+        },
+        {
+          "event": {
+            "op": "command-rejected",
+            "id": "1"
+          },
+          "expected": {
+            "reason": "stale-command",
+            "commands": {
+              "pending": {
+                "result": "sent"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command-rejected",
+            "id": "2"
+          },
+          "expected": {
+            "reason": null,
+            "commands": {
+              "pending": {
+                "result": "rejected"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.unsupported-command-is-refused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000",
+              "commands": [
+                "pause",
+                "stop"
+              ]
+            },
+            "nowMs": "1"
+          },
+          "expected": {
+            "commands": {
+              "capabilities": [
+                "pause",
+                "stop"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "seek-absolute",
+            "entry": "1",
+            "id": "1",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "unsupported"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.unknown-duration-never-reads-as-zero-length",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000",
+              "durationTicks": "0"
+            },
+            "nowMs": "1"
+          },
+          "expected": {
+            "commands": {
+              "durationTicks": "9223372036854775807"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.disconnect-leaves-the-receiver-playing-and-reattach-reads-it",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "disconnect"
+          },
+          "expected": {
+            "effect": "detach",
+            "notice": "receiver-continues",
+            "link": "idle",
+            "observed": null,
+            "commands": null,
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "disconnected"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "pause",
+            "id": "1",
+            "nowMs": "100"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "not-attached"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "not-attached"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation"
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "effect": "request-status",
+            "link": "connected",
+            "observed": null,
+            "owner": {
+              "phase": "disconnected"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "9",
+              "generation": "2",
+              "playerState": "paused",
+              "ticks": "5000000000",
+              "durationTicks": "72000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "notice": null,
+            "mediaSession": "9",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "generation": "2"
+            },
+            "commands": {
+              "fresh": true,
+              "observed": {
+                "ticks": "5000000000",
+                "paused": true
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "report",
+            "owner": {
+              "reportSequence": "1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.reattach-finds-the-viewing-finished",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "disconnect"
+          },
+          "expected": {
+            "effect": "detach"
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "effect": "request-status"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "71000000000",
+              "idleReason": "finished"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-finished",
+            "stop": "confirmed",
+            "stopPurpose": "ended",
+            "cleanup": "pending",
+            "returnPaused": true,
+            "returnTicks": "71000000000",
+            "owner": {
+              "phase": "return-ready",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation"
+          }
+        },
+        {
+          "event": {
+            "op": "cleanup-done"
+          },
+          "expected": {
+            "cleanup": "done"
+          }
+        },
+        {
+          "event": {
+            "op": "cleanup-done"
+          },
+          "expected": {
+            "reason": "stale-cleanup"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.sender-death-reattach-is-a-new-process-with-no-old-clock",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "disconnected",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        },
+        "notice": "receiver-continues"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation",
+            "owner": {
+              "phase": "disconnected"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "effect": "request-status",
+            "link": "connected",
+            "commands": null,
+            "observed": null
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "3",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "6000000000"
+            }
+          },
+          "expected": {
+            "notice": null,
+            "mediaSession": "3",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true,
+              "observed": {
+                "ticks": "6000000000",
+                "paused": false
+              }
+            },
+            "owner": {
+              "phase": "active",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.sender-death-reattach-ignores-someone-elses-media",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "rcv",
+            "session": "c",
+            "generation": "2",
+            "kind": "cast"
+          },
+          "local": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "phase": "disconnected",
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "effect": "request-status"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "4",
+              "generation": "-1",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-taken",
+            "stop": "confirmed",
+            "owner": {
+              "phase": "return-ready"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.suspended-link-pauses-controls-until-it-returns",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-suspended"
+          },
+          "expected": {
+            "link": "suspended",
+            "observed": null,
+            "commands": {
+              "fresh": false
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "command",
+            "value": "pause",
+            "id": "1",
+            "nowMs": "1"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "not-attached"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation"
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "effect": "request-status",
+            "link": "connected",
+            "mediaSession": null
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "11",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1500000000"
+            },
+            "nowMs": "9"
+          },
+          "expected": {
+            "commands": {
+              "fresh": true,
+              "observed": {
+                "ticks": "1500000000"
+              }
+            },
+            "mediaSession": "11",
+            "owner": {
+              "phase": "active"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.link-lost-while-casting-keeps-the-owner-and-tells-the-viewer",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-lost"
+          },
+          "expected": {
+            "link": "lost",
+            "effect": "none",
+            "notice": "link-lost",
+            "commands": null,
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "disconnected"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "effect": "request-status",
+            "link": "connected"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.stop-casting-confirmed-by-the-receiver",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-remote",
+            "stop": "sent",
+            "stopPurpose": "end",
+            "cleanup": "pending",
+            "owner": {
+              "phase": "returning",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "stop": "sent",
+            "owner": {
+              "phase": "returning"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "stop": "confirmed",
+            "owner": {
+              "phase": "return-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "cleanup-done"
+          },
+          "expected": {
+            "cleanup": "done",
+            "owner": {
+              "phase": "return-ready"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.stop-confirmed-by-an-empty-receiver",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-remote"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "stop": "confirmed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.stop-confirmed-by-someone-elses-media",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-remote"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "30",
+              "generation": "-1",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "stop": "confirmed",
+            "notice": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.unknown-stop-needs-an-explicit-choice",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-remote"
+          }
+        },
+        {
+          "event": {
+            "op": "stop-timeout"
+          },
+          "expected": {
+            "effect": "stop-unknown",
+            "stop": "unknown",
+            "reason": "remote-may-continue",
+            "cleanup": "pending",
+            "owner": {
+              "phase": "return-uncertain"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "phone",
+              "session": "p3",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "reason": "explicit-choice-required",
+            "owner": {
+              "phase": "return-uncertain",
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              }
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "phone",
+              "session": "p3",
+              "generation": "3",
+              "kind": "local"
+            },
+            "confirmed": true
+          },
+          "expected": {
+            "effect": "play-local",
+            "stop": "unknown",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p3",
+                "generation": "3",
+                "kind": "local"
+              },
+              "phase": "active"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-observation",
+            "stop": "unknown"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "stop": "confirmed",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p3",
+                "generation": "3",
+                "kind": "local"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.unknown-stop-can-be-retried",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-remote"
+          }
+        },
+        {
+          "event": {
+            "op": "stop-timeout"
+          },
+          "expected": {
+            "stop": "unknown"
+          }
+        },
+        {
+          "event": {
+            "op": "retry-stop"
+          },
+          "expected": {
+            "effect": "stop-remote",
+            "stop": "sent",
+            "stopPurpose": "end",
+            "owner": {
+              "phase": "returning"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "stop": "confirmed",
+            "owner": {
+              "phase": "return-ready"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-answers-after-an-unknown-stop",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-remote"
+          }
+        },
+        {
+          "event": {
+            "op": "stop-timeout"
+          },
+          "expected": {
+            "stop": "unknown"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "stop": "confirmed",
+            "owner": {
+              "phase": "return-ready"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.stop-timeout-without-a-stop-is-stale",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop-timeout"
+          },
+          "expected": {
+            "reason": "stale-stop",
+            "stop": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "retry-stop"
+          },
+          "expected": {
+            "reason": "stale-stop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.link-lost-while-stopping-is-unknown",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-remote"
+          }
+        },
+        {
+          "event": {
+            "op": "link-lost"
+          },
+          "expected": {
+            "link": "lost",
+            "stop": "unknown",
+            "effect": "stop-unknown",
+            "owner": {
+              "phase": "return-uncertain"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.play-here-keeps-a-paused-viewing-paused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "paused",
+              "ticks": "2000000000"
+            },
+            "nowMs": "1"
+          },
+          "expected": {
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "play-here"
+          },
+          "expected": {
+            "effect": "stop-remote",
+            "stopPurpose": "here",
+            "returnPaused": true,
+            "returnTicks": "2000000000",
+            "owner": {
+              "phase": "returning"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "2000000000",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "resume-here",
+            "stop": "confirmed",
+            "owner": {
+              "phase": "return-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "phone",
+              "session": "p3",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "effect": "play-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p3",
+                "generation": "3",
+                "kind": "local"
+              },
+              "phase": "active",
+              "intent": {
+                "paused": true,
+                "ticks": "2000000000"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.play-here-keeps-a-playing-viewing-playing",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "2000000000"
+            },
+            "nowMs": "1"
+          },
+          "expected": {
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "play-here"
+          },
+          "expected": {
+            "returnPaused": false,
+            "returnTicks": "2000000000"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "resume-here"
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "phone",
+              "session": "p3",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "effect": "play-local",
+            "owner": {
+              "intent": {
+                "paused": false,
+                "ticks": "2000000000"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.play-here-with-no-answer-asks-first",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "play-here"
+          },
+          "expected": {
+            "effect": "stop-remote"
+          }
+        },
+        {
+          "event": {
+            "op": "stop-timeout"
+          },
+          "expected": {
+            "effect": "require-choice",
+            "stop": "unknown",
+            "owner": {
+              "phase": "return-uncertain"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.play-here-from-a-local-owner-is-refused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "play-here"
+          },
+          "expected": {
+            "reason": "stale-owner",
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-finishes-by-itself",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "7000000000",
+              "idleReason": "finished"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-finished",
+            "stopPurpose": "ended",
+            "returnPaused": true,
+            "returnTicks": "7000000000",
+            "owner": {
+              "phase": "return-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "resume-here",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "phone",
+              "session": "p3",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "effect": "play-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "phone",
+                "session": "p3",
+                "generation": "3",
+                "kind": "local"
+              },
+              "intent": {
+                "paused": true,
+                "ticks": "7000000000"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-error-tells-the-viewer",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "error"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-error"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.receiver-stopped-elsewhere-tells-the-viewer",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "idle",
+              "ticks": "1000000000",
+              "idleReason": "cancelled"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-stopped"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.empty-receiver-ends-the-viewing",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "-1",
+              "generation": "-1",
+              "playerState": "idle",
+              "ticks": "0"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-stopped"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.someone-else-takes-the-receiver",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "30",
+              "generation": "-1",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "cleanup",
+            "notice": "receiver-taken",
+            "owner": {
+              "phase": "return-ready"
+            },
+            "stop": "confirmed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.reports-belong-to-the-attached-owner",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "report",
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "report",
+            "owner": {
+              "reportSequence": "1"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "sequence": "2"
+          },
+          "expected": {
+            "effect": "report",
+            "owner": {
+              "reportSequence": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "sequence": "2"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "stale-report"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.reports-after-the-handoff-need-a-live-status",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "sequence": "1"
+          },
+          "expected": {
+            "effect": "report"
+          }
+        },
+        {
+          "event": {
+            "op": "link-suspended"
+          },
+          "expected": {
+            "link": "suspended"
+          }
+        },
+        {
+          "event": {
+            "op": "report",
+            "sequence": "2"
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "not-attached"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.viewer-switch-detaches",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1000000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "observation": {
+              "mediaSession": "7",
+              "generation": "2",
+              "playerState": "playing",
+              "ticks": "1000000000"
+            }
+          },
+          "expected": {
+            "effect": "release-local",
+            "owner": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "phase": "active",
+              "candidate": null
+            },
+            "mediaSession": "7",
+            "commands": {
+              "owner": {
+                "server": "s",
+                "viewer": "v",
+                "device": "rcv",
+                "session": "c",
+                "generation": "2",
+                "kind": "cast"
+              },
+              "fresh": true
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "viewer-switch",
+            "identity": {
+              "server": "s",
+              "viewer": "w",
+              "device": "phone",
+              "session": "p3",
+              "generation": "3",
+              "kind": "local"
+            }
+          },
+          "expected": {
+            "effect": "detach",
+            "link": "idle",
+            "commands": null,
+            "owner": {
+              "phase": "active",
+              "candidate": null,
+              "owner": {
+                "viewer": "w"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.stale-candidate-target-is-refused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "0",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "reason": "invalid-target",
+            "owner": {
+              "phase": "active"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "w",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "reason": "invalid-target"
+          }
+        }
+      ]
+    }
+  ]
+}

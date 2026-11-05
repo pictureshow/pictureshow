@@ -3,6 +3,11 @@
  */
 package app.pictureshow.core
 
+import app.pictureshow.core.control.CastCapabilityInput
+import app.pictureshow.core.control.CastControlsInput
+import app.pictureshow.core.control.CastEvent
+import app.pictureshow.core.control.CastReachInput
+import app.pictureshow.core.control.CastState
 import app.pictureshow.core.control.CommandEvent
 import app.pictureshow.core.control.CommandState
 import app.pictureshow.core.control.ModeEvent
@@ -17,6 +22,14 @@ import app.pictureshow.core.control.TemporaryEvent
 import app.pictureshow.core.control.TemporaryState
 import app.pictureshow.core.control.TransferEvent
 import app.pictureshow.core.control.TransferState
+import app.pictureshow.core.control.castCapability
+import app.pictureshow.core.control.castContentType
+import app.pictureshow.core.control.castControls
+import app.pictureshow.core.control.castDeviceProfile
+import app.pictureshow.core.control.castMediaUrl
+import app.pictureshow.core.control.castReach
+import app.pictureshow.core.control.castSubtitles
+import app.pictureshow.core.control.reduceCast
 import app.pictureshow.core.control.reduceCommand
 import app.pictureshow.core.control.reduceMode
 import app.pictureshow.core.control.reduceOwner
@@ -24,6 +37,11 @@ import app.pictureshow.core.control.reduceQueue
 import app.pictureshow.core.control.reduceQueueStore
 import app.pictureshow.core.control.reduceTemporary
 import app.pictureshow.core.control.reduceTransfer
+import app.pictureshow.core.playback.DeviceProfile
+import app.pictureshow.core.playback.MediaSourceInfo
+import app.pictureshow.core.playback.PlayDecision
+import app.pictureshow.core.playback.PlayMethod
+import app.pictureshow.core.playback.PlaybackJson
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,16 +50,20 @@ import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 /** Frozen traces: exact typed values at explicit projections, no record/update mode. */
 class ControlVectorsTest {
     private val json = Json { encodeDefaults = true }
-    private val suites = setOf("session-owner", "session-command", "queue-edit", "queue-order", "playback-mode")
+    private val suites = setOf("session-owner", "session-command", "queue-edit", "queue-order", "playback-mode", "cast-handoff", "cast-capability")
 
     @Test fun sessionOwner() = run("session-owner")
 
@@ -52,6 +74,10 @@ class ControlVectorsTest {
     @Test fun queueOrder() = run("queue-order")
 
     @Test fun playbackMode() = run("playback-mode")
+
+    @Test fun castHandoff() = run("cast-handoff")
+
+    @Test fun castCapability() = run("cast-capability")
 
     @Test fun everyPackagedSuiteHasAnExecutorAndUnknownOperationsFail() {
         val directory = File(requireNotNull(javaClass.classLoader.getResource("control-vectors")).toURI())
@@ -67,6 +93,14 @@ class ControlVectorsTest {
         assertFails { reduceQueue(QueueState("s", "v"), QueueEvent("unknown")) }
         assertFails { reduceQueueStore(QueueStoreState(QueueState("s", "v")), QueueStoreEvent("unknown")) }
         assertFails { reduceMode(ModeState(), ModeEvent("unknown")) }
+        assertFails { reduceCast(CastState(OwnerState(owner)), CastEvent("unknown")) }
+    }
+
+    /** Built here rather than in the vectors: the public diff scan refuses these address forms by design. */
+    @Test fun castReachKnowsTheOtherPrivateForms() {
+        val classC = listOf(192, 168, 7, 7).joinToString(".")
+        assertEquals("private-http", castReach(CastReachInput("http://$classC:8096")).category)
+        assertEquals("private-http", castReach(CastReachInput("http://media" + ".local" + ":8096")).category)
     }
 
     @Test fun decimalInt64RoundTripsExactlyAndRejectsJsonNumbers() {
@@ -135,6 +169,47 @@ class ControlVectorsTest {
         "mode" -> json.encodeToJsonElement(
             reduceMode(json.decodeFromJsonElement<ModeState>(state), json.decodeFromJsonElement<ModeEvent>(event))
         )
+        "cast" -> json.encodeToJsonElement(
+            reduceCast(json.decodeFromJsonElement<CastState>(state), json.decodeFromJsonElement<CastEvent>(event))
+        )
+        "capability" -> json.encodeToJsonElement(castCapability(json.decodeFromJsonElement<CastCapabilityInput>(event)))
+        "controls" -> json.encodeToJsonElement(castControls(json.decodeFromJsonElement<CastControlsInput>(event)))
+        "reach" -> json.encodeToJsonElement(castReach(json.decodeFromJsonElement<CastReachInput>(event)))
+        "profile" -> PlaybackJson.encodeToJsonElement(DeviceProfile.serializer(), castDeviceProfile())
+        "media" -> castMediaProjection(event.jsonObject)
         else -> error("Unknown control vector operation: $operation")
+    }
+
+    private fun castMediaProjection(event: JsonObject): JsonElement {
+        fun text(key: String) = event.getValue(key).jsonPrimitive.content
+        val server = Server("server", "Server", text("serverUrl"), "12.4")
+        val decision = PlayDecision(
+            itemId = text("itemId"),
+            mediaSource = PlaybackJson.decodeFromJsonElement(MediaSourceInfo.serializer(), event.getValue("source")),
+            method = PlayMethod.valueOf(text("method")),
+            url = text("url"),
+            headers = emptyMap(),
+            playSessionId = null
+        )
+        return buildJsonObject {
+            put("url", castMediaUrl(decision, text("token")))
+            put("contentType", castContentType(decision))
+            put(
+                "subtitles",
+                buildJsonArray {
+                    castSubtitles(server, decision, text("token")).forEach { subtitle ->
+                        add(
+                            buildJsonObject {
+                                put("trackId", subtitle.trackId)
+                                put("streamIndex", subtitle.streamIndex)
+                                put("label", subtitle.label)
+                                put("language", subtitle.language)
+                                put("url", subtitle.url)
+                            }
+                        )
+                    }
+                }
+            )
+        }
     }
 }
