@@ -53,6 +53,8 @@ internal fun TouchPictureshow(
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
+    val offlineEngine = org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>()
+    LaunchedEffect(offlineEngine) { offlineEngine?.start() }
     val catalog =
         remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
             CatalogSession(catalogService, accounts) {
@@ -130,7 +132,7 @@ internal fun TouchPictureshow(
             installedExpired = expired
             installedToken = token
             accountInstalled = true
-            val destination = accountDestination(state.snapshot)
+            val destination = offlineStartRoute(accountDestination(state.snapshot), offlineEngine, state.snapshot.currentKey, context)
             nav.navigate(destination) {
                 popUpTo(nav.graph.id) { inclusive = true }
                 launchSingleTop = true
@@ -168,6 +170,7 @@ internal fun TouchPictureshow(
             consumeSearchEntry()
         }
         NavHost(navController = nav, startDestination = "waiting") {
+            offlineTouchScreens(nav, { state.snapshot.currentAccount }, { catalog })
             composable("waiting") { TouchPage("Pictureshow") { Text("Loading…") } }
             composable("servers") {
                 val vm: ServerViewModel = koinViewModel()

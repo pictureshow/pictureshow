@@ -373,7 +373,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 val client = PlaybackClient(http, clientIdentity)
                 extras = PlaybackExtrasClient(http, clientIdentity) { message -> Log.i("NextEpisode", message) }
                 tiles = TrickplayCache(http, account, clientIdentity, item.id)
-                val captionsEnabled = (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
+                val captionsEnabled = offline == null && (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
                 val configuration = if (captionsEnabled) {
                     (UserConfigurationClient(http, clientIdentity).configuration(account) as? ClientResult.Success)?.value
                 } else {

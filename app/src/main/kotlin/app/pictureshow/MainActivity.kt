@@ -358,6 +358,8 @@ internal fun Pictureshow(
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
+    val offlineEngine = org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>()
+    LaunchedEffect(offlineEngine) { offlineEngine?.start() }
     val catalog =
         remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
             CatalogSession(catalogService, accounts) {
@@ -387,7 +389,7 @@ internal fun Pictureshow(
         installedKey = key
         installedExpired = expired
         accountInstalled = true
-        val destination = accountDestination(state.snapshot)
+        val destination = offlineStartRoute(accountDestination(state.snapshot), offlineEngine, state.snapshot.currentKey, context)
         nav.navigate(destination) {
             popUpTo(nav.graph.id) { inclusive = true }
             launchSingleTop = true
@@ -829,10 +831,12 @@ internal fun Pictureshow(
                     onSignOut = profile::signOut,
                     onSearch = { nav.navigate(searchRoute()) },
                     onResume = vm::resumed,
-                    onSettings = { nav.navigate("settings") }
+                    onSettings = { nav.navigate("settings") },
+                    onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                 )
             }
         }
+        offlineTvScreens(nav, { state.snapshot.currentAccount }, { catalog })
         aboutScreens(nav)
         supporterScreen(nav)
         composable("this-tv") {
@@ -958,7 +962,10 @@ internal fun Pictureshow(
                         onPendingControlsReady = { exitHandoff?.live(entry.id, it) },
                         onPendingQueueExpired = { exitHandoff?.expired(entry.id) == true },
                         onPlayedRequest = vm::playedRequested,
-                        origin = item
+                        origin = item,
+                        onDownload = { shown, season, seasonName ->
+                            offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
+                        }
                     )
                 }
             }

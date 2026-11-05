@@ -145,7 +145,8 @@ fun CatalogHome(
     onSignOut: () -> Unit,
     onResume: () -> Unit = {},
     onSearch: () -> Unit = {},
-    onSettings: () -> Unit = {}
+    onSettings: () -> Unit = {},
+    onDownloads: (() -> Unit)? = null
 ) {
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
@@ -376,10 +377,18 @@ fun CatalogHome(
                             },
                             enabled = !state.busy,
                             modifier = target(Modifier, restoreAction == "settings").focusRequester(settingsFocus).testTag("home:settings")
-                                .staysInRow(first = false, last = true)
+                                .staysInRow(first = false, last = onDownloads == null)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Settings") }
+                        // Reachable with the server down: the home error above never hides the way to saved media.
+                        if (onDownloads != null) {
+                            Button(
+                                onClick = onDownloads,
+                                modifier = Modifier.testTag("home:downloads").staysInRow(first = false, last = true)
+                                    .onPreviewKeyEvent { headerDown(it) }
+                            ) { Text("Downloads") }
+                        }
                     }
                     Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CatalogHeading("Pictureshow")
@@ -716,7 +725,8 @@ fun CatalogDetail(
     onPendingControlsReady: (Boolean) -> Unit = {},
     onPendingQueueNeeded: () -> Unit = {},
     onPendingQueueExpired: (() -> Boolean)? = null,
-    onPlayedRequest: () -> Unit = {}
+    onPlayedRequest: () -> Unit = {},
+    onDownload: ((MediaItem, String?, String?) -> Unit)? = null
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     DisposableEffect(Unit) {
@@ -1666,6 +1676,11 @@ fun CatalogDetail(
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
+                                        onDownload = onDownload?.let { open ->
+                                            {
+                                                open(item, state.selectedSeasonId, state.seasons.firstOrNull { it.id == state.selectedSeasonId }?.name)
+                                            }
+                                        },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null)
                                     ) {
                                         if (trackSelection) selectedSection = "header"
@@ -1706,6 +1721,11 @@ fun CatalogDetail(
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
+                                        onDownload = onDownload?.let { open ->
+                                            {
+                                                open(item, state.selectedSeasonId, state.seasons.firstOrNull { it.id == state.selectedSeasonId }?.name)
+                                            }
+                                        },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null)
                                     ) {
                                         if (trackSelection) selectedSection = "header"
@@ -2249,6 +2269,7 @@ private fun DetailActions(
     readyCancelled: Boolean = false,
     fromStartFocus: FocusRequester? = null,
     blocked: Boolean = false,
+    onDownload: (() -> Unit)? = null,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
@@ -2538,6 +2559,11 @@ private fun DetailActions(
                         Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite"))
                     )
                 }
+            }
+        }
+        if (onDownload != null && pending == null) {
+            key("download") {
+                Button(onClick = { if (!blocked) onDownload() }, enabled = !blocked, modifier = Modifier.testTag("detail:download")) { Text("Download") }
             }
         }
         if (stableLayout) {

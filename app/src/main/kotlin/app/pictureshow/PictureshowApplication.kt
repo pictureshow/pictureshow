@@ -63,6 +63,15 @@ class PictureshowApplication : Application() {
                     single { AccountStore(AccountPersistence(get())) }
                     single { DeviceIdentityStore(get()) }
                     single { PlaybackPreferencesStore(get()) }
+                    single {
+                        val store = get<DeviceIdentityStore>()
+                        OfflineEngine(
+                            this@PictureshowApplication,
+                            get(),
+                            { app.pictureshow.core.ClientIdentity(deviceDisplayName(this@PictureshowApplication), store.getOrCreate(), BuildConfig.VERSION_NAME) },
+                            AndroidOfflineForeground(this@PictureshowApplication)
+                        )
+                    }
                     single<ServerDiscovery> { JvmServerDiscovery() }
                     single {
                         val name = deviceDisplayName(this@PictureshowApplication)
