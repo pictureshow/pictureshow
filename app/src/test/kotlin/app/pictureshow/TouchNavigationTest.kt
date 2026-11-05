@@ -143,6 +143,7 @@ class TouchNavigationTest {
             modules(
                 module {
                     single { inertRemoteController() }
+                    single { inertCastSender() }
                     single { accounts }
                     single<JellyfinService> { service }
                     single<CatalogService> { catalog }

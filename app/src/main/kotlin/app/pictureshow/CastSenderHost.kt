@@ -75,7 +75,11 @@ internal class CastPlayRequest(
     val mediaSourceId: String? = null,
     val audioStreamIndex: Int? = null,
     val subtitleStreamIndex: Int? = null,
-    val local: CastLocalOutput? = null
+    val local: CastLocalOutput? = null,
+    /** What "This device" does in the chooser; null when this device is already playing it. */
+    val onThisDevice: (() -> Unit)? = null,
+    /** Runs after a Jellyfin device is attached from this same chooser. */
+    val onJellyfinPick: (() -> Unit)? = null
 )
 
 internal data class CastPlayItem(
@@ -198,7 +202,12 @@ internal class CastSenderHost(
     private var lastStatus: CastStatus? = null
     private var awaitingReattach = false
 
+    private var startPausedItem: String? = null
+
     private val cast get() = mutable.value.cast
+
+    /** What the open chooser was opened to play, if anything. */
+    val chooserRequest: CastPlayRequest? get() = request
 
     fun bind(next: Account?) {
         val usable = next?.takeUnless { it.expired }
@@ -831,6 +840,7 @@ internal class CastSenderHost(
             link?.endSession(stopReceiver = true)
         }
         val output = request?.local.takeIf { localAlive }
+        startPausedItem = itemId.takeIf { output == null && state.owner.intent.paused }
         mutable.update { CastUi(capability = it.capability, localStart = if (output == null) start else null) }
         // After a failed handoff the player is still open, paused where it was.
         output?.resume()
@@ -841,6 +851,9 @@ internal class CastSenderHost(
     fun localStartHandled(serial: Long) {
         mutable.update { if (it.localStart?.serial == serial) it.copy(localStart = null) else it }
     }
+
+    /** True once, for the player that Play here opened on a viewing that was paused. */
+    fun consumeStartPaused(itemId: String): Boolean = (startPausedItem == itemId).also { if (it) startPausedItem = null }
 
     /** The player screen went away, so Resume here has to open a new one. */
     fun localClosed(output: CastLocalOutput) {

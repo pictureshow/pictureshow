@@ -286,7 +286,28 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
     }
 
-    private fun launch(paused: Boolean = false) {
+    @Test
+    fun playOnOpensTheChooserForThisPlayerAtItsPosition() {
+        val sender = inertCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        compose.onNodeWithTag("touch:play-on").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        compose.runOnIdle {
+            assertTrue(sender.state.value.chooserOpen)
+            val request = requireNotNull(sender.chooserRequest)
+            assertEquals("movie", request.items.single().id)
+            assertEquals(output.position().milliseconds, request.startMs, "where this player is, not where it opened")
+            assertTrue(request.local != null, "a handoff from this player has to be able to stop it")
+        }
+    }
+
+    @Test
+    fun aPlayerWithoutTheSenderOffersNoPlayOn() {
+        launch()
+        compose.onNodeWithTag("touch:stop").assertHasClickAction()
+        compose.onNodeWithTag("touch:play-on").assertDoesNotExist()
+    }
+
+    private fun launch(paused: Boolean = false, cast: TouchPlayerCast? = null) {
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
             decoder = Decoder(!paused)
@@ -296,7 +317,11 @@ class TouchPlayerControlsTest {
             host.duration = 60_000
             host.metadata = host.item.copy(chapters = listOf(Chapter(0, "Opening"), Chapter(300_000_000, "Middle")))
         }
-        compose.setContent { MaterialTheme(colorScheme = darkColorScheme()) { TouchPlayerContent(account, host) } }
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalTouchPlayerCast provides cast) { TouchPlayerContent(account, host) }
+            }
+        }
     }
 
     private class Decoder(playing: Boolean) : SimpleBasePlayer(Looper.getMainLooper()) {
