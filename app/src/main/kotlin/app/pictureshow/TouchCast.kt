@@ -69,6 +69,7 @@ internal fun castRecoveryMessage(recovery: String?, device: String): String = wh
     "receiver-timeout" -> "$device didn't start in time."
     "receiver-interrupted" -> "Something else started on $device."
     "server-unreachable" -> "Couldn't reach your server."
+    "quick-connect-off" -> "Casting needs Quick Connect, and it's off on this server. Its admin can turn it on in the server's settings."
     "link-lost" -> "Lost the connection to $device."
     "cancelled" -> "Cancelled."
     else -> "Couldn't play on $device."

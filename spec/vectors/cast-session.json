@@ -1452,6 +1452,517 @@
       ]
     },
     {
+      "id": "cast-session.sign-out-with-a-stale-generation-still-revokes",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "active",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "sign-out",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "9"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-persist",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "persist-revocation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.sign-out-with-a-stale-sender-still-revokes",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "active",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "sign-out",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "other",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-persist",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "persist-revocation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.viewer-change-with-a-stale-generation-still-revokes",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "active",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "viewer-change",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "9"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-persist",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "persist-revocation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.forget-with-a-stale-sender-still-revokes",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "active",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "forget",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "other",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-persist",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "persist-revocation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.a-stale-stop-is-surfaced-and-still-revokes",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "active",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "stop-confirmed",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "9"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-persist",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "persist-revocation",
+            "reason": "stale-binding"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.second-end-while-revoking-keeps-the-logout",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "revoking",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "sign-out",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "revoking",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "logout-ok",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [],
+            "effect": "erase-secret"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.second-end-while-pending-revoke-stays-pending",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "pending-revoke",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "stop-confirmed",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-revoke",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "reconnect",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "revoking",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "logout"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.second-end-while-pending-persist-stays",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "pending-persist",
+            "secretRef": "ref"
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "forget",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-persist",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "persisted",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "revoking",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "logout"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.second-end-while-waiting-for-the-issue-changes-nothing",
+      "operation": "session",
+      "state": {
+        "records": [
+          {
+            "server": "s",
+            "viewer": "v",
+            "device": "cast-d",
+            "sender": "this-sender",
+            "generation": "4",
+            "phase": "cancelled-creating",
+            "secretRef": null
+          }
+        ],
+        "effect": "none"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "cancel",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            }
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "cancelled-creating",
+                "secretRef": null
+              }
+            ],
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "issued",
+            "binding": {
+              "server": "s",
+              "viewer": "v",
+              "device": "cast-d",
+              "sender": "this-sender",
+              "generation": "4"
+            },
+            "returnedViewer": "v",
+            "secretRef": "ref"
+          },
+          "expected": {
+            "records": [
+              {
+                "server": "s",
+                "viewer": "v",
+                "device": "cast-d",
+                "sender": "this-sender",
+                "generation": "4",
+                "phase": "pending-persist",
+                "secretRef": "ref"
+              }
+            ],
+            "effect": "persist-revocation"
+          }
+        }
+      ]
+    },
+    {
       "id": "cast-session.ending-twice-has-nothing-left-to-end",
       "operation": "session",
       "state": {
@@ -1477,6 +1988,96 @@
       ]
     },
     {
+      "id": "cast-session.stored-route-missing-is-foreign",
+      "operation": "reattach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "server": "s",
+            "viewer": "v",
+            "mediaSession": "7",
+            "playerState": "playing",
+            "customData": {
+              "nonce": "n1",
+              "generation": "4",
+              "entry": "0:i"
+            },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "",
+            "record": {
+              "nonce": "n1",
+              "server": "s",
+              "viewer": "v",
+              "route": "",
+              "device": "cast-d",
+              "session": "cast-3",
+              "generation": "4",
+              "items": [
+                {
+                  "entry": "0:i",
+                  "itemId": "i",
+                  "mediaSourceId": "m",
+                  "playSessionId": "p",
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "decision": "foreign",
+            "reason": "route"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.stored-url-missing-is-foreign",
+      "operation": "reattach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "server": "s",
+            "viewer": "v",
+            "mediaSession": "7",
+            "playerState": "playing",
+            "customData": {
+              "nonce": "n1",
+              "generation": "4",
+              "entry": "0:i"
+            },
+            "contentUrl": "",
+            "route": "r",
+            "record": {
+              "nonce": "n1",
+              "server": "s",
+              "viewer": "v",
+              "route": "r",
+              "device": "cast-d",
+              "session": "cast-3",
+              "generation": "4",
+              "items": [
+                {
+                  "entry": "0:i",
+                  "itemId": "i",
+                  "mediaSourceId": "m",
+                  "playSessionId": "p",
+                  "method": "Transcode",
+                  "url": ""
+                }
+              ]
+            }
+          },
+          "expected": {
+            "decision": "foreign",
+            "reason": "url"
+          }
+        }
+      ]
+    },
+    {
       "id": "cast-session.reattach-our-own-media",
       "operation": "reattach",
       "state": {},
@@ -1492,6 +2093,8 @@
               "generation": "4",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1506,7 +2109,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1534,7 +2138,9 @@
               "nonce": "n1",
               "generation": "4",
               "entry": "0:i"
-            }
+            },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r"
           },
           "expected": {
             "decision": "foreign",
@@ -1559,6 +2165,8 @@
               "generation": "4",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1573,7 +2181,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1601,6 +2210,8 @@
               "generation": "4",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1615,7 +2226,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1643,6 +2255,8 @@
               "generation": "4",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1657,7 +2271,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1684,6 +2299,8 @@
               "generation": "4",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1698,7 +2315,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1728,6 +2346,8 @@
               "item": "planted",
               "playSession": "planted"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1742,7 +2362,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1770,6 +2391,8 @@
               "generation": "4",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1784,7 +2407,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1812,6 +2436,8 @@
               "generation": "5",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1826,7 +2452,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1854,6 +2481,8 @@
               "generation": "9223372036854775807",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1868,7 +2497,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1896,6 +2526,8 @@
               "generation": "-1",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1910,7 +2542,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1938,6 +2571,8 @@
               "generation": "4x",
               "entry": "0:i"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1952,7 +2587,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }
@@ -1960,6 +2596,186 @@
           "expected": {
             "decision": "foreign",
             "reason": "generation"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.replayed-nonce-with-another-url-is-foreign",
+      "operation": "reattach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "server": "s",
+            "viewer": "v",
+            "mediaSession": "7",
+            "playerState": "playing",
+            "customData": {
+              "nonce": "n1",
+              "generation": "4",
+              "entry": "0:i"
+            },
+            "contentUrl": "http://y/planted.mp4",
+            "route": "r",
+            "record": {
+              "nonce": "n1",
+              "server": "s",
+              "viewer": "v",
+              "route": "r",
+              "device": "cast-d",
+              "session": "cast-3",
+              "generation": "4",
+              "items": [
+                {
+                  "entry": "0:i",
+                  "itemId": "i",
+                  "mediaSourceId": "m",
+                  "playSessionId": "p",
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "decision": "foreign",
+            "reason": "url"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.replayed-nonce-without-a-url-is-foreign",
+      "operation": "reattach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "server": "s",
+            "viewer": "v",
+            "mediaSession": "7",
+            "playerState": "playing",
+            "customData": {
+              "nonce": "n1",
+              "generation": "4",
+              "entry": "0:i"
+            },
+            "contentUrl": null,
+            "route": "r",
+            "record": {
+              "nonce": "n1",
+              "server": "s",
+              "viewer": "v",
+              "route": "r",
+              "device": "cast-d",
+              "session": "cast-3",
+              "generation": "4",
+              "items": [
+                {
+                  "entry": "0:i",
+                  "itemId": "i",
+                  "mediaSourceId": "m",
+                  "playSessionId": "p",
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "decision": "foreign",
+            "reason": "url"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.replayed-nonce-on-another-route-is-foreign",
+      "operation": "reattach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "server": "s",
+            "viewer": "v",
+            "mediaSession": "7",
+            "playerState": "playing",
+            "customData": {
+              "nonce": "n1",
+              "generation": "4",
+              "entry": "0:i"
+            },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "other",
+            "record": {
+              "nonce": "n1",
+              "server": "s",
+              "viewer": "v",
+              "route": "r",
+              "device": "cast-d",
+              "session": "cast-3",
+              "generation": "4",
+              "items": [
+                {
+                  "entry": "0:i",
+                  "itemId": "i",
+                  "mediaSourceId": "m",
+                  "playSessionId": "p",
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "decision": "foreign",
+            "reason": "route"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-session.reattach-with-no-route-joined-is-foreign",
+      "operation": "reattach",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "server": "s",
+            "viewer": "v",
+            "mediaSession": "7",
+            "playerState": "playing",
+            "customData": {
+              "nonce": "n1",
+              "generation": "4",
+              "entry": "0:i"
+            },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": null,
+            "record": {
+              "nonce": "n1",
+              "server": "s",
+              "viewer": "v",
+              "route": "r",
+              "device": "cast-d",
+              "session": "cast-3",
+              "generation": "4",
+              "items": [
+                {
+                  "entry": "0:i",
+                  "itemId": "i",
+                  "mediaSourceId": "m",
+                  "playSessionId": "p",
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "decision": "foreign",
+            "reason": "route"
           }
         }
       ]
@@ -1980,6 +2796,8 @@
               "generation": "4",
               "entry": "0:planted"
             },
+            "contentUrl": "http://x/Videos/i/stream?static=true&ApiKey=t",
+            "route": "r",
             "record": {
               "nonce": "n1",
               "server": "s",
@@ -1994,7 +2812,8 @@
                   "itemId": "i",
                   "mediaSourceId": "m",
                   "playSessionId": "p",
-                  "method": "Transcode"
+                  "method": "Transcode",
+                  "url": "http://x/Videos/i/stream"
                 }
               ]
             }

@@ -8,6 +8,11 @@ import app.pictureshow.core.ClientResult
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import app.pictureshow.core.control.CastSenderVpn
+import app.pictureshow.core.control.CastStoredSessions
+import app.pictureshow.core.control.CastViewedItem
+import app.pictureshow.core.control.CastViewingRecord
+import app.pictureshow.core.control.TemporarySession
+import app.pictureshow.core.control.TemporaryState
 import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType
@@ -33,6 +38,9 @@ private val ACCOUNT = Account(Server("server", "Server", "http://server.example/
 private val ROUTE = CastRoute("provider:route-abcd", "Living room")
 private const val ITEM = "item-1"
 private const val ENTRY = "0:item-1"
+private const val SESSION_TOKEN = "cast-session-token"
+private const val SESSION_DEVICE = "cast-device"
+private const val MEDIA_URL = "http://server.example/jf/Videos/item-1/stream"
 
 private class FakeLink(private val log: MutableList<String>) : CastLink {
     override val routes = MutableStateFlow(listOf(ROUTE))
@@ -57,6 +65,9 @@ private class FakeLink(private val log: MutableList<String>) : CastLink {
     override fun select(routeId: String) {
         log += "select"
     }
+
+    var joined: String? = ROUTE.id
+    override fun joinedRoute() = joined
 
     override fun endSession(stopReceiver: Boolean) {
         log += "end:$stopReceiver"
@@ -115,25 +126,51 @@ private class FakeEnvironment(private val log: MutableList<String>) : CastEnviro
 
     override var enabled = true
     override var mayBeLive = false
+    override var sessions = CastStoredSessions()
+    override var viewing: CastViewingRecord? = null
 }
 
 private class FakeGateway(private val log: MutableList<String>) : CastMediaGateway {
     var outcome: ClientResult<PlayOutcome>? = null
     val reports = mutableListOf<String>()
+    val callers = mutableListOf<String>()
+    val items = mutableListOf<String>()
+    var issue: CastSessionIssue = CastSessionIssue.Issued(ACCOUNT.copy(accessToken = SESSION_TOKEN, deviceId = SESSION_DEVICE))
+    var revokes = true
+
+    override suspend fun sessionDevice(account: Account, route: String) = SESSION_DEVICE
+
+    override suspend fun provisionSession(account: Account, deviceId: String): CastSessionIssue {
+        log += "provision:${account.accessToken}"
+        return issue
+    }
+
+    override suspend fun revokeSession(session: Account): Boolean {
+        log += "revoke:${session.accessToken}"
+        return revokes
+    }
+
     override suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome> {
         log += "prepare:$startMs"
+        callers += account.accessToken
         return outcome ?: ClientResult.Success(PlayOutcome.Play(decision(itemId)))
     }
 
     override suspend fun reportStart(account: Account, report: CastReport) {
+        callers += account.accessToken
+        items += report.itemId
         reports += "start:${report.positionTicks}"
     }
 
     override suspend fun reportProgress(account: Account, report: CastReport) {
+        callers += account.accessToken
+        items += report.itemId
         reports += "progress:${report.positionTicks}:${report.paused}"
     }
 
     override suspend fun reportStopped(account: Account, report: CastReport) {
+        callers += account.accessToken
+        items += report.itemId
         reports += "stopped:${report.positionTicks}"
     }
 
@@ -206,7 +243,10 @@ class CastSenderHostTest {
         positionMs = positionMs,
         durationMs = 600_000,
         customData = buildMap {
-            generation?.let { put("generation", it.toString()) }
+            generation?.let {
+                put("generation", it.toString())
+                link.request?.items?.firstOrNull()?.customData?.get("nonce")?.let { nonce -> put("nonce", nonce) }
+            }
             put("entry", ENTRY)
             putAll(extra)
         },
@@ -516,55 +556,308 @@ class CastSenderHostTest {
         assertEquals("link-lost", second.state.value.cast!!.notice)
     }
 
-    @Test fun afterProcessDeathOnlyOurOwnMediaReattaches() = runTest {
+    private val stored = CastViewingRecord(
+        nonce = "stored-nonce",
+        server = "server",
+        viewer = "me",
+        route = ROUTE.id,
+        device = SESSION_DEVICE,
+        session = "cast-39",
+        generation = 40,
+        items = listOf(CastViewedItem(ENTRY, ITEM, "source", "ps", "Transcode", MEDIA_URL)),
+        title = "A film",
+        deviceName = "Living room"
+    )
+
+    private val storedSession = TemporarySession("server", "me", SESSION_DEVICE, "this-sender", 40, "active", "ref")
+
+    /** What a process death leaves behind: the record, the session and nothing in memory. */
+    private fun afterProcessDeath() {
         environment.mayBeLive = true
+        environment.viewing = stored
+        environment.sessions = CastStoredSessions(
+            TemporaryState(listOf(storedSession)),
+            mapOf("ref" to ACCOUNT.copy(accessToken = SESSION_TOKEN, deviceId = SESSION_DEVICE))
+        )
+    }
+
+    private fun receiverData(vararg extra: Pair<String, String>) =
+        mapOf("nonce" to "stored-nonce", "generation" to "40", "entry" to ENTRY) + extra
+
+    private fun TestScope.reattaching(data: Map<String, String>, url: String? = "$MEDIA_URL?static=true&ApiKey=x"): CastSenderHost {
+        afterProcessDeath()
         val host = host()
         host.setForeground(true)
         runCurrent()
-        assertEquals(1, environment.linkBuilds)
         link.sink!!.onConnected("Living room")
-        assertTrue("status" in log)
-        link.sink!!.onStatus(
-            status(
-                "playing",
-                positionMs = 30_000,
-                generation = 40,
-                extra = mapOf(
-                    "server" to "server",
-                    "viewer" to "me",
-                    "device" to ROUTE.id,
-                    "session" to "cast-39",
-                    "item" to ITEM,
-                    "method" to "Transcode",
-                    "source" to "source",
-                    "playSession" to "ps"
-                )
-            )
-        )
+        link.sink!!.onStatus(status("playing", positionMs = 30_000).copy(customData = data, contentUrl = url))
         runCurrent()
+        return host
+    }
+
+    @Test fun afterProcessDeathOnlyOurOwnMediaReattaches() = runTest {
+        val host = reattaching(receiverData("item" to "planted", "playSession" to "planted", "source" to "planted"))
+        assertEquals(1, environment.linkBuilds)
         val cast = host.state.value.cast!!
         assertEquals("cast", cast.owner.owner.kind)
         assertEquals(40, cast.owner.owner.generation)
         assertEquals("active", cast.owner.phase)
         assertEquals(300_000_000, cast.observed!!.ticks)
         host.stop()
-        link.sink!!.onStatus(status("idle", generation = 40, reason = "cancelled"))
+        link.sink!!.onStatus(status("idle", reason = "cancelled").copy(customData = receiverData()))
         runCurrent()
-        assertTrue(gateway.reports.contains("encoding:ps"), "cleanup still has what it needs")
+        assertTrue(gateway.reports.contains("encoding:ps"), "cleanup reports what we stored, not what the receiver claims")
+        assertEquals(setOf(ITEM), gateway.items.toSet())
+        assertEquals(setOf(SESSION_TOKEN), gateway.callers.toSet())
+        assertTrue("revoke:$SESSION_TOKEN" in log)
     }
 
-    @Test fun afterProcessDeathSomeoneElsesViewingIsNotTaken() = runTest {
-        environment.mayBeLive = true
-        val host = host()
-        host.setForeground(true)
-        runCurrent()
-        link.sink!!.onConnected(null)
-        link.sink!!.onStatus(
-            status("playing", generation = 40, extra = mapOf("server" to "server", "viewer" to "someone-else"))
-        )
-        runCurrent()
+    private fun assertForeign(host: CastSenderHost) {
         assertNull(host.state.value.cast)
         assertFalse(environment.mayBeLive)
+        assertEquals(listOf("end:false"), log.filter { it == "stop" || it.startsWith("end") })
+        assertEquals(emptyList(), gateway.reports)
+    }
+
+    @Test fun craftedCustomDataIsForeignAndNeverReported() = runTest {
+        val host = reattaching(
+            mapOf(
+                "generation" to "40",
+                "server" to "server",
+                "viewer" to "me",
+                "entry" to ENTRY,
+                "item" to "planted",
+                "playSession" to "planted"
+            )
+        )
+        assertForeign(host)
+    }
+
+    @Test fun replayedNonceWithAnotherUrlIsForeign() = runTest {
+        assertForeign(reattaching(receiverData(), url = "http://elsewhere.example/planted.mp4"))
+    }
+
+    @Test fun replayedNonceWithNoUrlIsForeign() = runTest {
+        assertForeign(reattaching(receiverData(), url = null))
+    }
+
+    @Test fun replayedNonceOnAnotherRouteIsForeign() = runTest {
+        link.joined = "provider:another"
+        assertForeign(reattaching(receiverData()))
+    }
+
+    @Test fun foreignMediaRevokesTheSessionWeStillHeld() = runTest {
+        reattaching(receiverData("nonce" to "someone-elses"))
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+        assertNull(environment.viewing)
+        assertEquals(emptyList(), environment.sessions.state.records)
+        assertEquals(emptyMap(), environment.sessions.secrets)
+    }
+
+    @Test fun withNoSessionToResumeTheViewingIsStillOfferedAndCanBeEnded() = runTest {
+        afterProcessDeath()
+        val host = host()
+        host.setForeground(true)
+        advanceTimeBy(CAST_SEARCH_MS + 1)
+        runCurrent()
+        val cast = host.state.value.cast!!
+        assertEquals("disconnected", cast.owner.phase)
+        assertEquals("A film", host.state.value.title)
+        assertFalse("revoke:$SESSION_TOKEN" in log, "it may still be playing")
+        host.dismiss()
+        runCurrent()
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+    }
+
+    @Test fun theReceiverGetsItsOwnSessionNeverTheViewersToken() = runTest {
+        val host = host()
+        casting(host)
+        host.stop()
+        link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertTrue("provision:secret-token" in log, "only approving the session uses the viewer's token")
+        assertEquals(setOf(SESSION_TOKEN), gateway.callers.toSet())
+        assertFalse("secret-token" in link.request.toString())
+        val item = link.request!!.items.single()
+        assertFalse("secret-token" in item.url)
+        assertFalse(item.tracks.any { "secret-token" in it.url })
+    }
+
+    @Test fun onlyWhatAReattachComparesIsOnTheReceiver() = runTest {
+        val host = host()
+        handoff(host)
+        assertEquals(setOf("app", "nonce", "generation", "entry"), link.request!!.items.single().customData.keys)
+        val record = environment.viewing!!
+        assertEquals(ROUTE.id, record.route)
+        assertEquals(SESSION_DEVICE, record.device)
+        assertEquals(MEDIA_URL, record.items.single().url)
+        assertFalse(SESSION_TOKEN in record.toString())
+        assertFalse(host.state.value.toString().contains(SESSION_TOKEN))
+    }
+
+    @Test fun stoppingRevokesOnlyAfterTheLastReport() = runTest {
+        val host = host()
+        casting(host)
+        log.clear()
+        host.stop()
+        link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertTrue(gateway.reports.any { it.startsWith("stopped") })
+        assertEquals(listOf("revoke:$SESSION_TOKEN"), log.filter { it.startsWith("revoke") })
+        assertEquals(emptyList(), environment.sessions.state.records)
+        assertEquals(emptyMap(), environment.sessions.secrets)
+        assertNull(environment.viewing)
+    }
+
+    @Test fun aFailedLoadRevokes() = runTest {
+        val host = host()
+        link.loadResult = false
+        handoff(host)
+        runCurrent()
+        assertEquals("unsupported-media", host.state.value.cast!!.recovery)
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+        assertEquals(emptyList(), environment.sessions.state.records)
+    }
+
+    @Test fun aLoadTimeoutRevokes() = runTest {
+        val host = host()
+        link.loadResult = null
+        handoff(host)
+        advanceTimeBy(CAST_LOAD_TIMEOUT_MS + 1)
+        runCurrent()
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+    }
+
+    @Test fun disconnectKeepsTheSessionForTheReceiver() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        assertFalse("revoke:$SESSION_TOKEN" in log)
+        assertEquals("active", environment.sessions.state.records.single().phase)
+    }
+
+    @Test fun anUnconfirmedStopKeepsTheSessionUntilTheViewerChooses() = runTest {
+        val host = host()
+        casting(host)
+        host.stop()
+        advanceTimeBy(CAST_STOP_TIMEOUT_MS + 1)
+        runCurrent()
+        assertFalse("revoke:$SESSION_TOKEN" in log, "it may still be playing")
+        host.resumeHere(confirmed = true)
+        runCurrent()
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+    }
+
+    @Test fun quickConnectOffRefusesTheCastAndNeverFallsBackToTheViewersToken() = runTest {
+        gateway.issue = CastSessionIssue.QuickConnectOff
+        val host = host()
+        handoff(host)
+        runCurrent()
+        assertEquals("quick-connect-off", host.state.value.cast!!.recovery)
+        assertFalse("load" in log)
+        assertNull(link.request)
+        assertEquals(emptyList(), environment.sessions.state.records)
+        assertTrue("Quick Connect" in castRecoveryMessage("quick-connect-off", "Living room"))
+    }
+
+    @Test fun aFailedSessionNeverFallsBackToTheViewersToken() = runTest {
+        gateway.issue = CastSessionIssue.Failed
+        val host = host()
+        handoff(host)
+        runCurrent()
+        assertEquals("server-unreachable", host.state.value.cast!!.recovery)
+        assertNull(link.request)
+    }
+
+    @Test fun signingOutStopsTheReceiverAndRevokes() = runTest {
+        val host = host()
+        casting(host)
+        log.clear()
+        gateway.reports.clear()
+        host.bind(null)
+        runCurrent()
+        assertEquals(listOf("stop", "end:true"), log.filter { it == "stop" || it.startsWith("end") })
+        assertTrue(gateway.reports.any { it.startsWith("stopped") })
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+        assertNull(host.state.value.cast)
+        assertNull(environment.viewing)
+    }
+
+    @Test fun changingAccountStopsTheReceiverAndRevokes() = runTest {
+        val host = host()
+        casting(host)
+        log.clear()
+        host.bind(ACCOUNT.copy(user = User("someone-else", "Bo")))
+        runCurrent()
+        assertTrue("stop" in log)
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+    }
+
+    @Test fun signingOutWhileDetachedRejoinsToStopOnlyOurOwnMedia() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        val nonce = link.request!!.items.single().customData.getValue("nonce")
+        val url = link.request!!.items.single().url
+        log.clear()
+        host.bind(null)
+        runCurrent()
+        assertTrue("select" in log, "revoking alone doesn't stop a file the server serves without a token")
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+        link.sink!!.onConnected(null)
+        link.sink!!.onStatus(
+            status("playing").copy(customData = mapOf("nonce" to nonce, "generation" to "0", "entry" to ENTRY), contentUrl = url)
+        )
+        assertFalse("stop" in log, "a claim that doesn't match what we stored isn't stopped")
+        assertEquals(listOf("end:false"), log.filter { it.startsWith("end") })
+    }
+
+    @Test fun aRevocationThatCantReachTheServerStaysPendingAndGoesFirstNextTime() = runTest {
+        val host = host()
+        casting(host)
+        gateway.revokes = false
+        host.stop()
+        link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertEquals("pending-revoke", environment.sessions.state.records.single().phase)
+        assertEquals(1, environment.sessions.secrets.size, "kept until the server has it")
+        gateway.revokes = true
+        log.clear()
+        host.bind(ACCOUNT)
+        runCurrent()
+        assertEquals(listOf("revoke:$SESSION_TOKEN"), log.filter { it.startsWith("revoke") })
+        assertEquals(emptyList(), environment.sessions.state.records)
+        assertEquals(emptyMap(), environment.sessions.secrets)
+    }
+
+    @Test fun aNewCastCleansUpBeforeAnotherSessionAndRefusesIfItCant() = runTest {
+        val host = host()
+        casting(host)
+        gateway.revokes = false
+        host.stop()
+        link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        host.dismiss()
+        log.clear()
+        handoff(host)
+        runCurrent()
+        assertFalse(log.any { it.startsWith("provision") }, "the old session is still alive and nothing can replace it yet")
+        assertEquals("server-unreachable", host.state.value.cast!!.recovery)
+    }
+
+    @Test fun aStatusClaimingOurGenerationWithoutOurNonceIsNotOurs() = runTest {
+        val host = host()
+        casting(host)
+        link.sink!!.onStatus(
+            status("playing", session = 30).copy(
+                customData = mapOf("generation" to host.generation().toString(), "entry" to ENTRY),
+                contentUrl = "http://elsewhere.example/planted.mp4"
+            )
+        )
+        runCurrent()
+        assertEquals("receiver-taken", host.state.value.cast!!.notice)
         assertEquals(listOf("end:false"), log.filter { it == "stop" || it.startsWith("end") })
     }
 
@@ -648,13 +941,14 @@ class CastSenderHostTest {
         val host = host()
         handoff(host)
         val item = link.request!!.items.single()
-        assertTrue("ApiKey=secret-token" in item.url, "the receiver can't send a header")
-        assertTrue("ApiKey=secret-token" in item.tracks.single().url)
-        assertFalse("secret-token" in item.customData.values.joinToString())
-        assertFalse("secret-token" in item.toString())
-        assertFalse("secret-token" in item.tracks.single().toString())
-        assertFalse("secret-token" in CastStatus(contentUrl = item.url).toString())
-        assertFalse("secret-token" in host.state.value.toString())
+        assertTrue("ApiKey=$SESSION_TOKEN" in item.url, "the receiver can't send a header")
+        assertTrue("ApiKey=$SESSION_TOKEN" in item.tracks.single().url)
+        assertFalse(SESSION_TOKEN in item.customData.values.joinToString())
+        assertFalse(SESSION_TOKEN in item.toString())
+        assertFalse(SESSION_TOKEN in item.tracks.single().toString())
+        assertFalse(SESSION_TOKEN in CastStatus(contentUrl = item.url).toString())
+        assertFalse(SESSION_TOKEN in host.state.value.toString())
+        assertFalse(SESSION_TOKEN in environment.sessions.toString(), "an account prints without its token")
     }
 
     @Test fun queueEntriesStayDistinctWhenTheSameItemRepeats() = runTest {

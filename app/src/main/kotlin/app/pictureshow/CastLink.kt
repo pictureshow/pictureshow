@@ -69,6 +69,9 @@ internal interface CastLink {
     fun startDiscovery()
     fun stopDiscovery()
     fun select(routeId: String)
+
+    /** The route currently joined, from this side of the link: a receiver's status can't say this. */
+    fun joinedRoute(): String?
     fun endSession(stopReceiver: Boolean)
     fun load(request: CastLoadRequest, onResult: (Boolean) -> Unit)
     fun play(onResult: (Boolean) -> Unit)
