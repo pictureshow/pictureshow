@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -29,13 +30,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.control.RemoteNowPlaying
 import app.pictureshow.core.control.RemoteTarget
@@ -106,7 +110,8 @@ internal fun TouchRemoteBar(state: RemoteControllerUi, nowMs: Long, onOpen: () -
                 LiveRegionMode.Polite
         }
     ) {
-        Text("${remoteTargetLabel(target)}: $line")
+        // One line whatever it says, so the bar's height never moves what is around it.
+        Text("${remoteTargetLabel(target)}: $line", maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -145,15 +150,8 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
             Button(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp).testTag("remote:choose")) { Text("Choose a TV") }
             return@Column
         }
-        if (status != null) {
-            Text(status, modifier = Modifier.testTag("remote:status").semantics { liveRegion = LiveRegionMode.Polite })
-        }
-        if (attached && !ready) Text("Checking the TV…", modifier = Modifier.testTag("remote:checking"))
-        if (now == null) {
-            if (attached && ready) Text("Nothing is playing on this TV.", modifier = Modifier.testTag("remote:idle"))
-        } else {
-            RemoteTransport(now, ready, host)
-        }
+        RemoteStatusSlot(status, attached, ready, now == null)
+        now?.let { RemoteTransport(it, ready, host) }
         if ("MoveUp" in target.commands) RemoteDpad(ready, host)
         if ("SendString" in target.commands) RemoteText(ready, host)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -168,14 +166,35 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
     }
 }
 
+/** One line of state in room reserved for the longest wording, so no control moves when it comes or goes (REM-04). */
+@Composable
+private fun RemoteStatusSlot(status: String?, attached: Boolean, ready: Boolean, idle: Boolean) {
+    Box(Modifier.fillMaxWidth()) {
+        REMOTE_STATUS_WORDINGS.forEach { RemoteReservedText(it) }
+        when {
+            status != null -> Text(status, modifier = Modifier.testTag("remote:status").semantics { liveRegion = LiveRegionMode.Polite })
+            attached && !ready -> Text(REMOTE_CHECKING, modifier = Modifier.testTag("remote:checking"))
+            attached && idle -> Text(REMOTE_IDLE, modifier = Modifier.testTag("remote:idle"))
+        }
+    }
+}
+
+@Composable
+private fun RemoteReservedText(wording: String) {
+    Text(wording, Modifier.alpha(0f).clearAndSetSemantics {})
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RemoteTransport(now: RemoteNowPlaying, ready: Boolean, host: RemoteControllerHost) {
     Text(now.title ?: "Playing", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("remote:title"))
-    Text(
-        "${remoteClock(now.positionTicks)} of ${remoteClock(now.durationTicks)}${if (now.paused) ", paused" else ""}",
-        modifier = Modifier.testTag("remote:position")
-    )
+    Box(Modifier.fillMaxWidth()) {
+        RemoteReservedText("${remoteClock(now.positionTicks)} of ${remoteClock(now.durationTicks)}, paused")
+        Text(
+            "${remoteClock(now.positionTicks)} of ${remoteClock(now.durationTicks)}${if (now.paused) ", paused" else ""}",
+            modifier = Modifier.testTag("remote:position")
+        )
+    }
     var drag by remember(now.item) { mutableStateOf<Float?>(null) }
     if (now.canSeek && now.durationTicks > 0) {
         Slider(
@@ -201,7 +220,7 @@ private fun RemoteTransport(now: RemoteNowPlaying, ready: Boolean, host: RemoteC
             modifier = Modifier.heightIn(min = 48.dp).testTag("remote:playpause").semantics {
                 stateDescription = if (now.paused) "Paused" else "Playing"
             }
-        ) { Text(if (now.paused) "Play" else "Pause") }
+        ) { TouchReservedLabel(if (now.paused) "Play" else "Pause", "Pause") }
         if (now.canSeek) RemoteButton("Forward 30 seconds", ready, "remote:forward") { host.seekBy(300_000_000) }
         RemoteButton("Next", ready, "remote:next") { host.next() }
         RemoteButton("Stop", ready, "remote:stop") { host.stop() }
@@ -276,14 +295,18 @@ private fun RemoteText(ready: Boolean, host: RemoteControllerHost) {
         modifier = Modifier.fillMaxWidth().testTag("remote:text")
     )
     Text("Works when the TV has its search screen open. Passwords can't be typed from here.")
-    if (failed) {
-        Text(
-            "That can't be sent. Use up to 256 characters on one line.",
-            modifier = Modifier.semantics {
-                liveRegion =
-                    LiveRegionMode.Polite
-            }
-        )
+    Box(Modifier.fillMaxWidth()) {
+        val wording = "That can't be sent. Use up to 256 characters on one line."
+        RemoteReservedText(wording)
+        if (failed) {
+            Text(
+                wording,
+                modifier = Modifier.semantics {
+                    liveRegion =
+                        LiveRegionMode.Polite
+                }
+            )
+        }
     }
     Button(
         onClick = {

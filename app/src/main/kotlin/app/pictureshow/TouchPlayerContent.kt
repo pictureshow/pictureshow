@@ -138,7 +138,7 @@ private val TOUCH_ACTIONS_WIDTH = 360.dp
 
 /** The label takes the room of its widest wording, at any font scale, so its neighbours never move when it changes. */
 @Composable
-private fun TouchReservedLabel(label: String, reserve: String) {
+internal fun TouchReservedLabel(label: String, reserve: String) {
     Box(contentAlignment = Alignment.Center) {
         Text(reserve, Modifier.alpha(0f).clearAndSetSemantics {}, maxLines = 1)
         Text(label)

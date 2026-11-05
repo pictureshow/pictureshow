@@ -224,6 +224,9 @@ internal class RemoteControllerHost(
 }
 
 /** Plain words for a phase, or null while everything is in order. Nothing here names what a denied viewer cannot see. */
+internal const val REMOTE_CHECKING = "Checking the TV…"
+internal const val REMOTE_IDLE = "Nothing is playing on this TV."
+
 internal fun remoteProblem(phase: String?): String? = when (phase) {
     "target-gone" -> "This TV isn't available right now. Open Pictureshow on the TV, then try again."
     "target-restarted" -> "This TV restarted. Reconnect to keep controlling it."
@@ -233,6 +236,17 @@ internal fun remoteProblem(phase: String?): String? = when (phase) {
 }
 
 private const val STATUS_SHOWN_MS = 15_000L
+
+/** Every wording of [remoteCommandStatus] and the slot's other lines: the screen reserves room for the longest. */
+internal val REMOTE_STATUS_WORDINGS = listOf(
+    "Sent to the TV.",
+    "Sending to the TV…",
+    "Sent. The TV doesn't report its queue, so check there.",
+    "The TV didn't confirm that. Showing what it reports now.",
+    "That wasn't allowed.",
+    REMOTE_CHECKING,
+    REMOTE_IDLE
+)
 
 /**
  * What the screen may claim about the last command. A 204 only ever reads as sending, and an old outcome leaves the
