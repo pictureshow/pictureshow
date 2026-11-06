@@ -230,6 +230,17 @@ class TouchRemoteScreenTest {
         assertTrue(contrast(edge, Color(0xFF10131C)) >= 3f, "edge against the page: $edge")
     }
 
+    // On its own row Stop's default outline read as disabled beside the transport's.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun stopsEdgeClearsThreeToOne() {
+        compose.setContent { TouchTheme { TouchRemoteScreen(attached(null), host, {}, {}) } }
+        compose.waitForIdle()
+        val image = compose.onNodeWithTag("remote:stop").captureToImage().toPixelMap()
+        val edge = (0 until image.width / 4).map { image[it, image.height / 2] }.maxBy { contrast(it, Color(0xFF10131C)) }
+        assertTrue(contrast(edge, Color(0xFF10131C)) >= 3f, "edge against the page: $edge")
+    }
+
     private fun contrast(a: Color, b: Color): Float {
         val light = maxOf(a.luminance(), b.luminance())
         val dark = minOf(a.luminance(), b.luminance())

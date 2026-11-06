@@ -315,7 +315,12 @@ private fun RemoteTrackButton(label: String, selected: Boolean, enabled: Boolean
 
 @Composable
 private fun RemoteButton(label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag(tag)) { Text(label) }
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        border = touchOutlineBorder(enabled),
+        modifier = Modifier.heightIn(min = 48.dp).testTag(tag)
+    ) { Text(label) }
 }
 
 /** A transport cell: its size comes from the grid, so it drops the button's own padding and minimum. Its name is its label. */
