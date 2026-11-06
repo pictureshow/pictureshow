@@ -13,6 +13,7 @@ import android.view.ViewTreeObserver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -53,11 +54,16 @@ internal fun TouchPlayerWindow() {
     val containerSize = LocalWindowInfo.current.containerSize
     // Its own effect, keyed on the rule: unfolding mid-play hands the lock back, and folding takes it up again (TOUCH-10).
     val locksOrientation = touchPlayerLocksOrientation(configuration.smallestScreenWidthDp)
+    // What the player last asked for, the viewer's toggle included, so folding again takes up that rather than landscape.
+    val request = remember { intArrayOf(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE) }
     DisposableEffect(activity, locksOrientation) {
         val orientation = activity?.requestedOrientation.takeIf { locksOrientation }
-        if (locksOrientation) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        if (locksOrientation) activity?.requestedOrientation = request[0]
         onDispose {
-            if (orientation != null) activity?.requestedOrientation = orientation
+            if (orientation != null) {
+                activity?.let { request[0] = it.requestedOrientation }
+                activity?.requestedOrientation = orientation
+            }
         }
     }
     DisposableEffect(activity) {

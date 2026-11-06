@@ -17,6 +17,9 @@ import app.pictureshow.core.control.reduceRemoteController
 import app.pictureshow.core.control.reduceRemoteQueue
 import app.pictureshow.core.control.reduceRemoteReceive
 import app.pictureshow.core.control.remoteAdvertisedCommands
+import app.pictureshow.core.control.remoteTrackSelected
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import app.pictureshow.core.control.remoteCapabilitiesBody
 import app.pictureshow.core.control.remoteRelayEnforcesRights
 import app.pictureshow.core.control.remoteRequest
@@ -106,6 +109,10 @@ class RemoteVectorsTest {
                 o.getValue("selfDevice").jsonPrimitive.content
             )
             put("targets", json.encodeToJsonElement(rows))
+        }
+        "track-selected" -> buildJsonObject {
+            val o = state.jsonObject
+            put("selected", remoteTrackSelected(o.getValue("reported").jsonPrimitive.intOrNull, o.getValue("offered").jsonPrimitive.int))
         }
         "request" -> json.encodeToJsonElement(
             remoteRequest(

@@ -3,12 +3,15 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,10 +43,14 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.control.RemoteNowPlaying
 import app.pictureshow.core.control.RemoteTarget
+import app.pictureshow.core.control.RemoteTrack
+import app.pictureshow.core.control.remoteTrackSelected
 
 internal fun remoteTargetLabel(target: RemoteTarget): String = buildString {
     append(target.name)
@@ -205,47 +213,92 @@ private fun RemoteTransport(now: RemoteNowPlaying, ready: Boolean, host: RemoteC
             }
         )
     }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        RemoteButton("Previous", ready, "remote:previous") { host.previous() }
-        if (now.canSeek) RemoteButton("Back 10 seconds", ready, "remote:back") { host.seekBy(-100_000_000) }
+    // Fixed places, learned by position: Pause never trades lines with its neighbours at any font, and a title that can't
+    // seek keeps the gaps. Marks and short numbers don't grow past their cells the way words do.
+    Row(Modifier.fillMaxWidth().testTag("remote:transport"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val cell = Modifier.weight(1f)
+        RemoteMarkButton("previous", "Previous", ready, "remote:previous", cell) { host.previous() }
+        if (now.canSeek) {
+            RemoteSeekButton("\u221210", "Back 10 seconds", ready, "remote:back", cell) { host.seekBy(-100_000_000) }
+        } else {
+            Spacer(cell)
+        }
         Button(
             onClick = { if (now.paused) host.play() else host.pause() },
             enabled = ready,
-            modifier = Modifier.heightIn(min = 48.dp).testTag("remote:playpause").semantics {
+            contentPadding = PaddingValues(0.dp),
+            modifier = cell.heightIn(min = 48.dp).testTag("remote:playpause").semantics {
+                contentDescription = if (now.paused) "Play" else "Pause"
                 stateDescription = if (now.paused) "Paused" else "Playing"
             }
-        ) { TouchReservedLabel(if (now.paused) "Play" else "Pause", "Pause") }
-        if (now.canSeek) RemoteButton("Forward 30 seconds", ready, "remote:forward") { host.seekBy(300_000_000) }
-        RemoteButton("Next", ready, "remote:next") { host.next() }
+        ) { Icon(touchActionIcon(if (now.paused) "play" else "pause"), contentDescription = null) }
+        if (now.canSeek) {
+            RemoteSeekButton("+30", "Forward 30 seconds", ready, "remote:forward", cell) { host.seekBy(300_000_000) }
+        } else {
+            Spacer(cell)
+        }
+        RemoteMarkButton("next", "Next", ready, "remote:next", cell) { host.next() }
+    }
+    // Apart, at the far end as in the player: it ends the viewing, so a slip on the row above can't reach it.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         RemoteButton("Stop", ready, "remote:stop") { host.stop() }
     }
     val audio = now.tracks.filter { it.type == "Audio" }
     val subtitles = now.tracks.filter { it.type == "Subtitle" }
     if (audio.size > 1) {
-        Text("Audio", modifier = Modifier.semantics { heading() })
+        RemoteTrackHeading("Audio", reported = now.audio != null)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            audio.forEach { track -> RemoteTrackButton(track.label, now.audio == track.index, ready) { host.audio(track.index) } }
+            audio.zip(remoteTrackLabels(audio)).forEach { (track, label) ->
+                RemoteTrackButton(label, remoteTrackSelected(now.audio, track.index), ready) { host.audio(track.index) }
+            }
         }
     }
     if (subtitles.isNotEmpty()) {
-        Text("Subtitles", modifier = Modifier.semantics { heading() })
+        RemoteTrackHeading("Subtitles", reported = now.subtitle != null)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            RemoteTrackButton("Off", now.subtitle == null || now.subtitle == -1, ready) { host.subtitle(-1) }
-            subtitles.forEach { track -> RemoteTrackButton(track.label, now.subtitle == track.index, ready) { host.subtitle(track.index) } }
+            RemoteTrackButton("Off", remoteTrackSelected(now.subtitle, -1), ready) { host.subtitle(-1) }
+            subtitles.zip(remoteTrackLabels(subtitles)).forEach { (track, label) ->
+                RemoteTrackButton(label, remoteTrackSelected(now.subtitle, track.index), ready) { host.subtitle(track.index) }
+            }
         }
+    }
+}
+
+/** The same names as the player's own track lists; the server's wording only for a stream it didn't describe. */
+internal fun remoteTrackLabels(tracks: List<RemoteTrack>): List<String> {
+    val streams = tracks.mapNotNull(RemoteTrack::stream)
+    return if (streams.size == tracks.size) trackLabels(streams) else tracks.map(RemoteTrack::label)
+}
+
+/**
+ * Nothing shows as selected until the TV reports a track, and null isn't Off: the TV may well be showing subtitles it chose
+ * by itself. The note takes its room either way, on the heading's own line, so a first pick moves nothing (REM-04).
+ */
+@Composable
+private fun RemoteTrackHeading(title: String, reported: Boolean) {
+    val note = "$title \u00b7 $REMOTE_TRACK_UNREPORTED"
+    Box(Modifier.fillMaxWidth()) {
+        RemoteReservedText(note)
+        Text(if (reported) title else note, modifier = Modifier.semantics { heading() })
     }
 }
 
 /**
  * The current choice is a filled state rather than a disabled one, whether or not commands can go yet: it is the answer to
  * "what is on", not an option that's unavailable. Both states keep one width, so a change of track moves nothing (REM-04).
+ * The border carries the state against the page, where the fill alone is 2:1. There's nothing to do on the current choice,
+ * so a screen reader isn't offered an action.
  */
 @Composable
 private fun RemoteTrackButton(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     if (selected) {
         FilledTonalButton(
             onClick = {},
-            modifier = Modifier.heightIn(min = 48.dp).semantics { this.selected = true }
+            modifier = Modifier.heightIn(min = 48.dp).clearAndSetSemantics {
+                this.selected = true
+                text = AnnotatedString(label)
+            },
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
         ) { Text(label) }
     } else {
         OutlinedButton(
@@ -263,6 +316,30 @@ private fun RemoteTrackButton(label: String, selected: Boolean, enabled: Boolean
 @Composable
 private fun RemoteButton(label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
     OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).testTag(tag)) { Text(label) }
+}
+
+/** A transport cell: its size comes from the grid, so it drops the button's own padding and minimum. Its name is its label. */
+@Composable
+private fun RemoteCell(name: String, enabled: Boolean, tag: String, modifier: Modifier, onClick: () -> Unit, content: @Composable () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(0.dp),
+        border = touchOutlineBorder(enabled),
+        modifier = modifier.heightIn(min = 48.dp).testTag(tag).semantics { contentDescription = name }
+    ) { content() }
+}
+
+@Composable
+private fun RemoteMarkButton(mark: String, name: String, enabled: Boolean, tag: String, modifier: Modifier, onClick: () -> Unit) {
+    RemoteCell(name, enabled, tag, modifier, onClick) { Icon(touchActionIcon(mark), contentDescription = null) }
+}
+
+@Composable
+private fun RemoteSeekButton(amount: String, name: String, enabled: Boolean, tag: String, modifier: Modifier, onClick: () -> Unit) {
+    RemoteCell(name, enabled, tag, modifier, onClick) {
+        Text(amount, Modifier.clearAndSetSemantics {}, maxLines = 1, softWrap = false)
+    }
 }
 
 @Composable

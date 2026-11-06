@@ -645,6 +645,86 @@
           }
         }
       ]
+    },
+    {
+      "id": "remote-track-unreported-is-not-off",
+      "operation": "track-selected",
+      "state": {
+        "reported": null,
+        "offered": -1
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "selected": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-track-unreported-selects-nothing",
+      "operation": "track-selected",
+      "state": {
+        "reported": null,
+        "offered": 2
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "selected": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-track-reported-off",
+      "operation": "track-selected",
+      "state": {
+        "reported": -1,
+        "offered": -1
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "selected": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-track-reported-index",
+      "operation": "track-selected",
+      "state": {
+        "reported": 2,
+        "offered": 2
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "selected": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-track-reported-other",
+      "operation": "track-selected",
+      "state": {
+        "reported": 2,
+        "offered": -1
+      },
+      "steps": [
+        {
+          "event": {},
+          "expected": {
+            "selected": false
+          }
+        }
+      ]
     }
   ]
 }

@@ -227,6 +227,9 @@ internal class RemoteControllerHost(
 internal const val REMOTE_CHECKING = "Checking the TV…"
 internal const val REMOTE_IDLE = "Nothing is playing on this TV."
 
+/** A track type the TV hasn't reported: it stays silent about its own automatic choice until someone picks (PLAY-20). */
+internal const val REMOTE_TRACK_UNREPORTED = "TV reports it once you pick"
+
 internal fun remoteProblem(phase: String?): String? = when (phase) {
     "target-gone" -> "This TV isn't available right now. Open Pictureshow on the TV, then try again."
     "target-restarted" -> "This TV restarted. Reconnect to keep controlling it."
@@ -241,8 +244,8 @@ private const val STATUS_SHOWN_MS = 15_000L
 internal val REMOTE_STATUS_WORDINGS = listOf(
     "Sent to the TV.",
     "Sending to the TV…",
-    "Sent. The TV doesn't report its queue, so check there.",
-    "The TV didn't confirm that. Showing what it reports now.",
+    "Sent. Check the queue on the TV.",
+    "The TV didn't confirm that.",
     "That wasn't allowed.",
     REMOTE_CHECKING,
     REMOTE_IDLE
@@ -266,9 +269,9 @@ internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long): St
     return when (result) {
         "sent" -> if (operation == "queue") "Sent to the TV." else "Sending to the TV…"
         "unknown" -> if (operation == "queue") {
-            "Sent. The TV doesn't report its queue, so check there."
+            "Sent. Check the queue on the TV."
         } else {
-            "The TV didn't confirm that. Showing what it reports now."
+            "The TV didn't confirm that."
         }
         "rejected" -> "That wasn't allowed."
         else -> null

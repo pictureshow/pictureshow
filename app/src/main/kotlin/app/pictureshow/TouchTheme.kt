@@ -113,8 +113,19 @@ internal fun TouchMessage(message: String?) {
 }
 
 @Composable
-internal fun TouchAction(label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
+internal fun TouchAction(label: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(onClick = onClick, enabled = enabled, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
+}
+
+/** Takes something away, after its own confirmation: quiet, in the error colour, and never mistaken for the way forward. */
+@Composable
+internal fun TouchRemoveAction(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+    ) { Text(label) }
 }
 
 /** Its text starts on the page edge, the line everything below it hangs from; the target stays 48 dp. */

@@ -11,20 +11,28 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.control.CommandState
@@ -35,10 +43,13 @@ import app.pictureshow.core.control.RemoteRequest
 import app.pictureshow.core.control.RemoteTarget
 import app.pictureshow.core.control.RemoteTrack
 import app.pictureshow.core.control.ViewingIdentity
+import app.pictureshow.core.control.remoteTargets
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -159,19 +170,19 @@ class TouchRemoteScreenTest {
 
     // "Off" drawn as disabled read as unavailable, at 2.6:1, when it was the current choice.
     @Test fun theCurrentTrackIsSelectedNotDisabled() {
-        show(attached(null, now.copy(audio = 1, subtitle = null)))
+        show(attached(null, now.copy(audio = 1, subtitle = -1)))
         compose.onNodeWithText("Off").performScrollTo().assert(selected).assertIsEnabled()
         compose.onNodeWithText("Spanish").performScrollTo().assert(unselected).assertIsEnabled()
     }
 
     @Test fun theCurrentTrackStaysSelectedWhileCommandsCannotGo() {
-        show(attached(null, now.copy(audio = 1, subtitle = null), fresh = false))
+        show(attached(null, now.copy(audio = 1, subtitle = -1), fresh = false))
         compose.onNodeWithText("Off").performScrollTo().assert(selected).assertIsEnabled()
         compose.onNodeWithText("Spanish").performScrollTo().assert(unselected).assertIsNotEnabled()
     }
 
     @Test fun choosingATrackMovesNothing() {
-        var state by mutableStateOf(attached(null, now.copy(audio = 1, subtitle = null)))
+        var state by mutableStateOf(attached(null, now.copy(audio = null, subtitle = null)))
         compose.setContent { MaterialTheme { TouchRemoteScreen(state, host, {}, {}) } }
         compose.waitForIdle()
         val tracks = listOf("Off", "Spanish")
@@ -182,6 +193,120 @@ class TouchRemoteScreenTest {
         assertEquals(before, places())
         compose.onNodeWithText("Off").assert(unselected)
         compose.onNodeWithText("Spanish").assert(selected)
+    }
+
+    // PLAY-20: a TV reports no index for its automatic choice, so "not reported" can't be drawn as Off.
+    @Test fun anUnreportedTrackSelectsNothingAndSaysSo() {
+        show(attached(null, now.copy(audio = null, subtitle = null)))
+        compose.onNodeWithText("Audio \u00b7 $REMOTE_TRACK_UNREPORTED").performScrollTo()
+        compose.onNodeWithText("Subtitles \u00b7 $REMOTE_TRACK_UNREPORTED").performScrollTo()
+        listOf("Off", "English", "Spanish").forEach { label ->
+            compose.onAllNodes(hasText(label).and(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))).assertCountEquals(0)
+        }
+    }
+
+    @Test fun aReportedTrackDropsTheNote() {
+        show(attached(null, now.copy(audio = 2, subtitle = -1)))
+        compose.onNodeWithText("Audio").performScrollTo()
+        compose.onNodeWithText("Audio \u00b7 $REMOTE_TRACK_UNREPORTED").assertDoesNotExist()
+        compose.onNodeWithText("Spanish").performScrollTo().assert(selected)
+    }
+
+    // A double tap on the current choice does nothing, so a reader shouldn't be offered it.
+    @Test fun theCurrentTrackOffersAReaderNoAction() {
+        show(attached(null, now.copy(audio = 1, subtitle = -1)))
+        compose.onNodeWithText("Off").performScrollTo().assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+        compose.onNodeWithText("Spanish").performScrollTo().assert(SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick))
+    }
+
+    // The fill alone is 2:1 against the page; the state needs 3:1.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun theCurrentTrackHasAnEdgeThatClearsThreeToOne() {
+        compose.setContent { TouchTheme { TouchRemoteScreen(attached(null, now.copy(audio = 1, subtitle = -1)), host, {}, {}) } }
+        compose.waitForIdle()
+        val image = compose.onNodeWithText("Off").performScrollTo().captureToImage().toPixelMap()
+        val edge = image[1, image.height / 2]
+        assertTrue(contrast(edge, Color(0xFF10131C)) >= 3f, "edge against the page: $edge")
+    }
+
+    private fun contrast(a: Color, b: Color): Float {
+        val light = maxOf(a.luminance(), b.luminance())
+        val dark = minOf(a.luminance(), b.luminance())
+        return (light + 0.05f) / (dark + 0.05f)
+    }
+
+    // One title, one name for a track: the server's "English - SUBRIP" is not what the player's own lists say.
+    @Test fun tracksCarryThePlayersNamesNotTheServersCodecText() {
+        val session = Json.parseToJsonElement(
+            """[{"Id":"s1","DeviceId":"tv","DeviceName":"TV","UserId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","SupportsRemoteControl":true,
+            "PlayableMediaTypes":["Video"],"SupportedCommands":[],"PlayState":{"CanSeek":true},
+            "NowPlayingItem":{"Id":"cccccccccccccccccccccccccccccccc","Name":"A film","RunTimeTicks":36000000000,"MediaStreams":[
+            {"Type":"Audio","Index":1,"Codec":"aac","Language":"eng","Channels":2,"DisplayTitle":"English - AAC - Stereo","Mystery":1},
+            {"Type":"Audio","Index":2,"Codec":"ac3","Language":"spa","Channels":6,"DisplayTitle":"Spanish - Dolby Digital - 5.1"},
+            {"Type":"Subtitle","Index":3,"Codec":"subrip","Language":"eng","DisplayTitle":"English - SUBRIP"}]}}]"""
+        ).jsonArray
+        val playing = remoteTargets(session, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "phone").single().now!!
+        show(attached(null, playing))
+        compose.onNodeWithText("English \u00b7 SRT").performScrollTo()
+        compose.onNodeWithText("English - SUBRIP").assertDoesNotExist()
+    }
+
+    @Test fun aStreamTheServerDidntDescribeKeepsItsWording() {
+        assertEquals(listOf("English"), remoteTrackLabels(listOf(RemoteTrack("Audio", 1, "English"))))
+    }
+
+    private val transport = listOf("remote:previous", "remote:back", "remote:playpause", "remote:forward", "remote:next")
+
+    // Learned by position: Pause used to trade lines with its neighbours as the font grew.
+    private fun assertOneFixedRow() {
+        val boxes = transport.map { compose.onNodeWithTag(it).getBoundsInRoot() }
+        boxes.forEach { assertEquals(boxes[0].top, it.top, "one line") }
+        boxes.zipWithNext { a, b -> assertEquals((a.right - a.left).value, (b.right - b.left).value, 1f, "equal cells") }
+    }
+
+    @Test fun transportIsOneRowOfEqualCells() {
+        show(attached(null))
+        assertOneFixedRow()
+        val stop = compose.onNodeWithTag("remote:stop").getBoundsInRoot()
+        val next = compose.onNodeWithTag("remote:next").getBoundsInRoot()
+        assertTrue(stop.top >= next.bottom, "Stop is apart")
+        assertEquals(next.right.value, stop.right.value, 1f, "Stop at the far end")
+    }
+
+    @Config(qualifiers = "w320dp-h2400dp-port-xhdpi")
+    @Test
+    fun transportStaysOneRowAtALargeFontInANarrowWindow() {
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.5f)) {
+                MaterialTheme { TouchRemoteScreen(attached(null), host, {}, {}) }
+            }
+        }
+        compose.waitForIdle()
+        assertOneFixedRow()
+    }
+
+    @Test fun aTitleThatCantSeekKeepsPauseInItsColumn() {
+        var state by mutableStateOf(attached(null))
+        compose.setContent { MaterialTheme { TouchRemoteScreen(state, host, {}, {}) } }
+        compose.waitForIdle()
+        val pause = compose.onNodeWithTag("remote:playpause").getBoundsInRoot()
+        compose.runOnIdle { state = attached(null, now.copy(canSeek = false)) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("remote:back").assertDoesNotExist()
+        // The seek bar leaves with seeking, so the row rises; Pause keeps its column and its size.
+        val after = compose.onNodeWithTag("remote:playpause").getBoundsInRoot()
+        assertEquals(pause.left, after.left)
+        assertEquals(pause.right, after.right)
+        assertEquals(pause.bottom - pause.top, after.bottom - after.top)
+    }
+
+    // The reserved slot stays, but the longest wording fits one line, so it no longer leaves a hole under the title.
+    @Test fun theStatusSlotIsOneLineOnAPhone() {
+        show(attached(null))
+        val page = compose.onNodeWithTag("touch:remote").getBoundsInRoot()
+        val title = compose.onNodeWithTag("remote:title", useUnmergedTree = true).getBoundsInRoot()
+        assertTrue(title.top - page.top <= 48.dp, "slot and its gap: ${title.top - page.top}")
     }
 
     @Test fun everyStatusWordingHasItsRoomReserved() {

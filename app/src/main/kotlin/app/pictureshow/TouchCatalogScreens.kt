@@ -621,8 +621,11 @@ private fun TouchDetailActionGrid(actions: List<TouchDetailAction>) {
     val favorite = actions.first { it.target == "favorite" }
     val tv = actions.filter { it.target in TOUCH_TV_ACTIONS }
     val cell = Modifier.fillMaxHeight()
+    val shortWindow = isShortTouchWindow()
     BoxWithConstraints(Modifier.fillMaxWidth().testTag("touch:detail:actions")) {
-        if (maxWidth >= 600.dp) {
+        // Five cells only with the room to hold "Resume from 0:35" on a line; a portrait tablet's 640 dp doesn't. A short
+        // window keeps them anyway, since three rows would take most of its height.
+        if (maxWidth >= 720.dp || shortWindow && maxWidth >= 600.dp) {
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.weight(2f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TouchDetailActionButton(primary, cell.weight(1f))
@@ -642,7 +645,7 @@ private fun TouchDetailActionGrid(actions: List<TouchDetailAction>) {
                     TouchDetailActionButton(played, cell.weight(1f))
                     TouchDetailActionButton(favorite, cell.weight(1f))
                 }
-                TouchDetailTvActions(tv, Modifier.fillMaxWidth())
+                TouchDetailTvActions(tv, Modifier.fillMaxWidth(), centerOnButton = true)
             }
         }
     }
@@ -725,6 +728,9 @@ private fun TouchDetailActionButton(action: TouchDetailAction, modifier: Modifie
 
 private val TOUCH_CHEVRON_END = 16.dp
 
+/** The chevron and the gap before it. */
+private val TOUCH_CHEVRON_ROOM = 22.dp
+
 /** A button that opens a menu says so: a reader hears whether it is open and what a double tap will do. */
 private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, open: () -> Unit) = semantics {
     stateDescription = if (expanded) "Expanded" else "Collapsed"
@@ -736,7 +742,7 @@ private fun Modifier.touchMenuButton(expanded: Boolean, openLabel: String, open:
 
 /** The TV's four actions behind one control. Its wording follows whichever request was accepted. */
 @Composable
-private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Modifier) {
+private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Modifier, centerOnButton: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     val lead = actions.firstOrNull(TouchDetailAction::requested) ?: actions.first()
     val enabled = actions.any(TouchDetailAction::enabled)
@@ -748,7 +754,13 @@ private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Mod
             enabled = enabled,
             modifier = Modifier.fillMaxWidth().fillMaxHeight().heightIn(min = 48.dp).testTag("touch:detail:tv")
                 .touchMenuButton(expanded, "Show TV actions") { expanded = true },
-            contentPadding = PaddingValues(start = 12.dp, end = TOUCH_CHEVRON_END, top = 8.dp, bottom = 8.dp),
+            // On a line of its own the label balances the chevron, so it shares a centre with Play above. A narrow cell can't spare that.
+            contentPadding = PaddingValues(
+                start = if (centerOnButton) TOUCH_CHEVRON_END + TOUCH_CHEVRON_ROOM else 12.dp,
+                end = TOUCH_CHEVRON_END,
+                top = 8.dp,
+                bottom = 8.dp
+            ),
             border = touchOutlineBorder(enabled),
             colors = ButtonDefaults.outlinedButtonColors(disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         ) {
@@ -761,7 +773,7 @@ private fun TouchDetailTvActions(actions: List<TouchDetailAction>, modifier: Mod
                     actions.flatMap(TouchDetailAction::reserve) + listOf("$fromStart when ready", "$fromStart requested")
                 )
             }
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(TOUCH_CHEVRON_ROOM - 18.dp))
             Icon(
                 touchActionIcon("chevron-down"),
                 contentDescription = null,

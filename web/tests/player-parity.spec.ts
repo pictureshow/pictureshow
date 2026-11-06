@@ -804,6 +804,11 @@ test("phone rotation preserves viewing, pause intent and selected sheet", async 
     const at = await page
         .locator("video")
         .evaluate((v: HTMLVideoElement) => v.currentTime);
+    // TOUCH-10: a portrait tablet at 600 to 650px has the narrow layout but follows the device.
+    await page.setViewportSize({ width: 620, height: 900 });
+    await expect(
+        page.getByRole("button", { name: "Landscape", exact: true }),
+    ).toBeHidden();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(
         page.getByRole("button", { name: "Landscape", exact: true }),

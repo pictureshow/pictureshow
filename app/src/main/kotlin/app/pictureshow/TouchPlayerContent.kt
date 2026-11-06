@@ -150,6 +150,9 @@ private val TOUCH_PLAYER_EDGE = 16.dp
 /** The narrowest notice worth keeping beside the action column; a window with less room stacks them. */
 private val TOUCH_NOTICE_MIN_BESIDE = 280.dp
 
+/** A bar action's text sits this far inside its target; hanging the target out by it puts the text on the panel's line. */
+private val TOUCH_BAR_TEXT_INSET = 8.dp
+
 /** The label takes the room of its widest wording, at any font scale, so its neighbours never move when it changes. */
 @Composable
 internal fun TouchReservedLabel(label: String, reserve: String, alignment: Alignment = Alignment.Center) {
@@ -373,7 +376,10 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     ) { Text("+10 s") }
                 }
                 val stop: @Composable () -> Unit = {
-                    TouchBarButton({ host.finish(reason = "stop-button") }, Modifier.testTag("touch:stop")) { Text("Stop") }
+                    // Its text ends where the scrubber does; the target hangs into the panel's margin.
+                    TouchBarButton({ host.finish(reason = "stop-button") }, Modifier.offset(x = TOUCH_BAR_TEXT_INSET).testTag("touch:stop")) {
+                        Text("Stop")
+                    }
                 }
                 val options = buildList<@Composable (Modifier) -> Unit> {
                     TouchPlayerSheet.entries.forEach { sheet ->
@@ -474,7 +480,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 val cardUp = next != null && actionsVisible && (eligible || host.ended)
                 SegmentControl(host.segments, host.position, host.localPreferences.segmentModes, host::seekTo, {
                 }, showButton = actionsVisible && !cardUp, button = { label, action ->
-                    Button(onClick = action, Modifier.testTag("touch:skip")) { Text(label) }
+                    // 48 dp drawn, not 40 in a 48 dp target: its top then meets the notice's beside it.
+                    Button(onClick = action, Modifier.heightIn(min = 48.dp).testTag("touch:skip")) { Text(label) }
                 })
                 next?.let {
                     key(host.deferredNext, host.output.stopGeneration) {
@@ -661,10 +668,15 @@ internal fun TouchPlayerScrubber(
     }
 }
 
-/** A bar action: tighter than a default text button, so the row fits one line, and still a 48 dp target. */
+/**
+ * A bar action: tighter than a default text button, so the row fits one line, and still a 48 dp target. A set minimum
+ * replaces `TextButton`'s wider one, which centred a short word and took its text off the line it starts from.
+ */
 @Composable
 private fun TouchBarButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    TextButton(onClick, modifier, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) { content() }
+    TextButton(onClick, modifier.widthIn(min = 48.dp), contentPadding = PaddingValues(horizontal = TOUCH_BAR_TEXT_INSET, vertical = 8.dp)) {
+        content()
+    }
 }
 
 @Composable
@@ -706,11 +718,14 @@ internal fun TouchNextEpisodeCard(
                     Modifier.testTag("next:cancel").semantics { contentDescription = "Cancel next episode" }
                 ) { Text("Cancel") }
                 if (skipLabel != null) {
-                    FilledTonalButton(
-                        onClick = onSkip,
-                        Modifier.testTag("touch:skip"),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) { Text(skipLabel) }
+                    // At the card's end, so its inner margin is the same both sides; Cancel stays where it was.
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        FilledTonalButton(
+                            onClick = onSkip,
+                            Modifier.testTag("touch:skip"),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) { Text(skipLabel) }
+                    }
                 }
             }
         }
