@@ -2985,6 +2985,8 @@ private fun DetailRow(
  * and `launch` swallows that, so everything after it, the focus request included, never runs and the press is lost.
  */
 internal suspend fun LazyListState.jumpTo(index: Int) {
+    // Already there: no frame to spend, which a reader's forward open into Detail counts.
+    if (firstVisibleItemIndex == index && firstVisibleItemScrollOffset == 0) return
     requestScrollToItem(index)
     withFrameNanos { }
 }

@@ -515,6 +515,14 @@ class CatalogGridLargeFontTest {
         assertFocus("person:back")
     }
 
+    @Test fun aCardTooTallForTheScreenStaysBelowTheStripInTheGrid() {
+        val tall = (0 until 15).map { MediaItem("film-$it", "A title long enough to fill the whole screen ".repeat(30), "Movie") }
+        showState(filmsState(tall), scale = 1.6f)
+        press(Key.DirectionDown)
+        assertFocus("grid:film-5")
+        assertStripClearsTheCard("grid:strip")
+    }
+
     @Test fun aMoveWhoseCardIsGoneTakesWhatHoldsItsPlaceNow() {
         // Each row fills the screen, so the row below isn't composed and the move has to scroll for it.
         val tall = (0 until 15).map { MediaItem("film-$it", "A title long enough to fill the whole screen ".repeat(30), "Movie") }
