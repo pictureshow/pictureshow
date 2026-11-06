@@ -34,6 +34,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -92,6 +93,7 @@ class TouchPlayerControlsTest {
     private lateinit var decoder: Decoder
     private lateinit var host: PlaybackHostState
     private var exits = 0
+    private var liveFontScale by androidx.compose.runtime.mutableStateOf<Float?>(null)
 
     @After fun cleanup() {
         compose.runOnIdle {
@@ -683,6 +685,30 @@ class TouchPlayerControlsTest {
         assertEquals(cancel, bounds("next:cancel"))
     }
 
+    @Test fun aFontChangeLetsGoOfTheGapHeldFromTheOldSize() {
+        launch()
+        decided(PlayMethod.Transcode)
+        compose.runOnIdle {
+            host.segments = listOf(MediaSegment("intro", SegmentType.Intro, 150_000_000, 300_000_000))
+        }
+        settled()
+        val held = bounds("touch:skip")
+        compose.runOnIdle { liveFontScale = 1.8f }
+        settled()
+        compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed()
+        compose.runOnIdle { liveFontScale = 1f }
+        settled()
+        assertEquals(held, bounds("touch:skip"))
+    }
+
+    @Test fun stopsTargetAnswersRightToItsEdge() {
+        launch()
+        settled()
+        compose.onNodeWithTag("touch:stop").performTouchInput { click(Offset(width - 2f, height / 2f)) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(1, exits) }
+    }
+
     @Test fun theNoticeGapClosesOnceTheColumnIsEmpty() {
         launch()
         decided(PlayMethod.Transcode)
@@ -1081,7 +1107,7 @@ class TouchPlayerControlsTest {
         }
         compose.setContent {
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale ?: density.fontScale)) {
+            CompositionLocalProvider(LocalDensity provides Density(density.density, liveFontScale ?: fontScale ?: density.fontScale)) {
                 MaterialTheme(colorScheme = darkColorScheme()) { TouchPlayerContent(account, host) }
             }
         }

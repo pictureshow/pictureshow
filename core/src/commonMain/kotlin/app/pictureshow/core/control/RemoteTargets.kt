@@ -76,7 +76,10 @@ private fun JsonElement?.ticks(): Long = (this as? JsonPrimitive)?.takeUnless { 
 
 private fun JsonElement?.strings(): List<String> = (this as? JsonArray).orEmpty().mapNotNull { it.text() }
 
-private val trackJson = Json { ignoreUnknownKeys = true }
+private val trackJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+}
 
 private fun tracks(streams: JsonElement?): List<RemoteTrack> = (streams as? JsonArray).orEmpty().mapNotNull { element ->
     val stream = element as? JsonObject ?: return@mapNotNull null
