@@ -258,8 +258,8 @@ class TouchRemoteScreenTest {
             "PlayableMediaTypes":["Video"],"SupportedCommands":[],"PlayState":{"CanSeek":true},
             "NowPlayingItem":{"Id":"cccccccccccccccccccccccccccccccc","Name":"A film","RunTimeTicks":36000000000,"MediaStreams":[
             {"Type":"Audio","Index":1,"Codec":"aac","Language":"eng","Channels":2,"DisplayTitle":"English - AAC - Stereo","Mystery":1},
-            {"Type":"Audio","Index":2,"Codec":"ac3","Language":"spa","Channels":6,"DisplayTitle":"Spanish - Dolby Digital - 5.1","IsDefault":null},
-            {"Type":"Subtitle","Index":3,"Codec":"subrip","Language":"eng","DisplayTitle":"English - SUBRIP"}]}}]"""
+            {"Type":"Audio","Index":2,"Codec":"ac3","Language":"spa","Channels":6,"DisplayTitle":"Spanish - Dolby Digital - 5.1"},
+            {"Type":"Subtitle","Index":3,"Codec":"subrip","Language":"eng","DisplayTitle":"English - SUBRIP","IsDefault":null}]}}]"""
         ).jsonArray
         val playing = remoteTargets(session, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "phone").single().now!!
         show(attached(null, playing))
