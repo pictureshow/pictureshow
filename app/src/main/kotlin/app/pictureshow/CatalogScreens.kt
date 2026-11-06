@@ -412,46 +412,49 @@ fun CatalogHome(
                         Box(Modifier.catalogFocusTarget(!handoff)) { CatalogHeading(row.title, large = false) }
                         // Only the outer vertical list changes its pivot; shelves retain platform scrolling.
                         CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
-                            LazyRow(
-                                state = rowStates.getValue(row.key),
-                                // Explicit stable-ID restoration in focusRow owns shelf entry. A focusRestorer
-                                // here can intercept its request after lazy disposal and select another child.
-                                modifier = Modifier.fillMaxWidth(),
-                                // Reserve the 1.1x focus scale and centered border inside the shelf clip.
-                                contentPadding = PaddingValues(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(18.dp)
-                            ) {
-                                itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
-                                    CatalogCard(
-                                        item = item,
-                                        account = account,
-                                        wide = row.wide || item.type == "Episode",
-                                        onClick = {
-                                            select(rowIndex, itemIndex)
-                                            onOpen(item)
-                                        },
-                                        modifier = target(
-                                            Modifier,
-                                            restoreAction == null && row.key == restoreRow?.key && item.id == restoreItem?.id
-                                        ).focusRequester(requesters.getValue("${row.key}:${item.id}"))
-                                            .testTag("home:${row.key}:${item.id}")
-                                            .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
-                                            .onFocusChanged {
-                                                if (it.isFocused && (restored || initialNavigation)) select(rowIndex, itemIndex)
-                                            }.onPreviewKeyEvent {
-                                                if (it.type != KeyEventType.KeyDown) {
-                                                    false
-                                                } else if (it.key == Key.DirectionDown) {
-                                                    moveRow(rowIndex + 1)
-                                                    true
-                                                } else if (it.key == Key.DirectionUp) {
-                                                    moveRow(rowIndex - 1)
-                                                    true
-                                                } else {
-                                                    false
+                            ShelfWithEnds(row.title, rowStates.getValue(row.key), row.items.lastIndex) { endCard ->
+                                LazyRow(
+                                    state = rowStates.getValue(row.key),
+                                    // Explicit stable-ID restoration in focusRow owns shelf entry. A focusRestorer
+                                    // here can intercept its request after lazy disposal and select another child.
+                                    modifier = Modifier.fillMaxWidth(),
+                                    // Reserve the 1.1x focus scale and centered border inside the shelf clip.
+                                    contentPadding = PaddingValues(16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                ) {
+                                    itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
+                                        CatalogCard(
+                                            item = item,
+                                            account = account,
+                                            wide = row.wide || item.type == "Episode",
+                                            onClick = {
+                                                select(rowIndex, itemIndex)
+                                                onOpen(item)
+                                            },
+                                            modifier = target(
+                                                Modifier,
+                                                restoreAction == null && row.key == restoreRow?.key && item.id == restoreItem?.id
+                                            ).focusRequester(requesters.getValue("${row.key}:${item.id}"))
+                                                .testTag("home:${row.key}:${item.id}")
+                                                .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
+                                                .then(endCard(itemIndex))
+                                                .onFocusChanged {
+                                                    if (it.isFocused && (restored || initialNavigation)) select(rowIndex, itemIndex)
+                                                }.onPreviewKeyEvent {
+                                                    if (it.type != KeyEventType.KeyDown) {
+                                                        false
+                                                    } else if (it.key == Key.DirectionDown) {
+                                                        moveRow(rowIndex + 1)
+                                                        true
+                                                    } else if (it.key == Key.DirectionUp) {
+                                                        moveRow(rowIndex - 1)
+                                                        true
+                                                    } else {
+                                                        false
+                                                    }
                                                 }
-                                            }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2581,40 +2584,43 @@ private fun DetailRow(
 ) {
     Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         CatalogHeading(title, large = false)
-        LazyRow(
-            state = rowState,
-            modifier = Modifier.fillMaxWidth().focusRestorer(),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
-            contentPadding = PaddingValues(16.dp)
-        ) {
-            itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
-                val requester = remember(item.id) { FocusRequester() }
-                val focusKey = "$section:${item.id}"
-                var focused by remember(item.id) { mutableStateOf(false) }
-                val selectOnRest by rememberUpdatedState(onFocusRested)
-                LaunchedEffect(focused, selectedId) {
-                    if (focused && item.id != selectedId && selectOnRest != null) {
-                        delay(350)
-                        selectOnRest?.invoke(item)
-                    }
-                }
-                DisposableEffect(focusKey) {
-                    requests[focusKey] = requester
-                    onDispose { requests.remove(focusKey) }
-                }
-                CatalogCard(
-                    item,
-                    account,
-                    wide,
-                    onClick = { onOpen(item) },
-                    selected = selectedId?.let { item.id == it },
-                    modifier = Modifier.focusRequester(requester).testTag("detail:$focusKey")
-                        .staysInRow(index == 0, index == items.lastIndex)
-                        .onFocusChanged {
-                            focused = it.isFocused
-                            if (it.isFocused) onFocus(item)
+        ShelfWithEnds(title, rowState, items.lastIndex) { endCard ->
+            LazyRow(
+                state = rowState,
+                modifier = Modifier.fillMaxWidth().focusRestorer(),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                contentPadding = PaddingValues(16.dp)
+            ) {
+                itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
+                    val requester = remember(item.id) { FocusRequester() }
+                    val focusKey = "$section:${item.id}"
+                    var focused by remember(item.id) { mutableStateOf(false) }
+                    val selectOnRest by rememberUpdatedState(onFocusRested)
+                    LaunchedEffect(focused, selectedId) {
+                        if (focused && item.id != selectedId && selectOnRest != null) {
+                            delay(350)
+                            selectOnRest?.invoke(item)
                         }
-                )
+                    }
+                    DisposableEffect(focusKey) {
+                        requests[focusKey] = requester
+                        onDispose { requests.remove(focusKey) }
+                    }
+                    CatalogCard(
+                        item,
+                        account,
+                        wide,
+                        onClick = { onOpen(item) },
+                        selected = selectedId?.let { item.id == it },
+                        modifier = Modifier.focusRequester(requester).testTag("detail:$focusKey")
+                            .staysInRow(index == 0, index == items.lastIndex)
+                            .then(endCard(index))
+                            .onFocusChanged {
+                                focused = it.isFocused
+                                if (it.isFocused) onFocus(item)
+                            }
+                    )
+                }
             }
         }
     }

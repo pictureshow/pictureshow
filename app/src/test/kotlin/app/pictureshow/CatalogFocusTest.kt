@@ -5,11 +5,16 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -18,11 +23,14 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -482,6 +490,117 @@ class CatalogFocusTest {
         compose.onNodeWithTag("home:resume:film-1").assertIsFocused()
         compose.runOnIdle { state = home.copy(rows = home.rows.map { if (it.key == "resume") it.copy(items = listOf(movies[0])) else it }) }
         compose.onNodeWithTag("home:resume:film-0").assertIsFocused().assertIsDisplayed()
+    }
+
+    // A reader's Left and Right prefer the next node in line and otherwise accept any node further that way (FocusFinder's
+    // rules, which TalkBack copies over node bounds). A preview key handler never runs under TalkBack on a TV, so these
+    // bounds are what holds the row; real TalkBack on an emulator is in the leg's result.
+    private fun shelfBounds(index: Int = 0) =
+        compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))[index].getUnclippedBoundsInRoot()
+
+    @Test
+    fun aReaderRightAtAShelfEndStopsAfterItsLastCard() {
+        compose.setContent { Harness() }
+        compose.onNodeWithContentDescription("End of Continue watching").assertDoesNotExist()
+        repeat(8) { key(Key.DirectionRight) }
+        val last = compose.onNodeWithTag("home:resume:film-8").assertIsFocused().getUnclippedBoundsInRoot()
+        val stop = compose.onNodeWithContentDescription("End of Continue watching").getUnclippedBoundsInRoot()
+        assertEquals(last.right.value, stop.left.value, 1f, "the stop starts where the last card ends")
+        assertEquals(shelfBounds().right.value, stop.right.value, 1f, "nothing in this shelf lies beyond the stop")
+        assertTrue(stop.top > last.top, "no nearer than the card to a reader moving Down from the heading")
+    }
+
+    @Test
+    fun aReaderLeftAtAShelfStartStopsBeforeItsFirstCard() {
+        compose.setContent { Harness() }
+        val first = compose.onNodeWithTag("home:resume:film-0").assertIsFocused().getUnclippedBoundsInRoot()
+        val stop = compose.onNodeWithContentDescription("Start of Continue watching").getUnclippedBoundsInRoot()
+        assertEquals(first.left.value, stop.right.value, 1f, "the stop ends where the first card starts")
+        assertEquals(shelfBounds().left.value, stop.left.value, 1f, "nothing in this shelf lies before the stop")
+        assertTrue(stop.top > first.top, "no nearer than the card to a reader moving Down from the heading")
+        val heading = compose.onNodeWithText("Continue watching").getUnclippedBoundsInRoot()
+        assertTrue(stop.left <= heading.left, "a heading starting further left is a candidate from the stop")
+        key(Key.DirectionRight)
+        compose.onNodeWithContentDescription("Start of Continue watching").assertDoesNotExist()
+    }
+
+    @Test
+    fun aRightToLeftShelfMirrorsItsStops() {
+        compose.setContent { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { Harness() } }
+        val first = compose.onNodeWithTag("home:resume:film-0").assertIsFocused().getUnclippedBoundsInRoot()
+        val stop = compose.onNodeWithContentDescription("Start of Continue watching").getUnclippedBoundsInRoot()
+        assertEquals(first.right.value, stop.left.value, 1f)
+        assertEquals(shelfBounds().right.value, stop.right.value, 1f)
+    }
+
+    @Test
+    fun aShortShelfHasBothStopsAndTheyLeaveWithFocus() {
+        compose.setContent { Harness(state = home.copy(rows = home.rows.drop(2))) }
+        val card = compose.onNodeWithTag("home:libraries:library").assertIsFocused().getUnclippedBoundsInRoot()
+        val stop = compose.onNodeWithContentDescription("End of Libraries").getUnclippedBoundsInRoot()
+        assertEquals(card.right.value, stop.left.value, 1f)
+        compose.onNodeWithContentDescription("Start of Libraries").assertExists()
+        assertTrue(stop.right >= shelfBounds(1).right, "Right from the stop has no candidate in the next row")
+        // Nothing to activate or to take input focus: OK on a stop can't open anything.
+        val noClick = SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick)
+        val inert = noClick and SemanticsMatcher.keyNotDefined(SemanticsActions.RequestFocus)
+        compose.onNodeWithContentDescription("End of Libraries").assert(inert)
+        compose.onNodeWithContentDescription("Start of Libraries").assert(inert)
+        // The stops never take input focus: the card keeps it and the keys behave as they do without a reader.
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        key(Key.DirectionLeft)
+        compose.onNodeWithTag("home:libraries:library").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("home:latest:library:film-0").assertIsFocused()
+        compose.onNodeWithContentDescription("End of Libraries").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Start of Libraries").assertDoesNotExist()
+    }
+
+    @Test
+    fun aStopLeavesWithTheShelfEvenIfItsCardStoppedBeingLast() {
+        fun resume(count: Int) = home.copy(rows = home.rows.map { if (it.key == "resume") it.copy(items = movies.take(count)) else it })
+        var state by mutableStateOf(resume(2))
+        compose.setContent { Harness(state = state) }
+        key(Key.DirectionRight)
+        compose.onNodeWithTag("home:resume:film-1").assertIsFocused()
+        compose.onNodeWithContentDescription("End of Continue watching").assertExists()
+        compose.runOnIdle { state = resume(3) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("home:resume:film-2").assertIsDisplayed()
+        compose.onNodeWithTag("home:resume:film-1").assertIsFocused()
+        compose.onNodeWithContentDescription("End of Continue watching").assertDoesNotExist()
+        key(Key.DirectionRight)
+        compose.onNodeWithContentDescription("End of Continue watching").assertExists()
+        key(Key.DirectionDown)
+        compose.onNodeWithContentDescription("End of Continue watching").assertDoesNotExist()
+    }
+
+    @Test
+    fun aDetailShelfHoldsAReaderAtBothEnds() {
+        val episodes = movies.take(3).map { it.copy(type = "Episode", seriesName = "A Series", indexNumber = 1, parentIndexNumber = 1) }
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                CatalogDetail(
+                    CatalogDetailState(account, MediaItem("season", "A Season", "Season"), loading = false, episodes = episodes),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                )
+            }
+        }
+        val first = compose.onNodeWithTag("detail:episodes:film-0")
+        first.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.waitForIdle()
+        val start = compose.onNodeWithContentDescription("Start of Episodes").getUnclippedBoundsInRoot()
+        assertEquals(first.getUnclippedBoundsInRoot().left.value, start.right.value, 1f)
+        key(Key.DirectionRight)
+        key(Key.DirectionRight)
+        val last = compose.onNodeWithTag("detail:episodes:film-2").assertIsFocused().getUnclippedBoundsInRoot()
+        val stop = compose.onNodeWithContentDescription("End of Episodes").getUnclippedBoundsInRoot()
+        assertEquals(last.right.value, stop.left.value, 1f)
     }
 
     @Test

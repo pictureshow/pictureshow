@@ -16,7 +16,9 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -34,6 +36,7 @@ import app.pictureshow.core.HomeRow
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
+import kotlin.test.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -190,6 +193,18 @@ class SearchFocusTest {
     }
 
     @Test
+    fun aSearchShelfHoldsAReaderAtBothEnds() {
+        compose.setContent { Harness(start = "search", keyboard = false) }
+        compose.onNodeWithTag("search:MOVIES:movie-0").assertIsFocused()
+        compose.onNodeWithContentDescription("Start of Movies").assertExists()
+        compose.onNodeWithContentDescription("End of Movies").assertDoesNotExist()
+        repeat(12) { key(Key.DirectionRight) }
+        val last = compose.onNodeWithTag("search:MOVIES:movie-12").assertIsFocused().getUnclippedBoundsInRoot()
+        val stop = compose.onNodeWithContentDescription("End of Movies").getUnclippedBoundsInRoot()
+        assertEquals(last.right.value, stop.left.value, 1f)
+    }
+
+    @Test
     fun playerDoesNotHandleTheDedicatedSearchKey() {
         compose.setContent { Harness(start = "player") }
         key(Key.Search)
@@ -232,7 +247,7 @@ class SearchFocusTest {
         compose.onNodeWithTag("search:retry").assertIsFocused()
         key(Key.DirectionCenter)
         compose.runOnIdle {
-            kotlin.test.assertEquals(1, retries)
+            assertEquals(1, retries)
             state = results.copy(someFailed = true)
         }
         compose.onNodeWithText("Some results could not load. Try again.").assertIsDisplayed()

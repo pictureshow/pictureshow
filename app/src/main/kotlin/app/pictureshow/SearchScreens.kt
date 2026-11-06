@@ -405,63 +405,70 @@ fun SearchScreen(
                                 heading()
                             }
                         )
-                        LazyRow(
-                            state = rowStates.getValue(row.key),
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
-                            itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
-                                val target = "${row.key}:${item.id}"
-                                CatalogCard(
-                                    item,
-                                    account,
-                                    row.wide,
-                                    onClick = {
-                                        editing = false
-                                        keyboard?.hide()
-                                        selected = target
-                                        selections = selections + (row.key to target)
-                                        focusResults = false
-                                        onOpen(item)
-                                    },
-                                    modifier = arrivalTarget(Modifier, target == returnTarget)
-                                        .focusRequester(requests.getValue(target)).testTag("search:$target")
-                                        .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
-                                        .onFocusChanged {
-                                            if (it.isFocused && (!returning || (restored && !handoff) || interacted)) {
-                                                selected = target
-                                                selections =
-                                                    selections + (row.key to target)
-                                            }
-                                        }
-                                        .onPreviewKeyEvent {
-                                            if (it.type != KeyEventType.KeyDown) {
-                                                false
-                                            } else {
-                                                when (it.key) {
-                                                    Key.DirectionUp -> {
-                                                        if (rowIndex ==
-                                                            0
-                                                        ) {
-                                                            if (state.someFailed || state.allFailed) retry.requestFocus() else focusField()
-                                                        } else {
-                                                            scope.launch { focusRow(rowIndex - 1) }
-                                                        }
-                                                        true
-                                                    }
-                                                    Key.DirectionDown -> {
-                                                        if (rowIndex <
-                                                            state.rows.lastIndex
-                                                        ) {
-                                                            scope.launch { focusRow(rowIndex + 1) }
-                                                        }
-                                                        true
-                                                    }
-                                                    else -> false
+                        ShelfWithEnds(row.title, rowStates.getValue(row.key), row.items.lastIndex) { endCard ->
+                            LazyRow(
+                                state = rowStates.getValue(row.key),
+                                contentPadding = PaddingValues(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(18.dp)
+                            ) {
+                                itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
+                                    val target = "${row.key}:${item.id}"
+                                    CatalogCard(
+                                        item,
+                                        account,
+                                        row.wide,
+                                        onClick = {
+                                            editing = false
+                                            keyboard?.hide()
+                                            selected = target
+                                            selections = selections + (row.key to target)
+                                            focusResults = false
+                                            onOpen(item)
+                                        },
+                                        modifier = arrivalTarget(Modifier, target == returnTarget)
+                                            .focusRequester(requests.getValue(target)).testTag("search:$target")
+                                            .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
+                                            .then(endCard(itemIndex))
+                                            .onFocusChanged {
+                                                if (it.isFocused && (!returning || (restored && !handoff) || interacted)) {
+                                                    selected = target
+                                                    selections =
+                                                        selections + (row.key to target)
                                                 }
                                             }
-                                        }
-                                )
+                                            .onPreviewKeyEvent {
+                                                if (it.type != KeyEventType.KeyDown) {
+                                                    false
+                                                } else {
+                                                    when (it.key) {
+                                                        Key.DirectionUp -> {
+                                                            if (rowIndex ==
+                                                                0
+                                                            ) {
+                                                                if (state.someFailed || state.allFailed) {
+                                                                    retry.requestFocus()
+                                                                } else {
+                                                                    focusField()
+                                                                }
+                                                            } else {
+                                                                scope.launch { focusRow(rowIndex - 1) }
+                                                            }
+                                                            true
+                                                        }
+                                                        Key.DirectionDown -> {
+                                                            if (rowIndex <
+                                                                state.rows.lastIndex
+                                                            ) {
+                                                                scope.launch { focusRow(rowIndex + 1) }
+                                                            }
+                                                            true
+                                                        }
+                                                        else -> false
+                                                    }
+                                                }
+                                            }
+                                    )
+                                }
                             }
                         }
                     }
