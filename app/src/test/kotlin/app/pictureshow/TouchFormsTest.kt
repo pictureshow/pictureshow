@@ -166,6 +166,14 @@ class TouchFormsTest {
         compose.onNodeWithText("Remove server Fixture server · ${server.url}").assertExists()
     }
 
+    @Test fun signInSaysWhichOfTwoSameNamedServersItIsFor() {
+        val label = "Fixture server · ${server.url}"
+        compose.setContent {
+            MaterialTheme { TouchLogin(LoginState(), server, false, {}, {}, {}, {}, {}, label) }
+        }
+        compose.onNodeWithText("Sign in to $label").assertExists()
+    }
+
     @Test fun settingsDialogSelectsValueAndShowsLoadingSaveAndRetryStates() {
         var state by mutableStateOf(PlaybackSettingsState())
         var chosen: Int? = null

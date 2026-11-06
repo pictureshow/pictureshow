@@ -253,12 +253,14 @@ export function ServerForm({
 }
 export function SignIn({
     client,
+    label = client.server.name,
     initialUsername = "",
     onAccount,
     onError,
     onBack,
 }: {
     client: Jellyfin;
+    label?: string;
     initialUsername?: string;
     onAccount: (a: Account) => void;
     onError: (e: unknown) => void;
@@ -412,7 +414,7 @@ export function SignIn({
     const spoken = announcement;
     return (
         <section className="signin">
-            <p className="eyebrow">{client.server.name}</p>
+            <p className="eyebrow">{label}</p>
             <h1>Welcome back.</h1>
             {quick ? (
                 <>

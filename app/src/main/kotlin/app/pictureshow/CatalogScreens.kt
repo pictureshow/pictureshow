@@ -144,7 +144,8 @@ fun CatalogHome(
     onSignOut: () -> Unit,
     onResume: () -> Unit = {},
     onSearch: () -> Unit = {},
-    onSettings: () -> Unit = {}
+    onSettings: () -> Unit = {},
+    serverLabel: String = account.server.name
 ) {
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
@@ -382,7 +383,7 @@ fun CatalogHome(
                     }
                     Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CatalogHeading("Pictureshow")
-                        Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
+                        Text("${account.user.name} · $serverLabel", color = CatalogMuted)
                     }
                     if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
                     CatalogError(

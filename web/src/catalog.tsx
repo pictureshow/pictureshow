@@ -515,6 +515,7 @@ const homeCache = new Map<string, Awaited<ReturnType<typeof loadHome>>>();
 const homeRevisions = new Map<string, number>();
 export function Home({
     client,
+    label = client.server.name,
     navigate,
     onError,
     onSearch,
@@ -522,6 +523,7 @@ export function Home({
     onSwitchUser,
     onSignOut,
 }: Props & {
+    label?: string;
     onSearch?: () => void;
     onSettings?: () => void;
     onSwitchUser?: () => void;
@@ -572,7 +574,7 @@ export function Home({
         <div className="catalog-page" ref={ref}>
             <div className="catalog-home-heading">
                 <div>
-                    <p className="catalog-eyebrow">{client.server.name}</p>
+                    <p className="catalog-eyebrow">{label}</p>
                     <h1>{client.account!.user.Name}</h1>
                 </div>
                 <nav aria-label="Home actions">

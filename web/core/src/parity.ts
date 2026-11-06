@@ -19,7 +19,11 @@ export function serverLabel(
 ): string {
     const name = server.name.trim();
     if (!name) return server.url;
-    const distinct = new Map(all.map((s) => [s.id + " " + s.url, s]));
+    const distinct = new Map<string, { name: string }>();
+    for (const s of all) {
+        const key = s.id + " " + s.url;
+        if (!distinct.has(key)) distinct.set(key, s);
+    }
     const repeats =
         [...distinct.values()].filter(
             (s) => s.name.trim().toLowerCase() === name.toLowerCase(),
