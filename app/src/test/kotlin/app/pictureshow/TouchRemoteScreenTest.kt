@@ -10,22 +10,22 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -221,7 +221,8 @@ class TouchRemoteScreenTest {
 
     // The fill alone is 2:1 against the page; the state needs 3:1.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun theCurrentTrackHasAnEdgeThatClearsThreeToOne() {
+    @Test
+    fun theCurrentTrackHasAnEdgeThatClearsThreeToOne() {
         compose.setContent { TouchTheme { TouchRemoteScreen(attached(null, now.copy(audio = 1, subtitle = -1)), host, {}, {}) } }
         compose.waitForIdle()
         val image = compose.onNodeWithText("Off").performScrollTo().captureToImage().toPixelMap()

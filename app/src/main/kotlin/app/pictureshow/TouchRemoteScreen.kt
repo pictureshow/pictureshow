@@ -320,7 +320,14 @@ private fun RemoteButton(label: String, enabled: Boolean, tag: String, onClick: 
 
 /** A transport cell: its size comes from the grid, so it drops the button's own padding and minimum. Its name is its label. */
 @Composable
-private fun RemoteCell(name: String, enabled: Boolean, tag: String, modifier: Modifier, onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun RemoteCell(
+    name: String,
+    enabled: Boolean,
+    tag: String,
+    modifier: Modifier,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,

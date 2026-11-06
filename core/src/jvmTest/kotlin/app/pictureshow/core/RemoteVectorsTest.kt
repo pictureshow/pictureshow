@@ -13,15 +13,13 @@ import app.pictureshow.core.control.parseRemoteMessage
 import app.pictureshow.core.control.reduceRemoteController
 import app.pictureshow.core.control.reduceRemoteReceive
 import app.pictureshow.core.control.remoteAdvertisedCommands
-import app.pictureshow.core.control.remoteTrackSelected
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.intOrNull
 import app.pictureshow.core.control.remoteCapabilitiesBody
 import app.pictureshow.core.control.remoteRelayEnforcesRights
 import app.pictureshow.core.control.remoteRequest
 import app.pictureshow.core.control.remoteSocketUrl
 import app.pictureshow.core.control.remoteTargets
 import app.pictureshow.core.control.remoteTargetsPath
+import app.pictureshow.core.control.remoteTrackSelected
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
@@ -37,6 +35,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
