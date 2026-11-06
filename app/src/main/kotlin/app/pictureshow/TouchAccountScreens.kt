@@ -161,8 +161,8 @@ internal fun TouchQuickConnect(
     state: QuickState,
     server: Server,
     onRetry: () -> Unit,
-    serverLabel: String = server.name,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    serverLabel: String = server.name
 ) {
     TouchPage("Quick Connect", onBack) {
         Text(serverLabel, style = MaterialTheme.typography.titleLarge)

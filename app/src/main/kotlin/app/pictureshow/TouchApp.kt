@@ -312,7 +312,7 @@ internal fun TouchPictureshow(
                 val screen by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(vm) { vm.start() }
                 SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
-                TouchQuickConnect(screen, server, vm::start, state.snapshot.serverLabel(server)) { nav.popBackStack() }
+                TouchQuickConnect(screen, server, vm::start, { nav.popBackStack() }, state.snapshot.serverLabel(server))
             }
             listOf("home", "libraries").forEach { destination ->
                 composable(destination) {
