@@ -2017,6 +2017,118 @@
           }
         }
       ]
+    },
+    {
+      "id": "queue-order.play-next-survives-unshuffle-ahead-of-automatic",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          },
+          {
+            "id": "b",
+            "media": "b",
+            "downloaded": false
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": false
+          },
+          {
+            "id": "d",
+            "media": "d",
+            "downloaded": false
+          }
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": [
+          "b",
+          "c",
+          "d"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "shuffle",
+            "permutation": [
+              "d",
+              "b",
+              "c"
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "d",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "next",
+            "revision": "1"
+          },
+          "expected": {
+            "queue": {
+              "current": "d"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "play-next",
+            "revision": "2",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "d",
+                "x",
+                "b",
+                "c"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "unshuffle",
+            "revision": "3"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "d",
+                "x",
+                "b",
+                "c"
+              ],
+              "shuffled": false
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -955,6 +955,98 @@
           }
         }
       ]
+    },
+    {
+      "id": "remote-queue.automatic-titles-already-watched-stay-gone",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "e3"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "x",
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ],
+            "watching": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "x",
+              "e3",
+              "e4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote-queue.open-collapses-the-same-title-twice-in-a-row",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "a",
+              "a",
+              "b",
+              "a"
+            ]
+          },
+          "expected": {
+            "current": "a",
+            "upNext": [
+              "b",
+              "a"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

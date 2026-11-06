@@ -148,6 +148,9 @@ internal class RemoteTargetHost(
     private var state: RemoteReceiveState? = null
     private var generation = 0L
     private var queue: RemoteQueue? = null
+
+    /** The queue's current title while the player is still on its way to it; what it reports until then is the old one. */
+    private var arriving: String? = null
     private var loop: Job? = null
     private var registration: Job? = null
     private var withdrawal: Job? = null
@@ -192,6 +195,7 @@ internal class RemoteTargetHost(
         generation = (state?.generation ?: generation) + 1
         state = null
         queue = null
+        arriving = null
         queueRevision++
         reconcile()
     }
@@ -344,14 +348,14 @@ internal class RemoteTargetHost(
             "open" -> {
                 val index = effect.index ?: 0
                 queueFor().open(effect.items.drop(index))
+                arriving = queue?.current
                 queueRevision++
                 mutableOpens.tryEmit(effect)
             }
             "queue-next", "queue-add" -> {
-                // The reducer also accepts these during preparation; the requested title is the current entry then,
+                // The reducer also accepts these during preparation; the title on its way is the current entry then,
                 // even while the title being replaced is still reporting.
-                val preparing = queue?.current.takeIf { state?.opening == true }
-                val watching = preparing ?: viewing?.item ?: queue?.current ?: return
+                val watching = arriving ?: viewing?.item ?: queue?.current ?: return
                 queueFor().add(watching, effect.items, effect.op == "queue-next")
                 queueRevision++
             }
@@ -373,7 +377,12 @@ internal class RemoteTargetHost(
     private fun previous(bridge: RemotePlayerBridge) {
         val here = viewing
         val prior = if ((here?.ticks ?: 0) > RESTART_TICKS) null else queue?.previous()
-        if (prior == null || prior == here?.item) bridge.seekTo(0) else bridge.next(prior)
+        if (prior == null || prior == here?.item) {
+            bridge.seekTo(0)
+        } else {
+            arriving = prior
+            bridge.next(prior)
+        }
         queueRevision++
     }
 
@@ -392,6 +401,7 @@ internal class RemoteTargetHost(
             return false
         }
         if (!ok) {
+            arriving = null
             queue?.clear()
             queueRevision++
         }
@@ -415,6 +425,7 @@ internal class RemoteTargetHost(
         val itemChanged = next?.item != viewing?.item
         viewing = next
         if (itemChanged && next != null) {
+            arriving = null
             queue?.observed(next.item)
             queueRevision++
         }

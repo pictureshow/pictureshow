@@ -66,7 +66,8 @@ private fun edit(s: RemoteQueueState, op: String, entries: List<String> = emptyL
 
 private fun open(s: RemoteQueueState, items: List<String>): RemoteQueueState {
     val first = items.firstOrNull() ?: return s
-    return edit(s, "play-now", listOf(first), items.drop(1))
+    val rest = items.filterIndexed { index, item -> index > 0 && item != items[index - 1] }
+    return edit(s, "play-now", listOf(first), rest)
 }
 
 /** Queueing from a viewing started by hand adopts that viewing as the queue's current entry first. */

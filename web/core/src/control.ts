@@ -128,7 +128,7 @@ function validateQueueInput(value: unknown, label: string) {
                 throw new Error(`${label}.${field}[${index}].downloaded must be boolean`);
         }
     }
-    for (const field of ["order", "history", "operations", "failed", "visited"])
+    for (const field of ["order", "history", "operations", "failed", "visited", "automatic"])
         if (q[field] !== undefined && (!Array.isArray(q[field]) || q[field].some((x: unknown) => typeof x !== "string")))
             throw new Error(`${label}.${field} must be a string array`);
     if (q.current !== undefined && q.current !== null) string(q.current, `${label}.current`);
@@ -683,9 +683,10 @@ function queueEditEvent(input: Dict, event: Dict): Dict {
                 ahead = new Set<string>(remaining.filter((id: string) => upcoming.has(id))),
                 insertAt = (list: string[]) => {
                     if (q.current === null) return 0;
-                    if (op === "play-next") return list.indexOf(q.current) + 1;
-                    const at = list.findIndex((id) => ahead.has(id));
-                    return at < 0 ? list.length : at;
+                    const at = list.findIndex((id) => ahead.has(id)),
+                        beforeAutomatic = at < 0 ? list.length : at;
+                    // Canonical order can hold current after the automatic entries while shuffled; unshuffle must still play this first.
+                    return op === "play-next" ? Math.min(list.indexOf(q.current) + 1, beforeAutomatic) : beforeAutomatic;
                 },
                 order: string[] = q.order.filter((id: string) => !superseded.has(id));
             order.splice(insertAt(order), 0, ...namedIds);

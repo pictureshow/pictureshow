@@ -426,10 +426,26 @@ class RemoteTargetHostTest {
     @Test fun addingTheTitleOnScreenDoesNotReplayItForever() = runTest {
         val rig = Rig(this)
         rig.online(this)
-        rig.message(this, play("open", listOf(film, second)))
+        rig.message(this, play("open", listOf(film)))
         rig.watching(film)
-        rig.message(this, play("add", listOf(film, second), "PlayLast"))
+        rig.message(this, play("add", listOf(film), "PlayLast"))
+        assertNull(rig.host.upcoming, "a copy next to itself could never advance: a target only sees media IDs")
+    }
+
+    @Test fun anAdditionRightAfterPreviousKeepsTheQueue() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.watching(film)
+        rig.message(this, play("a", listOf(second), "PlayNext"))
+        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        rig.message(this, state("b", "PreviousTrack"))
+        assertEquals("next:$film", rig.player.calls.last())
+        rig.message(this, play("c", listOf(third), "PlayLast"))
+        assertEquals(second, rig.host.upcoming, "the player is still on the later title; the queue must not adopt it")
+        rig.host.report(RemoteViewing(film, true, 10_000_000, 0, false, true))
         assertEquals(second, rig.host.upcoming)
+        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        assertEquals(third, rig.host.upcoming)
     }
 
     @Test fun previousRestartsPastThreeSecondsAndGoesBackBeforeThat() = runTest {

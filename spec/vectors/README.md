@@ -269,7 +269,7 @@ clear-upcoming keeps current/history; clear-all stops. Invalid IDs/blocks/indice
 
 Queue state also has automatic (default []): entry IDs that only continue what was asked for. play-now, play-next and
 append events may carry automatic entries besides entries. play-now needs a named entry and orders named then automatic.
-play-next inserts after current; append inserts before the first upcoming automatic entry, else at the end. A named entry
+play-next inserts after current, and in canonical order never behind the first upcoming automatic entry; append inserts before the first upcoming automatic entry, else at the end. A named entry
 removes any upcoming automatic entry with the same media. Automatic event entries go last, and only for media no
 entry in the queue holds, including media already played. An edit with only automatic entries is valid; one with neither is invalid.
 Shuffle keeps the permutation's order within non-automatic then automatic entries. Remove, clear and restore keep automatic consistent.

@@ -129,12 +129,11 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
             val superseded = q.entries.filter { it.id in q.automatic && it.id in upcoming && it.media in named }.map { it.id }.toSet()
             val remaining = q.automatic.filter { it !in superseded }
             val upcomingAutomatic = remaining.filter { it in upcoming }.toSet()
-            fun insertAt(list: List<String>) = if (q.current == null) {
-                0
-            } else if (event.op == "play-next") {
-                list.indexOf(q.current) + 1
-            } else {
-                list.indexOfFirst { it in upcomingAutomatic }.takeIf { it >= 0 } ?: list.size
+            fun insertAt(list: List<String>): Int {
+                if (q.current == null) return 0
+                val beforeAutomatic = list.indexOfFirst { it in upcomingAutomatic }.takeIf { it >= 0 } ?: list.size
+                // Canonical order can hold current after the automatic entries while shuffled; unshuffle must still play this first.
+                return if (event.op == "play-next") minOf(list.indexOf(q.current) + 1, beforeAutomatic) else beforeAutomatic
             }
             val order = q.order.filter { it !in superseded }.toMutableList().also { it.addAll(insertAt(it), block) }
             val canonical = q.entries.filter { it.id !in superseded }.toMutableList().also { list ->
