@@ -5,7 +5,14 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -33,6 +40,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
@@ -433,6 +441,29 @@ class OfflineDownloadsDesignTest {
         compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeBy(100)
         tag("downloads:working:a").assertExists()
+    }
+
+    @Test
+    fun `TV arriving on the notice's OK from below reveals the whole card`() {
+        val scroll = ScrollState(0)
+        val focus = FocusRequester()
+        compose.setContent {
+            Column(Modifier.height(100.dp).verticalScroll(scroll)) {
+                Box(Modifier.height(300.dp))
+                OfflineConflictTv("A short notice", focus) {}
+                Box(Modifier.height(300.dp))
+            }
+        }
+        // Scrolled so only the card's lower part shows, which is what a remote arriving from the rows below sees.
+        compose.runOnIdle { runBlocking { scroll.scrollTo(300 + compose.density.run { 40.dp.toPx() }.toInt()) } }
+        compose.waitForIdle()
+        compose.runOnIdle { focus.requestFocus() }
+        compose.waitForIdle()
+        val card = bounds("downloads:conflict-text")
+        val ok = bounds("downloads:conflict-ok")
+        // The card's top padding, 12dp above the taller of its two children, is inside the 100dp window.
+        val cardTop = minOf(card.top, ok.top) - 12f
+        assertTrue("card top is at $cardTop", cardTop >= -1f)
     }
 
     // Blocker 6: the OK sits beside the sentence it answers.

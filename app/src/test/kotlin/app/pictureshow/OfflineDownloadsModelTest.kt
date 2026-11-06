@@ -272,9 +272,10 @@ class OfflineDownloadsModelTest {
         assertTrue(library(row("a", OfflinePhase.failed, "needs-password")).passwordNeeded())
     }
 
+    private fun sections(vararg entries: OfflineEntry) = offlineSections(library(*entries), OfflineNetwork.metered)
+
     @Test
     fun `first focus is the password, then the top row's primary action, then Storage`() {
-        fun sections(vararg entries: OfflineEntry) = offlineSections(library(*entries), OfflineNetwork.metered)
         assertEquals(OfflineFirstFocus.Password, offlineFirstFocus(true, sections(row("a", OfflinePhase.ready))))
         assertEquals(OfflineFirstFocus.Row("a", OfflineAction.Play), offlineFirstFocus(false, sections(row("a", OfflinePhase.ready))))
         assertEquals(
@@ -362,5 +363,33 @@ class OfflineDownloadsModelTest {
         val refused = ClientResult.Failure(ClientError(ErrorKind.INVALID_RESPONSE, "x"))
         assertTrue(catalogUnreachable(listOf(ClientResult.Success(1), network)))
         assertFalse(catalogUnreachable(listOf(ClientResult.Success(1), refused)))
+    }
+
+    @Test
+    fun `a conflict notice is the first focus, after the password and only then the rows`() {
+        val rows = sections(row("a", OfflinePhase.ready))
+        assertEquals(OfflineFirstFocus.Conflict("x"), offlineFirstFocus(false, rows, listOf("x", "y")))
+        assertEquals(OfflineFirstFocus.Password, offlineFirstFocus(true, rows, listOf("x")))
+        assertEquals(OfflineFirstFocus.Row("a", OfflineAction.Play), offlineFirstFocus(false, rows, emptyList()))
+    }
+
+    @Test
+    fun `after a delete focus goes to the row below, else above, skipping rows with nothing to press`() {
+        val rows = sections(row("a", OfflinePhase.ready), row("b", OfflinePhase.ready), row("c", OfflinePhase.ready))
+        assertEquals(OfflineFirstFocus.Row("c", OfflineAction.Play), offlineFocusAfterDelete(rows, "b"))
+        assertEquals(OfflineFirstFocus.Row("b", OfflineAction.Play), offlineFocusAfterDelete(rows, "c"))
+        val gone = sections(row("a", OfflinePhase.ready), row("b", OfflinePhase.ready), row("d", OfflinePhase.deleting))
+        assertEquals(OfflineFirstFocus.Row("a", OfflineAction.Play), offlineFocusAfterDelete(gone, "b"))
+        assertEquals(OfflineFirstFocus.Storage, offlineFocusAfterDelete(sections(row("a", OfflinePhase.ready)), "a"))
+    }
+
+    @Test
+    fun `a row's place in the list counts each section's heading`() {
+        val rows = sections(row("a", OfflinePhase.ready), row("b", OfflinePhase.ready), row("c", OfflinePhase.paused))
+        val ordered = rows.ordered.flatMap { (_, section) -> section.map { it.entry.id } }
+        assertEquals(1, offlineRowPosition(rows, ordered[0]))
+        assertEquals(3, offlineRowPosition(rows, ordered[1]))
+        assertEquals(4, offlineRowPosition(rows, ordered[2]))
+        assertEquals(null, offlineRowPosition(rows, "nobody"))
     }
 }

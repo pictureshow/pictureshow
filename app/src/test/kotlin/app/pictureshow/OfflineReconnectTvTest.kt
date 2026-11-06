@@ -252,6 +252,20 @@ class OfflineReconnectTvTest {
         }
     }
 
+    @Test fun `no connection says so on TV in the phone's words`() {
+        launch(network = "none")
+        pickJapanese()
+        awaitTag("reconnect:ok")
+        compose.onNodeWithTag("reconnect:message").assertTextContains("There's no connection", substring = true)
+    }
+
+    @Test fun `the offer names mobile data only on a metered connection`() {
+        launch(network = "metered")
+        pickJapanese()
+        awaitTag("reconnect:stream")
+        compose.onNodeWithTag("reconnect:message").assertTextContains("mobile data", substring = true)
+    }
+
     @Test fun `a failed settle stays on the download, playing, and says so`() {
         launch { settled = OfflineSettleResult.Failed }
         pickJapanese()

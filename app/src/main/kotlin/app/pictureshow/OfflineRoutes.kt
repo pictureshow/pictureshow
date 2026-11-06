@@ -316,6 +316,8 @@ internal fun NavGraphBuilder.offlineTouchScreens(nav: NavController, account: ()
         )
     }
     composable("offline-player?entry={entry}", listOf(navArgument("entry") { type = NavType.StringType })) { entry ->
+        // Held from the route, not the player: the seconds it takes to load the next episode mustn't rotate the screen and back.
+        TouchPlayerWindow()
         OfflineLocalPlayer(
             account(),
             entry.text("entry").orEmpty(),
@@ -326,6 +328,7 @@ internal fun NavGraphBuilder.offlineTouchScreens(nav: NavController, account: ()
         }
     }
     composable(OFFLINE_STREAM_ROUTE, offlineStreamArguments) { entry ->
+        TouchPlayerWindow()
         OfflineStreamPlayer(nav, entry, account()) { current, item, start, onCurrentItem ->
             TouchPlayerScreen(current, item, start, catalog(), onCurrentItem, onExit = { nav.popBackStack() })
         }

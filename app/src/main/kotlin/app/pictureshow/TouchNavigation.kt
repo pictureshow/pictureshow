@@ -42,6 +42,9 @@ internal fun selectTouchTab(nav: NavHostController, tab: String) {
     ) {
         return
     }
+    // The tab already showing, from a screen opened inside it: its root. Saving and restoring that stack would land right back here.
+    val root = if (tab == "search") "search?query={query}&keyboard={keyboard}" else tab
+    if (tab != "home" && nav.popBackStack(root, inclusive = false)) return
     nav.navigate(destination) {
         popUpTo("home") { saveState = true }
         launchSingleTop = true

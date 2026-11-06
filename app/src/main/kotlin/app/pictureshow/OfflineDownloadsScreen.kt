@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -32,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -55,6 +61,7 @@ import app.pictureshow.core.offline.OfflineResourceRole
 import app.pictureshow.core.offline.watchedPreview
 import coil3.compose.AsyncImage
 import java.io.File
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 private val OfflineMuted = Color(0xFFB9C1D6)
@@ -93,6 +100,9 @@ internal fun offlineArtwork(accountKey: String, entry: OfflineEntry): File? {
     return engine.resourceFile(accountKey, entry, art).takeIf(File::exists)
 }
 
+/** The spacer, the heading and the buttons. */
+private const val OFFLINE_TV_ITEMS_ABOVE_NOTICES = 3
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun OfflineDownloadsTvScreen(
@@ -115,32 +125,36 @@ internal fun OfflineDownloadsTvScreen(
     val sections = view.sections
     val storage = remember { FocusRequester() }
     val firstRow = remember { FocusRequester() }
+    val conflictFocus = remember { FocusRequester() }
     val passwordNeeded = view.library.passwordNeeded()
+    val list = rememberLazyListState()
+    val conflictIds = view.conflicts.keys.toList()
+    // Where the remote goes after a press that takes the focused control away: a delete, or a notice's OK.
+    var moveTo by remember { mutableStateOf<OfflineFirstFocus?>(null) }
+    var afterMove by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val moved = moveTo?.takeIf { it !is OfflineFirstFocus.Row || offlineRowPosition(sections, it.entryId) != null }
     val target = when {
         passwordNeeded -> OfflineFirstFocus.Password
+        moved != null -> moved
         returnToStorage -> OfflineFirstFocus.Storage
         sections.ready.any { it.entry.id == returnToRow } -> OfflineFirstFocus.Row(returnToRow.orEmpty(), OfflineAction.Play)
-        else -> offlineFirstFocus(passwordNeeded, sections)
+        else -> offlineFirstFocus(false, sections, conflictIds)
     }
     // The first key press hands focus to the viewer: a list that changes afterwards mustn't pull the remote away.
     var viewerMoved by remember { mutableStateOf(false) }
     // A focused control that goes away takes focus with it, and that's the one time focus moves again on its own.
-    var deleted by remember { mutableStateOf<String?>(null) }
     var refocus by remember { mutableIntStateOf(0) }
     var handled by remember { mutableIntStateOf(0) }
     var askedForPassword by remember { mutableStateOf(false) }
-    val rowIds = view.library.manifest.entries.map(OfflineEntry::id)
-    LaunchedEffect(rowIds, passwordNeeded) {
-        if (deleted != null && deleted !in rowIds || askedForPassword && !passwordNeeded) {
-            deleted = deleted?.takeIf { it in rowIds }
-            refocus++
-        }
+    LaunchedEffect(passwordNeeded) {
+        if (askedForPassword && !passwordNeeded) refocus++
         askedForPassword = passwordNeeded
     }
     BackHandler(controller.confirm != null) { controller.confirm = null }
     BackHandler(controller.confirm == null, onBack)
     LazyColumn(
-        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics {
+        state = list,
+        modifier = Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics {
             testTagsAsResourceId = true
         }.onPreviewKeyEvent {
             if (it.type == KeyEventType.KeyDown) viewerMoved = true
@@ -183,7 +197,14 @@ internal fun OfflineDownloadsTvScreen(
         if (passwordNeeded) item(key = "password") { OfflinePasswordTv(controller, initial = !viewerMoved) }
         view.conflicts.keys.forEach { itemId ->
             item(key = "conflict:$itemId") {
-                OfflineConflictTv(offlineConflictText(view.conflictTitle(itemId))) { controller.dismissConflict(itemId) }
+                OfflineConflictTv(
+                    offlineConflictText(view.conflictTitle(itemId)),
+                    focus = conflictFocus.takeIf { target == OfflineFirstFocus.Conflict(itemId) }
+                ) {
+                    moveTo = offlineFirstFocus(false, sections, conflictIds - itemId)
+                    refocus++
+                    controller.dismissConflict(itemId)
+                }
             }
         }
         if (sections.isEmpty && !view.library.recoverable) {
@@ -204,7 +225,12 @@ internal fun OfflineDownloadsTvScreen(
                         returnToStorage = true
                         onStorage()
                     },
-                    onDeleteConfirmed = { deleted = row.entry.id }
+                    // The next row takes the remote before this one changes, so focus never falls to the top of the page.
+                    onDeleteConfirmed = { delete ->
+                        moveTo = offlineFocusAfterDelete(sections, row.entry.id)
+                        afterMove = delete
+                        refocus++
+                    }
                 )
             }
         }
@@ -212,25 +238,65 @@ internal fun OfflineDownloadsTvScreen(
     }
     LaunchedEffect(target, refocus) {
         if (viewerMoved && refocus == handled) return@LaunchedEffect
-        handled = refocus
         withFrameNanos { }
-        // The form's field takes its own focus. A row scrolled past the first screen isn't attached yet: Storage then.
-        if (target == OfflineFirstFocus.Password) return@LaunchedEffect
-        val requester = if (target is OfflineFirstFocus.Row) firstRow else storage
-        if (!runCatching { requester.requestFocus() }.getOrDefault(false)) runCatching { storage.requestFocus() }
+        handled = refocus
+        // The form's field takes its own focus.
+        if (target != OfflineFirstFocus.Password) {
+            // Only what's on screen can take focus, and a notice shows whole, from the top of the page.
+            val rowsStart = OFFLINE_TV_ITEMS_ABOVE_NOTICES +
+                (if (view.library.recoverable) 1 else 0) +
+                (if (passwordNeeded) 1 else 0) +
+                conflictIds.size +
+                (if (sections.isEmpty && !view.library.recoverable) 1 else 0)
+            when (val aim = target) {
+                is OfflineFirstFocus.Row -> offlineRowPosition(sections, aim.entryId)?.let { position ->
+                    val index = rowsStart + position
+                    if (list.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+                        list.scrollToItem(index)
+                        withFrameNanos { }
+                    }
+                }
+                is OfflineFirstFocus.Conflict -> if (list.firstVisibleItemIndex != 0 || list.firstVisibleItemScrollOffset != 0) {
+                    list.scrollToItem(0)
+                    withFrameNanos { }
+                }
+                else -> Unit
+            }
+            val requester = when (target) {
+                is OfflineFirstFocus.Row -> firstRow
+                is OfflineFirstFocus.Conflict -> conflictFocus
+                else -> storage
+            }
+            if (!runCatching { requester.requestFocus() }.getOrDefault(false)) runCatching { storage.requestFocus() }
+        }
+        afterMove?.invoke()
+        afterMove = null
     }
 }
 
 /** The card and the OK beside its sentence, so the answer is where the eyes already are. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun OfflineConflictTv(text: String, onDismiss: () -> Unit) {
+internal fun OfflineConflictTv(text: String, focus: FocusRequester? = null, onDismiss: () -> Unit) {
+    val card = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
     Row(
-        Modifier.background(OfflineCard, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .bringIntoViewRequester(card)
+            .background(OfflineCard, RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text, modifier = Modifier.weight(1f, fill = false).testTag("downloads:conflict-text"))
-        Button(onClick = onDismiss, modifier = Modifier.testTag("downloads:conflict-ok")) { Text("OK") }
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier
+                .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
+                // Arriving from below shows the sentence too, not only the button that answers it.
+                .onFocusChanged { if (it.isFocused) scope.launch { card.bringIntoView() } }
+                .testTag("downloads:conflict-ok")
+        ) { Text("OK") }
     }
 }
 
@@ -243,10 +309,11 @@ internal fun OfflineRowTv(
     focus: FocusRequester? = null,
     focusAction: OfflineAction? = null,
     onStorage: () -> Unit = {},
-    onDeleteConfirmed: () -> Unit = {}
+    onDeleteConfirmed: (delete: () -> Unit) -> Unit = { it() }
 ) {
     val confirming = (controller.confirm as? OfflineConfirm.One)?.row?.entry?.id == row.entry.id
     val deleteFocus = remember { FocusRequester() }
+    // Set while asking, so every way out of the question but Delete itself (Cancel, Back) returns here.
     var returnToDelete by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().testTag("downloads:row:${row.entry.id}")) {
         val art = offlineArtwork(account.key, row.entry)
@@ -289,19 +356,21 @@ internal fun OfflineRowTv(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = {
-                        returnToDelete = true
                         controller.confirm = null
                     }, modifier = Modifier.focusRequester(cancel).testTag("downloads:cancel")) { Text("Cancel") }
                     Button(
                         onClick = {
-                            onDeleteConfirmed()
-                            controller.confirmed(emptyList())
+                            returnToDelete = false
+                            onDeleteConfirmed { controller.confirmed(emptyList()) }
                         },
                         colors = offlineDestructiveColors(),
                         modifier = Modifier.testTag("downloads:confirm")
                     ) { Text("Delete") }
                 }
-                LaunchedEffect(Unit) { runCatching { cancel.requestFocus() } }
+                LaunchedEffect(Unit) {
+                    returnToDelete = true
+                    runCatching { cancel.requestFocus() }
+                }
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.actions.forEach { action ->
@@ -321,9 +390,10 @@ internal fun OfflineRowTv(
                 }
                 LaunchedEffect(returnToDelete) {
                     if (returnToDelete) {
-                        returnToDelete = false
                         withFrameNanos { }
                         runCatching { deleteFocus.requestFocus() }
+                        // Last: changing this restarts the effect, and earlier that cancelled it before focus moved.
+                        returnToDelete = false
                     }
                 }
             }

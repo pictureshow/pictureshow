@@ -4,15 +4,22 @@
 package app.pictureshow
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
@@ -20,13 +27,16 @@ import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
+import app.pictureshow.core.offline.OfflineConflict
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJob
 import app.pictureshow.core.offline.OfflineLabels
 import app.pictureshow.core.offline.OfflineManifest
 import app.pictureshow.core.offline.OfflineMediaKind
+import app.pictureshow.core.offline.OfflineOutboxEntry
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
+import app.pictureshow.core.offline.OfflineUserData
 import app.pictureshow.core.offline.offlineEncodeManifest
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -34,18 +44,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowNetworkCapabilities
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
@@ -71,14 +86,18 @@ class OfflineDownloadsScreenTest {
 
     @Before
     fun setUp() {
-        File(context.noBackupFilesDir, "offline").deleteRecursively()
-        val manifest = OfflineManifest(
-            entries = listOf(
-                entry("failed", OfflinePhase.failed, OfflineJob(OfflinePhase.failed, failure = "not-found")),
-                entry("waiting", OfflinePhase.waitingStorage),
-                entry("paused", OfflinePhase.paused)
-            )
+        install(
+            entry("failed", OfflinePhase.failed, OfflineJob(OfflinePhase.failed, failure = "not-found")),
+            entry("waiting", OfflinePhase.waitingStorage),
+            entry("paused", OfflinePhase.paused)
         )
+    }
+
+    /** A test that needs another list starts over with it: the engine reads the manifest once. */
+    private fun install(vararg entries: OfflineEntry) {
+        if (GlobalContext.getOrNull() != null) stopKoin()
+        File(context.noBackupFilesDir, "offline").deleteRecursively()
+        val manifest = OfflineManifest(entries = entries.toList())
         OfflineFiles(context.noBackupFilesDir).manifest(account.key).apply {
             parentFile!!.mkdirs()
             writeText(offlineEncodeManifest(manifest))
@@ -141,6 +160,151 @@ class OfflineDownloadsScreenTest {
         compose.onNodeWithTag("downloads:cancel").performSemanticsAction(SemanticsActions.OnClick)
         settle()
         compose.onNodeWithTag("downloads:row:paused").assertExists()
+    }
+
+    // The remote stays where the viewer was looking: a control that goes away used to drop focus on the top of the page.
+
+    private fun ask(id: String) {
+        compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("downloads:delete:$id"))
+        compose.onNodeWithTag("downloads:delete:$id").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        compose.onNodeWithTag("downloads:cancel").assertIsFocused()
+    }
+
+    private fun confirmDelete() {
+        compose.onNodeWithTag("downloads:confirm").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+    }
+
+    @Test
+    fun `TV Cancel returns to the row's own Delete, on a failed row and a waiting one`() {
+        tv()
+        settle()
+        listOf("failed", "waiting").forEach { id ->
+            ask(id)
+            compose.onNodeWithTag("downloads:cancel").performSemanticsAction(SemanticsActions.OnClick)
+            settle()
+            compose.onNodeWithTag("downloads:delete:$id").assertIsFocused()
+        }
+    }
+
+    @Test
+    fun `TV Back from the question returns to the row's own Delete`() {
+        tv()
+        settle()
+        ask("waiting")
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        settle()
+        compose.onNodeWithTag("downloads:delete:waiting").assertIsFocused()
+    }
+
+    @Test
+    fun `TV Cancel returns to a ready row's own Delete`() {
+        install(entry("a", OfflinePhase.ready), entry("b", OfflinePhase.ready))
+        tv()
+        settle()
+        ask("b")
+        compose.onNodeWithTag("downloads:cancel").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        compose.onNodeWithTag("downloads:delete:b").assertIsFocused()
+    }
+
+    @Test
+    fun `TV Delete moves to the row that takes its place, then the one above, then the top`() {
+        install(entry("a", OfflinePhase.ready), entry("b", OfflinePhase.ready), entry("c", OfflinePhase.ready))
+        tv()
+        settle()
+        ask("b")
+        confirmDelete()
+        compose.onNodeWithTag("downloads:row:b").assertDoesNotExist()
+        compose.onNodeWithTag("downloads:play:c").assertIsFocused()
+        ask("c")
+        confirmDelete()
+        compose.onNodeWithTag("downloads:play:a").assertIsFocused()
+        ask("a")
+        confirmDelete()
+        compose.onNodeWithTag("downloads:storage").assertIsFocused()
+    }
+
+    /** A window this short holds one row, so the next one isn't composed until the list scrolls to it. */
+    @Test
+    @Config(qualifiers = "w960dp-h200dp")
+    fun `TV Delete finds the next row when it isn't on screen yet`() {
+        install(*Array(12) { entry("r$it", OfflinePhase.ready) })
+        tv()
+        settle()
+        ask("r5")
+        confirmDelete()
+        compose.onNodeWithTag("downloads:play:r6").assertIsFocused()
+    }
+
+    private fun conflictOn(id: String) {
+        val file = OfflineFiles(context.noBackupFilesDir).progress(account.key)
+        file.parentFile!!.mkdirs()
+        val outbox = OfflineOutboxEntry(
+            account.server.id,
+            account.user.id,
+            id,
+            OfflineUserData(10, false, 0),
+            phase = "conflict",
+            conflict = OfflineConflict(20, false, 10, false, emptyList())
+        )
+        file.writeText(Json.encodeToString(OfflineProgressFile.serializer(), OfflineProgressFile(outbox = mapOf(id to outbox))))
+        runBlocking { engine.progressStore(account).watched(listOf(id)) }
+    }
+
+    @Test
+    fun `TV opens on the conflict notice, whole, and OK moves to the first row`() {
+        install(*Array(4) { entry("r$it", OfflinePhase.ready) })
+        conflictOn("r0")
+        tv()
+        settle()
+        compose.onNodeWithTag("downloads:conflict-ok").assertIsFocused()
+        val card = compose.onNodeWithTag("downloads:conflict-text").getBoundsInRoot()
+        assertTrue("the sentence isn't under the top edge: ${card.top}", card.top >= 0.dp)
+        compose.onNodeWithTag("downloads:conflict-ok").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        compose.onNodeWithTag("downloads:conflict-ok").assertDoesNotExist()
+        compose.onNodeWithTag("downloads:play:r0").assertIsFocused()
+    }
+
+    private fun network(transport: Int?) {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        if (transport == null) {
+            shadowOf(manager).setDefaultNetworkActive(false)
+            return
+        }
+        val network = requireNotNull(manager.activeNetwork)
+        val capabilities = ShadowNetworkCapabilities.newInstance()
+        shadowOf(capabilities).addTransportType(transport)
+        shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        shadowOf(manager).setNetworkCapabilities(network, capabilities)
+    }
+
+    @Test
+    fun `TV says there's no connection when there's none, the same as touch`() {
+        network(null)
+        tv()
+        settle()
+        compose.onNodeWithText("No connection. Everything saved below still plays.").assertExists()
+        compose.onNodeWithText("Open the library").assertExists()
+    }
+
+    @Test
+    fun `touch says there's no connection when there's none`() {
+        network(null)
+        touch()
+        settle()
+        compose.onNodeWithText("No connection. Everything saved below still plays.").assertExists()
+        compose.onNodeWithText("Open the library").assertExists()
+    }
+
+    @Test
+    fun `TV on a wired network with the server gone doesn't claim there's no connection`() {
+        network(NetworkCapabilities.TRANSPORT_ETHERNET)
+        tv()
+        settle()
+        compose.onNodeWithText("No connection. Everything saved below still plays.").assertDoesNotExist()
     }
 
     @Test

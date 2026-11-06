@@ -310,6 +310,47 @@ class TouchNavigationTest {
         waitForCard("edited result")
     }
 
+    /** A screen opened inside a tab sits on that tab's saved stack, and restoring it put the same screen straight back. */
+    @Test
+    fun tappingSearchFromAScreenOpenedInsideSearchGoesToSearch() {
+        launch(signedIn = true)
+        compose.onNodeWithText("Search").performClick()
+        compose.onNodeWithTag("touch:search:query").performTextReplacement("edited")
+        waitForCard("edited result")
+        compose.onNodeWithContentDescription("edited result").performClick()
+        waitFor("edited result")
+        compose.onNodeWithTag("touch:search:query").assertDoesNotExist()
+        compose.onNodeWithText("Search").performClick()
+        compose.waitForIdle()
+        assertInput("touch:search:query", "edited")
+    }
+
+    @Test
+    fun tappingSettingsFromAScreenOpenedInsideSettingsGoesToSettings() {
+        launch(signedIn = true)
+        compose.onNodeWithText("Settings").performClick()
+        waitFor("Downloads")
+        compose.onNodeWithText("Accounts").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Downloads").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("Settings").performClick()
+        waitFor("Downloads")
+    }
+
+    @Test
+    fun aTabLeftOnAnInnerScreenStillComesBackToIt() {
+        launch(signedIn = true)
+        compose.onNodeWithText("Search").performClick()
+        compose.onNodeWithTag("touch:search:query").performTextReplacement("edited")
+        waitForCard("edited result")
+        compose.onNodeWithContentDescription("edited result").performClick()
+        waitFor("edited result")
+        compose.onNodeWithText("Home").performClick()
+        waitFor("What would you like to watch?")
+        compose.onNodeWithText("Search").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("touch:search:query").assertDoesNotExist()
+    }
+
     @Test
     fun clearedExternalSearchStaysClearedAfterRestorationAndFreshIntentReplacesIt() {
         launch(signedIn = true)

@@ -79,6 +79,8 @@ internal fun offlineHomeOffersDownloads(state: CatalogHomeState, library: Offlin
 internal sealed interface OfflineFirstFocus {
     data object Password : OfflineFirstFocus
 
+    data class Conflict(val itemId: String) : OfflineFirstFocus
+
     data class Row(val entryId: String, val action: OfflineAction) : OfflineFirstFocus
 
     data object Storage : OfflineFirstFocus
@@ -88,10 +90,38 @@ internal sealed interface OfflineFirstFocus {
 private fun OfflineRow.primaryAction(): OfflineAction? =
     actions.firstOrNull { it != OfflineAction.AllowCellular && it != OfflineAction.Delete } ?: actions.firstOrNull()
 
-internal fun offlineFirstFocus(passwordNeeded: Boolean, sections: OfflineSections): OfflineFirstFocus {
+/** A notice about the viewer's place comes before the list: it's the first thing on the page, and its OK is the answer. */
+internal fun offlineFirstFocus(
+    passwordNeeded: Boolean,
+    sections: OfflineSections,
+    conflicts: Collection<String> = emptyList()
+): OfflineFirstFocus {
     if (passwordNeeded) return OfflineFirstFocus.Password
+    conflicts.firstOrNull()?.let { return OfflineFirstFocus.Conflict(it) }
     val row = sections.ordered.flatMap { it.second }.firstOrNull { it.primaryAction() != null } ?: return OfflineFirstFocus.Storage
     return OfflineFirstFocus.Row(row.entry.id, requireNotNull(row.primaryAction()))
+}
+
+/** The row that takes a deleted row's place, else the one above it, else the top of the page. Rows with nothing to press don't count. */
+internal fun offlineFocusAfterDelete(sections: OfflineSections, deleted: String): OfflineFirstFocus {
+    val rows = sections.ordered.flatMap { it.second }
+    val at = rows.indexOfFirst { it.entry.id == deleted }
+    val row = rows.drop(at + 1).firstOrNull { it.primaryAction() != null }
+        ?: rows.take(at.coerceAtLeast(0)).lastOrNull { it.primaryAction() != null }
+        ?: return OfflineFirstFocus.Storage
+    return OfflineFirstFocus.Row(row.entry.id, requireNotNull(row.primaryAction()))
+}
+
+/** Where a row sits among the list's section headings and rows, which is how the list finds one that isn't on screen yet. */
+internal fun offlineRowPosition(sections: OfflineSections, entryId: String): Int? {
+    var position = 0
+    sections.ordered.forEach { (_, rows) ->
+        position++
+        val at = rows.indexOfFirst { it.entry.id == entryId }
+        if (at >= 0) return position + at
+        position += rows.size
+    }
+    return null
 }
 
 /** Waiting for storage has its answer one screen away. */
