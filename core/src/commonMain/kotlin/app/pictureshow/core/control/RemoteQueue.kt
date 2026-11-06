@@ -21,12 +21,7 @@ data class RemoteQueueState(
 )
 
 @Serializable
-data class RemoteQueueEvent(
-    val op: String,
-    val items: List<String> = emptyList(),
-    val watching: String? = null,
-    val item: String? = null
-)
+data class RemoteQueueEvent(val op: String, val items: List<String> = emptyList(), val watching: String? = null, val item: String? = null)
 
 fun reduceRemoteQueue(state: RemoteQueueState, event: RemoteQueueEvent): RemoteQueueState {
     val next = when (event.op) {
@@ -49,7 +44,12 @@ fun reduceRemoteQueue(state: RemoteQueueState, event: RemoteQueueEvent): RemoteQ
 
 private fun clear(s: RemoteQueueState) = s.copy(queue = QueueState(s.queue.server, s.queue.viewer, revision = s.queue.revision + 1))
 
-private fun edit(s: RemoteQueueState, op: String, entries: List<String> = emptyList(), automatic: List<String> = emptyList()): RemoteQueueState {
+private fun edit(
+    s: RemoteQueueState,
+    op: String,
+    entries: List<String> = emptyList(),
+    automatic: List<String> = emptyList()
+): RemoteQueueState {
     var sequence = s.sequence
     fun made(items: List<String>) = items.map { QueueEntry("r${++sequence}", it) }
     val q = s.queue

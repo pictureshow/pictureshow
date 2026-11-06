@@ -132,7 +132,7 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
             fun insertAt(list: List<String>): Int {
                 if (q.current == null) return 0
                 val beforeAutomatic = list.indexOfFirst { it in upcomingAutomatic }.takeIf { it >= 0 } ?: list.size
-                // Canonical order can hold current after the automatic entries while shuffled; unshuffle must still play this first.
+                // While shuffled, canonical order can hold current after the automatic entries; unshuffle still plays this first.
                 return if (event.op == "play-next") minOf(list.indexOf(q.current) + 1, beforeAutomatic) else beforeAutomatic
             }
             val order = q.order.filter { it !in superseded }.toMutableList().also { it.addAll(insertAt(it), block) }
@@ -199,7 +199,8 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
         }
         "clear-all" -> changed(
             q.copy(
-                entries = emptyList(), order = emptyList(), current = null, history = emptyList(), visited = emptyList(), automatic = emptyList(),
+                entries = emptyList(), order = emptyList(), current = null, history = emptyList(), visited = emptyList(),
+                automatic = emptyList(),
                 positionTicks = 0,
                 paused = true, failed = emptyList(), shuffled = false, completion = q.completion + 1
             )
