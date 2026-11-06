@@ -1308,6 +1308,8 @@ class TouchPlayerControlsTest {
         val density = compose.onNodeWithTag("touch:play-on").fetchSemanticsNode().layoutInfo.density.density
         val target = compose.onNodeWithTag("touch:play-on").fetchSemanticsNode().touchBoundsInRoot
         assertTrue(target.width / density >= 47.5f && target.height / density >= 47.5f, "a 48 dp target: $target at $density")
+        val stopTarget = compose.onNodeWithTag("touch:stop").fetchSemanticsNode().touchBoundsInRoot
+        assertTrue((stopTarget.left - target.right) / density >= 7.5f, "the tap areas stay apart too: $target $stopTarget")
         assertInsideTheWindow(mark)
         compose.onNodeWithContentDescription("Play on").assertHasClickAction()
     }

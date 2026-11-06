@@ -1438,8 +1438,10 @@ class CastSenderHostTest {
         val player = FakeOutput(log)
         host.openChooser(request(local = player))
         host.localClosed(FakeOutput(log))
+        host.closeChooserFor(FakeOutput(log))
         assertTrue(host.state.value.chooserOpen, "another player's")
-        host.closeChooserFor(player)
+        // A player that goes without finishing, such as the screen being torn down, still closes its own.
+        host.localClosed(player)
         assertFalse(host.state.value.chooserOpen)
         assertEquals(null, host.chooserRequest)
     }
