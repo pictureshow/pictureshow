@@ -6656,6 +6656,71 @@
       },
       "expected": null,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-past-a-short-row-holds-while-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-from-last-row-holds-while-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 11,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-within-loaded-rows-ignores-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": true
+      },
+      "expected": 8,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-past-a-short-row-after-loading-lands-on-its-last",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": false
+      },
+      "expected": 11,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.up-ignores-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 12,
+        "down": false,
+        "loadingMore": true
+      },
+      "expected": 3,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     }
   ]
 }

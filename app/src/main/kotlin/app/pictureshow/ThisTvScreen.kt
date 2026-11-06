@@ -26,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -181,8 +180,7 @@ internal fun ThisTvScreen(
                     showJson = !showJson
                     if (hiding) {
                         scope.launch {
-                            list.scrollToItem(0)
-                            withFrameNanos { }
+                            list.jumpTo(0)
                             toggle.requestFocus()
                         }
                     }

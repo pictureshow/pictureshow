@@ -1,6 +1,7 @@
 import app.pictureshow.buildlogic.Media3ControllerIdentityFix
 import com.android.build.api.instrumentation.FramesComputationMode
 import com.android.build.api.instrumentation.InstrumentationScope
+import java.time.Duration
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -51,7 +52,11 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         // Robolectric API 36 initializes ApplicationSharedMemory through the JDK file-descriptor bridge.
-        unitTests.all { it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED") }
+        unitTests.all {
+            it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+            // Backstop for what PerTestTimeLimit can't stop: code spinning with no looper and no interrupt.
+            it.timeout.set(Duration.ofMinutes(25))
+        }
     }
     lint {
         warningsAsErrors = true

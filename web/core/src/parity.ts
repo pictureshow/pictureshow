@@ -335,11 +335,13 @@ export function gridVerticalMove(
     columns: number,
     count: number,
     down: boolean,
+    loadingMore: boolean,
 ): number | null {
     if (columns <= 0 || index < 0 || index >= count) return null;
     if (!down) return index >= columns ? index - columns : null;
     const last = count - 1;
     if (index + columns <= last) return index + columns;
+    if (loadingMore) return null;
     return Math.floor(last / columns) > Math.floor(index / columns) ? last : null;
 }
 export function nextCountdown(

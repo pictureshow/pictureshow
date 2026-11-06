@@ -158,6 +158,30 @@ internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
                     close()
                 }
             }
+            "arrow-up" -> {
+                moveTo(12f, 4f)
+                lineTo(19f, 11f)
+                lineTo(17f, 13f)
+                lineTo(13.5f, 9.5f)
+                lineTo(13.5f, 20f)
+                lineTo(10.5f, 20f)
+                lineTo(10.5f, 9.5f)
+                lineTo(7f, 13f)
+                lineTo(5f, 11f)
+                close()
+            }
+            "arrow-down" -> {
+                moveTo(12f, 20f)
+                lineTo(5f, 13f)
+                lineTo(7f, 11f)
+                lineTo(10.5f, 14.5f)
+                lineTo(10.5f, 4f)
+                lineTo(13.5f, 4f)
+                lineTo(13.5f, 14.5f)
+                lineTo(17f, 11f)
+                lineTo(19f, 13f)
+                close()
+            }
             "chevron-down" -> {
                 moveTo(6f, 8f)
                 lineTo(12f, 14f)

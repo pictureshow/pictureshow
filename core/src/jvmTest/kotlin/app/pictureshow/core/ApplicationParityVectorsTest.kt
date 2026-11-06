@@ -432,7 +432,8 @@ class ApplicationParityVectorsTest {
                         input.getValue("index").jsonPrimitive.int,
                         input.getValue("columns").jsonPrimitive.int,
                         input.getValue("count").jsonPrimitive.int,
-                        input.getValue("down").jsonPrimitive.booleanOrNull!!
+                        input.getValue("down").jsonPrimitive.booleanOrNull!!,
+                        input["loadingMore"]?.jsonPrimitive?.booleanOrNull ?: false
                     )?.let(::JsonPrimitive) ?: JsonNull
                     "next-countdown" -> nextEpisodeCardSeconds(
                         input.getValue("wallSeconds").jsonPrimitive.long,

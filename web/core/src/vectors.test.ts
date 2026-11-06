@@ -720,7 +720,13 @@ for (const file of files) {
                         value = nextTrigger(i.durationMs, i.segments);
                         break;
                     case "grid-vertical-move":
-                        value = gridVerticalMove(i.index, i.columns, i.count, i.down);
+                        value = gridVerticalMove(
+                            i.index,
+                            i.columns,
+                            i.count,
+                            i.down,
+                            i.loadingMore ?? false,
+                        );
                         break;
                     case "next-countdown":
                         value = nextCountdown(

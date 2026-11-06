@@ -161,11 +161,11 @@ fun SearchScreen(
     suspend fun focusRow(index: Int, target: String? = null): Boolean {
         val row = state.rows.getOrNull(index) ?: return false
         val itemIndex = row.items.indexOfFirst { "${row.key}:${it.id}" == (target ?: selections[row.key]) }.coerceAtLeast(0)
-        list.scrollToItem(index)
+        list.jumpTo(index)
         val horizontal = rowStates.getValue(row.key)
         return withTimeoutOrNull(1_500) {
             snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.index == index } }.first { it }
-            horizontal.scrollToItem(itemIndex)
+            horizontal.jumpTo(itemIndex)
             snapshotFlow { horizontal.layoutInfo.visibleItemsInfo.any { it.index == itemIndex } }.first { it }
             while (true) {
                 withFrameNanos { }
@@ -223,184 +223,196 @@ fun SearchScreen(
         var resultsFocused by remember { mutableStateOf(false) }
         // A long title at the largest sizes is taller than the space under the field: it goes while results hold focus.
         val headCollapsed = resultsFocused && LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE
-        Column(Modifier.collapsedOffScreen(headCollapsed), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(
-                "Search",
-                style = MaterialTheme.typography.headlineLarge,
-                modifier = Modifier.fillMaxWidth().catalogFocusTarget(!handoff).semantics {
-                    heading()
-                    traversalIndex =
-                        -2f
-                }
-            )
-            // Text can arrive from outside the keyboard (a recent search, a phone remote). The caret goes after it.
-            var fieldValue by remember { mutableStateOf(TextFieldValue(state.query, TextRange(state.query.length))) }
-            var seenQuery by remember { mutableStateOf(state.query) }
-            if (state.query != seenQuery) {
-                seenQuery = state.query
-                if (state.query != fieldValue.text) fieldValue = TextFieldValue(state.query, TextRange(state.query.length))
-            }
-            InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
-                BasicTextField(
-                    value = fieldValue,
-                    onValueChange = {
-                        val changed = it.text != fieldValue.text
-                        fieldValue = it
-                        if (changed) {
-                            focusResults = false
-                            selected = ""
-                            selections = emptyMap()
-                            onQuery(it.text)
-                        }
-                    },
-                    readOnly = !editing,
-                    singleLine = true,
-                    textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
-                    cursorBrush = SolidColor(Color(0xFFB8C4FF)),
-                    keyboardOptions = KeyboardOptions(
-                        autoCorrectEnabled = false,
-                        imeAction = ImeAction.Search
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onSearch = {
-                            onSubmit()
-                            focusResults = true
-                            down()
-                        },
-                        onDone = {
-                            onSubmit()
-                            focusResults = true
-                            down()
-                        }
-                    ),
-                    modifier = arrivalTarget(Modifier.fillMaxWidth(), returningToField)
-                        .focusRequester(field).testTag("search:field")
-                        .semantics {
-                            contentDescription = "Search your video library"
-                            traversalIndex = -1f
-                        }
-                        .editWithKeyboard {
-                            field.requestFocus()
-                            editing = true
-                            keyboard?.show()
-                        }
-                        .onFocusChanged {
-                            // Attachment reports false before the first focus request. Preserve entry-time editing.
-                            if (fieldFocused && !it.isFocused) editing = false
-                            if (!it.isFocused) navigation.clear()
-                            fieldFocused = it.isFocused
-                        }
-                        .onPreviewKeyEvent {
-                            when {
-                                it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter) -> {
-                                    if (it.type == KeyEventType.KeyUp) {
-                                        editing = true
-                                        keyboard?.show()
-                                    }
-                                    true
-                                }
-
-                                navigation.handle(it) { down() } -> true
-
-                                else -> false
-                            }
-                        }
-                        .border(if (fieldFocused) 3.dp else 1.dp, Color(0xFFB8C4FF)).padding(16.dp)
-                )
-            }
-            state.storageError?.let { Text(it, modifier = Modifier.catalogFocusTarget(!handoff)) }
-            if (normalizeSearch(state.query).isEmpty()) {
-                if (state.recent.isNotEmpty()) {
-                    Text("Recent searches", modifier = Modifier.catalogFocusTarget(!handoff))
-                    LazyRow(
-                        modifier = Modifier.catalogFocusTarget(!handoff) { !returning || (restored && !handoff) || interacted },
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        itemsIndexed(state.recent, key = { _, term -> term }) { index, term ->
-                            Button(
-                                onClick = {
-                                    focusResults = true
-                                    selected = ""
-                                    selections = emptyMap()
-                                    onRecent(term)
-                                    focusField()
-                                },
-                                modifier = (if (index == 0) Modifier.focusRequester(recentFirst) else Modifier)
-                                    .catalogFocusTarget(!handoff) {
-                                        !returning || (restored && !handoff) || interacted
-                                    }.testTag("recent:$index")
-                                    .staysInRow(index == 0, last = false)
-                                    .onPreviewKeyEvent {
-                                        if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown) {
-                                            focusField()
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    }
-                            ) { Text(term) }
-                        }
-                        item {
-                            Button(
-                                onClick = {
-                                    focusField()
-                                    selected = ""
-                                    selections = emptyMap()
-                                    onClear()
-                                },
-                                modifier = Modifier.catalogFocusTarget(
-                                    !handoff,
-                                    { !returning || (restored && !handoff) || interacted }
-                                ).testTag("search:clear")
-                            ) {
-                                Text("Clear")
-                            }
-                        }
+        Box {
+            Column(Modifier.collapsedOffScreen(headCollapsed), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    "Search",
+                    style = MaterialTheme.typography.headlineLarge,
+                    modifier = Modifier.fillMaxWidth().catalogFocusTarget(!handoff).semantics {
+                        heading()
+                        traversalIndex =
+                            -2f
                     }
-                } else {
-                    Text(
-                        "Type or use your keyboard’s microphone to search movies, shows and people.",
-                        modifier = Modifier.catalogFocusTarget(!handoff)
+                )
+                // Text can arrive from outside the keyboard (a recent search, a phone remote). The caret goes after it.
+                var fieldValue by remember { mutableStateOf(TextFieldValue(state.query, TextRange(state.query.length))) }
+                var seenQuery by remember { mutableStateOf(state.query) }
+                if (state.query != seenQuery) {
+                    seenQuery = state.query
+                    if (state.query != fieldValue.text) fieldValue = TextFieldValue(state.query, TextRange(state.query.length))
+                }
+                InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
+                    BasicTextField(
+                        value = fieldValue,
+                        onValueChange = {
+                            val changed = it.text != fieldValue.text
+                            fieldValue = it
+                            if (changed) {
+                                focusResults = false
+                                selected = ""
+                                selections = emptyMap()
+                                onQuery(it.text)
+                            }
+                        },
+                        readOnly = !editing,
+                        singleLine = true,
+                        textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
+                        cursorBrush = SolidColor(Color(0xFFB8C4FF)),
+                        keyboardOptions = KeyboardOptions(
+                            autoCorrectEnabled = false,
+                            imeAction = ImeAction.Search
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                onSubmit()
+                                focusResults = true
+                                down()
+                            },
+                            onDone = {
+                                onSubmit()
+                                focusResults = true
+                                down()
+                            }
+                        ),
+                        modifier = arrivalTarget(Modifier.fillMaxWidth(), returningToField)
+                            .focusRequester(field).testTag("search:field")
+                            .semantics {
+                                contentDescription = "Search your video library"
+                                traversalIndex = -1f
+                            }
+                            .editWithKeyboard {
+                                field.requestFocus()
+                                editing = true
+                                keyboard?.show()
+                            }
+                            .onFocusChanged {
+                                // Attachment reports false before the first focus request. Preserve entry-time editing.
+                                if (fieldFocused && !it.isFocused) editing = false
+                                if (!it.isFocused) navigation.clear()
+                                fieldFocused = it.isFocused
+                            }
+                            .onPreviewKeyEvent {
+                                when {
+                                    it.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter) -> {
+                                        if (it.type == KeyEventType.KeyUp) {
+                                            editing = true
+                                            keyboard?.show()
+                                        }
+                                        true
+                                    }
+
+                                    navigation.handle(it) { down() } -> true
+
+                                    else -> false
+                                }
+                            }
+                            .border(if (fieldFocused) 3.dp else 1.dp, Color(0xFFB8C4FF)).padding(16.dp)
                     )
                 }
-            } else if (normalizeSearch(state.query).length < 2) {
-                Text("Enter at least 2 characters.", modifier = Modifier.catalogFocusTarget(!handoff))
-            }
-            if (state.loading) Text("Searching…", modifier = Modifier.catalogFocusTarget(!handoff))
-            if (state.allFailed || state.someFailed || state.refreshError != null) {
-                Text(
-                    state.refreshError
-                        ?: if (state.allFailed) "Could not search your library. Try again." else "Some results could not load. Try again.",
-                    modifier = Modifier.catalogFocusTarget(!handoff)
-                )
-                Button(
-                    onClick = {
-                        focusField()
-                        focusResults = true
-                        onRetry()
-                    },
-                    modifier = arrivalTarget(Modifier, returningToRetry).focusRequester(retry).testTag("search:retry").onPreviewKeyEvent {
-                        if (it.type != KeyEventType.KeyDown) {
-                            false
-                        } else {
-                            when (it.key) {
-                                Key.DirectionUp -> {
-                                    focusField()
-                                    true
+                state.storageError?.let { Text(it, modifier = Modifier.catalogFocusTarget(!handoff)) }
+                if (normalizeSearch(state.query).isEmpty()) {
+                    if (state.recent.isNotEmpty()) {
+                        Text("Recent searches", modifier = Modifier.catalogFocusTarget(!handoff))
+                        LazyRow(
+                            modifier = Modifier.catalogFocusTarget(!handoff) { !returning || (restored && !handoff) || interacted },
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            itemsIndexed(state.recent, key = { _, term -> term }) { index, term ->
+                                Button(
+                                    onClick = {
+                                        focusResults = true
+                                        selected = ""
+                                        selections = emptyMap()
+                                        onRecent(term)
+                                        focusField()
+                                    },
+                                    modifier = (if (index == 0) Modifier.focusRequester(recentFirst) else Modifier)
+                                        .catalogFocusTarget(!handoff) {
+                                            !returning || (restored && !handoff) || interacted
+                                        }.testTag("recent:$index")
+                                        .staysInRow(index == 0, last = false)
+                                        .onPreviewKeyEvent {
+                                            if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown) {
+                                                focusField()
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                ) { Text(term) }
+                            }
+                            item {
+                                Button(
+                                    onClick = {
+                                        focusField()
+                                        selected = ""
+                                        selections = emptyMap()
+                                        onClear()
+                                    },
+                                    modifier = Modifier.catalogFocusTarget(
+                                        !handoff,
+                                        { !returning || (restored && !handoff) || interacted }
+                                    ).testTag("search:clear")
+                                ) {
+                                    Text("Clear")
                                 }
-
-                                Key.DirectionDown -> {
-                                    scope.launch { focusRow(0) }
-                                    true
-                                }
-
-                                else -> false
                             }
                         }
+                    } else {
+                        Text(
+                            "Type or use your keyboard’s microphone to search movies, shows and people.",
+                            modifier = Modifier.catalogFocusTarget(!handoff)
+                        )
                     }
-                ) { Text("Retry") }
-            } else if (state.completed && state.rows.isEmpty()) {
-                Text("No results for “${normalizeSearch(state.query)}”", modifier = Modifier.catalogFocusTarget(!handoff))
+                } else if (normalizeSearch(state.query).length < 2) {
+                    Text("Enter at least 2 characters.", modifier = Modifier.catalogFocusTarget(!handoff))
+                }
+                if (state.loading) Text("Searching…", modifier = Modifier.catalogFocusTarget(!handoff))
+                if (state.allFailed || state.someFailed || state.refreshError != null) {
+                    Text(
+                        state.refreshError
+                            ?: if (state.allFailed) {
+                                "Could not search your library. Try again."
+                            } else {
+                                "Some results could not load. Try again."
+                            },
+                        modifier = Modifier.catalogFocusTarget(!handoff)
+                    )
+                    Button(
+                        onClick = {
+                            focusField()
+                            focusResults = true
+                            onRetry()
+                        },
+                        modifier = arrivalTarget(
+                            Modifier,
+                            returningToRetry
+                        ).focusRequester(retry).testTag("search:retry").onPreviewKeyEvent {
+                            if (it.type != KeyEventType.KeyDown) {
+                                false
+                            } else {
+                                when (it.key) {
+                                    Key.DirectionUp -> {
+                                        focusField()
+                                        true
+                                    }
+
+                                    Key.DirectionDown -> {
+                                        scope.launch { focusRow(0) }
+                                        true
+                                    }
+
+                                    else -> false
+                                }
+                            }
+                        }
+                    ) { Text("Retry") }
+                } else if (state.completed && state.rows.isEmpty()) {
+                    Text("No results for “${normalizeSearch(state.query)}”", modifier = Modifier.catalogFocusTarget(!handoff))
+                }
+            }
+            if (headCollapsed) {
+                ContextStrip("Results for \"${state.query}\"", null, Modifier.pinnedToScreenTop(48.dp, 24.dp).testTag("search:strip"))
             }
         }
         val platformBringIntoView = LocalBringIntoViewSpec.current
@@ -536,7 +548,7 @@ fun SearchScreen(
             if (!focused) {
                 interacted = true
                 restored = true
-                list.scrollToItem(0)
+                list.jumpTo(0)
                 editing = false
                 keyboard?.hide()
                 awaitCatalogFocus(field)
@@ -561,9 +573,10 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
         if (!state.grid.loading && state.grid.items.isEmpty() && state.grid.error == null) back.requestFocus()
     }
     var gridFocused by remember { mutableStateOf(false) }
+    val headCollapsed = gridFocused && LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE
     Column(Modifier.fillMaxSize().background(Color(0xFF10131C))) {
         Row(
-            Modifier.collapsedOffScreen(gridFocused && LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE)
+            Modifier.collapsedOffScreen(headCollapsed)
                 .padding(start = 48.dp, top = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
@@ -575,7 +588,7 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
         }
         Box(Modifier.weight(1f).onFocusChanged { gridFocused = it.hasFocus }) {
             CatalogGrid(state.grid.copy(parent = state.person.copy(name = "Movies and shows")), onOpen, onNearEnd, { _, _ ->
-            }, onRetry, showSort = false)
+            }, onRetry, showSort = false, stripTitle = state.person.name.takeIf { headCollapsed }, pinStrip = headCollapsed)
         }
     }
 }
