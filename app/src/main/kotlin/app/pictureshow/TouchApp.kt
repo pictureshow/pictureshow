@@ -284,6 +284,7 @@ internal fun TouchPictureshow(
                         val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
                         val profileState by profile.state.collectAsStateWithLifecycle()
+                        val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                         TouchCatalogHome(
                             screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                             profileState.account.copy(server = account.server),
@@ -293,7 +294,8 @@ internal fun TouchPictureshow(
                                 vm.reload()
                             },
                             onResume = vm::resumed,
-                            librariesOnly = destination == "libraries"
+                            librariesOnly = destination == "libraries",
+                            onWatchDownloads = watchDownloads
                         )
                     }
                 }

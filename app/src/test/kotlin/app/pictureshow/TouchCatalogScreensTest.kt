@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -32,6 +33,7 @@ import app.pictureshow.core.User
 import app.pictureshow.core.resumeLabel
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -101,6 +103,23 @@ class TouchCatalogScreensTest {
         compose.onNodeWithTag("touch:card:movie").performClick()
         assertEquals(movie, opened)
         compose.onNodeWithText("Connection unavailable").assertDoesNotExist()
+    }
+
+    @Test fun unreachableServerWithDownloadsLeadsWithThemThenRetry() {
+        var retries = 0
+        var watched = 0
+        val error = "Could not reach the server. Check your connection and try again."
+        val state = CatalogHomeState(loading = false, error = error, unreachable = true)
+        compose.setContent { MaterialTheme { TouchCatalogHome(state, account, {}, { retries++ }, onWatchDownloads = { watched++ }) } }
+        compose.onNodeWithText("Could not reach the server. Your downloads still play.").assertExists()
+        compose.onNodeWithText("Could not reach the server. Check your connection and try again.").assertDoesNotExist()
+        val watch = compose.onNodeWithTag("home:watch-downloads").getUnclippedBoundsInRoot()
+        val retry = compose.onNodeWithTag("home:retry").getUnclippedBoundsInRoot()
+        assertTrue(retry.top >= watch.bottom, "Retry comes second")
+        compose.onNodeWithTag("home:watch-downloads").performClick()
+        compose.onNodeWithTag("home:retry").performClick()
+        assertEquals(1, watched)
+        assertEquals(1, retries)
     }
 
     @Test fun librariesTabOnlyExposesLibrariesWhileHomeKeepsWatchingRows() {

@@ -111,7 +111,8 @@ internal fun TouchCatalogHome(
     onOpen: (MediaItem) -> Unit,
     onRetry: () -> Unit,
     onResume: () -> Unit = {},
-    librariesOnly: Boolean = false
+    librariesOnly: Boolean = false,
+    onWatchDownloads: (() -> Unit)? = null
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     val shortWindow = isShortTouchWindow()
@@ -131,7 +132,11 @@ internal fun TouchCatalogHome(
                 TouchCatalogHeading("Pictureshow")
                 if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.loading) TouchCatalogLoading("Loading your library…")
-                TouchCatalogError(state.error, onRetry)
+                if (onWatchDownloads != null) {
+                    TouchDownloadsOffer(onWatchDownloads, onRetry)
+                } else {
+                    TouchCatalogError(state.error, onRetry)
+                }
                 if (!state.loading && rows.isEmpty() && state.error == null) {
                     Text("Your library is ready for something new.")
                     TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Refresh") }
@@ -967,6 +972,22 @@ internal fun TouchCatalogLoading(label: String) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Home's error when the server is out of reach and saved films aren't: the way to them comes first. */
+@Composable
+private fun TouchDownloadsOffer(onWatchDownloads: () -> Unit, onRetry: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            OFFLINE_UNREACHABLE_TEXT,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        Button(onClick = onWatchDownloads, modifier = Modifier.heightIn(min = 48.dp).testTag("home:watch-downloads")) {
+            Text("Watch downloads")
+        }
+        TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp).testTag("home:retry")) { Text("Retry") }
     }
 }
 
