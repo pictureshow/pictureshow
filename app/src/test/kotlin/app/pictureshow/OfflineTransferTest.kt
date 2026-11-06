@@ -23,9 +23,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.rules.Timeout
 
 class OfflineTransferTest {
     @get:Rule val folder = TemporaryFolder()
+
+    // A cancel that never arrives leaves a blocked read waiting for ever; this makes that bug a failure with a name.
+    @get:Rule val limit: Timeout = Timeout.seconds(60)
 
     private class Ledger(var allowance: Long = Long.MAX_VALUE) : OfflineLedger {
         var reserved = 0L
@@ -317,7 +321,7 @@ class OfflineTransferTest {
                 object : InputStream() {
                     override fun read(): Int {
                         blocked.countDown()
-                        broken.await()
+                        broken.await(20, java.util.concurrent.TimeUnit.SECONDS)
                         throw IOException("Canceled")
                     }
 

@@ -810,6 +810,28 @@ class OfflineEngineTest {
     }
 
     @Test
+    fun `a manifest that can't take its new name is kept in memory and saved when it can`() = runBlocking<Unit> {
+        recheckMs = 20
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        val manifest = engine.files.manifest(viewerA.key)
+        // The temp file writes and the rename refuses, which is the other way a save can fail.
+        assertTrue(manifest.delete())
+        val inTheWay = File(manifest, "in-the-way")
+        assertTrue(inTheWay.mkdirs())
+        engine.delete(viewerA.key, entryId("1"))
+        assertEquals(null, engine.entry(viewerA, "1"))
+        assertTrue(inTheWay.delete())
+        assertTrue(manifest.delete())
+        withTimeout(10_000) {
+            while (!manifest.isFile) delay(10)
+        }
+        assertFalse(manifest.readText().contains(entryId("1")))
+    }
+
+    @Test
     fun `no button can take the app down, whatever goes wrong behind it`() = runBlocking<Unit> {
         signIn(viewerA)
         val engine = started()
