@@ -1654,8 +1654,10 @@ fun CatalogDetail(
                 val (section, items) = sections[index]
                 val target = rowSelections[section] ?: state.selectedSeasonId.takeIf { section == "seasons" }
                 val itemIndex = items.indexOfFirst { it.id == target }.coerceAtLeast(0)
-                // A visible shelf heading does not mean its lazy cards are attached.
-                list.scrollToItem(index + 1)
+                // A visible shelf heading does not mean its lazy cards are attached. Requested rather than scrollToItem, which
+                // never returned here when the failed focus search had just met a shelf too tall to fit.
+                list.requestScrollToItem(index + 1)
+                withFrameNanos { }
                 val horizontal = rowStates.getValue(section)
                 if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
                 selectedSection = section

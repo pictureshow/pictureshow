@@ -278,6 +278,22 @@ class CatalogGridLargeFontTest {
         downToWholeCard("detail:episodes:", "detail")
     }
 
+    @Test fun detailShelfShowsAWholeCardWithAVeryLongTitle() {
+        val title = "A Long Episode Title That Needs Many Lines ".repeat(4)
+        val episodes = longTitles.map { it.copy(name = title, type = "Episode", seriesName = "A series", indexNumber = 1, parentIndexNumber = 1) }
+        showLarge {
+            CatalogDetail(
+                CatalogDetailState(account, MediaItem("season", "A season", "Season"), loading = false, episodes = episodes),
+                {},
+                {},
+                {},
+                {},
+                {}
+            )
+        }
+        downToWholeCard("detail:episodes:", "detail")
+    }
+
     @Test fun searchFieldComesBackWholeAboveTheResults() {
         showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
         downToWholeCard("search:first:", "search:results")
