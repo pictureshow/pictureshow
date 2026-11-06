@@ -184,6 +184,13 @@ when `suspended` and not `ended`. A nonpositive `mediaLeftMs` or `speed` keeps `
 `toEnd = ceil(mediaLeftMs / speed / 1000)`, and the result is `min(wallSeconds, toEnd)` with a credits countdown and
 `toEnd` without one. See TOUCH-13.
 
+## `grid-vertical-move`
+
+Input: integers `index`, `columns`, `count`, boolean `down`. Expected is the index a vertical D-pad move lands on in a
+grid laid out row by row, or null. Up is `index - columns`, null from the first row (the caller decides what is above
+the grid). Down is `index + columns`; when that passes the end but the last item is on a later row, the last item;
+null from the last row. Null when `columns` is not positive or `index` is outside `0 until count`. See CAT-19.
+
 ## `next-adjacency`
 
 Input: a Jellyfin `item` and an `items` array representing the mocked server adjacency response. Expected is the next

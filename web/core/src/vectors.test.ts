@@ -25,6 +25,7 @@ import {
     endPosition,
     activeSegment,
     nextTrigger,
+    gridVerticalMove,
     nextCountdown,
     nextAdjacency,
     imageUrl,
@@ -717,6 +718,9 @@ for (const file of files) {
                         break;
                     case "next-trigger":
                         value = nextTrigger(i.durationMs, i.segments);
+                        break;
+                    case "grid-vertical-move":
+                        value = gridVerticalMove(i.index, i.columns, i.count, i.down);
                         break;
                     case "next-countdown":
                         value = nextCountdown(

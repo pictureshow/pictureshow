@@ -6524,6 +6524,138 @@
         ]
       },
       "expected": "Home"
+    },
+    {
+      "id": "grid-vertical-move.down-keeps-column",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 35,
+        "down": true
+      },
+      "expected": 8,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.up-keeps-column",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 35,
+        "down": false
+      },
+      "expected": 3,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.up-from-first-row-leaves",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 35,
+        "down": false
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-to-short-last-row-lands-on-its-last",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 7,
+        "down": true
+      },
+      "expected": 6,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-exact-column-in-short-last-row",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 1,
+        "columns": 5,
+        "count": 7,
+        "down": true
+      },
+      "expected": 6,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-from-last-row-stays",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 6,
+        "columns": 5,
+        "count": 7,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-from-last-full-row-stays",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 9,
+        "columns": 5,
+        "count": 10,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.single-column",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 2,
+        "columns": 1,
+        "count": 4,
+        "down": true
+      },
+      "expected": 3,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.empty-grid",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 0,
+        "columns": 5,
+        "count": 0,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.unknown-columns",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 0,
+        "columns": 0,
+        "count": 5,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.index-out-of-range",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 7,
+        "columns": 5,
+        "count": 5,
+        "down": false
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     }
   ]
 }

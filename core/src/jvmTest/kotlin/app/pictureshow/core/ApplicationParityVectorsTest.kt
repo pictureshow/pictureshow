@@ -32,6 +32,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -426,6 +427,12 @@ class ApplicationParityVectorsTest {
                     "next-trigger" -> nextEpisodeTriggerMs(
                         input.getValue("durationMs").jsonPrimitive.long,
                         Json.decodeFromJsonElement(input.getValue("segments"))
+                    )?.let(::JsonPrimitive) ?: JsonNull
+                    "grid-vertical-move" -> gridVerticalTarget(
+                        input.getValue("index").jsonPrimitive.int,
+                        input.getValue("columns").jsonPrimitive.int,
+                        input.getValue("count").jsonPrimitive.int,
+                        input.getValue("down").jsonPrimitive.booleanOrNull!!
                     )?.let(::JsonPrimitive) ?: JsonNull
                     "next-countdown" -> nextEpisodeCardSeconds(
                         input.getValue("wallSeconds").jsonPrimitive.long,

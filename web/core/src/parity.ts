@@ -330,6 +330,18 @@ export function activeSegment(
             .sort((a, b) => a.StartTicks - b.StartTicks)[0] ?? null
     );
 }
+export function gridVerticalMove(
+    index: number,
+    columns: number,
+    count: number,
+    down: boolean,
+): number | null {
+    if (columns <= 0 || index < 0 || index >= count) return null;
+    if (!down) return index >= columns ? index - columns : null;
+    const last = count - 1;
+    if (index + columns <= last) return index + columns;
+    return Math.floor(last / columns) > Math.floor(index / columns) ? last : null;
+}
 export function nextCountdown(
     wallSeconds: number,
     creditsCountdown: boolean,
