@@ -83,10 +83,21 @@ internal fun offlineNetworkAllows(network: OfflineNetwork, wifiOnly: Boolean, ce
 /** Keeps the process alive and honest while bytes move. */
 internal interface OfflineForeground {
     fun update(activeTitles: List<String>)
+
+    /** Something still has to finish without the viewer touching it, so a restart must stay booked. */
+    fun unfinished(any: Boolean) = Unit
 }
 
 private const val OFFLINE_RETRIES = 3
 private const val OFFLINE_LOG = "PictureshowOffline"
+private val OFFLINE_UNFINISHED = setOf(
+    OfflinePhase.queued,
+    OfflinePhase.waitingNetwork,
+    OfflinePhase.waitingStorage,
+    OfflinePhase.preparing,
+    OfflinePhase.transferring,
+    OfflinePhase.verifying
+)
 private const val OFFLINE_STORAGE_MARGIN = 16L * 1024 * 1024
 
 internal class OfflineEngine(
@@ -456,6 +467,11 @@ internal class OfflineEngine(
             }.map { it.labels.title }
         }
         foreground.update(titles)
+        foreground.unfinished(
+            mutableLibraries.value.values.any { library ->
+                library.manifest.entries.any { it.job.phase in OFFLINE_UNFINISHED }
+            }
+        )
     }
 
     /** The network really changed, or the viewer came to look: a server that couldn't be reached is worth trying now. */

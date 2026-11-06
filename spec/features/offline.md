@@ -50,6 +50,7 @@ The vectors freeze the reducers. These behaviours live in each platform's engine
 - **One attempt's surprise ends that attempt.** Any unexpected exception becomes a failed row with plain words and Retry; cancellation passes through. Nothing in the engine's background work may take the app down.
 - **Words on a failed row are plain.** Never show a raw reason code.
 - **The OS-visible transfer service has a contract.** On Android: once `startForegroundService` is called the service must call `startForeground`, so never stop it while a start is unanswered, debounce the start and stop (400 ms here), and schedule the restart job only on idle to active. A refused start doesn't end the downloads' state; the scheduled job resumes them.
+- **A restart stays booked while work is unfinished.** On Android a job that may run at once runs, ends and leaves the system's store, so it is gone at the kill or reboot it was for. Book it for later (2 minutes while bytes move, 15 while only waiting), book it again each time it runs, never reschedule its id while it runs, and cancel it when nothing is unfinished. Paused stays paused. If Android refuses the foreground service from the background, the job's own running time carries the bytes until its time is up.
 - **Ask for notification permission at most once**, at the first download on touch, and a declined answer never blocks the download. TV doesn't ask.
 - **The offline player keeps the file's real duration**, from the local index, not the server's item length: 5:59 for a 359.875 s file of a "6:00" item.
 

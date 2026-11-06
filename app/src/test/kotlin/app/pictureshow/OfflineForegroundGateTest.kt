@@ -26,40 +26,25 @@ class OfflineForegroundGateTest {
             if (allowed) log += "start:${titles.joinToString()}"
             allowed
         },
-        stop = { log += "stop" },
-        schedule = { log += "schedule" }
+        stop = { log += "stop" }
     )
 
     @Test
     fun `a stop waits until the service has answered its start`() {
         gate.want(listOf("A"))
         gate.want(emptyList())
-        assertEquals(listOf("schedule", "start:A"), log)
+        assertEquals(listOf("start:A"), log)
         gate.started()
-        assertEquals(listOf("schedule", "start:A", "stop"), log)
+        assertEquals(listOf("start:A", "stop"), log)
     }
 
     @Test
     fun `new titles during a start wait for the answer and then show`() {
         gate.want(listOf("A"))
         gate.want(listOf("A", "B"))
-        assertEquals(listOf("schedule", "start:A"), log)
+        assertEquals(listOf("start:A"), log)
         gate.started()
-        assertEquals(listOf("schedule", "start:A", "start:A, B"), log)
-    }
-
-    @Test
-    fun `the job is scheduled once for each run of work, not for every change`() {
-        gate.want(listOf("A"))
-        gate.started()
-        gate.want(listOf("B"))
-        gate.started()
-        gate.want(listOf("C"))
-        assertEquals(1, log.count { it == "schedule" })
-        gate.started()
-        gate.want(emptyList())
-        gate.want(listOf("D"))
-        assertEquals(2, log.count { it == "schedule" })
+        assertEquals(listOf("start:A", "start:A, B"), log)
     }
 
     @Test
@@ -67,7 +52,7 @@ class OfflineForegroundGateTest {
         gate.want(listOf("A"))
         gate.started()
         gate.want(listOf("A"))
-        assertEquals(listOf("schedule", "start:A"), log)
+        assertEquals(listOf("start:A"), log)
     }
 
     @Test
@@ -81,10 +66,10 @@ class OfflineForegroundGateTest {
         allowed = false
         gate.want(listOf("A"))
         gate.want(emptyList())
-        assertEquals(listOf("schedule"), log)
+        assertEquals(emptyList<String>(), log)
         allowed = true
         gate.want(listOf("B"))
-        assertEquals(listOf("schedule", "schedule", "start:B"), log)
+        assertEquals(listOf("start:B"), log)
     }
 
     @Test
@@ -92,7 +77,7 @@ class OfflineForegroundGateTest {
         gate.want(listOf("A"))
         gate.refused()
         gate.want(emptyList())
-        assertEquals(listOf("schedule", "start:A"), log)
+        assertEquals(listOf("start:A"), log)
         gate.want(listOf("A"))
         gate.started()
         gate.gone()

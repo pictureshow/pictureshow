@@ -24,6 +24,11 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 private const val OFFLINE_CHANNEL = "downloads"
@@ -33,6 +38,9 @@ private const val OFFLINE_CHANNEL_NAME = "Downloads"
 
 internal const val OFFLINE_EXTRA_TITLES = "titles"
 internal const val OFFLINE_FOREGROUND_SETTLE_MS = 400L
+internal const val OFFLINE_JOB_TRANSFER_MS = 2 * 60_000L
+internal const val OFFLINE_JOB_WAITING_MS = 15 * 60_000L
+private const val OFFLINE_JOB_HOLD_LOOK_MS = 2_000L
 
 private fun offlineNotification(context: Context, titles: List<String>): Notification {
     val manager = context.getSystemService(NotificationManager::class.java)
@@ -87,30 +95,46 @@ class OfflineTransferService : Service() {
     /** Android 15 limits this service type's time. Bytes wait; the scheduled job picks them up. */
     override fun onTimeout(startId: Int, fgsType: Int) {
         engine.foregroundTimedOut()
-        offlineScheduleJob(this)
         stopSelf()
     }
 }
 
-/** Restarts unfinished work after a kill or reboot, with no Google services involved. */
+/**
+ * Restarts unfinished work after a kill or reboot, with no Google services involved. While the service can't be
+ * foreground (Android refuses a start from the background), this job's own running time carries the bytes.
+ */
 class OfflineJobService : JobService() {
     private val engine: OfflineEngine by inject()
+    private val foreground: AndroidOfflineForeground by inject()
+    private var holding: Job? = null
 
     override fun onStartJob(params: JobParameters?): Boolean {
-        engine.start()
-        engine.networkChanged()
-        return false
+        foreground.jobStarted()
+        holding = CoroutineScope(Dispatchers.Main.immediate).launch {
+            engine.start().join()
+            delay(OFFLINE_FOREGROUND_SETTLE_MS * 3)
+            while (foreground.transferringUnderJobOnly()) delay(OFFLINE_JOB_HOLD_LOOK_MS)
+            jobFinished(params, false)
+            foreground.jobEnded()
+        }
+        return true
     }
 
-    override fun onStopJob(params: JobParameters?): Boolean = true
+    /** The system's time for this run is up. Book the next one, since the booked one is this one. */
+    override fun onStopJob(params: JobParameters?): Boolean {
+        holding?.cancel()
+        foreground.jobEnded()
+        return false
+    }
 }
 
-internal fun offlineScheduleJob(context: Context) {
+internal fun offlineScheduleJob(context: Context, delayMs: Long) {
     val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
     runCatching {
         scheduler.schedule(
             JobInfo.Builder(OFFLINE_JOB, ComponentName(context, OfflineJobService::class.java))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setMinimumLatency(delayMs)
                 .setPersisted(true)
                 .build()
         )
@@ -118,21 +142,63 @@ internal fun offlineScheduleJob(context: Context) {
 }
 
 /**
+ * Keeps one restart booked for as long as work is unfinished. A job that may run at once runs at once, ends, and is
+ * gone from the system's store, so it would be missing at the kill or reboot it was for: this one is booked for later
+ * and booked again each time it runs. Scheduling the same id ends a running job, so nothing is booked until it ends.
+ * Main thread only.
+ */
+internal class OfflineRestartBooking(private val book: (Long) -> Unit, private val cancel: () -> Unit) {
+    private var transferring = false
+    private var unfinished = false
+    private var booked: Long? = null
+    private var running = false
+
+    fun transferring(any: Boolean) {
+        transferring = any
+        settle()
+    }
+
+    fun unfinished(any: Boolean) {
+        unfinished = any
+        settle()
+    }
+
+    fun started() {
+        running = true
+        booked = null
+    }
+
+    fun ended() {
+        running = false
+        settle()
+    }
+
+    private fun settle() {
+        if (running) return
+        val want = when {
+            !unfinished -> null
+            transferring -> OFFLINE_JOB_TRANSFER_MS
+            else -> OFFLINE_JOB_WAITING_MS
+        }
+        if (want == booked) return
+        if (want == null) cancel() else book(want)
+        booked = want
+    }
+}
+
+/**
  * Decides when the service starts and stops. One rule keeps the app alive: never stop while a start is unanswered.
  * Main thread only.
  */
-internal class OfflineForegroundGate(
-    private val start: (List<String>) -> Boolean,
-    private val stop: () -> Unit,
-    private val schedule: () -> Unit
-) {
+internal class OfflineForegroundGate(private val start: (List<String>) -> Boolean, private val stop: () -> Unit) {
     private var wanted = emptyList<String>()
     private var shown = emptyList<String>()
     private var unanswered = 0
     private var alive = false
 
+    val serviceUp get() = alive
+
     fun want(titles: List<String>) {
-        if (wanted.isEmpty() && titles.isNotEmpty()) schedule()
         wanted = titles
         settle()
     }
@@ -172,8 +238,11 @@ internal class AndroidOfflineForeground(private val context: Context) : OfflineF
     private var posted = false
     private val gate = OfflineForegroundGate(
         start = ::startService,
-        stop = { context.stopService(Intent(context, OfflineTransferService::class.java)) },
-        schedule = { offlineScheduleJob(context) }
+        stop = { context.stopService(Intent(context, OfflineTransferService::class.java)) }
+    )
+    private val restart = OfflineRestartBooking(
+        book = { delayMs -> offlineScheduleJob(context, delayMs) },
+        cancel = { context.getSystemService(JobScheduler::class.java)?.cancel(OFFLINE_JOB) }
     )
     private val apply = Runnable {
         val titles = synchronized(this) {
@@ -181,6 +250,7 @@ internal class AndroidOfflineForeground(private val context: Context) : OfflineF
             latest
         }
         gate.want(titles)
+        restart.transferring(titles.isNotEmpty())
     }
 
     /** Called from the engine at every phase change. A flurry settles into one look at where things ended up. */
@@ -192,6 +262,16 @@ internal class AndroidOfflineForeground(private val context: Context) : OfflineF
         }
         main.postDelayed(apply, OFFLINE_FOREGROUND_SETTLE_MS)
     }
+
+    override fun unfinished(any: Boolean) {
+        main.post { restart.unfinished(any) }
+    }
+
+    fun jobStarted() = restart.started()
+
+    fun jobEnded() = restart.ended()
+
+    fun transferringUnderJobOnly() = synchronized(this) { latest.isNotEmpty() } && !gate.serviceUp
 
     fun serviceStarted() = gate.started()
 

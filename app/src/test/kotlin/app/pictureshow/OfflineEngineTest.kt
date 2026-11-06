@@ -67,6 +67,7 @@ class OfflineEngineTest {
     private var restMs = 1L
     private var recheckMs = 30_000L
     private var revocationMs = 60_000L
+    private val unfinishedReports = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
 
     @Volatile
     private var offAfterNextCut = false
@@ -181,6 +182,10 @@ class OfflineEngineTest {
             accounts,
             { ClientIdentity("Test", "install-id", "1") },
             object : OfflineForeground {
+                override fun unfinished(any: Boolean) {
+                    unfinishedReports += any
+                }
+
                 override fun update(activeTitles: List<String>) {
                     foreground += activeTitles
                 }
@@ -616,6 +621,16 @@ class OfflineEngineTest {
         Thread.setDefaultUncaughtExceptionHandler { _, error -> crashes += error }
         restoreCrashHandler = { Thread.setDefaultUncaughtExceptionHandler(before) }
         return crashes
+    }
+
+    @Test
+    fun `the engine says work is unfinished until it is ready, paused or failed`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertTrue(unfinishedReports.contains(true))
+        assertEquals(false, unfinishedReports.last())
     }
 
     @Test
