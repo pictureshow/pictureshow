@@ -346,6 +346,20 @@ class CatalogGridLargeFontTest {
 
     private var gridState by mutableStateOf(CatalogGridState(account, MediaItem("library", "Films")))
 
+    private fun assertLibraryTilesAreWide(scale: Float) {
+        val libraries = HomeRow("libraries", "Libraries", listOf(MediaItem("movies", "Movies", "CollectionFolder")), library = true)
+        val films = HomeRow("latest", "Latest in Movies", listOf(MediaItem("film", "Film", "Movie")))
+        showLarge(scale) { CatalogHome(CatalogHomeState(rows = listOf(libraries, films), loading = false), account, {}, {}, {}, {}) }
+        val tile = compose.onNodeWithTag("home:libraries:movies").getUnclippedBoundsInRoot()
+        assertEquals(240f, (tile.right - tile.left).value, 1f, "Library art is 16:9, so its tile is wide")
+        val poster = compose.onNodeWithTag("home:latest:film", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(144f, (poster.right - poster.left).value, 1f, "Films stay posters")
+    }
+
+    @Test fun libraryTilesAreWideAtDefaultFont() = assertLibraryTilesAreWide(1f)
+
+    @Test fun libraryTilesAreWideAtLargestFont() = assertLibraryTilesAreWide(1.3f)
+
     private fun showState(state: CatalogGridState, scale: Float = 1f) {
         gridState = state
         showLarge(scale) { CatalogGrid(gridState, {}, {}, { _, _ -> }, {}) }

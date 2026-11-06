@@ -447,7 +447,7 @@ fun CatalogHome(
                                         CatalogCard(
                                             item = item,
                                             account = account,
-                                            wide = row.wide || item.type == "Episode",
+                                            wide = row.wide || row.library || item.type == "Episode",
                                             onClick = {
                                                 select(rowIndex, itemIndex)
                                                 onOpen(item)
