@@ -67,17 +67,17 @@ internal fun TouchServers(
             keyboardActions = KeyboardActions(onGo = { connect() }),
             modifier = Modifier.fillMaxWidth().testTag("touch:server-address")
         )
-        TouchAction(if (state.connecting) "Connecting…" else "Connect", !state.connecting) { connect() }
+        TouchAction(if (state.connecting) "Connecting…" else "Connect", enabled = !state.connecting) { connect() }
         TouchMessage(state.error)
         if (snapshot.rememberedServers.isNotEmpty()) {
             Text("Remembered servers", style = MaterialTheme.typography.titleLarge)
             snapshot.rememberedServers.forEach { server ->
-                TouchAction("Sign in to ${server.name}", !state.connecting) { onRemembered(server) }
+                TouchAction("Sign in to ${server.name}", enabled = !state.connecting) { onRemembered(server) }
             }
         }
         Text("On your network", style = MaterialTheme.typography.titleLarge)
         state.discovered.forEach { server ->
-            TouchAction("${server.name} · ${server.address}", !state.connecting) { onConnect(server.address) }
+            TouchAction("${server.name} · ${server.address}", enabled = !state.connecting) { onConnect(server.address) }
         }
         Text(
             when {
@@ -87,7 +87,7 @@ internal fun TouchServers(
             },
             Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
-        TouchAction("Search again", !state.scanning, onClick = onScan)
+        TouchAction("Search again", enabled = !state.scanning, onClick = onScan)
         if (snapshot.accounts.isNotEmpty() ||
             snapshot.rememberedServers.isNotEmpty()
         ) {
@@ -142,14 +142,14 @@ internal fun TouchLogin(
             },
             modifier = Modifier.fillMaxWidth().testTag("touch:password")
         )
-        TouchAction(if (state.busy) "Signing in…" else "Sign in", !state.busy) { submit() }
+        TouchAction(if (state.busy) "Signing in…" else "Sign in", enabled = !state.busy) { submit() }
         TouchMessage(state.error)
         TouchMessage(state.notice)
         if (state.loading) Text("Loading sign-in options…")
-        if (state.quickConnect) TouchAction("Use Quick Connect", !state.busy, onClick = onQuickConnect)
+        if (state.quickConnect) TouchAction("Use Quick Connect", enabled = !state.busy, onClick = onQuickConnect)
         if (state.users.isNotEmpty()) {
             Text("Public users", style = MaterialTheme.typography.titleLarge)
-            state.users.forEach { user -> TouchAction(user.name, !state.busy) { onUsername(user.name) } }
+            state.users.forEach { user -> TouchAction(user.name, enabled = !state.busy) { onUsername(user.name) } }
         }
     }
 }
@@ -227,7 +227,7 @@ internal fun TouchAccounts(
                 else -> "Switch to ${remembered.user.name}"
             }
             if (remembered.key == primary) {
-                TouchAction(label, !state.busy, Modifier.testTag("touch:accounts:primary")) { onSelect(remembered) }
+                TouchAction(label, Modifier.testTag("touch:accounts:primary"), enabled = !state.busy) { onSelect(remembered) }
             } else {
                 TouchSecondaryAction(label, !state.busy) { onSelect(remembered) }
             }
@@ -243,7 +243,7 @@ internal fun TouchAccounts(
             }
         }
         if (primary == null) {
-            TouchAction("Add a server", !state.busy, Modifier.testTag("touch:accounts:primary"), onAddServer)
+            TouchAction("Add a server", Modifier.testTag("touch:accounts:primary"), enabled = !state.busy, onAddServer)
         } else {
             TouchSecondaryAction("Add a server", !state.busy, onAddServer)
         }
