@@ -155,4 +155,19 @@ class OfflineDownloadsModelTest {
         assertTrue(offlineNetworkAllows(OfflineNetwork.metered, true, true))
         assertTrue(offlineNetworkAllows(OfflineNetwork.metered, false, false))
     }
+
+    @Test
+    fun `notifications are asked for once, and never after a yes`() {
+        assertTrue(offlineAskForNotifications(granted = false, alreadyAsked = false))
+        assertFalse(offlineAskForNotifications(granted = false, alreadyAsked = true))
+        assertFalse(offlineAskForNotifications(granted = true, alreadyAsked = false))
+    }
+
+    @Test
+    fun `a failed row never shows an internal word`() {
+        val job = OfflineJob(phase = OfflinePhase.failed, failure = "gone")
+        assertEquals("The server no longer has this file.", offlineStatus(job, null, false, OfflineNetwork.unmetered, 0))
+        val other = job.copy(failure = "some-new-reason")
+        assertEquals("The download stopped.", offlineStatus(other, null, false, OfflineNetwork.unmetered, 0))
+    }
 }

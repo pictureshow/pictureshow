@@ -81,8 +81,8 @@ private fun failureText(reason: String?): String = when (reason) {
     "revocation-pending" -> "Still cleaning up an old sign-in. Try again when the server is reachable."
     "network" -> "The connection kept dropping."
     "internal" -> "Something went wrong with this download. Try again."
-    null -> "The download stopped."
-    else -> "The download stopped ($reason)."
+    "gone" -> "The server no longer has this file."
+    else -> "The download stopped."
 }
 
 internal fun offlineStatus(

@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.edit
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.ClientResult
@@ -313,16 +314,25 @@ internal suspend fun offlineStartRoute(destination: String, engine: OfflineEngin
  * Asks once for the permission the progress notification needs on Android 13 and later (touch only: a TV has no
  * notification shade). The answer changes nothing about the download: it still runs and Downloads still shows it.
  */
+private const val OFFLINE_NOTIFICATION_PREFS = "offline-ui"
+private const val OFFLINE_NOTIFICATION_ASKED = "notifications-asked"
+
+/** Asked once. Downloads run either way, and a "no" isn't a question to repeat at every download. */
+internal fun offlineAskForNotifications(granted: Boolean, alreadyAsked: Boolean) = !granted && !alreadyAsked
+
 @Composable
 internal fun rememberOfflineNotificationAsk(): () -> Unit {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     return remember(context, launcher) {
         {
-            if (Build.VERSION.SDK_INT >= 33 &&
-                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) {
-                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= 33) {
+                val prefs = context.getSharedPreferences(OFFLINE_NOTIFICATION_PREFS, Context.MODE_PRIVATE)
+                val granted = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                if (offlineAskForNotifications(granted, prefs.getBoolean(OFFLINE_NOTIFICATION_ASKED, false))) {
+                    prefs.edit { putBoolean(OFFLINE_NOTIFICATION_ASKED, true) }
+                    launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
             }
         }
     }
