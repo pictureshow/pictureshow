@@ -66,6 +66,7 @@ class OfflineEngineTest {
     private var serverOff = false
     private var restMs = 1L
     private var recheckMs = 30_000L
+    private var revocationMs = 60_000L
 
     @Volatile
     private var offAfterNextCut = false
@@ -198,6 +199,7 @@ class OfflineEngineTest {
             retryDelayMs = { 1 },
             unreachableDelayMs = { restMs },
             storageRecheckMs = recheckMs,
+            revocationRecheckMs = revocationMs,
             scope = scope
         )
     }
@@ -614,6 +616,24 @@ class OfflineEngineTest {
         Thread.setDefaultUncaughtExceptionHandler { _, error -> crashes += error }
         restoreCrashHandler = { Thread.setDefaultUncaughtExceptionHandler(before) }
         return crashes
+    }
+
+    @Test
+    fun `a revocation owed at sign-out goes through when the server returns, with no network change or restart`() = runBlocking<Unit> {
+        revocationMs = 100
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        logoutStatus = 500
+        accounts.signOut(viewerA.key)
+        withTimeout(10_000) {
+            while (!engine.files.sessions().readText().contains("pending-revoke")) delay(5)
+        }
+        logoutStatus = 204
+        withTimeout(10_000) {
+            while (engine.files.sessions().readText().contains("set-viewer-a")) delay(20)
+        }
     }
 
     @Test

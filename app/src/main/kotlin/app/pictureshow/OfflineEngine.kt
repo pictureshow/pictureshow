@@ -102,6 +102,7 @@ internal class OfflineEngine(
     private val retryDelayMs: (Int) -> Long = { attempt -> 5_000L * (1L shl (attempt * 2)) },
     private val unreachableDelayMs: (Int) -> Long = { tries -> minOf(300_000L, 5_000L shl tries.coerceAtMost(6)) },
     private val storageRecheckMs: Long = 30_000L,
+    private val revocationRecheckMs: Long = 60_000L,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     /** Background work here must never take the app down with it, and a viewer may be in the middle of a film. */
@@ -122,6 +123,7 @@ internal class OfflineEngine(
     private val unreachable = mutableMapOf<String, OfflineUnreachable>()
     private val freeAtDenial = mutableMapOf<String, Long>()
     private var storageWatch: Job? = null
+    private var revocationWatch: Job? = null
 
     @Volatile
     private var lastNetwork: OfflineNetwork? = null
@@ -167,6 +169,7 @@ internal class OfflineEngine(
                 (keys - mutableLibraries.value.keys).forEach { loadLocked(it) }
             }
             runCatching { sessions().endAllExcept(snapshot.accounts.map { it.server.id to it.user.id }.toSet()) }
+            watchRevocations()
             if (keys.isNotEmpty() || lastAccountKeys.isEmpty()) mutex.withLock { pumpLocked() }
         }
     }
@@ -504,6 +507,21 @@ internal class OfflineEngine(
             runCatching { progressStore(current).sync(remote) }
         }
         runCatching { sessions().reconnect() }
+        watchRevocations()
+    }
+
+    /**
+     * A signed-out viewer's download set must end even when the server was off at sign-out, and a server coming back
+     * tells nobody. So while one is owed, keep asking.
+     */
+    private fun watchRevocations() {
+        if (revocationWatch?.isActive == true) return
+        revocationWatch = scope.launch {
+            while (runCatching { sessions().revocationsPending() }.getOrDefault(false)) {
+                delay(revocationRecheckMs)
+                if (networkState() != OfflineNetwork.none) runCatching { sessions().reconnect() }
+            }
+        }
     }
 
     fun foregroundTimedOut() {

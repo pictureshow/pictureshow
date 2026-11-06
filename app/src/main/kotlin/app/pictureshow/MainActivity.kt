@@ -626,6 +626,7 @@ internal fun Pictureshow(
                                     hideFromAccessibility()
                                 }
                             )
+                            Text("Downloads saved for it on this device are deleted.")
                             Message(screen.error)
                             val question = if (removingAccount != null) "Remove remembered account?" else "Remove server?"
                             Action(

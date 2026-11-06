@@ -121,6 +121,10 @@ internal class OfflineSessionOwner(
     }
 
     /** Retries revocations a dead network left pending. */
+    suspend fun revocationsPending() = mutex.withLock {
+        load().state.records.any { it.phase in listOf("pending-revoke", "revoking", "pending-persist") }
+    }
+
     suspend fun reconnect() = mutex.withLock {
         load().state.records.filter { it.phase in listOf("pending-revoke", "revoking", "pending-persist") }.forEach { settle(it) }
     }
