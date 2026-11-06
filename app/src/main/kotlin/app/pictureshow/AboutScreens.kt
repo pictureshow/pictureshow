@@ -77,8 +77,9 @@ internal fun NavGraphBuilder.aboutScreens(nav: NavHostController) {
 private fun AboutScreen(onLicenses: () -> Unit, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val first = remember { FocusRequester() }
+    val scroll = rememberScrollState()
     Column(
-        Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
+        rememberFontChangeReveal(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Pictureshow", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
@@ -138,8 +139,9 @@ private fun LicenseTextScreen(library: LicenseEntry, onBack: () -> Unit) {
     val first = remember { FocusRequester() }
     val fontScale = LocalDensity.current.fontScale
     val chunks = remember(library.id, fontScale) { licenseTextChunks(library.text, fontScale) }
+    val scroll = rememberScrollState()
     Column(
-        Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
+        rememberFontChangeReveal(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("${library.name} ${library.version}", style = MaterialTheme.typography.headlineSmall)

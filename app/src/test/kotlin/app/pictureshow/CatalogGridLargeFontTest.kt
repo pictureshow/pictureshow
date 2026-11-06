@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -21,6 +22,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -75,13 +78,27 @@ class HangGuard(private val seconds: Long) : TestWatcher() {
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class CatalogGridLargeFontTest {
-    @get:Rule(order = 0) val hangGuard = HangGuard(180)
+    @get:Rule(order = 0)
+    val hangGuard = HangGuard(180)
 
-    @get:Rule(order = 1) val compose = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule(order = 1)
+    val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Screen room", "https://media.example.test", "12.0.0"), User("u", "Jamie"), "fake")
 
     // Every third title wraps to several lines, as the demo library's "Copied Audio Clock 1440p" does.
-    private val films = (0 until 35).map { MediaItem("film-$it", if (it % 3 == 0) "A long title that wraps over several lines" else "Film", "Movie") }
+    private val films = (0 until 35).map {
+        MediaItem(
+            "film-$it",
+            if (it % 3 ==
+                0
+            ) {
+                "A long title that wraps over several lines"
+            } else {
+                "Film"
+            },
+            "Movie"
+        )
+    }
     private var fontScale by mutableFloatStateOf(1f)
 
     private fun show(items: List<MediaItem> = films, scale: Float = 1f) {
@@ -90,7 +107,9 @@ class CatalogGridLargeFontTest {
         compose.setContent {
             val density = LocalDensity.current.density
             CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
-                PictureshowTheme { CatalogGrid(CatalogGridState(account, MediaItem("library", "Films"), items, items.size), {}, {}, { _, _ -> }, {}) }
+                PictureshowTheme {
+                    CatalogGrid(CatalogGridState(account, MediaItem("library", "Films"), items, items.size), {}, {}, { _, _ -> }, {})
+                }
             }
         }
         settle()
@@ -111,10 +130,10 @@ class CatalogGridLargeFontTest {
     private fun assertFocus(tag: String) = assertEquals(tag, focusedTag())
 
     /** The card's scaled edges and border lie on screen. Layout bounds exclude tv-material's 1.1x, so add its 5%. */
-    private fun assertFocusedCardWhole(context: String) {
+    private fun assertFocusedCardWhole(context: String, clippedBy: String? = null) {
         val tag = focusedTag()
         val bounds = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
-        val root = compose.onRoot().getBoundsInRoot()
+        val root = (clippedBy?.let(compose::onNodeWithTag) ?: compose.onRoot()).getBoundsInRoot()
         val overhang = (bounds.bottom - bounds.top) * .05f
         assertTrue(bounds.top - overhang >= root.top, "$context: $tag cut at the top: $bounds in $root")
         assertTrue(bounds.bottom + overhang <= root.bottom, "$context: $tag cut at the bottom: $bounds in $root")
@@ -137,7 +156,11 @@ class CatalogGridLargeFontTest {
             assertFocusedCardWhole("up to $film")
         }
         // The first row sits under a whole header.
-        assertEquals(compose.onNodeWithTag("grid:count").getUnclippedBoundsInRoot().top.value > 0f, true, "Header scrolled away on the first row")
+        assertEquals(
+            compose.onNodeWithTag("grid:count").getUnclippedBoundsInRoot().top.value > 0f,
+            true,
+            "Header scrolled away on the first row"
+        )
         press(Key.DirectionUp)
         assertTrue(focusedTag().startsWith("grid:sort"), "Up from the first row reaches the sort controls, got ${focusedTag()}")
         press(Key.DirectionDown)
@@ -195,11 +218,15 @@ class CatalogGridLargeFontTest {
         assertFocus("grid:film-0")
     }
 
-    private val longTitles = (0 until 3).map { MediaItem("long-$it", "A Long Film Title That Needs More Than Two Lines On A Poster Card", "Movie") }
+    private val longFilms = (0 until 25).map {
+        MediaItem("long-$it", "A Long Film Title That Needs More Than Two Lines On A Poster Card", "Movie")
+    }
+    private val longTitles = (0 until 3).map {
+        MediaItem("long-$it", "A Long Film Title That Needs More Than Two Lines On A Poster Card", "Movie")
+    }
 
-    /** Shows [content] at the largest size, then moves Down until a card under [prefix] holds focus and checks it whole. */
-    private fun assertLongTitleCardWholeAfterDown(prefix: String, content: @Composable () -> Unit) {
-        fontScale = 1.3f
+    private fun showLarge(scale: Float = 1.3f, content: @Composable () -> Unit) {
+        fontScale = scale
         shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
         compose.setContent {
             val density = LocalDensity.current.density
@@ -208,48 +235,97 @@ class CatalogGridLargeFontTest {
             }
         }
         settle()
+    }
+
+    /** Moves Down until a card under [prefix] holds focus, then checks it whole inside the list that clips it. */
+    private fun downToWholeCard(prefix: String, clippedBy: String) {
         val path = mutableListOf(focusedTag())
         while (!path.last().startsWith(prefix) && path.size < 8) {
             press(Key.DirectionDown)
             path += focusedTag()
         }
         assertTrue(path.last().startsWith(prefix), "Never reached $prefix: $path")
-        assertFocusedCardWhole(prefix)
+        assertFocusedCardWhole(prefix, clippedBy)
+        press(Key.DirectionRight)
+        assertFocusedCardWhole("$prefix, one to the right", clippedBy)
     }
 
-    @Test fun homeShelfShowsAWholeLongTitleCard() = assertLongTitleCardWholeAfterDown("home:second:") {
-        val rows = listOf(HomeRow("first", "Continue watching", longTitles), HomeRow("second", "Latest", longTitles))
-        CatalogHome(CatalogHomeState(rows, loading = false), account, {}, {}, {}, {})
+    private val longRows =
+        listOf(HomeRow("first", "Movies", longTitles), HomeRow("second", "Shows", longTitles), HomeRow("third", "More", longTitles))
+
+    @Test fun homeShelfShowsAWholeLongTitleCard() {
+        showLarge { CatalogHome(CatalogHomeState(longRows, loading = false), account, {}, {}, {}, {}) }
+        downToWholeCard("home:second:", "home")
+        downToWholeCard("home:third:", "home")
+        press(Key.DirectionUp)
+        assertFocusedCardWhole("back up on Home", "home")
     }
 
-    @Test fun searchResultsShowAWholeLongTitleCard() = assertLongTitleCardWholeAfterDown("search:second:") {
-        val rows = listOf(HomeRow("first", "Movies", longTitles), HomeRow("second", "Shows", longTitles))
-        SearchScreen(SearchState("film", rows, completed = true), account, false, {}, {}, {}, {}, {}, {})
+    @Test fun searchResultsShowAWholeLongTitleCard() {
+        showLarge { SearchScreen(SearchState("film", longRows, completed = true), account, false, {}, {}, {}, {}, {}, {}) }
+        downToWholeCard("search:second:", "search:results")
+        downToWholeCard("search:third:", "search:results")
     }
 
-    @Test fun detailShelfShowsAWholeLongTitleCard() = assertLongTitleCardWholeAfterDown("detail:next:") {
-        val episodes = longTitles.map { it.copy(type = "Episode", seriesName = "A series with a long name", indexNumber = 1, parentIndexNumber = 1) }
-        CatalogDetail(CatalogDetailState(account, MediaItem("series", "A series", "Series"), loading = false, nextUp = episodes), {}, {}, {}, {}, {})
+    @Test fun detailShelfShowsAWholeLongTitleCard() {
+        val episodes = longTitles.map {
+            it.copy(type = "Episode", seriesName = "A series with a long name", indexNumber = 1, parentIndexNumber = 1)
+        }
+        showLarge {
+            CatalogDetail(CatalogDetailState(account, MediaItem("season", "A season", "Season"), loading = false, episodes = episodes), {
+            }, {}, {}, {}, {})
+        }
+        downToWholeCard("detail:episodes:", "detail")
     }
 
     @Test fun searchFieldComesBackWholeAboveTheResults() {
-        assertLongTitleCardWholeAfterDown("search:first:") {
-            val rows = listOf(HomeRow("first", "Movies", longTitles))
-            SearchScreen(SearchState("film", rows, completed = true), account, false, {}, {}, {}, {}, {}, {})
-        }
+        showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
+        downToWholeCard("search:first:", "search:results")
         press(Key.DirectionUp)
         assertFocus("search:field")
         assertTrue(compose.onNodeWithTag("search:field").getUnclippedBoundsInRoot().top.value >= 0f, "The field stayed above the screen")
     }
 
     @Test fun personGridShowsAWholeLongTitleCardAndBackIsStillReachable() {
-        assertLongTitleCardWholeAfterDown("grid:long-0") {
+        showLarge {
             val person = MediaItem("person", "A Person", "Person")
             PersonScreen(PersonState(CatalogGridState(account, person, longTitles, longTitles.size), person), {}, {}, {}, {})
         }
+        downToWholeCard("grid:long-", "grid")
         press(Key.DirectionUp)
         assertFocus("person:back")
         assertTrue(compose.onNodeWithTag("person:back").getUnclippedBoundsInRoot().top.value >= 0f, "Back stayed above the screen")
+    }
+
+    /** A focused control low on the page keeps its place when the text above it grows; the app stays alive through this. */
+    private fun growWithFocusOn(tag: String) {
+        compose.onNodeWithTag(tag).performScrollTo()
+        compose.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.RequestFocus)
+        settle()
+        assertFocus(tag)
+        fontScale = 1.3f
+        settle()
+        settle()
+        assertFocus(tag)
+        assertFocusedCardWhole("$tag in place to 1.3")
+    }
+
+    @Test fun inPlaceFontChangeRevealsSettingsLastControl() {
+        showLarge(1f) { PlaybackSettingsScreen(PlaybackSettingsState(loading = false), "PCM", {}, { _, _ -> }, {}, onBack = {}) }
+        growWithFocusOn("settings:back")
+    }
+
+    @Test fun inPlaceFontChangeRevealsATallGridCard() {
+        showLarge(1f) {
+            CatalogGrid(CatalogGridState(account, MediaItem("library", "Films"), longFilms, longFilms.size), {}, {}, { _, _ -> }, {})
+        }
+        repeat(2) { press(Key.DirectionDown) }
+        assertFocus("grid:long-10")
+        fontScale = 1.3f
+        settle()
+        settle()
+        assertFocus("grid:long-10")
+        assertFocusedCardWhole("grid in place to 1.3", "grid:items")
     }
 
     @Test fun platformDistanceIsKeptWhenTheScaledCardFits() =
@@ -260,8 +336,10 @@ class CatalogGridLargeFontTest {
         // Card 600 at 500 in 1000: platform goes flush with the end, at 400. 30 scale + 8 margin more.
         assertEquals(138f, focusedCardScrollDistance(500f, 600f, 1000f, 8f, wanted = 100f))
 
-    @Test fun aCardFlushWithTheStartDropsByItsOverhang() =
-        assertEquals(-138f, focusedCardScrollDistance(-100f, 600f, 1000f, 8f, wanted = -100f))
+    @Test fun aCardFlushWithTheStartDropsByItsOverhang() = assertEquals(
+        -138f,
+        focusedCardScrollDistance(-100f, 600f, 1000f, 8f, wanted = -100f)
+    )
 
     @Test fun aCardTallerThanTheScreenShowsFromItsTop() =
         assertEquals(50f - (950f * .05f + 8f), focusedCardScrollDistance(50f, 950f, 1000f, 8f, wanted = 0f), .01f)

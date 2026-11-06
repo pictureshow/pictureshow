@@ -86,6 +86,7 @@ internal class PlaybackSettingsViewModel(
         viewModelScope.launch {
             when (val result = service.configuration(account)) {
                 is ClientResult.Success -> mutable.update { it.copy(configuration = result.value, loading = false) }
+
                 is ClientResult.Failure -> {
                     if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) accounts.expire(account.key, account.accessToken)
                     mutable.update { it.copy(loading = false, error = result.error.message) }
@@ -114,6 +115,7 @@ internal class PlaybackSettingsViewModel(
         viewModelScope.launch {
             when (val result = service.saveConfiguration(account, next)) {
                 is ClientResult.Success -> mutable.update { it.copy(configuration = next, saving = false) }
+
                 is ClientResult.Failure -> {
                     if (result.error.kind == ErrorKind.INVALID_CREDENTIALS) accounts.expire(account.key, account.accessToken)
                     mutable.update { it.copy(saving = false, error = result.error.message) }
@@ -148,8 +150,9 @@ internal fun PlaybackSettingsScreen(
     var restoreEntry by rememberSaveable { mutableStateOf("") }
     val local = state.local
     val configuration = state.configuration
+    val scroll = rememberScrollState()
     Column(
-        Modifier.fillMaxSize().background(Color(0xFF10131C)).verticalScroll(rememberScrollState()).padding(48.dp),
+        rememberFontChangeReveal(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })

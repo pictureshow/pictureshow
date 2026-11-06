@@ -5,9 +5,9 @@ package app.pictureshow
 
 import android.view.KeyEvent.KEYCODE_SEARCH
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -51,8 +51,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -222,7 +222,7 @@ fun SearchScreen(
     ) {
         var resultsFocused by remember { mutableStateOf(false) }
         // A long title at the largest sizes is taller than the space under the field: it goes while results hold focus.
-        val headCollapsed = resultsFocused && LocalDensity.current.fontScale > UnboundedTitleFontScale
+        val headCollapsed = resultsFocused && LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE
         Column(Modifier.collapsedOffScreen(headCollapsed), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
                 "Search",
@@ -299,7 +299,9 @@ fun SearchScreen(
                                     }
                                     true
                                 }
+
                                 navigation.handle(it) { down() } -> true
+
                                 else -> false
                             }
                         }
@@ -386,10 +388,12 @@ fun SearchScreen(
                                     focusField()
                                     true
                                 }
+
                                 Key.DirectionDown -> {
                                     scope.launch { focusRow(0) }
                                     true
                                 }
+
                                 else -> false
                             }
                         }
@@ -401,24 +405,26 @@ fun SearchScreen(
         }
         val platformBringIntoView = LocalBringIntoViewSpec.current
         val focusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
+        val reveal = rememberFontChangeReveal(list)
         val resultsBringIntoView = remember(platformBringIntoView, focusMargin) {
             object : BringIntoViewSpec {
-                override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
-                    focusedCardScrollDistance(
-                        offset,
-                        size,
-                        containerSize,
-                        focusMargin,
-                        platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
-                    )
+                override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = focusedCardScrollDistance(
+                    offset,
+                    size,
+                    containerSize,
+                    focusMargin,
+                    platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+                )
             }
         }
         CompositionLocalProvider(LocalBringIntoViewSpec provides resultsBringIntoView) {
             LazyColumn(
                 state = list,
-                modifier = Modifier.weight(1f).onFocusChanged { resultsFocused = it.hasFocus }.semantics {
+                modifier = reveal.weight(1f).testTag("search:results").onFocusChanged { resultsFocused = it.hasFocus }.semantics {
                     traversalIndex = 1f
                 },
+                // Room for the last row's focus scale, which this list would otherwise clip.
+                contentPadding = PaddingValues(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 state.rows.forEachIndexed { rowIndex, row ->
@@ -483,6 +489,7 @@ fun SearchScreen(
                                                                     }
                                                                     true
                                                                 }
+
                                                                 Key.DirectionDown -> {
                                                                     if (rowIndex <
                                                                         state.rows.lastIndex
@@ -491,6 +498,7 @@ fun SearchScreen(
                                                                     }
                                                                     true
                                                                 }
+
                                                                 else -> false
                                                             }
                                                         }
@@ -555,7 +563,7 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
     var gridFocused by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(Color(0xFF10131C))) {
         Row(
-            Modifier.collapsedOffScreen(gridFocused && LocalDensity.current.fontScale > UnboundedTitleFontScale)
+            Modifier.collapsedOffScreen(gridFocused && LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE)
                 .padding(start = 48.dp, top = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
