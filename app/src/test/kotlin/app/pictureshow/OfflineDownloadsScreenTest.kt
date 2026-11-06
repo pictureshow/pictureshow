@@ -7,6 +7,7 @@ import android.app.Application
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getBoundsInRoot
@@ -16,9 +17,11 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.pictureshow.core.Account
@@ -262,10 +265,37 @@ class OfflineDownloadsScreenTest {
         compose.onNodeWithTag("downloads:conflict-ok").assertIsFocused()
         val card = compose.onNodeWithTag("downloads:conflict-text").getBoundsInRoot()
         assertTrue("the sentence isn't under the top edge: ${card.top}", card.top >= 0.dp)
-        compose.onNodeWithTag("downloads:conflict-ok").performSemanticsAction(SemanticsActions.OnClick)
+        // A real key press: from here on, focus only moves by itself because the control under it went away.
+        compose.onNodeWithTag("downloads:conflict-ok").performKeyInput { pressKey(Key.DirectionCenter) }
         settle()
         compose.onNodeWithTag("downloads:conflict-ok").assertDoesNotExist()
         compose.onNodeWithTag("downloads:play:r0").assertIsFocused()
+    }
+
+    /** The first sync after reconnecting often finishes with the list already open and scrolled to its first row. */
+    @Test
+    @Config(qualifiers = "w960dp-h200dp")
+    fun `TV a notice that arrives while the list is open and untouched shows whole and takes focus`() {
+        install(*Array(4) { entry("r$it", OfflinePhase.ready) })
+        tv()
+        settle()
+        compose.onNodeWithTag("downloads:play:r0").assertIsFocused()
+        runBlocking {
+            val store = engine.progressStore(account)
+            store.remember("r0", OfflineUserData(positionTicks = 100))
+            store.viewing("r0", 1, 500)
+            store.sync(
+                object : OfflineProgressRemote {
+                    override suspend fun sameViewer(account: Account) = true
+                    override suspend fun read(account: Account, itemId: String) = OfflineUserData(positionTicks = 900)
+                    override suspend fun write(account: Account, itemId: String, positionTicks: Long?, played: Boolean?): Int? = 204
+                }
+            )
+        }
+        settle()
+        compose.onNodeWithTag("downloads:conflict-ok").assertIsFocused()
+        val card = compose.onNodeWithTag("downloads:conflict-text").getBoundsInRoot()
+        assertTrue("the sentence isn't under the top edge: ${card.top}", card.top >= 0.dp)
     }
 
     private fun network(transport: Int?) {

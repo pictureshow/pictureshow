@@ -4,7 +4,6 @@
 package app.pictureshow
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -37,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -61,7 +56,6 @@ import app.pictureshow.core.offline.OfflineResourceRole
 import app.pictureshow.core.offline.watchedPreview
 import coil3.compose.AsyncImage
 import java.io.File
-import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 private val OfflineMuted = Color(0xFFB9C1D6)
@@ -242,12 +236,9 @@ internal fun OfflineDownloadsTvScreen(
         handled = refocus
         // The form's field takes its own focus.
         if (target != OfflineFirstFocus.Password) {
-            // Only what's on screen can take focus, and a notice shows whole, from the top of the page.
-            val rowsStart = OFFLINE_TV_ITEMS_ABOVE_NOTICES +
-                (if (view.library.recoverable) 1 else 0) +
-                (if (passwordNeeded) 1 else 0) +
-                conflictIds.size +
-                (if (sections.isEmpty && !view.library.recoverable) 1 else 0)
+            // Only what's on screen can take focus, and a notice shows whole.
+            val noticesStart = OFFLINE_TV_ITEMS_ABOVE_NOTICES + (if (view.library.recoverable) 1 else 0) + (if (passwordNeeded) 1 else 0)
+            val rowsStart = noticesStart + conflictIds.size + (if (sections.isEmpty && !view.library.recoverable) 1 else 0)
             when (val aim = target) {
                 is OfflineFirstFocus.Row -> offlineRowPosition(sections, aim.entryId)?.let { position ->
                     val index = rowsStart + position
@@ -256,9 +247,13 @@ internal fun OfflineDownloadsTvScreen(
                         withFrameNanos { }
                     }
                 }
-                is OfflineFirstFocus.Conflict -> if (list.firstVisibleItemIndex != 0 || list.firstVisibleItemScrollOffset != 0) {
-                    list.scrollToItem(0)
-                    withFrameNanos { }
+                is OfflineFirstFocus.Conflict -> {
+                    val index = noticesStart + conflictIds.indexOf(aim.itemId).coerceAtLeast(0)
+                    val shown = list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                    if (shown == null || shown.offset < 0 || shown.offset + shown.size > list.layoutInfo.viewportEndOffset) {
+                        list.scrollToItem(index)
+                        withFrameNanos { }
+                    }
                 }
                 else -> Unit
             }
@@ -275,16 +270,10 @@ internal fun OfflineDownloadsTvScreen(
 }
 
 /** The card and the OK beside its sentence, so the answer is where the eyes already are. */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun OfflineConflictTv(text: String, focus: FocusRequester? = null, onDismiss: () -> Unit) {
-    val card = remember { BringIntoViewRequester() }
-    val scope = rememberCoroutineScope()
     Row(
-        Modifier
-            .bringIntoViewRequester(card)
-            .background(OfflineCard, RoundedCornerShape(8.dp))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.background(OfflineCard, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -293,8 +282,6 @@ internal fun OfflineConflictTv(text: String, focus: FocusRequester? = null, onDi
             onClick = onDismiss,
             modifier = Modifier
                 .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
-                // Arriving from below shows the sentence too, not only the button that answers it.
-                .onFocusChanged { if (it.isFocused) scope.launch { card.bringIntoView() } }
                 .testTag("downloads:conflict-ok")
         ) { Text("OK") }
     }
