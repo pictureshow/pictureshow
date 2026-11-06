@@ -27,6 +27,7 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -1017,6 +1019,25 @@ class OfflineEngineTest {
         assertEquals(0, engine.progressStore(viewerA).resumeTicks("not-downloaded"))
         engine.onlineViewingEnded(viewerA, "1") { throw IOException("server gone") }.join()
         assertEquals(7_000, engine.progressStore(viewerA).resumeTicks("1"))
+    }
+
+    @Test
+    fun `reads after stopping and after finishing land in order, however long the first takes`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        val slow = CompletableDeferred<Unit>()
+        val stopped = engine.onlineViewingEnded(viewerA, "1") {
+            slow.await()
+            OfflineUserData(positionTicks = 9_000)
+        }
+        val finished = engine.onlineViewingEnded(viewerA, "1") { OfflineUserData(positionTicks = 0, played = true) }
+        withTimeoutOrNull(200) { finished.join() }
+        slow.complete(Unit)
+        stopped.join()
+        finished.join()
+        assertEquals(0, engine.progressStore(viewerA).resumeTicks("1"))
+        assertEquals(setOf("1"), engine.progressStore(viewerA).watched(listOf("1")))
     }
 
     @Test

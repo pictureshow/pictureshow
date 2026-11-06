@@ -216,11 +216,9 @@ private fun OfflineStreamPlayer(
             nav.popBackStack()
             return@LaunchedEffect
         }
-        val store = engine.progressStore(current)
-        val api = offlineInteractiveApi(context, current, identity)
         val tracks = PlaybackStartTracks(entry.sourceId, route.text("audio")?.toIntOrNull(), route.text("subtitle")?.toIntOrNull())
         loaded = entry to OfflineHandoffStart(entry.itemId, tracks) { server ->
-            OfflineOnlineViewingGateway(server) { store.remember(entry.itemId, api.userData(current, entry.itemId)) }
+            offlineAwareGateway(context, current, entry.itemId, identity, server)
         }
     }
     val (entry, handoff) = loaded ?: return

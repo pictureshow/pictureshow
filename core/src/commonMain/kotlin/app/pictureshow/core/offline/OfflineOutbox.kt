@@ -121,7 +121,9 @@ private fun serverState(entry: OfflineOutboxEntry, current: OfflineUserData): Of
     entry.positionTicks?.let { desired ->
         when {
             current.positionTicks == desired -> Unit
+            // A write whose answer was lost may have landed: the server then holds this device's own value, not someone else's.
             current.positionTicks == entry.base.positionTicks -> writePosition = desired
+            current.positionTicks == entry.writing?.positionTicks -> writePosition = desired
             else -> conflicts += "position"
         }
     }
@@ -129,6 +131,7 @@ private fun serverState(entry: OfflineOutboxEntry, current: OfflineUserData): Of
         when {
             current.played == desired -> Unit
             current.played == entry.base.played -> writePlayed = desired
+            current.played == entry.writing?.played -> writePlayed = desired
             else -> conflicts += "played"
         }
     }
