@@ -47,6 +47,8 @@ internal class OfflineApiProgressRemote(private val api: OfflineApi) : OfflinePr
     }
 }
 
+internal enum class OfflineSettleResult { Settled, Conflict, Failed }
+
 /** One viewer's durable outbox (OFF-07, OFF-08): writes commit to disk before anything touches the server. */
 internal class OfflineProgressStore(private val file: File, account: Account) {
     /** The newest credentials the app has for this viewer: a re-sign-in replaces the token this store was made with. */
@@ -175,6 +177,29 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
             }
         }
         clean
+    }
+
+    /**
+     * One item's progress, now, for a viewer waiting on it. Unlike a background sync this answers what happened; a Failed record stays in the
+     * outbox for later, and a write whose answer never came is read first by the reducer as always.
+     */
+    suspend fun settle(itemId: String, remote: OfflineProgressRemote): OfflineSettleResult = mutex.withLock {
+        val start = load().outbox[itemId]?.takeIf { it.phase != "synced" } ?: return@withLock OfflineSettleResult.Settled
+        if (start.phase == "conflict") return@withLock OfflineSettleResult.Conflict
+        try {
+            if (!remote.sameViewer(account)) return@withLock OfflineSettleResult.Failed
+            syncOne(remote, itemId, start)
+        } catch (e: IOException) {
+            return@withLock OfflineSettleResult.Failed
+        } catch (e: IllegalArgumentException) {
+            return@withLock OfflineSettleResult.Failed
+        }
+        val after = load().outbox[itemId]
+        when {
+            after == null || after.phase == "synced" -> OfflineSettleResult.Settled
+            after.phase == "conflict" -> OfflineSettleResult.Conflict
+            else -> OfflineSettleResult.Failed
+        }
     }
 
     private suspend fun syncOne(remote: OfflineProgressRemote, itemId: String, start: OfflineOutboxEntry) {

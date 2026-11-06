@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
@@ -11,7 +12,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
@@ -19,6 +22,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import app.pictureshow.core.Account
+import app.pictureshow.core.ClientIdentity
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflinePhase
@@ -91,9 +95,13 @@ private fun OfflineLocalPlayer(
     account: Account?,
     entryId: String,
     onGone: () -> Unit,
+    onStream: (String) -> Unit,
     content: @Composable (Account, MediaItem, Long) -> Unit
 ) {
     val engine: OfflineEngine = koinInject()
+    val context = LocalContext.current
+    val identity: DeviceIdentityStore = koinInject()
+    val scope = rememberCoroutineScope()
     var ready by remember { mutableStateOf<Triple<OfflineEntry, OfflinePlaybackBinding, Long>?>(null) }
     LaunchedEffect(entryId) {
         val current = account ?: return@LaunchedEffect onGone()
@@ -111,13 +119,101 @@ private fun OfflineLocalPlayer(
             store.newSequence(),
             engine::syncSoon
         )
-        ready = Triple(entry, OfflinePlaybackBinding(gateway, entry.sidecarAudio(file)), store.resumeTicks(entry.itemId) / 10_000)
+        val api = offlineInteractiveApi(context, current, identity)
+        val reconnect = OfflineReconnect(
+            entry,
+            scope,
+            { measuredNetwork(context).name },
+            OfflineApiReconnectProbe(api, current, entry),
+            OfflineStoreHandoff(gateway, store, entry.itemId, OfflineApiProgressRemote(api))
+        ) { start -> onStream(offlineStreamRoute(entry, start)) }
+        val binding = OfflinePlaybackBinding(gateway, entry.sidecarAudio(file), offlineUndownloadedStreams(entry), reconnect)
+        ready = Triple(entry, binding, store.resumeTicks(entry.itemId) / 10_000)
     }
     val loaded = ready ?: return
     val current = account ?: return
     CompositionLocalProvider(LocalOfflinePlayback provides loaded.second) {
         content(current, loaded.first.playerItem(), loaded.third)
     }
+}
+
+private suspend fun offlineInteractiveApi(context: Context, account: Account, identity: DeviceIdentityStore) = OfflineApi(
+    offlineReconnectHttp,
+    ClientIdentity(
+        deviceDisplayName(context),
+        account.deviceId?.takeIf(String::isNotBlank) ?: identity.getOrCreate(),
+        BuildConfig.VERSION_NAME
+    )
+)
+
+/** The player owns the whole screen on every route that plays, downloaded or streamed. */
+internal fun isTouchPlayerRoute(route: String?): Boolean =
+    listOf("player?", "offline-player?", "online-player?").any { route?.startsWith(it) == true }
+
+internal fun offlineStreamRoute(entry: OfflineEntry, start: OfflineStreamStart) =
+    "online-player?entry=${Uri.encode(entry.id)}&start=${start.positionMs}" +
+        "&audio=${start.audioIndex ?: ""}&subtitle=${start.subtitleIndex ?: ""}"
+
+internal const val OFFLINE_STREAM_ROUTE = "online-player?entry={entry}&start={start}&audio={audio}&subtitle={subtitle}"
+
+internal val offlineStreamArguments = listOf(
+    navArgument("entry") { type = NavType.StringType },
+    navArgument("start") {
+        type = NavType.LongType
+        defaultValue = 0L
+    },
+    navArgument("audio") {
+        type = NavType.StringType
+        defaultValue = ""
+    },
+    navArgument("subtitle") {
+        type = NavType.StringType
+        defaultValue = ""
+    }
+)
+
+/**
+ * The normal online player after a handoff: the local player is gone from the back stack, so Back lands on Downloads, and a later local viewing
+ * reads where this one ended. A process restored here returns to Downloads rather than replaying the old offset.
+ */
+@Composable
+private fun OfflineStreamPlayer(
+    nav: NavController,
+    route: NavBackStackEntry,
+    account: Account?,
+    content: @Composable (Account, MediaItem, Long, (MediaItem) -> Unit) -> Unit
+) {
+    val engine: OfflineEngine = koinInject()
+    val context = LocalContext.current
+    val identity: DeviceIdentityStore = koinInject()
+    var loaded by remember { mutableStateOf<Pair<OfflineEntry, OfflineHandoffStart>?>(null) }
+    LaunchedEffect(route.id) {
+        val current = account ?: return@LaunchedEffect Unit.also { nav.popBackStack() }
+        val id = route.text("entry").orEmpty()
+        val entry = engine.ready()[current.key]?.manifest?.entries?.firstOrNull { it.id == id }
+        if (entry == null) {
+            nav.popBackStack()
+            return@LaunchedEffect
+        }
+        val store = engine.progressStore(current)
+        val api = offlineInteractiveApi(context, current, identity)
+        val tracks = PlaybackStartTracks(entry.sourceId, route.text("audio")?.toIntOrNull(), route.text("subtitle")?.toIntOrNull())
+        loaded = entry to OfflineHandoffStart(entry.itemId, tracks) { server ->
+            OfflineHandoffOnlineGateway(server) { store.remember(entry.itemId, api.userData(current, entry.itemId)) }
+        }
+    }
+    val (entry, handoff) = loaded ?: return
+    val current = account ?: return
+    val item = remember(entry) { entry.playerItem() }
+    PlayerRestoration(item, onRestore = { if (nav.currentBackStackEntry?.id == route.id) nav.popBackStack() }) { onCurrentItem ->
+        CompositionLocalProvider(LocalOfflineHandoff provides handoff) {
+            content(current, item, route.arguments?.getLong("start") ?: 0L, onCurrentItem)
+        }
+    }
+}
+
+internal fun NavController.leaveLocalPlayer(from: NavBackStackEntry, route: String) = navigate(route) {
+    popUpTo(from.destination.id) { inclusive = true }
 }
 
 internal fun NavGraphBuilder.offlineTvScreens(nav: NavController, account: () -> Account?, catalog: () -> CatalogSession) {
@@ -152,8 +248,18 @@ internal fun NavGraphBuilder.offlineTvScreens(nav: NavController, account: () ->
         )
     }
     composable("offline-player?entry={entry}", listOf(navArgument("entry") { type = NavType.StringType })) { entry ->
-        OfflineLocalPlayer(account(), entry.text("entry").orEmpty(), { nav.popBackStack() }) { current, item, start ->
+        OfflineLocalPlayer(
+            account(),
+            entry.text("entry").orEmpty(),
+            { nav.popBackStack() },
+            { nav.leaveLocalPlayer(entry, it) }
+        ) { current, item, start ->
             PlayerScreen(current, item, start, catalog(), onExit = { nav.popBackStack() })
+        }
+    }
+    composable(OFFLINE_STREAM_ROUTE, offlineStreamArguments) { entry ->
+        OfflineStreamPlayer(nav, entry, account()) { current, item, start, onCurrentItem ->
+            PlayerScreen(current, item, start, catalog(), onCurrentItem, onExit = { nav.popBackStack() })
         }
     }
 }
@@ -191,8 +297,18 @@ internal fun NavGraphBuilder.offlineTouchScreens(nav: NavController, account: ()
         )
     }
     composable("offline-player?entry={entry}", listOf(navArgument("entry") { type = NavType.StringType })) { entry ->
-        OfflineLocalPlayer(account(), entry.text("entry").orEmpty(), { nav.popBackStack() }) { current, item, start ->
+        OfflineLocalPlayer(
+            account(),
+            entry.text("entry").orEmpty(),
+            { nav.popBackStack() },
+            { nav.leaveLocalPlayer(entry, it) }
+        ) { current, item, start ->
             TouchPlayerScreen(current, item, start, catalog(), {}, onExit = { nav.popBackStack() })
+        }
+    }
+    composable(OFFLINE_STREAM_ROUTE, offlineStreamArguments) { entry ->
+        OfflineStreamPlayer(nav, entry, account()) { current, item, start, onCurrentItem ->
+            TouchPlayerScreen(current, item, start, catalog(), onCurrentItem, onExit = { nav.popBackStack() })
         }
     }
 }

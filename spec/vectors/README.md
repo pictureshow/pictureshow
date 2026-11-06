@@ -338,7 +338,7 @@ reconnect, and PlayPause resolves against the viewing's observed state.
 
 ## Offline (OFF) trace format
 
-`offline-job`, `offline-budget`, `offline-resume`, `offline-manifest`, `offline-outbox`, `offline-plan` and `offline-fmp4` use
+`offline-job`, `offline-budget`, `offline-resume`, `offline-manifest`, `offline-outbox`, `offline-plan`, `offline-reconnect` and `offline-fmp4` use
 the shared trace format and run through `OfflineVectorsTest` (Gradle packages them in `offline-vectors`). Web lists them as
 `it.todo` through `pendingPortSuites` until it ports them. Each step's output feeds the next step's state. An expected object
 is a projection of the output, except that `{}` and any `reservations` object compare exactly. Outbox ticks and sequences are
@@ -347,7 +347,8 @@ decimal strings; byte counts in these fixtures fit the safe integer range and ar
 Operations: `job`, `admit`, `budget`, `default-cap`, `range-header`, `decision`, `body-end`, `verify`, `blockers`, `commit`,
 `reconcile`, `decode`, `roundtrip`, `track-switch`, `entry-id`, `entry-dir`, `safe-path`, `preview`, `outbox`, `download-set`
 (`reduceTemporary` under a download-set identity), `sha256`, `device`, `presets`, `select`, the `*-request` builders,
-`box-header`, `parse-moof`, `parse-moov` and `index-boxes`. `{"error": true}` means the call refuses its input.
+`box-header`, `parse-moof`, `parse-moov`, `index-boxes`, `reconnect-tracks`, `reconnect-decision`, `reconnect-track-on-server` and
+`handoff-selection`. `{"error": true}` means the call refuses its input.
 
 Fixed behaviour worth reading before porting: Ready is reachable only through `committed`, and `commit` checks blockers first.
 Reconcile lists only safe paths under no entry's directory, never touches a file directly in the root, and recomputes used bytes

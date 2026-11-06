@@ -169,7 +169,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     // Prepared with the player, as on TV: a sheet that prepared its own would measure its waiting line, then grow.
     val trackMenus = rememberPlayerTrackMenus(
         host.state.decision?.mediaSourceId,
-        host.state.decision?.mediaSource?.mediaStreams.orEmpty()
+        host.state.decision?.mediaSource?.mediaStreams.orEmpty(),
+        LocalOfflinePlayback.current?.undownloaded.orEmpty()
     )
     val playback = rememberPlayerPlayback(host.player, onPause = {
         // Leaving pauses the player too: the controls stay down while the stop report finishes, or Back looks refused.

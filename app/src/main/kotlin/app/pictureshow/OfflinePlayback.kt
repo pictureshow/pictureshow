@@ -22,6 +22,7 @@ import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflineResourceRole
 import app.pictureshow.core.offline.OfflineTrack
+import app.pictureshow.core.offline.undownloadedTracks
 import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.playback.MediaStream
 import app.pictureshow.core.playback.MediaStreamType
@@ -33,9 +34,16 @@ import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PlaybackStopInfo
 import app.pictureshow.core.playback.SubtitleDeliveryMethod
 import java.io.File
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** The local file's side of a normal player: same session, same controls, no server (OFF-11). */
-internal class OfflinePlaybackBinding(val gateway: PlaybackGateway, private val sidecars: List<File>) {
+internal class OfflinePlaybackBinding(
+    val gateway: PlaybackGateway,
+    private val sidecars: List<File>,
+    val undownloaded: List<MediaStream> = emptyList(),
+    val reconnect: OfflineReconnect? = null
+) {
     fun output(context: Context, server: Server, title: String): Media3PlaybackOutput =
         Media3PlaybackOutput(context, server, title, DefaultDataSource.Factory(context), sourceWrapper = {
             OfflineMergingFactory(context, it, sidecars)
@@ -78,6 +86,10 @@ internal class OfflinePlaybackGateway(
     private val sequence: Long,
     private val onExit: () -> Unit
 ) : PlaybackGateway {
+    private val gate = Mutex()
+
+    @Volatile private var sealed = false
+
     override suspend fun prepare(request: PlaybackRequest): ClientResult<PlayOutcome> = ClientResult.Success(
         PlayOutcome.Play(
             PlayDecision(
@@ -94,12 +106,12 @@ internal class OfflinePlaybackGateway(
     override suspend fun start(info: PlaybackProgressInfo): ClientResult<Unit> = ClientResult.Success(Unit)
 
     override suspend fun progress(info: PlaybackProgressInfo): ClientResult<Unit> {
-        progress.viewing(entry.itemId, sequence, info.positionTicks)
+        writeUnlessSealed { progress.viewing(entry.itemId, sequence, info.positionTicks) }
         return ClientResult.Success(Unit)
     }
 
     override suspend fun stopped(info: PlaybackStopInfo): ClientResult<Unit> {
-        progress.viewing(entry.itemId, sequence, info.positionTicks)
+        writeUnlessSealed { progress.viewing(entry.itemId, sequence, info.positionTicks) }
         onExit()
         return ClientResult.Success(Unit)
     }
@@ -107,41 +119,56 @@ internal class OfflinePlaybackGateway(
     override suspend fun stopEncoding(sessionId: String): ClientResult<Unit> = ClientResult.Success(Unit)
 
     override suspend fun played(): ClientResult<Unit> {
-        progress.completed(entry.itemId, sequence)
+        writeUnlessSealed { progress.completed(entry.itemId, sequence) }
         // Stopped ran first and its sync found nothing to say about the ending.
         onExit()
         return ClientResult.Success(Unit)
     }
+
+    /** The viewing's last word before a handoff; a report already in flight either lands before it or not at all. */
+    suspend fun seal(positionTicks: Long) = gate.withLock {
+        sealed = true
+        progress.viewing(entry.itemId, sequence, positionTicks)
+    }
+
+    fun reopen() {
+        sealed = false
+    }
+
+    private suspend fun writeUnlessSealed(write: suspend () -> Unit) = gate.withLock { if (!sealed) write() }
 }
 
-/** The player reads tracks from here exactly as it reads a server's. Tracks that weren't downloaded aren't offered. */
-internal fun offlineSourceInfo(entry: OfflineEntry, size: Long, resourceFile: (String) -> File?): MediaSourceInfo {
-    fun stream(track: OfflineTrack): MediaStream {
-        val sidecar = track.resourceId?.let { id -> entry.resources.firstOrNull { it.id == id } }
-        val isSubtitle = track.type == "subtitle"
-        val external = isSubtitle && sidecar != null
-        return MediaStream(
-            type = if (isSubtitle) MediaStreamType.Subtitle else MediaStreamType.Audio,
-            index = track.serverIndex,
-            codec = track.codec,
-            language = track.language,
-            displayTitle = track.label,
-            title = track.label,
-            isExternal = external,
-            isDefault = track.isDefault,
-            isForced = track.isForced,
-            isTextSubtitleStream = external,
-            deliveryMethod = if (isSubtitle) (if (external) SubtitleDeliveryMethod.External else SubtitleDeliveryMethod.Embed) else null,
-            deliveryUrl = if (external) resourceFile(sidecar.id)?.let { Uri.fromFile(it).toString() } else null
-        )
-    }
-    return MediaSourceInfo(
-        id = entry.sourceId ?: entry.itemId,
-        container = entry.container,
-        size = size,
-        runTimeTicks = entry.runtimeTicks,
-        supportsDirectPlay = true,
-        mediaStreams = entry.tracks.filter { it.available }.sortedBy { it.serverIndex }.map(::stream)
+/** The player reads tracks from here exactly as it reads a server's. Tracks that weren't downloaded aren't playable here. */
+internal fun offlineSourceInfo(entry: OfflineEntry, size: Long, resourceFile: (String) -> File?): MediaSourceInfo = MediaSourceInfo(
+    id = entry.sourceId ?: entry.itemId,
+    container = entry.container,
+    size = size,
+    runTimeTicks = entry.runtimeTicks,
+    supportsDirectPlay = true,
+    mediaStreams = entry.tracks.filter { it.available }.sortedBy { it.serverIndex }.map { entry.stream(it, resourceFile) }
+)
+
+/** Rows for the player's menus only. These never reach the decision, so the decoder, the remote and playback info can't see them as playable. */
+internal fun offlineUndownloadedStreams(entry: OfflineEntry): List<MediaStream> =
+    (entry.undownloadedTracks("audio") + entry.undownloadedTracks("subtitle")).map { entry.stream(it) { null } }
+
+private fun OfflineEntry.stream(track: OfflineTrack, resourceFile: (String) -> File?): MediaStream {
+    val sidecar = track.resourceId?.let { id -> resources.firstOrNull { it.id == id } }
+    val isSubtitle = track.type == "subtitle"
+    val external = isSubtitle && sidecar != null
+    return MediaStream(
+        type = if (isSubtitle) MediaStreamType.Subtitle else MediaStreamType.Audio,
+        index = track.serverIndex,
+        codec = track.codec,
+        language = track.language,
+        displayTitle = track.label,
+        title = track.label,
+        isExternal = external,
+        isDefault = track.isDefault,
+        isForced = track.isForced,
+        isTextSubtitleStream = external,
+        deliveryMethod = if (isSubtitle) (if (external) SubtitleDeliveryMethod.External else SubtitleDeliveryMethod.Embed) else null,
+        deliveryUrl = if (external) resourceFile(sidecar.id)?.let { Uri.fromFile(it).toString() } else null
     )
 }
 

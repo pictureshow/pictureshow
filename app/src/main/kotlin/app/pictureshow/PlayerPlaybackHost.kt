@@ -170,6 +170,14 @@ internal class PlaybackHostState(
         if (advanceReported) finish(reason = "natural-end")
     }
 
+    /** The offline handoff's exit: this session ends and something other than the usual back navigation follows. */
+    fun closeForStream(next: () -> Unit) {
+        if (exitRequested) return
+        PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=offline-handoff"))
+        exitRequested = true
+        if (advanceReported) next() else finishPlayback(controller, next)
+    }
+
     fun applyPendingSeek() {
         val active = player ?: return
         val requested = pendingSeek ?: return
@@ -349,6 +357,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val identity: DeviceIdentityStore = koinInject()
     val preferences: PlaybackPreferencesStore = koinInject()
     val offline = LocalOfflinePlayback.current
+    val handoff = LocalOfflineHandoff.current?.takeIf { it.itemId == host.item.id }
     val output = host.output
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
@@ -397,7 +406,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                     ),
                     offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
                         catalog.completePlayback(account, item.id, report)
-                    },
+                    }.let { server -> handoff?.gateway?.invoke(server) ?: server },
                     MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
                     item.id
                 ) { reason -> PlaybackDiagnostics.write("owner-report suppressed reason=$reason") }
@@ -443,7 +452,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 }
                 activeProbe.start { session.routeChanged() }
                 PlaybackDiagnostics.write("start-request item=${item.id} requestedMs=$startMs")
-                session.start(startMs)
+                session.start(startMs, handoff?.tracks)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

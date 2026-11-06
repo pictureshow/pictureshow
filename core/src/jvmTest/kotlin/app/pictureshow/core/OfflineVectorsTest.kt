@@ -20,8 +20,11 @@ import app.pictureshow.core.offline.OfflineOutboxEntry
 import app.pictureshow.core.offline.OfflineOutboxEvent
 import app.pictureshow.core.offline.OfflinePolicy
 import app.pictureshow.core.offline.OfflinePreset
+import app.pictureshow.core.offline.OfflineReconnectFacts
 import app.pictureshow.core.offline.OfflineRequest
 import app.pictureshow.core.offline.OfflineResponse
+import app.pictureshow.core.offline.OfflineServerSource
+import app.pictureshow.core.offline.OfflineTrack
 import app.pictureshow.core.offline.OfflineUserData
 import app.pictureshow.core.offline.OfflineValidator
 import app.pictureshow.core.offline.OfflineVerifyInput
@@ -43,16 +46,19 @@ import app.pictureshow.core.offline.offlineDurableOffset
 import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryDir
 import app.pictureshow.core.offline.offlineEntryId
+import app.pictureshow.core.offline.offlineHandoffSelection
 import app.pictureshow.core.offline.offlineOriginalRequest
 import app.pictureshow.core.offline.offlinePresets
 import app.pictureshow.core.offline.offlineRangeHeader
 import app.pictureshow.core.offline.offlineReadyBlockers
+import app.pictureshow.core.offline.offlineReconnectDecision
 import app.pictureshow.core.offline.offlineResumeDecision
 import app.pictureshow.core.offline.offlineSafePath
 import app.pictureshow.core.offline.offlineSelect
 import app.pictureshow.core.offline.offlineSha256Hex
 import app.pictureshow.core.offline.offlineSidecarAudioRequest
 import app.pictureshow.core.offline.offlineSubtitleRequest
+import app.pictureshow.core.offline.offlineTrackOnServer
 import app.pictureshow.core.offline.offlineVerify
 import app.pictureshow.core.offline.offlineVideoRequest
 import app.pictureshow.core.offline.reconcile
@@ -62,6 +68,7 @@ import app.pictureshow.core.offline.release
 import app.pictureshow.core.offline.reserve
 import app.pictureshow.core.offline.setCap
 import app.pictureshow.core.offline.trackSwitch
+import app.pictureshow.core.offline.undownloadedTracks
 import app.pictureshow.core.offline.watchedPreview
 import java.security.MessageDigest
 import kotlin.random.Random
@@ -103,6 +110,8 @@ class OfflineVectorsTest {
     @Test fun outbox() = run("offline-outbox")
 
     @Test fun plan() = run("offline-plan")
+
+    @Test fun reconnect() = run("offline-reconnect")
 
     @Test fun fmp4() = run("offline-fmp4")
 
@@ -375,6 +384,33 @@ class OfflineVectorsTest {
         }
         "track-switch" -> buildJsonObject {
             put("action", event.decoded<OfflineEntry>("entry")!!.trackSwitch(event.need("type"), event.int("serverIndex")))
+        }
+        "reconnect-tracks" -> buildJsonObject {
+            put("indexes", JsonArray(event.decoded<OfflineEntry>("entry")!!.undownloadedTracks(event.need("type")).map { JsonPrimitive(it.serverIndex) }))
+        }
+        "reconnect-decision" -> {
+            val decision = offlineReconnectDecision(
+                event.need("trackSwitch"),
+                event.need("network"),
+                OfflineReconnectFacts(event.text("server") ?: "unknown", event.bool("playbackAllowed"), event.bool("trackOnServer"))
+            )
+            buildJsonObject {
+                put("outcome", decision.outcome)
+                put("metered", decision.metered)
+            }
+        }
+        "reconnect-track-on-server" -> buildJsonObject {
+            put(
+                "found",
+                offlineTrackOnServer(event.decoded<OfflineTrack>("track")!!, event.text("sourceId"), event.decoded<List<OfflineServerSource>>("sources")!!)
+            )
+        }
+        "handoff-selection" -> {
+            val selection = offlineHandoffSelection(event.need("type"), event.int("index")!!, event.int("currentAudio"), event.int("currentSubtitle"))
+            buildJsonObject {
+                put("audio", selection.audio)
+                put("subtitle", selection.subtitle)
+            }
         }
         "entry-id" -> {
             val id = offlineEntryId(event.need("itemId"), event.preset())

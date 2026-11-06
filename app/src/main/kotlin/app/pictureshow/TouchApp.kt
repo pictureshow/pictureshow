@@ -37,6 +37,13 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
+/** Sign-in steps and every playing route, downloaded or streamed, own the whole screen. */
+internal fun touchShowsNavigation(route: String?, signedIn: Boolean): Boolean = signedIn &&
+    route !in listOf("waiting", "servers") &&
+    route?.startsWith("login?") != true &&
+    route?.startsWith("quick?") != true &&
+    !isTouchPlayerRoute(route)
+
 @Composable
 internal fun TouchPictureshow(
     session: SessionViewModel = koinViewModel(),
@@ -83,12 +90,8 @@ internal fun TouchPictureshow(
     var installedToken by remember { mutableStateOf(state.snapshot.currentAccount?.accessToken) }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
-    val inPlayer = route?.startsWith("player?") == true
-    val showNavigation = signedIn &&
-        route !in listOf("waiting", "servers") &&
-        route?.startsWith("login?") != true &&
-        route?.startsWith("quick?") != true &&
-        !inPlayer
+    val inPlayer = isTouchPlayerRoute(route)
+    val showNavigation = touchShowsNavigation(route, signedIn)
     val remote: RemoteControllerHost = koinInject()
     val remoteState by remote.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.snapshot.currentAccount) { remote.bind(state.snapshot.currentAccount) }
