@@ -88,6 +88,8 @@ class TouchCastChooserTest {
     }
 
     // Turning Cast off is a setting, not somewhere to play: its words start where the body's do.
+    // Native: without real text measurement the words come out about 10 dp wide and centre in the button's 58 dp minimum.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
     fun theSettingSitsOnTheBodysEdge() {
         chooser()
