@@ -6491,6 +6491,35 @@
         ]
       },
       "expected": "http://noname.example"
+    },
+    {
+      "id": "server-label.one-server-listed-twice-counts-once-by-its-first-name",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "a",
+          "name": "Home",
+          "url": "https://home.example"
+        },
+        "all": [
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "https://home.example"
+          },
+          {
+            "id": "a",
+            "name": "Den",
+            "url": "https://home.example"
+          },
+          {
+            "id": "b",
+            "name": "Den",
+            "url": "https://cabin.example"
+          }
+        ]
+      },
+      "expected": "Home"
     }
   ]
 }

@@ -106,7 +106,8 @@ internal fun TouchLogin(
     onPassword: (String) -> Unit,
     onSignIn: () -> Unit,
     onQuickConnect: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    serverLabel: String = server.name
 ) {
     var reveal by rememberSaveable { mutableStateOf(false) }
     val focus = LocalFocusManager.current
@@ -115,7 +116,7 @@ internal fun TouchLogin(
         keyboard?.hide()
         onSignIn()
     }
-    TouchPage("Sign in to ${server.name}", onBack) {
+    TouchPage("Sign in to $serverLabel", onBack) {
         if (sessionEnded) TouchMessage("Your session ended. Sign in again.")
         OutlinedTextField(
             value = state.username,
@@ -156,9 +157,15 @@ internal fun TouchLogin(
 }
 
 @Composable
-internal fun TouchQuickConnect(state: QuickState, server: Server, onRetry: () -> Unit, onBack: () -> Unit) {
+internal fun TouchQuickConnect(
+    state: QuickState,
+    server: Server,
+    onRetry: () -> Unit,
+    serverLabel: String = server.name,
+    onBack: () -> Unit
+) {
     TouchPage("Quick Connect", onBack) {
-        Text(server.name, style = MaterialTheme.typography.titleLarge)
+        Text(serverLabel, style = MaterialTheme.typography.titleLarge)
         Text("On another signed-in Jellyfin app, open Settings → Quick Connect and enter this code.")
         state.code?.let { code ->
             Text(

@@ -750,7 +750,7 @@ internal fun Pictureshow(
                     it.user.name == entry.arguments?.getString("username")
             } == true
             BackHandler(enabled = nav.previousBackStackEntry == null) { leaveLogin(nav) }
-            Page("Sign in to ${server.name}") {
+            Page("Sign in to ${state.snapshot.serverLabel(server)}") {
                 RemoteField(
                     "Username",
                     screen.username,
@@ -795,7 +795,7 @@ internal fun Pictureshow(
             // Leaving the sign-in flow clears the owner and cancels polling.
             LaunchedEffect(vm) { vm.start() }
             SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
-            Page("Quick Connect · ${server.name}") {
+            Page("Quick Connect · ${state.snapshot.serverLabel(server)}") {
                 Text(
                     "Open Jellyfin on your phone or computer → Settings → Quick Connect, " +
                         "and enter this code"
@@ -823,6 +823,7 @@ internal fun Pictureshow(
                 CatalogHome(
                     screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                     profileState.account.copy(server = account.server),
+                    serverLabel = state.snapshot.serverLabel(account.server),
                     onOpen = { nav.navigate(itemRoute(it)) },
                     onRetry = {
                         profile.verify()

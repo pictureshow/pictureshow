@@ -606,6 +606,62 @@ class CastSenderHostTest {
         assertTrue(log.indexOf("reported-stopped") < log.indexOf("revoke:$SESSION_TOKEN"))
     }
 
+    @Test fun changingAccountDuringTheWaitKeepsTheSessionForTheLastReport() = runTest {
+        val host = host()
+        casting(host)
+        link.position = 70_000
+        host.disconnect()
+        runCurrent()
+        val first = link.request!!.items.single()
+        gateway.reports.clear()
+        log.clear()
+        host.bind(null)
+        runCurrent()
+        host.bind(ACCOUNT.copy(user = User("someone-else", "Bo")))
+        runCurrent()
+        assertFalse("revoke:$SESSION_TOKEN" in log, "the wait still has a report to make with it")
+        link.sink!!.onConnected(null)
+        link.sink!!.onStatus(
+            status("playing", positionMs = 900_000).copy(
+                customData = mapOf(
+                    "nonce" to first.customData.getValue("nonce"),
+                    "generation" to first.customData.getValue("generation"),
+                    "entry" to ENTRY
+                ),
+                contentUrl = first.url
+            )
+        )
+        runCurrent()
+        assertTrue("stopped:9000000000" in gateway.reports, gateway.reports.toString())
+        assertEquals(1, log.count { it == "revoke:$SESSION_TOKEN" }, log.toString())
+        assertTrue(log.indexOf("reported-stopped") < log.indexOf("revoke:$SESSION_TOKEN"))
+    }
+
+    @Test fun aDetachedAnswerPastTheEndIsHeldToTheDuration() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        val first = link.request!!.items.single()
+        gateway.reports.clear()
+        host.bind(null)
+        runCurrent()
+        link.sink!!.onConnected(null)
+        link.sink!!.onStatus(
+            status("playing", positionMs = 900_000).copy(
+                durationMs = 600_000,
+                customData = mapOf(
+                    "nonce" to first.customData.getValue("nonce"),
+                    "generation" to first.customData.getValue("generation"),
+                    "entry" to ENTRY
+                ),
+                contentUrl = first.url
+            )
+        )
+        runCurrent()
+        assertTrue("stopped:6000000000" in gateway.reports, gateway.reports.toString())
+    }
+
     @Test fun signingOutWhileDetachedWithNoAnswerStillRevokes() = runTest {
         val host = host()
         casting(host)

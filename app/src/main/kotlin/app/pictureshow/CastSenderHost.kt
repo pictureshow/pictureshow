@@ -318,7 +318,10 @@ internal class CastSenderHost(
         sessionBinding = null
         val records = sessions.state.records.filter { active || next == null || it.server != next.server.id || it.viewer != next.user.id }
         if (records.isEmpty() && last == null && rejoined == null) return
+        val earlier = cleanupJob
         cleanupJob = scope.launch {
+            // A change of account during an earlier wait must not revoke the session that wait still has to report with.
+            earlier?.join()
             // Detached, only the receiver knows how far it got, so its answer comes before the session goes.
             val final = answer?.await()?.let { lastReportOf(requireNotNull(rejoined), it) } ?: last
             if (lastReporter != null && final != null) {
@@ -340,7 +343,7 @@ internal class CastSenderHost(
             item.mediaSourceId,
             item.playSessionId,
             playMethod(item.method),
-            status.positionMs * MS_TO_TICKS,
+            status.durationMs?.takeIf { it > 0 }?.let { minOf(status.positionMs, it) }.let { it ?: status.positionMs } * MS_TO_TICKS,
             status.playerState == "paused"
         )
     }
@@ -956,6 +959,7 @@ internal class CastSenderHost(
 
     /** Takes the receiver's clock now, before something reads the position or takes the status away. */
     private fun readPosition() {
+        if (retiring != null) return
         link?.positionMs()?.let { dispatch(CastEvent("progress", ticks = it * MS_TO_TICKS)) }
     }
 

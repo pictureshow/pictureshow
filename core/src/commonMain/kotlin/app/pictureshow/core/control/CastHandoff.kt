@@ -333,9 +333,18 @@ private fun linkLost(s: CastState): CastState {
  * Detaching forgets the observation, and the owner's intent is the only thing left that a later Stop or Resume here can
  * read. Left alone that is where the handoff began, however long the receiver has played since.
  */
+private fun OwnerState.onItem(entry: String?): OwnerState =
+    if (entry == null) this else copy(intent = intent.copy(entry = entry))
+
 private fun CastState.ownerAtLastPosition(): OwnerState {
     val last = observed ?: return owner
-    return owner.copy(intent = owner.intent.copy(ticks = last.ticks, paused = pausedOf(last) ?: owner.intent.paused))
+    return owner.copy(
+        intent = owner.intent.copy(
+            entry = last.entry ?: owner.intent.entry,
+            ticks = last.ticks,
+            paused = pausedOf(last) ?: owner.intent.paused
+        )
+    )
 }
 
 /**
@@ -388,6 +397,8 @@ private fun beginStop(s: CastState, purpose: String): CastState {
     }
     return viaOwner(s, OwnerEvent("return", identity = s.owner.owner)) {
         it.copy(
+            // A queue moves on by itself, and a position only means something on the item it was read from.
+            owner = if (s.returnTicks == null) it.owner.onItem(observed?.entry) else it.owner,
             stop = "sent",
             stopPurpose = purpose,
             cleanup = "pending",
@@ -426,8 +437,9 @@ private fun stopConfirmed(s: CastState): CastState {
 }
 
 /** The receiver ended this viewing itself. Nothing local starts; the viewer may choose Resume here. */
-private fun receiverEnded(s: CastState, notice: String, ticks: Long?): CastState = stopConfirmed(
+private fun receiverEnded(s: CastState, notice: String, ticks: Long?, entry: String?): CastState = stopConfirmed(
     s.copy(
+        owner = s.owner.onItem(entry),
         stopPurpose = "ended",
         returnPaused = true,
         returnTicks = ticks ?: s.observed?.ticks ?: s.owner.intent.ticks
@@ -484,13 +496,14 @@ private fun observe(state: CastState, event: CastEvent): CastState {
     val bound = s.copy(mediaSession = o.mediaSession, observed = o)
     // A receiver that has let go can say zero, and that mustn't wipe the resume point. What it said last stands.
     val endedAt = o.ticks.takeIf { it > 0 } ?: s.observed?.ticks ?: s.owner.intent.ticks
+    val endedOn = o.entry ?: s.observed?.entry
     return when (s.owner.phase) {
         "awaiting-ready" -> awaitingReady(bound, o)
 
         "returning", "return-uncertain" -> if (idle) stopConfirmed(bound) else bound
 
         "disconnected" -> if (idle) {
-            receiverEnded(bound, endedNotice(o.idleReason), endedAt)
+            receiverEnded(bound, endedNotice(o.idleReason), endedAt, endedOn)
         } else {
             // Reattach: reduceOwner's disconnect only detached controls, so the same owner and generation carry on.
             bound.copy(
@@ -501,7 +514,7 @@ private fun observe(state: CastState, event: CastEvent): CastState {
         }
 
         "active" -> if (idle) {
-            receiverEnded(bound, endedNotice(o.idleReason), endedAt)
+            receiverEnded(bound, endedNotice(o.idleReason), endedAt, endedOn)
         } else {
             bound.copy(commands = observeCommands(bound.commands ?: freshCommands(target, o), o, event.nowMs))
         }

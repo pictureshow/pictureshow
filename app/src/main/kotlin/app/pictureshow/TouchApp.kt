@@ -32,6 +32,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -297,7 +298,8 @@ internal fun TouchPictureshow(
                     vm::password,
                     vm::signIn,
                     { nav.navigate(serverRoute("quick", server)) },
-                    { leaveLogin(nav) }
+                    { leaveLogin(nav) },
+                    state.snapshot.serverLabel(server)
                 )
             }
             composable("quick?server={server}", arguments = listOf(navArgument("server") { type = NavType.StringType })) { entry ->
@@ -310,7 +312,7 @@ internal fun TouchPictureshow(
                 val screen by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(vm) { vm.start() }
                 SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
-                TouchQuickConnect(screen, server, vm::start) { nav.popBackStack() }
+                TouchQuickConnect(screen, server, vm::start, state.snapshot.serverLabel(server)) { nav.popBackStack() }
             }
             listOf("home", "libraries").forEach { destination ->
                 composable(destination) {
