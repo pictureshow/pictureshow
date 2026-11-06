@@ -49,7 +49,10 @@ class TouchCastScreenTest {
             routes = listOf(CastRoute("r", "Kitchen"))
         )
         compose.setContent {
-            MaterialTheme { TouchCastChooser(RemoteControllerUi(), ui, showCast = true, onThisDevice = null, onPickRemote = { }, onPickCast = { }, onSetCastEnabled = { }, onDismiss = { }) }
+            MaterialTheme {
+                TouchCastChooser(RemoteControllerUi(), ui, showCast = true, onThisDevice = null, onPickRemote = {
+                }, onPickCast = { }, onSetCastEnabled = { }, onDismiss = { })
+            }
         }
         compose.onNodeWithTag("cast:pick-refused").assertIsDisplayed()
         compose.onNodeWithText("Still playing on Den.", substring = true).assertIsDisplayed()

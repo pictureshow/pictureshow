@@ -222,6 +222,12 @@ internal class CastSenderHost(
     private var pendingSelect: String? = null
     private var switchJob: Job? = null
 
+    /** The old session's end hasn't come yet, though the new route has been selected. */
+    private var oldEndOwed = false
+
+    /** What the viewer picked for a receiver this app first has to rejoin. */
+    private var pendingPick: Pair<CastRoute, CastPlayRequest>? = null
+
     /** The last report, the encoder and the revocation of a viewing that just ended. The next session waits for it. */
     private var cleanupJob: Job? = null
     private var foreground = false
@@ -589,9 +595,13 @@ internal class CastSenderHost(
             queue = playRequest.items.mapIndexed { index, it -> entryId(index, it.id) }
         )
         val before = cast
-        val next = reduceCast(before ?: CastState(OwnerState(local, intent = intent)), CastEvent("pick", identity = target, intent = intent))
+        val next = reduceCast(
+            before ?: CastState(OwnerState(local, intent = intent)),
+            CastEvent("pick", identity = target, intent = intent)
+        )
         when {
-            next.reason == "already-casting" -> {
+            next.effect == "show-controls" || next.effect == "reconnect" -> {
+                pendingPick = (route to playRequest).takeIf { next.reason == "rejoin-to-replace" }
                 request = null
                 stopSearch()
                 mutable.update { it.copy(chooserOpen = false, pickRefusal = null) }
@@ -619,7 +629,9 @@ internal class CastSenderHost(
         lastStatus = null
         loadStarted = false
         localAlive = playRequest.local != null
-        mutable.update { it.copy(cast = next, deviceName = route.name, title = item.title, controls = null, chooserOpen = false, pickRefusal = null) }
+        mutable.update {
+            it.copy(cast = next, deviceName = route.name, title = item.title, controls = null, chooserOpen = false, pickRefusal = null)
+        }
         environment.mayBeLive = true
         loadTimer?.cancel()
         // The same limit covers joining the device: a route that never connects must not leave local playback waiting.
@@ -644,7 +656,7 @@ internal class CastSenderHost(
                 switchJob?.cancel()
                 switchJob = scope.launch {
                     delay(CAST_SWITCH_MS)
-                    selectPending()
+                    selectPending(oldEnded = false)
                 }
             }
 
@@ -662,15 +674,31 @@ internal class CastSenderHost(
         if (!selected) dispatch(CastEvent("load-failed", recovery = "route-gone"))
     }
 
-    private fun selectPending() {
+    private fun selectPending(oldEnded: Boolean = true) {
         val routeId = pendingSelect ?: return
         pendingSelect = null
+        oldEndOwed = !oldEnded
         switchJob?.cancel()
         switchJob = null
         joinRoute(ensureLink(), routeId)
     }
 
+    /** Once the receiver has answered, the rejoin is done and this is a replace on the link. If the viewing has gone, so is the point of it. */
+    private fun settlePendingPick() {
+        val (route, playRequest) = pendingPick ?: return
+        val state = cast
+        if (state == null || state.owner.owner.kind != "cast") {
+            pendingPick = null
+        } else if (state.owner.phase == "active" && state.link == "connected" && state.observed != null) {
+            pendingPick = null
+            request = playRequest
+            pick(route)
+            request = null
+        }
+    }
+
     private fun cancelPendingSelect() {
+        oldEndOwed = false
         pendingSelect = null
         switchJob?.cancel()
         switchJob = null
@@ -1029,6 +1057,7 @@ internal class CastSenderHost(
         commandTimer?.cancel()
         reportJob?.cancel()
         cancelPendingSelect()
+        pendingPick = null
         request = null
         handoff = null
         prepared = emptyMap()
@@ -1061,7 +1090,10 @@ internal class CastSenderHost(
 
     fun retryStop() = dispatch(CastEvent("retry-stop"))
 
-    fun disconnect() = dispatch(CastEvent("disconnect"))
+    fun disconnect() {
+        pendingPick = null
+        dispatch(CastEvent("disconnect"))
+    }
 
     fun cancel() = dispatch(CastEvent("cancel"))
 
@@ -1075,7 +1107,10 @@ internal class CastSenderHost(
             val found = withTimeoutOrNull(CAST_SEARCH_MS) { current.routes.first { routes -> routes.any { it.id == device } } }
             val selected = found != null && current.select(device)
             current.stopDiscovery()
-            if (!selected) dispatch(CastEvent("link-failed"))
+            if (!selected) {
+                pendingPick = null
+                dispatch(CastEvent("link-failed"))
+            }
         }
     }
 
@@ -1097,6 +1132,7 @@ internal class CastSenderHost(
     override fun onConnected(deviceName: String?) {
         restoreJob?.cancel()
         reattachEmptySeen = false
+        oldEndOwed = false
         if (retiring != null) {
             link?.requestStatus()
             return
@@ -1119,6 +1155,11 @@ internal class CastSenderHost(
         stopRetiring()
         // The old device's session, which a move to another device was waiting for. It isn't the new one's failure.
         if (pendingSelect != null) return selectPending()
+        if (oldEndOwed) {
+            oldEndOwed = false
+            return
+        }
+        pendingPick = null
         if (cast == null) {
             // A viewing still on record may still be playing, and is still offered so it can be ended.
             if (environment.viewing == null) environment.mayBeLive = false
@@ -1131,6 +1172,7 @@ internal class CastSenderHost(
 
     override fun onConnectFailed() {
         awaitingReattach = false
+        pendingPick = null
         if (retiring != null) return stopRetiring()
         dispatch(CastEvent("link-failed"))
     }
@@ -1159,6 +1201,7 @@ internal class CastSenderHost(
         val after = cast?.observed?.playerState?.takeIf { cast?.owner?.phase == "active" }
         // A change of state goes out at once. The first status is the start report's, not a change.
         if (before != null && after != null && before != after) report()
+        settlePendingPick()
     }
 
     /** After a process death: ours only if what the receiver shows is what we stored, and what we report comes from that. */

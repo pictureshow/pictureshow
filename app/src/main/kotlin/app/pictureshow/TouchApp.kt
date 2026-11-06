@@ -471,7 +471,13 @@ internal fun TouchPictureshow(
             }
             composable("cast") {
                 // Only from this screen: Play here may already have opened a player above it.
-                TouchCastScreen(castState, cast, onBack = { if (nav.currentBackStackEntry?.destination?.route == "cast") nav.popBackStack() })
+                TouchCastScreen(castState, cast, onBack = {
+                    if (nav.currentBackStackEntry?.destination?.route ==
+                        "cast"
+                    ) {
+                        nav.popBackStack()
+                    }
+                })
             }
             composable("settings") {
                 state.snapshot.currentAccount?.let { account ->

@@ -65,6 +65,25 @@ internal interface CastLinkListener {
     fun onStatus(status: CastStatus)
 }
 
+/**
+ * The session the SDK last spoke about. Ending an old session is slow, so its end can arrive once a newer one is under way,
+ * and that end says nothing about the newer one.
+ */
+internal class NewestSession<T : Any> {
+    private var newest: T? = null
+    fun note(session: T) {
+        newest = session
+    }
+
+    fun isSuperseded(session: T) = newest.let { it != null && it !== session }
+}
+
+/**
+ * The SDK raises several callbacks for one status. One empty status is asked about again, and a second is the end of the
+ * viewing, so the same one twice over mustn't count as a second answer. A reply to that question always counts.
+ */
+internal fun repeatsAnEmptyStatus(status: CastStatus, last: CastStatus?) = status.mediaSession < 0 && status == last
+
 /** Everything the app asks of the Cast SDK. [GmsCastLink] is the only implementation and the only file with SDK types. */
 internal interface CastLink {
     val routes: StateFlow<List<CastRoute>>

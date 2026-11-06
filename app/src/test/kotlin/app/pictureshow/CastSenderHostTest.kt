@@ -1015,7 +1015,8 @@ class CastSenderHostTest {
 
     private val den = CastRoute("provider:route-den", "Den")
 
-    private fun anotherItem() = CastPlayRequest(listOf(CastPlayItem("item-2", "Another film")), startMs = 1_000, paused = false, local = null)
+    private fun anotherItem() =
+        CastPlayRequest(listOf(CastPlayItem("item-2", "Another film")), startMs = 1_000, paused = false, local = null)
 
     private fun CastSenderHost.pickFrom(route: CastRoute, playRequest: CastPlayRequest) {
         openChooser(playRequest)
@@ -1037,7 +1038,13 @@ class CastSenderHostTest {
         assertFalse("select" in log, "already joined: the SDK says nothing about selecting a joined route")
         assertFalse(log.any { it.startsWith("end") }, "the session stays up for the next load")
         assertTrue("stop" in log)
-        val order = log.filter { it == "stop" || it == "reported-stopped" || it.startsWith("revoke") || it == "load" || it.startsWith("provision") }
+        val order = log.filter {
+            it == "stop" ||
+                it == "reported-stopped" ||
+                it.startsWith("revoke") ||
+                it == "load" ||
+                it.startsWith("provision")
+        }
         assertEquals(listOf("stop", "reported-stopped", "revoke:$SESSION_TOKEN", "provision:secret-token", "load"), order)
         assertEquals("Another film", host.state.value.title)
         assertTrue(host.generation() > old)
@@ -1096,6 +1103,12 @@ class CastSenderHostTest {
         runCurrent()
         assertEquals(den.id, link.selected)
         assertFalse(link.discovering, "the search ends once the route is selected")
+        link.sink!!.onEnded()
+        assertNull(host.state.value.cast!!.recovery, "that's the old device's session ending late")
+        link.sink!!.onConnecting()
+        link.sink!!.onConnected("Den")
+        runCurrent()
+        assertTrue("load" in log)
     }
 
     @Test fun playOnADetachedReceiverWithTheSameItemReconnects() = runTest {
@@ -1119,15 +1132,73 @@ class CastSenderHostTest {
         host.disconnect()
         runCurrent()
         log.clear()
+        val old = host.generation()
         host.pickFrom(ROUTE, anotherItem())
         runCurrent()
         assertTrue("select" in log)
         assertFalse("load" in log, "not before it has joined")
-        assertTrue("revoke:$SESSION_TOKEN" in log)
+        assertFalse("revoke:$SESSION_TOKEN" in log, "it may still be playing, and the join may fail")
+        assertEquals(old, host.generation())
         link.sink!!.onConnecting()
         link.sink!!.onConnected("Living room")
         runCurrent()
-        assertTrue("load" in log)
+        assertFalse("stop" in log, "not before the receiver has said what it's playing")
+        link.sink!!.onStatus(status("playing", generation = old))
+        runCurrent()
+        assertEquals(
+            listOf("stop", "reported-stopped", "revoke:$SESSION_TOKEN", "load"),
+            log.filter {
+                it == "stop" ||
+                    it == "reported-stopped" ||
+                    it.startsWith("revoke") ||
+                    it == "load"
+            }
+        )
+        assertEquals("Another film", host.state.value.title)
+    }
+
+    @Test fun aFailedRejoinToReplaceCostsNothing() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        val old = host.generation()
+        log.clear()
+        host.pickFrom(ROUTE, anotherItem())
+        runCurrent()
+        link.sink!!.onConnectFailed()
+        runCurrent()
+        val cast = host.state.value.cast!!
+        assertEquals("disconnected", cast.owner.phase)
+        assertEquals(old, host.generation())
+        assertEquals("connect-failed", cast.notice)
+        assertFalse("revoke:$SESSION_TOKEN" in log)
+        assertNotNull(environment.viewing, "it's still on record so it can be ended")
+        // A later reconnect is just that: the abandoned pick isn't carried out behind the viewer's back.
+        host.reconnect()
+        runCurrent()
+        link.sink!!.onConnected("Living room")
+        link.sink!!.onStatus(status("playing", generation = old))
+        runCurrent()
+        assertFalse("stop" in log)
+        assertEquals(old, host.generation())
+    }
+
+    @Test fun aRejoinThatFindsTheViewingOverStartsNothingBehindTheNotice() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        log.clear()
+        host.pickFrom(ROUTE, anotherItem())
+        runCurrent()
+        link.sink!!.onConnected("Living room")
+        link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "finished"))
+        runCurrent()
+        assertFalse("load" in log)
+        link.sink!!.onStatus(status("idle", generation = host.generation(), reason = "finished"))
+        runCurrent()
+        assertFalse("load" in log)
     }
 
     @Test fun playElsewhereWhileDetachedIsRefusedWithAReason() = runTest {
@@ -1174,7 +1245,9 @@ class CastSenderHostTest {
         runCurrent()
         assertEquals(1, environment.linkBuilds)
         link.sink!!.onConnected("Living room")
-        link.sink!!.onStatus(status("playing", positionMs = 30_000).copy(customData = receiverData(), contentUrl = "$MEDIA_URL?static=true"))
+        link.sink!!.onStatus(
+            status("playing", positionMs = 30_000).copy(customData = receiverData(), contentUrl = "$MEDIA_URL?static=true")
+        )
         runCurrent()
         assertEquals("active", host.state.value.cast!!.owner.phase)
     }
@@ -1257,6 +1330,10 @@ class CastSenderHostTest {
         runCurrent()
         assertTrue("select" in log)
         link.sink!!.onConnectFailed()
+        log.clear()
+        advanceTimeBy(CAST_RETIRE_MS + 1)
+        runCurrent()
+        assertFalse(log.any { it.startsWith("end") }, "there's nothing to leave, and the attempt is over")
         host.bind(ACCOUNT)
         log.clear()
         handoff(host)
@@ -1292,6 +1369,10 @@ class CastSenderHostTest {
         host.bind(null)
         runCurrent()
         link.sink!!.onEnded()
+        log.clear()
+        advanceTimeBy(CAST_RETIRE_MS + 1)
+        runCurrent()
+        assertFalse(log.any { it.startsWith("end") }, "it has already gone")
         host.bind(ACCOUNT)
         log.clear()
         handoff(host)
@@ -1373,7 +1454,9 @@ class CastSenderHostTest {
         log.clear()
         link.sink!!.onStatus(CastStatus())
         assertFalse(log.any { it.startsWith("end") }, "the SDK may not have synced yet")
-        link.sink!!.onStatus(status("playing").copy(customData = mapOf("nonce" to nonce, "generation" to generation, "entry" to ENTRY), contentUrl = url))
+        link.sink!!.onStatus(
+            status("playing").copy(customData = mapOf("nonce" to nonce, "generation" to generation, "entry" to ENTRY), contentUrl = url)
+        )
         assertTrue("stop" in log, "it was ours and still playing")
     }
 
@@ -1518,6 +1601,25 @@ class CastSenderHostTest {
         advanceTimeBy(CAST_SEARCH_MS + 1)
         runCurrent()
         assertEquals("connect-failed", host.state.value.cast!!.notice)
+    }
+
+    @Test fun theEndOfAnOlderSessionIsNotTheEndOfTheNewest() {
+        val first = Any()
+        val second = Any()
+        val newest = NewestSession<Any>()
+        assertFalse(newest.isSuperseded(first), "nothing has been said yet")
+        newest.note(first)
+        assertFalse(newest.isSuperseded(first))
+        newest.note(second)
+        assertTrue(newest.isSuperseded(first))
+        assertFalse(newest.isSuperseded(second))
+    }
+
+    @Test fun onlyTheSameEmptyStatusAgainIsARepeat() {
+        assertTrue(repeatsAnEmptyStatus(CastStatus(), CastStatus()))
+        assertFalse(repeatsAnEmptyStatus(CastStatus(), null))
+        assertFalse(repeatsAnEmptyStatus(CastStatus(idleReason = "finished"), CastStatus()))
+        assertFalse(repeatsAnEmptyStatus(CastStatus(mediaSession = 7), CastStatus(mediaSession = 7)))
     }
 
     @Test fun everyStateHasPlainWordsAndNoCodes() {
