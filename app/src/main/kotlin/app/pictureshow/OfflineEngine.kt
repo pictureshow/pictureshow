@@ -539,6 +539,14 @@ internal class OfflineEngine(
             )
         )
         eventLocked(key, entryId, OfflineJobEvent("deleted"))
+        // The flag asked on behalf of a download that needed the password; with the last of those gone nothing is asking.
+        mutableLibraries.update { all ->
+            val library = all[key]
+            val stillAsked = library?.manifest?.entries.orEmpty().any {
+                it.job.phase == OfflinePhase.failed && it.job.failure == "needs-password"
+            }
+            if (library == null || !library.needsPassword || stillAsked) all else all + (key to library.copy(needsPassword = false))
+        }
     }
 
     private fun activeCount(manifest: OfflineManifest) = manifest.entries.count {

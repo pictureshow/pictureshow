@@ -499,6 +499,22 @@ class OfflineEngineTest {
     }
 
     @Test
+    fun `deleting the last download that needed the password stops asking for it`() = runBlocking<Unit> {
+        signIn(viewerA)
+        quickConnect = false
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.enqueue(viewerA, item("2"), choice("2"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.failed)
+        engine.awaitPhase(viewerA, "2", OfflinePhase.failed)
+        withTimeout(5_000) { engine.libraries.first { it[viewerA.key]!!.needsPassword } }
+        engine.delete(viewerA.key, entryId("1"))
+        assertTrue(engine.libraries.value[viewerA.key]!!.needsPassword)
+        engine.delete(viewerA.key, entryId("2"))
+        assertFalse(engine.libraries.value[viewerA.key]!!.needsPassword)
+    }
+
+    @Test
     fun `the foreground notice follows work and ends with it`() = runBlocking<Unit> {
         signIn(viewerA)
         val engine = started()
