@@ -626,7 +626,12 @@ internal fun Pictureshow(
                                     hideFromAccessibility()
                                 }
                             )
-                            Text("Downloads saved for it on this device are deleted.")
+                            Text(
+                                "Downloads saved for it on this device are deleted.",
+                                modifier = Modifier.semantics {
+                                    hideFromAccessibility()
+                                }
+                            )
                             Message(screen.error)
                             val question = if (removingAccount != null) "Remove remembered account?" else "Remove server?"
                             Action(
@@ -635,7 +640,8 @@ internal fun Pictureshow(
                                 enabled = !screen.busy,
                                 modifier = Modifier.semantics {
                                     contentDescription =
-                                        "$question $description Other accounts stay signed in. You can add it again later."
+                                        "$question $description Other accounts stay signed in. You can add it again later. " +
+                                        "Downloads saved for it on this device are deleted."
                                 }
                             ) { cancelRemoval() }
                             Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
@@ -820,6 +826,7 @@ internal fun Pictureshow(
                 val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                 val screen by vm.state.collectAsStateWithLifecycle()
                 val profileState by profile.state.collectAsStateWithLifecycle()
+                val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                 CatalogHome(
                     screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                     profileState.account.copy(server = account.server),
@@ -833,7 +840,8 @@ internal fun Pictureshow(
                     onSearch = { nav.navigate(searchRoute()) },
                     onResume = vm::resumed,
                     onSettings = { nav.navigate("settings") },
-                    onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
+                    onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                    onWatchDownloads = watchDownloads
                 )
             }
         }

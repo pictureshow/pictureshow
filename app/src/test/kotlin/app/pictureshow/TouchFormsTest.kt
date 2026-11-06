@@ -160,6 +160,15 @@ class TouchFormsTest {
         compose.runOnIdle { assertEquals(1, removals) }
     }
 
+    @Test fun removalSaysSavedDownloadsGoForAnAccountAndForAServer() {
+        compose.setContent { MaterialTheme { TouchAccounts(AccountsState(), snapshot, {}, {}, {}, {}, {}) } }
+        compose.onNodeWithText("Remove Viewer on Fixture server").performScrollTo().performClick()
+        compose.onNodeWithText("Downloads saved for it on this device are deleted.").assertExists()
+        compose.runOnIdle { (ShadowDialog.getLatestDialog() as ComponentDialog).onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("Remove server Fixture server").performScrollTo().performClick()
+        compose.onNodeWithText("Downloads saved for it on this device are deleted.").assertExists()
+    }
+
     @Test fun accountsExposeSwitchExpiredAndServerRemovalAndEmptyStates() {
         var selected: Account? = null
         var removed: Server? = null

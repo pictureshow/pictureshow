@@ -146,7 +146,8 @@ fun CatalogHome(
     onResume: () -> Unit = {},
     onSearch: () -> Unit = {},
     onSettings: () -> Unit = {},
-    onDownloads: (() -> Unit)? = null
+    onDownloads: (() -> Unit)? = null,
+    onWatchDownloads: (() -> Unit)? = null
 ) {
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
@@ -189,7 +190,7 @@ fun CatalogHome(
         "search" -> "Search"
         "settings" -> "Settings"
         "profile" -> "Switch user"
-        "retry" -> "Retry"
+        "retry" -> if (onWatchDownloads != null) "Watch downloads" else "Retry"
         else -> restoreItem?.let(::catalogAnnouncement)
     }
     var openerHasInput by remember { mutableStateOf(false) }
@@ -396,7 +397,7 @@ fun CatalogHome(
                     }
                     if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
                     CatalogError(
-                        state.error,
+                        if (onWatchDownloads != null) OFFLINE_UNREACHABLE_TEXT else state.error,
                         onRetry,
                         target(Modifier, restoreAction == "retry").focusRequester(retry).onPreviewKeyEvent {
                             if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
@@ -406,7 +407,9 @@ fun CatalogHome(
                                 false
                             }
                         },
-                        announceMessage = !handoff
+                        announceMessage = !handoff,
+                        onWatchDownloads = onWatchDownloads,
+                        secondary = target(Modifier, false)
                     )
                     if (!state.loading && rows.isEmpty() && state.error == null) {
                         Text(
@@ -522,6 +525,13 @@ fun CatalogHome(
                     ) { Text(if (state.busy) "Please wait…" else "Sign out") }
                 }
             }
+        }
+    }
+    // The offer comes and goes with each load. Each return puts the remote on it, unless the viewer went to another action.
+    val offered = onWatchDownloads != null
+    LaunchedEffect(offered) {
+        if (offered && homeLifecycle == Lifecycle.State.RESUMED && selectedRow !in listOf("search", "settings", "profile")) {
+            focusAction("header", 0, retry)
         }
     }
     LaunchedEffect(homeLifecycle, state.loading, state.busy, state.error, rows.map { it.key to it.items.map(MediaItem::id) }) {
@@ -2840,11 +2850,26 @@ private fun CatalogHeading(title: String, modifier: Modifier = Modifier, large: 
 }
 
 @Composable
-private fun CatalogError(message: String?, onRetry: () -> Unit, modifier: Modifier = Modifier, announceMessage: Boolean = true) {
+private fun CatalogError(
+    message: String?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    announceMessage: Boolean = true,
+    onWatchDownloads: (() -> Unit)? = null,
+    secondary: Modifier = Modifier
+) {
     if (message != null) {
         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(message, color = Color(0xFFFFCCB8), modifier = Modifier.catalogFocusTarget(announceMessage))
-            Button(onClick = onRetry, modifier = modifier) { Text("Retry") }
+            if (onWatchDownloads != null) {
+                // The focused action takes Home's error focus target, so everything that lands on Retry lands here.
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(onClick = onWatchDownloads, modifier = modifier.testTag("home:watch-downloads")) { Text("Watch downloads") }
+                    Button(onClick = onRetry, modifier = secondary.testTag("home:retry")) { Text("Retry") }
+                }
+            } else {
+                Button(onClick = onRetry, modifier = modifier) { Text("Retry") }
+            }
         }
     }
 }

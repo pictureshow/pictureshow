@@ -426,7 +426,8 @@ class SignInAccountsTest {
             SemanticsMatcher.expectValue(
                 SemanticsProperties.ContentDescription,
                 listOf(
-                    "Remove remembered account? This removes Viewer one on Screen room from this TV. Other accounts stay signed in. You can add it again later."
+                    "Remove remembered account? This removes Viewer one on Screen room from this TV. Other accounts stay signed in. " +
+                        "You can add it again later. Downloads saved for it on this device are deleted."
                 )
             )
         )
