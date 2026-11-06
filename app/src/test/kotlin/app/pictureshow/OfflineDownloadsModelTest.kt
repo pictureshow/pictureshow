@@ -3,12 +3,21 @@
  */
 package app.pictureshow
 
+import app.pictureshow.core.ClientError
+import app.pictureshow.core.ClientResult
+import app.pictureshow.core.ErrorKind
+import app.pictureshow.core.HomeRow
+import app.pictureshow.core.MediaItem
+import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineJob
 import app.pictureshow.core.offline.OfflineLabels
+import app.pictureshow.core.offline.OfflineManifest
 import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePolicy
 import app.pictureshow.core.offline.OfflinePreset
+import app.pictureshow.core.offline.OfflineTrack
+import app.pictureshow.core.offline.offlineDecodeManifest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -33,24 +42,27 @@ class OfflineDownloadsModelTest {
         assertTrue(unknown, unknown.contains("2 KB received"))
     }
 
+    private fun meteredActions(job: OfflineJob) = offlineActions(job, true, OfflineNetwork.metered)
+
     @Test
     fun `every phase says something true and offers what it can do`() {
         val phases = OfflinePhase.entries
         phases.forEach { assertTrue(it.name, offlineStatus(job(it), null, true, OfflineNetwork.none, 10).isNotBlank()) }
-        assertEquals(listOf(OfflineAction.Play, OfflineAction.Delete), offlineActions(job(OfflinePhase.ready), true))
-        assertEquals(listOf(OfflineAction.Retry, OfflineAction.Delete), offlineActions(job(OfflinePhase.failed), true))
-        assertEquals(listOf(OfflineAction.Redownload, OfflineAction.Delete), offlineActions(job(OfflinePhase.missing), true))
-        assertEquals(listOf(OfflineAction.Resume, OfflineAction.Delete), offlineActions(job(OfflinePhase.paused), true))
-        assertTrue(offlineActions(job(OfflinePhase.deleting), true).isEmpty())
-        phases.filter { it != OfflinePhase.ready }.forEach { assertFalse(it.name, OfflineAction.Play in offlineActions(job(it), true)) }
+        assertEquals(listOf(OfflineAction.Play, OfflineAction.Delete), meteredActions(job(OfflinePhase.ready)))
+        assertEquals(listOf(OfflineAction.Retry, OfflineAction.Delete), meteredActions(job(OfflinePhase.failed)))
+        assertEquals(listOf(OfflineAction.Redownload, OfflineAction.Delete), meteredActions(job(OfflinePhase.missing)))
+        assertEquals(listOf(OfflineAction.Resume, OfflineAction.Delete), meteredActions(job(OfflinePhase.paused)))
+        assertTrue(meteredActions(job(OfflinePhase.deleting)).isEmpty())
+        phases.filter { it != OfflinePhase.ready }.forEach { assertFalse(it.name, OfflineAction.Play in meteredActions(job(it))) }
     }
 
     @Test
     fun `waiting names what it waits for`() {
         assertEquals("Waiting for Wi-Fi", offlineStatus(job(OfflinePhase.waitingNetwork), null, true, OfflineNetwork.metered, 0))
-        assertEquals("Waiting for a connection", offlineStatus(job(OfflinePhase.waitingNetwork), null, true, OfflineNetwork.none, 0))
-        assertTrue(OfflineAction.AllowCellular in offlineActions(job(OfflinePhase.waitingNetwork), true))
-        assertFalse(OfflineAction.AllowCellular in offlineActions(job(OfflinePhase.waitingNetwork).copy(cellularAllowed = true), true))
+        val offline = offlineStatus(job(OfflinePhase.waitingNetwork), null, true, OfflineNetwork.none, 0)
+        assertEquals("Waiting for a connection. It resumes once you're connected and Pictureshow is open.", offline)
+        assertTrue(OfflineAction.AllowCellular in meteredActions(job(OfflinePhase.waitingNetwork)))
+        assertFalse(OfflineAction.AllowCellular in meteredActions(job(OfflinePhase.waitingNetwork).copy(cellularAllowed = true)))
         assertTrue(offlineStatus(job(OfflinePhase.paused, cap = true), null, true, OfflineNetwork.none, 0).contains("limit"))
     }
 
@@ -169,5 +181,186 @@ class OfflineDownloadsModelTest {
         assertEquals("The server no longer has this file.", offlineStatus(job, null, false, OfflineNetwork.unmetered, 0))
         val other = job.copy(failure = "some-new-reason")
         assertEquals("The download stopped.", offlineStatus(other, null, false, OfflineNetwork.unmetered, 0))
+    }
+
+    private fun row(id: String, phase: OfflinePhase, failure: String? = null) = OfflineEntry(
+        id = id,
+        itemId = id,
+        kind = OfflineMediaKind.movie,
+        preset = OfflinePreset.video720,
+        labels = OfflineLabels(id),
+        job = job(phase, failure)
+    )
+
+    private fun library(vararg entries: OfflineEntry, flag: Boolean = false, recoverable: Boolean = false) =
+        OfflineLibrary(OfflineManifest(entries = entries.toList()), needsPassword = flag, recoverable = recoverable)
+
+    private fun track(type: String, language: String?, available: Boolean = false, index: Int = 0) =
+        OfflineTrack(index, type, "$language - Dolby Digital - SUBRIP", language, available = available)
+
+    @Test
+    fun `not downloaded names each language once in plain words`() {
+        assertEquals(
+            "Not downloaded: Spanish audio; English, Spanish and French subtitles",
+            offlineNotDownloadedSummary(
+                listOf(
+                    track("audio", "eng", available = true),
+                    track("audio", "spa"),
+                    track("subtitle", "eng"),
+                    track("subtitle", "spa"),
+                    track("subtitle", "eng"),
+                    track("subtitle", "fre")
+                )
+            )
+        )
+        assertNull(offlineNotDownloadedSummary(listOf(track("audio", "eng", available = true))))
+    }
+
+    @Test
+    fun `tracks with no language are counted rather than named`() {
+        assertEquals("Not downloaded: 1 audio track", offlineNotDownloadedSummary(listOf(track("audio", null))))
+        val unnamed = listOf(track("subtitle", "und"), track("subtitle", null))
+        assertEquals("Not downloaded: 2 subtitle tracks", offlineNotDownloadedSummary(unnamed))
+        val partly = listOf(track("subtitle", "ger"), track("subtitle", "zzz"))
+        assertEquals("Not downloaded: German and other subtitles", offlineNotDownloadedSummary(partly))
+    }
+
+    @Test
+    fun `an entry saved before this wording still gets the summary and keeps its raw labels`() {
+        val old = offlineDecodeManifest(
+            """{"schema":1,"entries":[{"id":"a","itemId":"a","kind":"movie","preset":"video720","labels":{"title":"A"},
+            "tracks":[{"serverIndex":2,"type":"audio","label":"Spanish - Dolby Digital - Mono","language":"spa","available":false}]}]}"""
+        )!!
+        val row = offlineSections(OfflineLibrary(old), OfflineNetwork.unmetered).active.single()
+        assertEquals("Not downloaded: Spanish audio", row.notDownloadedSummary)
+        assertEquals(listOf("Spanish - Dolby Digital - Mono (audio)"), row.notDownloaded)
+    }
+
+    @Test
+    fun `the mobile data override appears only on a metered network`() {
+        val waiting = job(OfflinePhase.waitingNetwork)
+        assertTrue(OfflineAction.AllowCellular in offlineActions(waiting, true, OfflineNetwork.metered))
+        assertFalse(OfflineAction.AllowCellular in offlineActions(waiting, true, OfflineNetwork.none))
+        assertFalse(OfflineAction.AllowCellular in offlineActions(waiting, true, OfflineNetwork.unmetered))
+        assertFalse(OfflineAction.AllowCellular in offlineActions(waiting, false, OfflineNetwork.metered))
+    }
+
+    @Test
+    fun `a TV talks about its own connections`() {
+        assertEquals("Use this connection", offlineActionLabel(OfflineAction.AllowCellular, tv = true))
+        assertEquals("Use mobile data", offlineActionLabel(OfflineAction.AllowCellular))
+        val waiting = job(OfflinePhase.waitingNetwork)
+        assertEquals("Waiting for Wi-Fi or Ethernet", offlineStatus(waiting, null, true, OfflineNetwork.metered, 0, tv = true))
+        assertEquals("Waiting for Wi-Fi", offlineStatus(waiting, null, true, OfflineNetwork.metered, 0))
+    }
+
+    @Test
+    fun `a row waiting for a password says so and offers only Delete`() {
+        val waiting = job(OfflinePhase.failed, "needs-password")
+        assertEquals("Waiting for your password", offlineStatus(waiting, null, true, OfflineNetwork.unmetered, 0))
+        assertEquals(listOf(OfflineAction.Delete), offlineActions(waiting, true, OfflineNetwork.unmetered))
+        assertFalse(offlineStatusIsError(waiting))
+        val failed = offlineActions(job(OfflinePhase.failed, "network"), true, OfflineNetwork.none)
+        assertEquals(listOf(OfflineAction.Retry, OfflineAction.Delete), failed)
+    }
+
+    @Test
+    fun `either the flag or a job asks for the password`() {
+        assertFalse(library(row("a", OfflinePhase.failed, "network")).passwordNeeded())
+        assertTrue(library(row("a", OfflinePhase.ready), flag = true).passwordNeeded())
+        // A network error during the attempt clears the flag and leaves the job waiting.
+        assertTrue(library(row("a", OfflinePhase.failed, "needs-password")).passwordNeeded())
+    }
+
+    @Test
+    fun `first focus is the password, then the top row's primary action, then Storage`() {
+        fun sections(vararg entries: OfflineEntry) = offlineSections(library(*entries), OfflineNetwork.metered)
+        assertEquals(OfflineFirstFocus.Password, offlineFirstFocus(true, sections(row("a", OfflinePhase.ready))))
+        assertEquals(OfflineFirstFocus.Row("a", OfflineAction.Play), offlineFirstFocus(false, sections(row("a", OfflinePhase.ready))))
+        assertEquals(
+            OfflineFirstFocus.Row("b", OfflineAction.Retry),
+            offlineFirstFocus(false, sections(row("a", OfflinePhase.ready), row("b", OfflinePhase.failed, "network")))
+        )
+        assertEquals(
+            "OK on arrival never spends metered data",
+            OfflineFirstFocus.Row("c", OfflineAction.Pause),
+            offlineFirstFocus(false, sections(row("c", OfflinePhase.waitingNetwork)))
+        )
+        assertEquals(
+            OfflineFirstFocus.Row("e", OfflineAction.Play),
+            offlineFirstFocus(false, sections(row("d", OfflinePhase.deleting), row("e", OfflinePhase.ready)))
+        )
+        assertEquals(OfflineFirstFocus.Storage, offlineFirstFocus(false, sections()))
+    }
+
+    @Test
+    fun `needs attention comes first`() {
+        val sections = offlineSections(
+            library(row("a", OfflinePhase.ready), row("b", OfflinePhase.paused), row("c", OfflinePhase.failed, "network")),
+            OfflineNetwork.none
+        )
+        assertEquals(listOf("Needs attention", "In progress", "Ready to watch"), sections.ordered.map { it.first })
+    }
+
+    @Test
+    fun `the current limit is always a choice`() {
+        val gib = 1024L * 1024 * 1024
+        val limit = gib * 6 / 5
+        assertEquals(listOf(limit, 2 * gib, 5 * gib), offlineCapChoices(listOf(2 * gib, 5 * gib), limit))
+        assertEquals(listOf(2 * gib, 5 * gib), offlineCapChoices(listOf(2 * gib, 5 * gib), 2 * gib))
+        assertEquals(listOf(2 * gib), offlineCapChoices(listOf(2 * gib), null))
+    }
+
+    @Test
+    fun `work with no total to show moves, and work with one doesn't`() {
+        assertTrue(offlineIndeterminate(job(OfflinePhase.preparing), null))
+        assertTrue(offlineIndeterminate(job(OfflinePhase.verifying), null))
+        assertTrue(offlineIndeterminate(job(OfflinePhase.transferring), null))
+        assertTrue(offlineIndeterminate(job(OfflinePhase.transferring), OfflineLiveProgress(5, null)))
+        assertFalse(offlineIndeterminate(job(OfflinePhase.transferring), OfflineLiveProgress(5, 10)))
+        assertFalse(offlineIndeterminate(job(OfflinePhase.queued), null))
+    }
+
+    @Test
+    fun `only real failures take the error tone`() {
+        assertTrue(offlineStatusIsError(job(OfflinePhase.failed, "network")))
+        assertTrue(offlineStatusIsError(job(OfflinePhase.missing)))
+        assertFalse(offlineStatusIsError(job(OfflinePhase.paused)))
+    }
+
+    @Test
+    fun `the conflict notice says what happened to the viewer's place`() {
+        assertEquals(
+            "Scope: your place changed on the server while you were offline, so the server's place was kept.",
+            offlineConflictText("Scope")
+        )
+    }
+
+    @Test
+    fun `only waiting for storage offers the storage screen`() {
+        assertTrue(offlineOffersStorage(job(OfflinePhase.waitingStorage)))
+        assertFalse(offlineOffersStorage(job(OfflinePhase.waitingNetwork)))
+    }
+
+    @Test
+    fun `Home offers downloads only when the server is out of reach and nothing else is on the page`() {
+        val ready = library(row("a", OfflinePhase.ready))
+        val failed = CatalogHomeState(loading = false, error = "x", unreachable = true)
+        assertTrue(offlineHomeOffersDownloads(failed, ready))
+        assertFalse("server said no", offlineHomeOffersDownloads(failed.copy(unreachable = false), ready))
+        assertFalse("nothing saved", offlineHomeOffersDownloads(failed, library()))
+        assertFalse("still downloading", offlineHomeOffersDownloads(failed, library(row("a", OfflinePhase.paused))))
+        assertFalse("no library", offlineHomeOffersDownloads(failed, null))
+        assertFalse("unreadable list", offlineHomeOffersDownloads(failed, library(row("a", OfflinePhase.ready), recoverable = true)))
+        val rows = listOf(HomeRow("r", "R", listOf(MediaItem("m", "M", "Movie"))))
+        assertFalse("partial load", offlineHomeOffersDownloads(failed.copy(rows = rows), ready))
+    }
+
+    @Test
+    fun `only a network failure counts as unreachable`() {
+        val network = ClientResult.Failure(ClientError(ErrorKind.NETWORK, "x"))
+        val refused = ClientResult.Failure(ClientError(ErrorKind.INVALID_RESPONSE, "x"))
+        assertTrue(catalogUnreachable(listOf(ClientResult.Success(1), network)))
+        assertFalse(catalogUnreachable(listOf(ClientResult.Success(1), refused)))
     }
 }

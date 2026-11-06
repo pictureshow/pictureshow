@@ -11,6 +11,7 @@ import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePolicy
 import app.pictureshow.core.offline.OfflinePreset
 import app.pictureshow.core.offline.OfflinePresetChoice
+import app.pictureshow.core.offline.OfflineTrack
 import app.pictureshow.core.offline.committedBytes
 import app.pictureshow.core.offline.offlinePresets
 import app.pictureshow.core.offline.offlineSelect
@@ -31,7 +32,12 @@ internal data class OfflineRow(
     val status: String,
     val fraction: Float?,
     val actions: List<OfflineAction>,
-    val notDownloaded: List<String>
+    val notDownloaded: List<String>,
+    /** The same tracks in plain words, for the row. Null when every track came along. */
+    val notDownloadedSummary: String? = null,
+    /** Working with no total to measure against: motion, not a number (OFF-03b). */
+    val indeterminate: Boolean = false,
+    val statusIsError: Boolean = false
 )
 
 internal data class OfflineSections(
@@ -42,6 +48,85 @@ internal data class OfflineSections(
     val capBytes: Long?
 ) {
     val isEmpty: Boolean get() = ready.isEmpty() && active.isEmpty() && failed.isEmpty()
+
+    /** Top to bottom on both form factors: what needs the viewer comes first. */
+    val ordered: List<Pair<String, List<OfflineRow>>>
+        get() = listOf("Needs attention" to failed, "In progress" to active, "Ready to watch" to ready).filter { it.second.isNotEmpty() }
+}
+
+internal const val OFFLINE_NEEDS_PASSWORD = "needs-password"
+internal const val OFFLINE_PASSWORD_STATUS = "Waiting for your password"
+internal const val OFFLINE_PASSWORD_REASON =
+    "This server has Quick Connect off. Downloads need your password once, to get their own sign-in. It isn't saved."
+internal const val OFFLINE_PASSWORD_FAILED = "Could not confirm your password. Check it and your connection, then try again."
+internal const val OFFLINE_RECOVERABLE_TEXT =
+    "This list couldn't be read. Nothing was deleted. If a newer version of Pictureshow saved it, updating the app brings it back."
+internal const val OFFLINE_UNREACHABLE_TEXT = "Could not reach the server. Your downloads still play."
+
+private fun OfflineJob.waitingForPassword() = phase == OfflinePhase.failed && failure == OFFLINE_NEEDS_PASSWORD
+
+/** The engine's flag and a job's failure can disagree (a failed password attempt clears one, a restart the other); either one asks. */
+internal fun OfflineLibrary.passwordNeeded(): Boolean = needsPassword || manifest.entries.any { it.job.waitingForPassword() }
+
+/** Ready downloads this viewer can watch right now; an unreadable list promises nothing. */
+internal fun OfflineLibrary?.hasReadyDownloads(): Boolean =
+    this != null && !recoverable && manifest.entries.any { it.job.phase == OfflinePhase.ready }
+
+/** Home offers saved films in place of a bare error only when the server is out of reach and nothing else is on the page. */
+internal fun offlineHomeOffersDownloads(state: CatalogHomeState, library: OfflineLibrary?): Boolean =
+    state.unreachable && state.rows.none { it.items.isNotEmpty() } && library.hasReadyDownloads()
+
+internal sealed interface OfflineFirstFocus {
+    data object Password : OfflineFirstFocus
+
+    data class Row(val entryId: String, val action: OfflineAction) : OfflineFirstFocus
+
+    data object Storage : OfflineFirstFocus
+}
+
+/** What OK does on arrival. Never a step that spends metered data, and never Delete while something else is on offer. */
+private fun OfflineRow.primaryAction(): OfflineAction? =
+    actions.firstOrNull { it != OfflineAction.AllowCellular && it != OfflineAction.Delete } ?: actions.firstOrNull()
+
+internal fun offlineFirstFocus(passwordNeeded: Boolean, sections: OfflineSections): OfflineFirstFocus {
+    if (passwordNeeded) return OfflineFirstFocus.Password
+    val row = sections.ordered.flatMap { it.second }.firstOrNull { it.primaryAction() != null } ?: return OfflineFirstFocus.Storage
+    return OfflineFirstFocus.Row(row.entry.id, requireNotNull(row.primaryAction()))
+}
+
+/** Waiting for storage has its answer one screen away. */
+internal fun offlineOffersStorage(job: OfflineJob): Boolean = job.phase == OfflinePhase.waitingStorage
+
+/** The current limit is always a choice, even one no step offers, so what's set is visible and there's a way back to it. */
+internal fun offlineCapChoices(steps: List<Long>, current: Long?): List<Long> = (steps + listOfNotNull(current)).distinct().sorted()
+
+private fun joinLanguages(names: List<String>): String = when (names.size) {
+    0 -> ""
+    1 -> names.first()
+    else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+}
+
+private fun OfflineTrack.languageName(): String? = language?.let(::trackLanguage)?.takeIf { !it.equals(language, ignoreCase = true) }
+
+private fun trackGroup(tracks: List<OfflineTrack>, words: String, oneTrack: String): String? {
+    if (tracks.isEmpty()) return null
+    val names = tracks.mapNotNull { it.languageName() }.distinct()
+    val unnamed = tracks.count { it.languageName() == null }
+    return when {
+        names.isEmpty() -> "$unnamed $oneTrack track" + if (unnamed == 1) "" else "s"
+        unnamed > 0 -> joinLanguages(names + "other") + " $words"
+        else -> joinLanguages(names) + " $words"
+    }
+}
+
+/** "Not downloaded: Spanish audio; English, Spanish and French subtitles". Each language once, in words a viewer knows. */
+internal fun offlineNotDownloadedSummary(tracks: List<OfflineTrack>): String? {
+    val missing = tracks.filter { !it.available }
+    val groups = listOfNotNull(
+        trackGroup(missing.filter { it.type == "audio" }, "audio", "audio"),
+        trackGroup(missing.filter { it.type != "audio" }, "subtitles", "subtitle")
+    )
+    return groups.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = "Not downloaded: ")
 }
 
 internal fun offlineBytes(bytes: Long): String {
@@ -72,7 +157,7 @@ internal fun offlinePresetUnavailable(reason: String?): String = when (reason) {
 }
 
 private fun failureText(reason: String?): String = when (reason) {
-    "needs-password" -> "This server has Quick Connect off. Enter your password to download."
+    OFFLINE_NEEDS_PASSWORD -> OFFLINE_PASSWORD_STATUS
     "denied", "unauthorized" -> "The server no longer lets this account download it."
     "not-indexable", "no-body" -> "The server's copy couldn't be saved in a playable form."
     "length", "hash", "truncated", "overrun" -> "The file arrived damaged and couldn't be verified."
@@ -91,12 +176,15 @@ internal fun offlineStatus(
     progress: OfflineLiveProgress?,
     wifiOnly: Boolean,
     network: OfflineNetwork,
-    committed: Long
+    committed: Long,
+    tv: Boolean = false
 ): String = when (job.phase) {
     OfflinePhase.queued -> "Queued"
     OfflinePhase.waitingNetwork -> when {
-        network == OfflineNetwork.metered && wifiOnly && !job.cellularAllowed -> "Waiting for Wi-Fi"
-        else -> "Waiting for a connection"
+        network == OfflineNetwork.metered && wifiOnly && !job.cellularAllowed ->
+            if (tv) "Waiting for Wi-Fi or Ethernet" else "Waiting for Wi-Fi"
+        // Only what's true: a booked restart is best effort, so this promises nothing about a closed app.
+        else -> "Waiting for a connection. It resumes once you're connected and Pictureshow is open."
     }
     OfflinePhase.waitingStorage -> "Waiting for storage. Free up space or raise your limit."
     OfflinePhase.preparing -> "Preparing"
@@ -115,19 +203,32 @@ internal fun offlineStatus(
     OfflinePhase.deleting -> "Removing"
 }
 
-internal fun offlineActions(job: OfflineJob, wifiOnly: Boolean): List<OfflineAction> = when (job.phase) {
+internal fun offlineActions(job: OfflineJob, wifiOnly: Boolean, network: OfflineNetwork): List<OfflineAction> = when (job.phase) {
     OfflinePhase.ready -> listOf(OfflineAction.Play, OfflineAction.Delete)
     OfflinePhase.paused -> listOf(OfflineAction.Resume, OfflineAction.Delete)
-    OfflinePhase.failed -> listOf(OfflineAction.Retry, OfflineAction.Delete)
+    // Retry can't work without the password; the form above the list retries these itself.
+    OfflinePhase.failed ->
+        if (job.waitingForPassword()) listOf(OfflineAction.Delete) else listOf(OfflineAction.Retry, OfflineAction.Delete)
     OfflinePhase.missing -> listOf(OfflineAction.Redownload, OfflineAction.Delete)
     OfflinePhase.waitingNetwork -> listOfNotNull(
-        OfflineAction.AllowCellular.takeIf { wifiOnly && !job.cellularAllowed },
+        // The override only helps on the connection it overrides for.
+        OfflineAction.AllowCellular.takeIf { wifiOnly && !job.cellularAllowed && network == OfflineNetwork.metered },
         OfflineAction.Pause,
         OfflineAction.Delete
     )
     OfflinePhase.deleting -> emptyList()
     else -> listOf(OfflineAction.Pause, OfflineAction.Delete)
 }
+
+internal fun offlineIndeterminate(job: OfflineJob, progress: OfflineLiveProgress?): Boolean = when (job.phase) {
+    OfflinePhase.preparing, OfflinePhase.verifying -> true
+    OfflinePhase.transferring -> progress?.total?.takeIf { it > 0 } == null
+    else -> false
+}
+
+/** Waiting for a password is a question, not a failure; the form asks it. */
+internal fun offlineStatusIsError(job: OfflineJob): Boolean =
+    (job.phase == OfflinePhase.failed && !job.waitingForPassword()) || job.phase == OfflinePhase.missing
 
 internal fun offlineSubtitle(entry: OfflineEntry): String? {
     val labels = entry.labels
@@ -138,7 +239,7 @@ internal fun offlineSubtitle(entry: OfflineEntry): String? {
     return listOfNotNull(labels.seriesName, place, offlinePresetLabel(entry.preset)).joinToString(" · ").ifEmpty { null }
 }
 
-internal fun offlineSections(library: OfflineLibrary, network: OfflineNetwork): OfflineSections {
+internal fun offlineSections(library: OfflineLibrary, network: OfflineNetwork, tv: Boolean = false): OfflineSections {
     val manifest: OfflineManifest = library.manifest
     val rows = manifest.entries.sortedBy { it.createdSequence }.map { entry ->
         val live = library.progress[entry.id]
@@ -146,12 +247,15 @@ internal fun offlineSections(library: OfflineLibrary, network: OfflineNetwork): 
             entry,
             entry.labels.title,
             offlineSubtitle(entry),
-            offlineStatus(entry.job, live, manifest.wifiOnly, network, entry.committedBytes()),
+            offlineStatus(entry.job, live, manifest.wifiOnly, network, entry.committedBytes(), tv),
             live?.total?.takeIf {
                 it > 0 && entry.job.phase == OfflinePhase.transferring
             }?.let { (live.received.toFloat() / it).coerceIn(0f, 1f) },
-            offlineActions(entry.job, manifest.wifiOnly),
-            entry.tracks.filter { !it.available }.map { "${it.label} (${it.type})" }
+            offlineActions(entry.job, manifest.wifiOnly, network),
+            entry.tracks.filter { !it.available }.map { "${it.label} (${it.type})" },
+            offlineNotDownloadedSummary(entry.tracks),
+            offlineIndeterminate(entry.job, live),
+            offlineStatusIsError(entry.job)
         )
     }
     val needsAttention = setOf(OfflinePhase.failed, OfflinePhase.missing)

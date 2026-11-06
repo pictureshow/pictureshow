@@ -16,30 +16,36 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
@@ -53,18 +59,32 @@ import org.koin.compose.koinInject
 
 private val OfflineMuted = Color(0xFFB9C1D6)
 private val OfflinePage = Color(0xFF10131C)
+private val OfflineCard = Color(0xFF1F2433)
+private val OfflineSelected = Color(0xFF9DB7FF)
 
-internal fun offlineActionLabel(action: OfflineAction): String = when (action) {
+/** Home's error coral, so anything that can't be undone or went wrong reads the same across the app. */
+internal val OfflineErrorTone = Color(0xFFFFCCB8)
+
+@Composable
+private fun offlineDestructiveColors() = ButtonDefaults.colors(
+    contentColor = OfflineErrorTone,
+    focusedContainerColor = OfflineErrorTone,
+    focusedContentColor = OfflinePage
+)
+
+internal fun offlineActionLabel(action: OfflineAction, tv: Boolean = false): String = when (action) {
     OfflineAction.Play -> "Play"
     OfflineAction.Pause -> "Pause"
     OfflineAction.Resume -> "Resume"
     OfflineAction.Retry -> "Retry"
     OfflineAction.Redownload -> "Download again"
-    OfflineAction.AllowCellular -> "Use mobile data"
+    // A TV's only metered link is something like a hotspot; it has no mobile data to speak of.
+    OfflineAction.AllowCellular -> if (tv) "Use this connection" else "Use mobile data"
     OfflineAction.Delete -> "Delete"
 }
 
-internal fun offlineConflictText(title: String): String = "$title: progress on the server had changed, so the server's was kept."
+internal fun offlineConflictText(title: String): String =
+    "$title: your place changed on the server while you were offline, so the server's place was kept."
 
 @Composable
 internal fun offlineArtwork(accountKey: String, entry: OfflineEntry): File? {
@@ -83,91 +103,179 @@ internal fun OfflineDownloadsTvScreen(
     onOnline: () -> Unit,
     onBack: () -> Unit
 ) {
-    val view = rememberOfflineDownloads(account, onPlay)
+    // Survive a trip to the player or to Storage, so Back returns the remote to where it left from.
+    var returnToRow by rememberSaveable { mutableStateOf<String?>(null) }
+    var returnToStorage by rememberSaveable { mutableStateOf(false) }
+    val view = rememberOfflineDownloads(account, tv = true) { entry ->
+        returnToRow = entry.id
+        returnToStorage = false
+        onPlay(entry)
+    }
     val controller = view.controller
     val sections = view.sections
-    val first = remember { FocusRequester() }
+    val storage = remember { FocusRequester() }
+    val firstRow = remember { FocusRequester() }
+    val passwordNeeded = view.library.passwordNeeded()
+    val target = when {
+        passwordNeeded -> OfflineFirstFocus.Password
+        returnToStorage -> OfflineFirstFocus.Storage
+        sections.ready.any { it.entry.id == returnToRow } -> OfflineFirstFocus.Row(returnToRow.orEmpty(), OfflineAction.Play)
+        else -> offlineFirstFocus(passwordNeeded, sections)
+    }
+    // The first key press hands focus to the viewer: a list that changes afterwards mustn't pull the remote away.
+    var viewerMoved by remember { mutableStateOf(false) }
+    // A focused control that goes away takes focus with it, and that's the one time focus moves again on its own.
+    var deleted by remember { mutableStateOf<String?>(null) }
+    var refocus by remember { mutableIntStateOf(0) }
+    var handled by remember { mutableIntStateOf(0) }
+    var askedForPassword by remember { mutableStateOf(false) }
+    val rowIds = view.library.manifest.entries.map(OfflineEntry::id)
+    LaunchedEffect(rowIds, passwordNeeded) {
+        if (deleted != null && deleted !in rowIds || askedForPassword && !passwordNeeded) {
+            deleted = deleted?.takeIf { it in rowIds }
+            refocus++
+        }
+        askedForPassword = passwordNeeded
+    }
     BackHandler(controller.confirm != null) { controller.confirm = null }
     BackHandler(controller.confirm == null, onBack)
     LazyColumn(
-        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics { testTagsAsResourceId = true },
+        Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics {
+            testTagsAsResourceId = true
+        }.onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown) viewerMoved = true
+            false
+        },
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item(key = "top") { Box(Modifier.height(24.dp)) }
         item(key = "heading") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Downloads", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-                Text(
-                    sections.capBytes?.let { "${offlineBytes(sections.usedBytes)} of ${offlineBytes(it)} used" }
-                        ?: "${offlineBytes(sections.usedBytes)} used",
-                    color = OfflineMuted
-                )
+                // An unreadable list has nothing to measure, and "0 bytes used" beside "nothing was deleted" reads as a lie.
+                if (!view.library.recoverable) {
+                    Text(
+                        sections.capBytes?.let { "${offlineBytes(sections.usedBytes)} of ${offlineBytes(it)} used" }
+                            ?: "${offlineBytes(sections.usedBytes)} used",
+                        color = OfflineMuted
+                    )
+                }
                 if (view.network == OfflineNetwork.none) Text("No connection. Everything saved below still plays.", color = OfflineMuted)
             }
         }
         item(key = "buttons") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onStorage, modifier = Modifier.focusRequester(first).testTag("downloads:storage")) {
+                Button(
+                    onClick = {
+                        returnToStorage = true
+                        onStorage()
+                    },
+                    modifier = Modifier.focusRequester(storage).testTag("downloads:storage")
+                ) {
                     Text("Storage and Wi-Fi")
                 }
                 if (offline) Button(onClick = onOnline, modifier = Modifier.testTag("downloads:online")) { Text("Open the library") }
             }
         }
         if (view.library.recoverable) {
-            item(key = "recoverable") {
-                Text(
-                    "This list was saved by a newer version of Pictureshow or couldn't be read. Nothing was deleted. Update the app to get it back.",
-                    color = OfflineMuted
-                )
-            }
+            item(key = "recoverable") { Text(OFFLINE_RECOVERABLE_TEXT, color = OfflineMuted) }
         }
-        if (view.library.needsPassword) item(key = "password") { OfflinePasswordTv(controller) }
+        if (passwordNeeded) item(key = "password") { OfflinePasswordTv(controller, initial = !viewerMoved) }
         view.conflicts.keys.forEach { itemId ->
             item(key = "conflict:$itemId") {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(offlineConflictText(view.conflictTitle(itemId)), modifier = Modifier.weight(1f))
-                    Button(onClick = { controller.dismissConflict(itemId) }) { Text("OK") }
-                }
+                OfflineConflictTv(offlineConflictText(view.conflictTitle(itemId))) { controller.dismissConflict(itemId) }
             }
         }
         if (sections.isEmpty && !view.library.recoverable) {
             item(key = "empty") { Text("Nothing downloaded yet. Open a movie or an episode and choose Download.", color = OfflineMuted) }
         }
-        fun section(title: String, rows: List<OfflineRow>) {
-            if (rows.isEmpty()) return
+        sections.ordered.forEach { (title, rows) ->
             item(key = "section:$title") {
                 Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }.padding(top = 10.dp))
             }
-            items(rows, key = { it.entry.id }) { row -> OfflineRowTv(account, row, controller) }
+            items(rows, key = { it.entry.id }) { row ->
+                OfflineRowTv(
+                    account,
+                    row,
+                    controller,
+                    focus = firstRow.takeIf { target is OfflineFirstFocus.Row && target.entryId == row.entry.id },
+                    focusAction = (target as? OfflineFirstFocus.Row)?.action,
+                    onStorage = {
+                        returnToStorage = true
+                        onStorage()
+                    },
+                    onDeleteConfirmed = { deleted = row.entry.id }
+                )
+            }
         }
-        section("In progress", sections.active)
-        section("Needs attention", sections.failed)
-        section("Ready to watch", sections.ready)
         item(key = "end") { Box(Modifier.height(32.dp)) }
     }
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    LaunchedEffect(target, refocus) {
+        if (viewerMoved && refocus == handled) return@LaunchedEffect
+        handled = refocus
+        withFrameNanos { }
+        // The form's field takes its own focus. A row scrolled past the first screen isn't attached yet: Storage then.
+        if (target == OfflineFirstFocus.Password) return@LaunchedEffect
+        val requester = if (target is OfflineFirstFocus.Row) firstRow else storage
+        if (!runCatching { requester.requestFocus() }.getOrDefault(false)) runCatching { storage.requestFocus() }
+    }
+}
+
+/** The card and the OK beside its sentence, so the answer is where the eyes already are. */
+@Composable
+internal fun OfflineConflictTv(text: String, onDismiss: () -> Unit) {
+    Row(
+        Modifier.background(OfflineCard, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text, modifier = Modifier.weight(1f, fill = false).testTag("downloads:conflict-text"))
+        Button(onClick = onDismiss, modifier = Modifier.testTag("downloads:conflict-ok")) { Text("OK") }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun OfflineRowTv(account: Account, row: OfflineRow, controller: OfflineDownloadsController) {
+internal fun OfflineRowTv(
+    account: Account,
+    row: OfflineRow,
+    controller: OfflineDownloadsController,
+    focus: FocusRequester? = null,
+    focusAction: OfflineAction? = null,
+    onStorage: () -> Unit = {},
+    onDeleteConfirmed: () -> Unit = {}
+) {
     val confirming = (controller.confirm as? OfflineConfirm.One)?.row?.entry?.id == row.entry.id
+    val deleteFocus = remember { FocusRequester() }
+    var returnToDelete by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().testTag("downloads:row:${row.entry.id}")) {
         val art = offlineArtwork(account.key, row.entry)
-        Box(Modifier.size(width = 80.dp, height = 120.dp).background(Color(0xFF1F2433))) {
+        Box(Modifier.size(width = 80.dp, height = 120.dp).background(OfflineCard)) {
             if (art != null) AsyncImage(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(row.title, style = MaterialTheme.typography.titleMedium)
-            row.subtitle?.let { Text(it, color = OfflineMuted) }
-            Text(row.status, modifier = Modifier.testTag("downloads:status:${row.entry.id}"))
+            Text(row.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
+            row.subtitle?.let { Text(it, color = OfflineMuted, style = MaterialTheme.typography.bodyMedium) }
+            Text(
+                row.status,
+                color = if (row.statusIsError) OfflineErrorTone else Color.Unspecified,
+                modifier = Modifier.testTag("downloads:status:${row.entry.id}")
+            )
             row.fraction?.let { fraction ->
                 Box(Modifier.fillMaxWidth(0.6f).height(6.dp).background(Color(0xFF2B3144))) {
-                    Box(Modifier.fillMaxWidth(fraction).height(6.dp).background(Color(0xFF9DB7FF)))
+                    Box(Modifier.fillMaxWidth(fraction).height(6.dp).background(OfflineSelected))
                 }
             }
+            if (row.indeterminate) {
+                // A still line reads as stuck from a couch. Explicit colours: this is compose-material3, outside the TV theme.
+                androidx.compose.material3.LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(0.6f).height(6.dp).testTag("downloads:working:${row.entry.id}"),
+                    color = OfflineSelected,
+                    trackColor = Color(0xFF2B3144)
+                )
+            }
             row.entry.warning?.let { Text(it, color = OfflineMuted) }
-            if (row.notDownloaded.isNotEmpty()) Text("Not downloaded: ${row.notDownloaded.joinToString(", ")}", color = OfflineMuted)
+            row.notDownloadedSummary?.let { Text(it, color = OfflineMuted, style = MaterialTheme.typography.bodyMedium) }
             if (confirming) {
                 val cancel = remember { FocusRequester() }
                 Text(
@@ -181,11 +289,17 @@ private fun OfflineRowTv(account: Account, row: OfflineRow, controller: OfflineD
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = {
+                        returnToDelete = true
                         controller.confirm = null
                     }, modifier = Modifier.focusRequester(cancel).testTag("downloads:cancel")) { Text("Cancel") }
-                    Button(onClick = {
-                        controller.confirmed(emptyList())
-                    }, modifier = Modifier.testTag("downloads:confirm")) { Text("Delete") }
+                    Button(
+                        onClick = {
+                            onDeleteConfirmed()
+                            controller.confirmed(emptyList())
+                        },
+                        colors = offlineDestructiveColors(),
+                        modifier = Modifier.testTag("downloads:confirm")
+                    ) { Text("Delete") }
                 }
                 LaunchedEffect(Unit) { runCatching { cancel.requestFocus() } }
             } else {
@@ -193,8 +307,23 @@ private fun OfflineRowTv(account: Account, row: OfflineRow, controller: OfflineD
                     row.actions.forEach { action ->
                         Button(
                             onClick = { controller.act(row, action) },
-                            modifier = Modifier.testTag("downloads:${action.name.lowercase()}:${row.entry.id}")
-                        ) { Text(offlineActionLabel(action)) }
+                            modifier = Modifier
+                                .then(if (focus != null && action == focusAction) Modifier.focusRequester(focus) else Modifier)
+                                .then(if (action == OfflineAction.Delete) Modifier.focusRequester(deleteFocus) else Modifier)
+                                .testTag("downloads:${action.name.lowercase()}:${row.entry.id}")
+                        ) { Text(offlineActionLabel(action, tv = true)) }
+                    }
+                    if (offlineOffersStorage(row.entry.job)) {
+                        Button(onClick = onStorage, modifier = Modifier.testTag("downloads:open-storage:${row.entry.id}")) {
+                            Text("Storage and Wi-Fi")
+                        }
+                    }
+                }
+                LaunchedEffect(returnToDelete) {
+                    if (returnToDelete) {
+                        returnToDelete = false
+                        withFrameNanos { }
+                        runCatching { deleteFocus.requestFocus() }
                     }
                 }
             }
@@ -203,30 +332,33 @@ private fun OfflineRowTv(account: Account, row: OfflineRow, controller: OfflineD
 }
 
 @Composable
-private fun OfflinePasswordTv(controller: OfflineDownloadsController) {
+private fun OfflinePasswordTv(controller: OfflineDownloadsController, initial: Boolean) {
     var password by remember { mutableStateOf("") }
+    val submit = { if (password.isNotEmpty()) controller.providePassword(password) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("This server has Quick Connect off. Downloads need your password once, to get their own sign-in. It isn't saved.")
-        androidx.compose.material3.OutlinedTextField(
-            password,
-            { password = it },
-            label = { androidx.compose.material3.Text("Password") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.width(420.dp)
-        )
-        Button(onClick = { controller.providePassword(password) }, enabled = password.isNotEmpty()) { Text("Continue") }
+        Text(OFFLINE_PASSWORD_REASON)
+        RemoteField("Password", password, { password = it }, initial = initial, password = true, onDone = submit)
+        Button(onClick = submit, enabled = password.isNotEmpty(), modifier = Modifier.testTag("downloads:password-continue")) {
+            Text("Continue")
+        }
+        if (controller.passwordFailed) Text(OFFLINE_PASSWORD_FAILED, color = OfflineErrorTone)
     }
 }
 
+/** Selected reads at a glance from across the room, not just by a small tick. */
+@Composable
+private fun offlineChoiceColors(selected: Boolean) =
+    if (selected) ButtonDefaults.colors(containerColor = OfflineSelected, contentColor = OfflinePage) else ButtonDefaults.colors()
+
 @Composable
 internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
-    val view = rememberOfflineDownloads(account) {}
+    val view = rememberOfflineDownloads(account, tv = true) {}
     val controller = view.controller
     val engine: OfflineEngine = koinInject()
     val manifest = view.library.manifest
     val first = remember { FocusRequester() }
+    val deviceBytes = android.os.StatFs(engine.files.root.parentFile!!.path).totalBytes
+    val steps = offlineCapChoices(offlineCapSteps(deviceBytes), manifest.budget.capBytes)
     var confirmAll by remember { mutableStateOf(false) }
     val played = rememberOfflineWatched(account, manifest.entries)
     val preview = manifest.watchedPreview(played)
@@ -247,12 +379,15 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
                         ::offlineBytes
                     ) ?: "not set. Choose one to download."}. Used: ${offlineBytes(manifest.budget.usedBytes)}."
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    offlineCapSteps(android.os.StatFs(engine.files.root.parentFile!!.path).totalBytes).forEachIndexed { index, step ->
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // First focus sits on what's set, so one OK on arrival changes nothing.
+                    val focused = manifest.budget.capBytes ?: steps.first()
+                    steps.forEach { step ->
                         Button(
                             onClick = { controller.setCap(step) },
-                            modifier = (if (index == 0) Modifier.focusRequester(first) else Modifier).testTag("storage:cap:$step")
-                        ) { Text(offlineBytes(step)) }
+                            colors = offlineChoiceColors(step == manifest.budget.capBytes),
+                            modifier = (if (step == focused) Modifier.focusRequester(first) else Modifier).testTag("storage:cap:$step")
+                        ) { Text((if (step == manifest.budget.capBytes) "✓ " else "") + offlineBytes(step)) }
                     }
                 }
             }
@@ -263,11 +398,11 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
                     if (manifest.wifiOnly) {
                         "Downloads use Wi-Fi or Ethernet only."
                     } else {
-                        "Downloads can use any connection, including mobile data."
+                        "Downloads can use any connection, including a hotspot."
                     }
                 )
                 Button(onClick = { controller.setWifiOnly(!manifest.wifiOnly) }, modifier = Modifier.testTag("storage:wifi")) {
-                    Text(if (manifest.wifiOnly) "Allow any connection" else "Use Wi-Fi only")
+                    Text(if (manifest.wifiOnly) "Allow any connection" else "Use Wi-Fi or Ethernet only")
                 }
             }
         }
@@ -284,7 +419,7 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
                         Button(onClick = {
                             showPreview = false
                             controller.deleteEntries(preview.entryIds)
-                        }) { Text("Remove") }
+                        }, colors = offlineDestructiveColors()) { Text("Remove") }
                         LaunchedEffect(Unit) { runCatching { cancel.requestFocus() } }
                     }
                 } else {
@@ -294,6 +429,13 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
         }
         item(key = "all") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (manifest.entries.isNotEmpty()) {
+                    Text(
+                        "All downloads",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.semantics { heading() }.padding(top = 10.dp)
+                    )
+                }
                 if (confirmAll) {
                     Text("Delete all ${manifest.entries.size} downloads for this viewer?")
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -304,20 +446,26 @@ internal fun OfflineStorageTvScreen(account: Account, onBack: () -> Unit) {
                         Button(onClick = {
                             confirmAll = false
                             controller.deleteEntries(manifest.entries.map(OfflineEntry::id))
-                        }, modifier = Modifier.testTag("storage:confirm-all")) { Text("Delete all") }
+                        }, colors = offlineDestructiveColors(), modifier = Modifier.testTag("storage:confirm-all")) { Text("Delete all") }
                         LaunchedEffect(Unit) { runCatching { cancel.requestFocus() } }
                     }
                 } else if (manifest.entries.isNotEmpty()) {
                     Button(onClick = {
                         confirmAll = true
-                    }, modifier = Modifier.testTag("storage:delete-all")) { Text("Delete all downloads") }
+                    }, colors = offlineDestructiveColors(), modifier = Modifier.testTag("storage:delete-all")) {
+                        Text("Delete all downloads")
+                    }
                 }
             }
         }
         item(key = "back") { Button(onClick = onBack) { Text("Back") } }
         item(key = "end") { Box(Modifier.height(32.dp)) }
     }
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    LaunchedEffect(Unit) {
+        // The list's items attach during layout, so a request before the first frame finds nothing and focus is simply lost.
+        withFrameNanos { }
+        runCatching { first.requestFocus() }
+    }
 }
 
 @Composable
@@ -330,8 +478,14 @@ internal fun OfflineDownloadTvScreen(
     onDone: () -> Unit,
     onBack: () -> Unit
 ) {
-    val controller = rememberOfflinePreview(account, itemId, seriesId, seasonId, title)
+    OfflineDownloadTvContent(rememberOfflinePreview(account, itemId, seriesId, seasonId, title), title, onDone, onBack)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun OfflineDownloadTvContent(controller: OfflinePreviewController, title: String, onDone: () -> Unit, onBack: () -> Unit) {
     val first = remember { FocusRequester() }
+    val fallback = remember { FocusRequester() }
     BackHandler(onBack = onBack)
     LazyColumn(
         Modifier.fillMaxSize().background(OfflinePage).padding(horizontal = 48.dp).semantics { testTagsAsResourceId = true },
@@ -351,31 +505,65 @@ internal fun OfflineDownloadTvScreen(
                 }
             }
             is OfflinePreviewState.Ready -> {
-                item(key = "quality") { Text("Quality", style = MaterialTheme.typography.titleMedium) }
-                state.preview.choices.forEachIndexed { index, choice ->
-                    item(key = "preset:${choice.preset}") {
-                        Button(
-                            onClick = { controller.preset = choice.preset },
-                            enabled = choice.available,
-                            modifier = (
-                                if (index ==
-                                    0
+                val canStart = !controller.started &&
+                    controller.selectedItems().isNotEmpty() &&
+                    state.preview.choices.any { it.preset == controller.preset && it.available }
+                item(key = "quality") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Quality", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            state.preview.choices.forEach { choice ->
+                                val selected = controller.preset == choice.preset && choice.available
+                                Button(
+                                    onClick = { controller.preset = choice.preset },
+                                    enabled = choice.available,
+                                    colors = offlineChoiceColors(selected),
+                                    modifier = Modifier.testTag("download:preset:${choice.preset}")
                                 ) {
-                                    Modifier.focusRequester(first)
-                                } else {
-                                    Modifier
+                                    Text(
+                                        (if (selected) "✓ " else "") +
+                                            offlinePresetLabel(choice.preset) +
+                                            if (choice.available) "" else ". " + offlinePresetUnavailable(choice.reason)
+                                    )
                                 }
-                                ).testTag("download:preset:${choice.preset}")
-                        ) {
-                            Text(
-                                (if (controller.preset == choice.preset && choice.available) "✓ " else "") +
-                                    offlinePresetLabel(choice.preset) +
-                                    if (choice.available) "" else ". " + offlinePresetUnavailable(choice.reason)
-                            )
+                            }
                         }
                     }
                 }
-                item(key = "first") { LaunchedEffect(Unit) { runCatching { first.requestFocus() } } }
+                // Download sits above the long lists: what's chosen is already a good answer, so one OK starts it.
+                item(key = "start") {
+                    val estimate = state.preview.choices.firstOrNull { it.preset == controller.preset }?.estimateBytes
+                    val count = controller.selectedItems().size.coerceAtLeast(1)
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = { controller.start(onDone) },
+                            enabled = canStart,
+                            modifier = Modifier.focusRequester(first).testTag("download:start")
+                        ) { Text("Download") }
+                        Text(
+                            offlineSizeText(controller.selectedItems(), controller.preset) {
+                                estimate?.let { total ->
+                                    total /
+                                        state.preview.items.size.coerceAtLeast(count)
+                                }
+                            },
+                            modifier = Modifier.testTag("download:size")
+                        )
+                    }
+                    LaunchedEffect(Unit) {
+                        withFrameNanos { }
+                        // Nothing to start can't take focus: the Wi-Fi control below is the only thing left to reach.
+                        runCatching { (if (canStart) first else fallback).requestFocus() }
+                    }
+                }
+                item(key = "cellular") {
+                    Button(
+                        onClick = { controller.cellular = !controller.cellular },
+                        modifier = Modifier.focusRequester(fallback).testTag("download:cellular")
+                    ) {
+                        Text(if (controller.cellular) "Wi-Fi or Ethernet only: Off" else "Wi-Fi or Ethernet only: On")
+                    }
+                }
                 if (state.preview.items.size > 1) {
                     item(key = "episodes") { Text("Episodes", style = MaterialTheme.typography.titleMedium) }
                     items(state.preview.items, key = { "episode:" + it.id }) { episode ->
@@ -420,39 +608,6 @@ internal fun OfflineDownloadTvScreen(
                             )
                         }
                     }
-                }
-                item(key = "size") {
-                    val estimate = state.preview.choices.firstOrNull { it.preset == controller.preset }?.estimateBytes
-                    val count = controller.selectedItems().size.coerceAtLeast(1)
-                    Text(
-                        offlineSizeText(controller.selectedItems(), controller.preset) {
-                            estimate?.let { total ->
-                                total /
-                                    state.preview.items.size.coerceAtLeast(count)
-                            }
-                        }
-                    )
-                }
-                item(key = "cellular") {
-                    Button(onClick = { controller.cellular = !controller.cellular }, modifier = Modifier.testTag("download:cellular")) {
-                        Text(
-                            if (controller.cellular) {
-                                "✓ Can use mobile data for this"
-                            } else {
-                                "Wi-Fi only for this. Select to allow mobile data."
-                            }
-                        )
-                    }
-                }
-                item(key = "start") {
-                    Button(
-                        onClick = { controller.start(onDone) },
-                        enabled =
-                        !controller.started &&
-                            controller.selectedItems().isNotEmpty() &&
-                            state.preview.choices.any { it.preset == controller.preset && it.available },
-                        modifier = Modifier.testTag("download:start")
-                    ) { Text("Download") }
                 }
             }
         }

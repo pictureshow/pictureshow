@@ -96,8 +96,11 @@ internal class OfflineDownloadsController(
         scope.launch { engine.deleteMany(account.key, ids) }
     }
 
+    /** The last password attempt didn't get a sign-in. Without this, a wrong password just leaves the form sitting there. */
+    var passwordFailed by mutableStateOf(false)
+
     fun providePassword(password: String) {
-        scope.launch { engine.providePassword(account, password) }
+        scope.launch { passwordFailed = !engine.providePassword(account, password) }
     }
 }
 
@@ -112,7 +115,7 @@ internal class OfflineDownloadsView(
 }
 
 @Composable
-internal fun rememberOfflineDownloads(account: Account, onPlay: (OfflineEntry) -> Unit): OfflineDownloadsView {
+internal fun rememberOfflineDownloads(account: Account, tv: Boolean = false, onPlay: (OfflineEntry) -> Unit): OfflineDownloadsView {
     val engine: OfflineEngine = koinInject()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -131,7 +134,7 @@ internal fun rememberOfflineDownloads(account: Account, onPlay: (OfflineEntry) -
     }
     val controller = remember(account.key) { OfflineDownloadsController(account, engine, scope, onPlay) }
     val library = libraries[account.key] ?: OfflineLibrary()
-    return OfflineDownloadsView(controller, library, offlineSections(library, network), conflicts, network)
+    return OfflineDownloadsView(controller, library, offlineSections(library, network, tv), conflicts, network)
 }
 
 /** One preview's choices. Held apart from its screens so TV and touch can't drift on what gets downloaded. */
@@ -336,4 +339,15 @@ internal fun rememberOfflineNotificationAsk(): () -> Unit {
             }
         }
     }
+}
+
+/**
+ * Home's way to saved films when its load failed because the server is out of reach. Null means no offer, which is
+ * always the case with no engine or no ready downloads, so that Home stays exactly as it was for that viewer.
+ */
+@Composable
+internal fun rememberHomeDownloadsOffer(state: CatalogHomeState, accountKey: String, open: () -> Unit): (() -> Unit)? {
+    val engine = remember { org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>() } ?: return null
+    val libraries by engine.libraries.collectAsState()
+    return open.takeIf { offlineHomeOffersDownloads(state, libraries[accountKey]) }
 }
