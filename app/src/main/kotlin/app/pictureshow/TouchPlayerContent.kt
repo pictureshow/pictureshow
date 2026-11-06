@@ -197,7 +197,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val castUi = entry?.let { it.cast.state.collectAsState().value }
     val castStatus = castUi?.let(::castStatusLine)
     // A chooser left open is holding this viewing's next step, as a sheet does; a Jellyfin pick reads this player's clock.
-    val choosing = castUi?.chooserOpen == true && entry?.cast?.chooserRequest?.local === castOutput
+    val choosing = castUi?.chooserOpen == true && entry.cast.chooserRequest?.local === castOutput
     if (entry != null) {
         DisposableEffect(castOutput) { onDispose { entry.cast.localClosed(castOutput) } }
         LaunchedEffect(host) { if (entry.cast.consumeStartPaused(host.item.id)) host.output.pause() }
@@ -546,7 +546,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 })
                 next?.let {
                     key(host.deferredNext, host.output.stopGeneration) {
-                        val suspended = paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
+                        val suspended =
+                            paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
                         val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
                         val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)

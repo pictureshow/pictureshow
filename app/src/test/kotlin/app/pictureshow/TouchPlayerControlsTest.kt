@@ -1206,7 +1206,8 @@ class TouchPlayerControlsTest {
                 CompositionLocalProvider(LocalTouchPlayerCast provides cast) {
                     PlayerViewing(account, first, 0, {}) { current, start, onNext ->
                         val viewing = remember {
-                            PlaybackHostState(current, start, Media3PlaybackOutput(compose.activity, account.server), onNext, { exits++ }).apply {
+                            val output = Media3PlaybackOutput(compose.activity, account.server)
+                            PlaybackHostState(current, start, output, onNext, { exits++ }).apply {
                                 playerSource = mutableStateOf(Decoder(true))
                                 stateSource = mutableStateOf(PlaybackState(preparing = false))
                                 duration = 60_000
@@ -1313,11 +1314,15 @@ class TouchPlayerControlsTest {
 
     private fun assertInsideTheWindow(box: androidx.compose.ui.unit.DpRect) {
         val window = compose.onNodeWithTag("touch:player").getBoundsInRoot()
-        assertTrue(box.left >= window.left && box.right <= window.right && box.top >= window.top && box.bottom <= window.bottom, "$box in $window")
+        val inside = box.left >= window.left && box.right <= window.right && box.top >= window.top && box.bottom <= window.bottom
+        assertTrue(inside, "$box in $window")
     }
 
     /** Text tops of the options, grouped into lines, as counts per line. */
-    private fun optionsPerLine(tags: List<String>) = tags.map(::bounds).groupBy { it.top.value.toInt() }.toSortedMap().values.map { it.size }
+    private fun optionsPerLine(tags: List<String>): List<Int> {
+        val lines = tags.map(::bounds).groupBy { it.top.value.toInt() }
+        return lines.toSortedMap().values.map { it.size }
+    }
 
     private val chaptered = (TouchPlayerSheet.entries.map { "touch:open:$it" } + "touch:orientation")
     private val withoutChapters = chaptered - "touch:open:Chapters"
@@ -1373,9 +1378,14 @@ class TouchPlayerControlsTest {
         assertEquals(chaptered.size, perLine.sum())
         assertEquals(columns, perLine.max(), "$columns columns: $perLine")
         val audio = bounds("touch:open:Audio")
-        chaptered.forEach { assertEquals(audio.bottom.value - audio.top.value, bounds(it).let { b -> b.bottom - b.top }.value, 0.5f, "$it stays one line") }
+        chaptered.forEach { tag ->
+            val box = bounds(tag)
+            assertEquals(audio.bottom.value - audio.top.value, (box.bottom - box.top).value, 0.5f, "$tag stays one line")
+        }
         chaptered.map(::bounds).groupBy { it.top.value.toInt() }.values.forEach { line ->
-            line.sortedBy { it.left.value }.zipWithNext { a, b -> assertTrue(a.right - 8.dp <= b.left + 8.dp, "text clear of the next text: $a $b") }
+            line.sortedBy { it.left.value }.zipWithNext { a, b ->
+                assertTrue(a.right - 8.dp <= b.left + 8.dp, "text clear of the next text: $a $b")
+            }
         }
         chaptered.forEach { assertTrue(bounds(it).right - 8.dp <= bounds("touch:panel").right - 16.dp, "$it inside the panel's content") }
         assertInsideTheWindow(bounds("touch:panel"))
