@@ -63,9 +63,15 @@ jobs:
       - name: Prepare reports and install Playwright browsers
         id: browsers
         if: steps.web-source.outputs.available == 'true'
+        timeout-minutes: 25
         run: |
           mkdir -p artifacts
-          npx playwright install --with-deps chromium webkit
+          # A stalled download used to hold the job until its 60-minute limit; give up early and try again.
+          for attempt in 1 2 3; do
+            timeout 420 npx playwright install --with-deps chromium webkit && exit 0
+            echo "Playwright install attempt $attempt failed or stalled"
+          done
+          exit 1
 
       - name: Unit tests
         if: always() && steps.web-source.outputs.available == 'true' && steps.npm-deps.outcome == 'success'
