@@ -343,7 +343,7 @@ internal class CastSenderHost(
             item.mediaSourceId,
             item.playSessionId,
             playMethod(item.method),
-            status.durationMs?.takeIf { it > 0 }?.let { minOf(status.positionMs, it) }.let { it ?: status.positionMs } * MS_TO_TICKS,
+            (status.durationMs?.takeIf { it > 0 }?.let { minOf(status.positionMs, it) } ?: status.positionMs) * MS_TO_TICKS,
             status.playerState == "paused"
         )
     }

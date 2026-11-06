@@ -333,8 +333,7 @@ private fun linkLost(s: CastState): CastState {
  * Detaching forgets the observation, and the owner's intent is the only thing left that a later Stop or Resume here can
  * read. Left alone that is where the handoff began, however long the receiver has played since.
  */
-private fun OwnerState.onItem(entry: String?): OwnerState =
-    if (entry == null) this else copy(intent = intent.copy(entry = entry))
+private fun OwnerState.onItem(entry: String?): OwnerState = if (entry == null) this else copy(intent = intent.copy(entry = entry))
 
 private fun CastState.ownerAtLastPosition(): OwnerState {
     val last = observed ?: return owner
