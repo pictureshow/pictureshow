@@ -289,6 +289,32 @@ class OfflineDownloadsDesignTest {
         assertEquals(OfflineErrorTone, label.textColor())
     }
 
+    @Test
+    fun `touch final Delete wears the error colour`() {
+        start(entry("a", OfflinePhase.ready))
+        var error = Color.Unspecified
+        compose.setContent {
+            error = androidx.compose.material3.MaterialTheme.colorScheme.error
+            OfflineDownloadsTouchScreen(account, true, {}, {}, {}, {})
+        }
+        settle()
+        tag("downloads:delete:a").performScrollTo().performClick()
+        settle()
+        val label = compose.onNode(hasText("Delete") and hasAnyAncestor(hasTestTag("downloads:confirm")), useUnmergedTree = true)
+        assertEquals(error, label.textColor())
+    }
+
+    @Test
+    fun `TV Storage's delete-all wears the error tone`() {
+        start(entry("a", OfflinePhase.paused))
+        compose.setContent { OfflineStorageTvScreen(account) {} }
+        settle()
+        tag("storage:delete-all").performScrollTo()
+        val words = hasText("Delete all downloads") and hasAnyAncestor(hasTestTag("storage:delete-all"))
+        val label = compose.onNode(words, useUnmergedTree = true)
+        assertEquals(OfflineErrorTone, label.textColor())
+    }
+
     // Follow-ups 4 to 8.
 
     @Test
