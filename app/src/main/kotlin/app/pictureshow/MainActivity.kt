@@ -90,6 +90,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -510,7 +511,8 @@ internal fun Pictureshow(
             ServerDiscoveryPage(modifier = discoveryFocus.container) {
                 Text("Choose a server on your network, or enter an address.")
                 remembered.forEachIndexed { index, server ->
-                    val label = if (server == state.snapshot.lastServer) "Sign in to ${server.name}" else "${server.name} · remembered"
+                    val named = state.snapshot.serverLabel(server)
+                    val label = if (server == state.snapshot.lastServer) "Sign in to $named" else "$named · remembered"
                     Action(label, initial = index == 0 && state.snapshot.lastServer != null) {
                         nav.navigate(serverRoute("login", server)) {
                             launchSingleTop =
@@ -600,7 +602,8 @@ internal fun Pictureshow(
                         // While committing, hardware Back must not expose controls from the parent page.
                         BackHandler(enabled = screen.busy) { }
                         val description = if (removingAccount != null) {
-                            "This removes ${removingAccount.user.name} on ${removingAccount.server.name} from this TV."
+                            "This removes ${removingAccount.user.name} on " +
+                                "${state.snapshot.serverLabel(removingAccount.server)} from this TV."
                         } else {
                             requireNotNull(removingServer)
                             val count = state.snapshot.accounts.count {
@@ -658,7 +661,7 @@ internal fun Pictureshow(
                             val initialAccount = state.snapshot.currentAccount ?: state.snapshot.accounts.firstOrNull()
                             state.snapshot.accounts.forEach { account ->
                                 Action(
-                                    "${account.user.name} on ${account.server.name}",
+                                    "${account.user.name} on ${state.snapshot.serverLabel(account.server)}",
                                     initial = returnFocus == account.key ||
                                         (returnFocus == null && !offerSignedOutServer && account.key == initialAccount?.key),
                                     enabled = !screen.busy
@@ -673,12 +676,12 @@ internal fun Pictureshow(
                                     }
                                 }
                                 Action(
-                                    "Remove ${account.user.name} on ${account.server.name}",
+                                    "Remove ${account.user.name} on ${state.snapshot.serverLabel(account.server)}",
                                     initial = returnFocus == "remove:${account.key}",
                                     enabled = !screen.busy
                                 ) {
                                     returnFocus = "remove:${account.key}"
-                                    removalOpenerLabel = "Remove ${account.user.name} on ${account.server.name}"
+                                    removalOpenerLabel = "Remove ${account.user.name} on ${state.snapshot.serverLabel(account.server)}"
                                     removeKey = account.key
                                 }
                             }
@@ -686,7 +689,7 @@ internal fun Pictureshow(
                             state.snapshot.rememberedServers.forEachIndexed { index, server ->
                                 val identity = "server:${server.id}:${server.url}"
                                 Action(
-                                    "Sign in another user on ${server.name}",
+                                    "Sign in another user on ${state.snapshot.serverLabel(server)}",
                                     initial = returnFocus == identity || (returnFocus == null && offerSignedOutServer && index == 0),
                                     enabled = !screen.busy
                                 ) {
@@ -694,12 +697,12 @@ internal fun Pictureshow(
                                     nav.navigate(serverRoute("login", server)) { launchSingleTop = true }
                                 }
                                 Action(
-                                    "Remove server ${server.name}",
+                                    "Remove server ${state.snapshot.serverLabel(server)}",
                                     initial = returnFocus == "remove:$identity",
                                     enabled = !screen.busy
                                 ) {
                                     returnFocus = "remove:$identity"
-                                    removalOpenerLabel = "Remove server ${server.name}"
+                                    removalOpenerLabel = "Remove server ${state.snapshot.serverLabel(server)}"
                                     removeServerId = server.id
                                     removeServerUrl = server.url
                                 }

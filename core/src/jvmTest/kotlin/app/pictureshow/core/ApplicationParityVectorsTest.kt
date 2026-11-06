@@ -58,6 +58,12 @@ class ApplicationParityVectorsTest {
             try {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
+                    "server-label" -> JsonPrimitive(
+                        serverLabel(
+                            Json.decodeFromJsonElement<Server>(input.getValue("server")),
+                            Json.decodeFromJsonElement<List<Server>>(input.getValue("all"))
+                        )
+                    )
                     "detail-read-failure" -> JsonPrimitive(
                         detailReadHasFailure(
                             input.getValue("readFailed").jsonPrimitive.booleanOrNull!!,

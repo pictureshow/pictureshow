@@ -156,6 +156,16 @@ class TouchFormsTest {
         compose.onNodeWithText("No remembered accounts. Sign in to start watching.").assertExists()
     }
 
+    @Test fun oneServerByTwoAddressesCanBeToldApart() {
+        val other = server.copy(url = "http://other.example:8096")
+        val current = snapshot.copy(lastServer = other)
+        compose.setContent {
+            MaterialTheme { TouchAccounts(AccountsState(), current, {}, {}, {}, {}, {}) }
+        }
+        compose.onNodeWithText("Remove server Fixture server · http://other.example:8096").assertExists()
+        compose.onNodeWithText("Remove server Fixture server · ${server.url}").assertExists()
+    }
+
     @Test fun settingsDialogSelectsValueAndShowsLoadingSaveAndRetryStates() {
         var state by mutableStateOf(PlaybackSettingsState())
         var chosen: Int? = null

@@ -113,6 +113,10 @@ private class FakeLink(private val log: MutableList<String>) : CastLink {
     override fun requestStatus() {
         log += "status"
     }
+
+    /** Where the SDK's clock says the receiver is by now. */
+    var position: Long? = null
+    override fun positionMs() = position
 }
 
 private class FakeEnvironment(private val log: MutableList<String>) : CastEnvironment {
@@ -429,6 +433,8 @@ class CastSenderHostTest {
         assertEquals(listOf("end:false"), log.filter { it == "stop" || it.startsWith("end") })
         assertEquals("disconnected", host.state.value.cast!!.owner.phase)
         assertTrue(environment.mayBeLive, "a viewing may still be running")
+        assertEquals(1, gateway.reports.size, "one last report of where the receiver had got to, then silence")
+        gateway.reports.clear()
         advanceTimeBy(CAST_REPORT_MS * 3)
         runCurrent()
         assertEquals(emptyList(), gateway.reports)
@@ -484,6 +490,172 @@ class CastSenderHostTest {
         log.clear()
         host.play()
         assertEquals(emptyList(), log.filter { it == "play" })
+    }
+
+    @Test fun theScreenMovesWhileTheReceiverPlaysWithNoStatus() = runTest {
+        val host = host()
+        casting(host)
+        link.sink!!.onProgress(61_000)
+        assertEquals(610_000_000, host.state.value.cast!!.observed!!.ticks)
+    }
+
+    @Test fun periodicReportsCarryTheClockNotTheLastStatus() = runTest {
+        val host = host()
+        casting(host)
+        gateway.reports.clear()
+        link.sink!!.onProgress(20_000)
+        link.position = 21_000
+        advanceTimeBy(CAST_REPORT_MS + 1)
+        runCurrent()
+        assertEquals(listOf("progress:210000000:false"), gateway.reports)
+    }
+
+    @Test fun stopSavesThePositionAtTheMomentOfStop() = runTest {
+        val host = host()
+        casting(host)
+        link.sink!!.onProgress(30_000)
+        // The clock has gone on since its last tick, and this reading has to come before the receiver hears anything.
+        link.position = 30_400
+        host.stop()
+        link.position = 0
+        link.sink!!.onStatus(status("idle", positionMs = 0, generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertTrue("stopped:304000000" in gateway.reports, gateway.reports.toString())
+    }
+
+    @Test fun stopWithNoClockToAskSavesTheLastTick() = runTest {
+        val host = host()
+        casting(host)
+        link.sink!!.onProgress(30_000)
+        host.stop()
+        link.sink!!.onStatus(status("idle", positionMs = 0, generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertTrue("stopped:300000000" in gateway.reports, gateway.reports.toString())
+    }
+
+    @Test fun playHereReturnsToThePositionAtTheMomentOfTheTap() = runTest {
+        val host = host()
+        casting(host)
+        link.position = 44_000
+        host.playHere()
+        link.sink!!.onStatus(status("idle", positionMs = 0, generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertEquals(44_000, host.state.value.localStart!!.positionMs)
+        assertTrue("stopped:440000000" in gateway.reports)
+    }
+
+    @Test fun whilePausedThePositionHoldsStillOnEveryRoute() = runTest {
+        val host = host()
+        casting(host, paused = true)
+        link.sink!!.onProgress(99_000)
+        link.position = 99_000
+        assertEquals(50_000_000, host.state.value.cast!!.observed!!.ticks)
+        gateway.reports.clear()
+        advanceTimeBy(CAST_REPORT_MS + 1)
+        runCurrent()
+        assertEquals(listOf("progress:50000000:true"), gateway.reports)
+        host.stop()
+        link.sink!!.onStatus(status("idle", positionMs = 0, generation = host.generation(), reason = "cancelled"))
+        runCurrent()
+        assertTrue("stopped:50000000" in gateway.reports)
+    }
+
+    @Test fun disconnectLeavesTheServerWithThePositionAtThatMoment() = runTest {
+        val host = host()
+        casting(host)
+        gateway.reports.clear()
+        link.position = 70_000
+        host.disconnect()
+        runCurrent()
+        assertEquals(listOf("progress:700000000:false"), gateway.reports)
+        assertEquals("disconnected", host.state.value.cast!!.owner.phase)
+    }
+
+    @Test fun signingOutSavesThePositionAtThatMoment() = runTest {
+        val host = host()
+        casting(host)
+        link.position = 80_000
+        host.bind(null)
+        runCurrent()
+        assertTrue("stopped:800000000" in gateway.reports, gateway.reports.toString())
+    }
+
+    @Test fun signingOutWhileDetachedSavesWhatTheReceiverSaysBeforeRevoking() = runTest {
+        val host = host()
+        casting(host)
+        link.position = 70_000
+        host.disconnect()
+        runCurrent()
+        val generation = link.request!!.items.single().customData.getValue("generation")
+        val nonce = link.request!!.items.single().customData.getValue("nonce")
+        val url = link.request!!.items.single().url
+        gateway.reports.clear()
+        log.clear()
+        host.bind(null)
+        runCurrent()
+        assertFalse("revoke:$SESSION_TOKEN" in log, "the last report needs the session")
+        assertEquals(emptyList(), gateway.reports)
+        link.sink!!.onConnected(null)
+        link.sink!!.onStatus(
+            status("playing", positionMs = 900_000)
+                .copy(customData = mapOf("nonce" to nonce, "generation" to generation, "entry" to ENTRY), contentUrl = url)
+        )
+        runCurrent()
+        assertTrue("stopped:9000000000" in gateway.reports, gateway.reports.toString())
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+        assertTrue(log.indexOf("reported-stopped") < log.indexOf("revoke:$SESSION_TOKEN"))
+    }
+
+    @Test fun signingOutWhileDetachedWithNoAnswerStillRevokes() = runTest {
+        val host = host()
+        casting(host)
+        link.position = 70_000
+        host.disconnect()
+        runCurrent()
+        gateway.reports.clear()
+        log.clear()
+        host.bind(null)
+        advanceTimeBy(CAST_SEARCH_MS + CAST_RETIRE_MS + 1)
+        runCurrent()
+        assertTrue("stopped:700000000" in gateway.reports, "the position from Disconnect stands: ${gateway.reports}")
+        assertTrue("revoke:$SESSION_TOKEN" in log)
+    }
+
+    @Test fun aReceiverEndingAtZeroKeepsTheResumePoint() = runTest {
+        val host = host()
+        casting(host)
+        link.sink!!.onProgress(30_000)
+        link.sink!!.onStatus(status("idle", positionMs = 0, generation = host.generation(), reason = "error"))
+        runCurrent()
+        assertEquals("receiver-error", host.state.value.cast!!.notice)
+        assertTrue("stopped:300000000" in gateway.reports, gateway.reports.toString())
+    }
+
+    @Test fun replacingAViewingSavesTheOldOnesPosition() = runTest {
+        val host = host()
+        casting(host)
+        link.position = 33_000
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem("item-2", "Another"))))
+        runCurrent()
+        host.pick(ROUTE)
+        runCurrent()
+        assertTrue("stopped:330000000" in gateway.reports, gateway.reports.toString())
+    }
+
+    @Test fun aRelativeSeekStartsFromTheClock() = runTest {
+        val host = host()
+        casting(host)
+        link.sink!!.onProgress(100_000)
+        log.clear()
+        host.seekBy(300_000_000)
+        assertTrue("seek:130000" in log, log.toString())
+    }
+
+    @Test fun aTimeoutSaysTheLikelyReasonAndWhatToTry() = runTest {
+        val message = castRecoveryMessage("receiver-timeout", "Den")
+        assertTrue(message.startsWith("Den didn't start in time."), message)
+        assertTrue("may not be able to reach your server" in message, "a guess reads as one: $message")
+        assertTrue("an address Den can reach" in message, message)
     }
 
     @Test fun stopCastingWaitsForTheReceiverThenCleansUp() = runTest {
@@ -847,13 +1019,14 @@ class CastSenderHostTest {
         host.bind(null)
         runCurrent()
         assertTrue("select" in log, "revoking alone doesn't stop a file the server serves without a token")
-        assertTrue("revoke:$SESSION_TOKEN" in log)
         link.sink!!.onConnected(null)
         link.sink!!.onStatus(
             status("playing").copy(customData = mapOf("nonce" to nonce, "generation" to "0", "entry" to ENTRY), contentUrl = url)
         )
         assertFalse("stop" in log, "a claim that doesn't match what we stored isn't stopped")
         assertEquals(listOf("end:false"), log.filter { it.startsWith("end") })
+        runCurrent()
+        assertTrue("revoke:$SESSION_TOKEN" in log)
     }
 
     @Test fun aRevocationThatCantReachTheServerStaysPendingAndGoesFirstNextTime() = runTest {

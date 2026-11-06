@@ -41,6 +41,7 @@ import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.PlayOutcome
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -215,6 +216,9 @@ internal class CastSenderHost(
     private var retiring: CastViewingRecord? = null
     private var restoreJob: Job? = null
     private var retireJob: Job? = null
+
+    /** What the receiver said on rejoining to stop, if it was ours: a sign-out's last report waits for this. Null is no answer. */
+    private var retireAnswer: CompletableDeferred<CastStatus?>? = null
     private var retireEmptySeen = false
     private var reattachEmptySeen = false
 
@@ -280,6 +284,7 @@ internal class CastSenderHost(
     }
 
     private fun stopForAccountChange(next: Account?, trigger: String) {
+        readPosition()
         val state = cast
         val reporter = session
         val active = state?.owner?.let { it.candidate?.kind == "cast" || it.owner.kind == "cast" } == true
@@ -288,16 +293,22 @@ internal class CastSenderHost(
         val leaving = stored?.takeIf { next == null || it.server != next.server.id || it.viewer != next.user.id }
         // With Google Cast turned off this app stays away from Cast devices: the session still goes, the receiver is left alone.
         val mayJoin = environment.enabled && environment.services() == "ok"
-        when {
+        val rejoined = when {
             active && state?.link == "connected" -> {
                 if (loadStarted || state.owner.owner.kind == "cast") link?.stop { }
                 link?.endSession(stopReceiver = true)
+                null
             }
 
-            active && stored != null -> if (mayJoin) rejoinToStop(stored)
+            active && stored != null -> stored.takeIf { mayJoin }
 
-            leaving != null && mayJoin -> rejoinToStop(leaving)
+            leaving != null && mayJoin -> leaving
+
+            else -> null
         }
+        rejoined?.let(::rejoinToStop)
+        val answer = retireAnswer.takeIf { rejoined != null }
+        val lastReporter = reporter ?: rejoined?.let(::storedSession)
         if (active || leaving != null) {
             environment.mayBeLive = false
             environment.clearViewing()
@@ -306,14 +317,32 @@ internal class CastSenderHost(
         session = null
         sessionBinding = null
         val records = sessions.state.records.filter { active || next == null || it.server != next.server.id || it.viewer != next.user.id }
-        if (records.isEmpty() && last == null) return
+        if (records.isEmpty() && last == null && rejoined == null) return
         cleanupJob = scope.launch {
-            if (reporter != null && last != null) {
-                gateway.reportStopped(reporter, last)
-                last.playSessionId?.let { gateway.stopEncoding(reporter, it) }
+            // Detached, only the receiver knows how far it got, so its answer comes before the session goes.
+            val final = answer?.await()?.let { lastReportOf(requireNotNull(rejoined), it) } ?: last
+            if (lastReporter != null && final != null) {
+                gateway.reportStopped(lastReporter, final)
+                final.playSessionId?.let { gateway.stopEncoding(lastReporter, it) }
             }
             records.forEach { endRecord(it, trigger) }
         }
+    }
+
+    private fun storedSession(record: CastViewingRecord): Account? = sessions.state.records
+        .firstOrNull { it.device == record.device }?.secretRef?.let(sessions.secrets::get)
+
+    private fun lastReportOf(record: CastViewingRecord, status: CastStatus): CastReport? {
+        if (status.positionMs <= 0) return null
+        val item = record.items.firstOrNull { it.entry == status.customData["entry"] } ?: record.items.firstOrNull() ?: return null
+        return CastReport(
+            item.itemId,
+            item.mediaSourceId,
+            item.playSessionId,
+            playMethod(item.method),
+            status.positionMs * MS_TO_TICKS,
+            status.playerState == "paused"
+        )
     }
 
     /**
@@ -326,6 +355,9 @@ internal class CastSenderHost(
         val current = ensureLink()
         current.startDiscovery()
         retireJob?.cancel()
+        retireAnswer?.complete(null)
+        val answer = CompletableDeferred<CastStatus?>()
+        retireAnswer = answer
         retireJob = scope.launch {
             val found = withTimeoutOrNull(CAST_SEARCH_MS) { current.routes.first { routes -> routes.any { it.id == record.route } } }
             val selected = found != null && current.select(record.route)
@@ -336,11 +368,14 @@ internal class CastSenderHost(
                 retiring = null
                 if (selected) current.endSession(stopReceiver = false)
             }
+            answer.complete(null)
         }
     }
 
     private fun stopRetiring() {
         retiring = null
+        retireAnswer?.complete(null)
+        retireAnswer = null
         retireJob?.cancel()
         retireJob = null
     }
@@ -573,6 +608,7 @@ internal class CastSenderHost(
         val active = account ?: return
         val playRequest = request ?: return
         if (!capability(0).canDiscover) return
+        readPosition()
         val reach = castReach(CastReachInput(active.server.url, environment.senderVpn()))
         if (!reach.allowed) {
             mutable.update { it.copy(blockedReach = reach, pickRefusal = null) }
@@ -918,7 +954,13 @@ internal class CastSenderHost(
         }
     }
 
+    /** Takes the receiver's clock now, before something reads the position or takes the status away. */
+    private fun readPosition() {
+        link?.positionMs()?.let { dispatch(CastEvent("progress", ticks = it * MS_TO_TICKS)) }
+    }
+
     private fun report() {
+        readPosition()
         val before = cast ?: return
         val after = reduceCast(before, CastEvent("report", sequence = ++reportSequence))
         mutable.update { it.copy(cast = after) }
@@ -1084,14 +1126,22 @@ internal class CastSenderHost(
         link?.setActiveTracks(listOfNotNull(id?.toLong())) { link?.requestStatus() }
     }
 
-    fun stop() = dispatch(CastEvent("stop"))
+    fun stop() {
+        readPosition()
+        dispatch(CastEvent("stop"))
+    }
 
-    fun playHere() = dispatch(CastEvent("play-here"))
+    fun playHere() {
+        readPosition()
+        dispatch(CastEvent("play-here"))
+    }
 
     fun retryStop() = dispatch(CastEvent("retry-stop"))
 
     fun disconnect() {
         pendingPick = null
+        // Nothing reports while detached, so this is the position the server keeps until someone comes back.
+        report()
         dispatch(CastEvent("disconnect"))
     }
 
@@ -1185,8 +1235,9 @@ internal class CastSenderHost(
                 link?.requestStatus()
                 return
             }
-            stopRetiring()
             val ours = answer.decision == "adopt"
+            if (ours) retireAnswer?.complete(status)
+            stopRetiring()
             if (ours) link?.stop { }
             link?.endSession(stopReceiver = ours)
             return
@@ -1202,6 +1253,10 @@ internal class CastSenderHost(
         // A change of state goes out at once. The first status is the start report's, not a change.
         if (before != null && after != null && before != after) report()
         settlePendingPick()
+    }
+
+    override fun onProgress(positionMs: Long) {
+        if (retiring == null) dispatch(CastEvent("progress", ticks = positionMs * MS_TO_TICKS))
     }
 
     /** After a process death: ours only if what the receiver shows is what we stored, and what we report comes from that. */
