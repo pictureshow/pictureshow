@@ -84,8 +84,7 @@ fun offlineNextEpisode(entries: List<OfflineEntry>, current: OfflineEntry, serve
         it.kind == OfflineMediaKind.episode &&
             it.labels.seriesId == series &&
             it.labels.seasonNumber == season &&
-            it.labels.episodeNumber == episode + 1 &&
-            it.job.phase == OfflinePhase.ready
+            it.labels.episodeNumber == episode + 1
     } ?: return null
     return offlineReadyEntry(entries, next.itemId, current.preset)
 }

@@ -601,6 +601,72 @@
       ]
     },
     {
+      "id": "offline-next.no-answer-other-season",
+      "note": "Same number, later season.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "s2e2:original",
+                "itemId": "s2e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "s2e2",
+                  "seriesId": "show",
+                  "seasonNumber": 2,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
       "id": "offline-next.no-answer-not-ready",
       "note": "Only a ready download plays.",
       "operation": "next-episode",
