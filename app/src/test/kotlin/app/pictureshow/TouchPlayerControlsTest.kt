@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -34,6 +35,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.getBoundsInRoot
@@ -1066,12 +1068,12 @@ class TouchPlayerControlsTest {
 
     // A title with no chapters needs less room, so it keeps the single line a chaptered title has to give up.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Config(qualifiers = "w790dp-h360dp-land-xxhdpi")
     @Test
     fun aTitleWithNoChaptersCountsInTheFit() {
         launch()
         settled()
-        val spare = bounds("touch:stop").left - bounds("touch:forward10").right - 32.dp
+        val spare = bounds("touch:play-on").left - bounds("touch:forward10").right - 32.dp
         val options = optionBounds()
         val chapters = bounds("touch:open:Chapters")
         val needed = options.last().right - options.first().left
@@ -1095,30 +1097,61 @@ class TouchPlayerControlsTest {
         compose.waitForIdle()
     }
 
+    /** Where this player's clock reads; the fixture's decoder never reaches the output. */
+    private fun playerAt(ms: Long) = compose.runOnIdle {
+        Media3PlaybackOutput::class.java.getDeclaredField("saved").apply { isAccessible = true }
+            .set(output, PlaybackPosition(ms, false))
+    }
+
+    private fun tapPlayOn() = compose.onNodeWithTag("touch:play-on").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+
     @Test
     fun playOnOpensTheChooserForThisPlayerAtItsPosition() {
         val sender = inertCastSender()
         launch(cast = TouchPlayerCast(sender, inertRemoteController()))
-        compose.onNodeWithTag("touch:play-on").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        decided(PlayMethod.DirectPlay)
+        playerAt(37_000)
+        tapPlayOn()
         compose.runOnIdle {
             assertTrue(sender.state.value.chooserOpen)
             val request = requireNotNull(sender.chooserRequest)
             assertEquals("movie", request.items.single().id)
-            assertEquals(output.position().milliseconds, request.startMs, "where this player is, not where it opened")
+            assertEquals(37_000, request.startMs, "where this player is; it opened at ${host.startMs}")
+            assertEquals(false, request.paused)
+            assertEquals("source", request.mediaSourceId, "the source this player chose")
             assertTrue(request.local != null, "a handoff from this player has to be able to stop it")
         }
     }
 
     @Test
+    fun aPausedPlayerAsksTheChooserToKeepItPaused() {
+        val sender = inertCastSender()
+        launch(paused = true, cast = TouchPlayerCast(sender, inertRemoteController()))
+        settled()
+        tapPlayOn()
+        compose.runOnIdle { assertEquals(true, requireNotNull(sender.chooserRequest).paused) }
+    }
+
+    @Test
+    fun aPauseIntentCountsAsPausedForTheChooser() {
+        val sender = inertCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        settled()
+        compose.runOnIdle { output.pause() }
+        settled()
+        tapPlayOn()
+        compose.runOnIdle { assertEquals(true, requireNotNull(sender.chooserRequest).paused) }
+    }
+
+    @Test
     fun aPlayerWithoutTheSenderOffersNoPlayOn() {
-        launch()
+        launch(cast = null)
         compose.onNodeWithTag("touch:stop").assertHasClickAction()
         compose.onNodeWithTag("touch:play-on").assertDoesNotExist()
     }
 
-    // The chooser's Jellyfin row: the TV starts where this player is, and the wire's position is in ticks.
-    @Test
-    fun aJellyfinPickFromThePlayerStartsTheTvAtThisPosition() {
+    /** A TV that's attached and listening, and what it was told. */
+    private fun attachedTv(body: (RemoteControllerHost, List<app.pictureshow.core.control.RemoteRequest>) -> Unit) {
         val sent = java.util.concurrent.CopyOnWriteArrayList<app.pictureshow.core.control.RemoteRequest>()
         val tv = app.pictureshow.core.control.RemoteTarget(
             session = "s1",
@@ -1143,54 +1176,313 @@ class TouchPlayerControlsTest {
             remote.bind(account)
             remote.setForeground(true)
             remote.attach(tv)
-            val sender = inertCastSender()
-            launch(cast = TouchPlayerCast(sender, remote), itemId = "0123456789abcdef0123456789abcdef")
-            compose.runOnIdle {
-                Media3PlaybackOutput::class.java.getDeclaredField("saved").apply { isAccessible = true }
-                    .set(output, PlaybackPosition(90_000, false))
-            }
-            compose.onNodeWithTag("touch:play-on").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
-            compose.runOnIdle { requireNotNull(requireNotNull(sender.chooserRequest).onJellyfinPick).invoke() }
-            compose.waitUntil(5_000) { sent.isNotEmpty() }
-            compose.runOnIdle {
-                assertEquals("900000000", sent.single().query["startPositionTicks"])
-                assertEquals(1, exits, "the local player gives way to the TV")
-            }
+            body(remote, sent)
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         }
     }
 
-    // Play on is one more option in the fit, on the size of phone whose row is the tightest.
+    // CAST-23: the player keeps playing under the chooser, so the TV starts from the pick, in ticks.
+    @Test
+    fun aJellyfinPickStartsTheTvWhereThePlayerIsAtThePick() = attachedTv { remote, sent ->
+        val sender = inertCastSender()
+        launch(cast = TouchPlayerCast(sender, remote), itemId = "0123456789abcdef0123456789abcdef")
+        playerAt(90_000)
+        tapPlayOn()
+        playerAt(110_000) // 20 s of reading the list
+        compose.runOnIdle { requireNotNull(requireNotNull(sender.chooserRequest).onJellyfinPick).invoke() }
+        compose.waitUntil(5_000) { sent.isNotEmpty() }
+        compose.runOnIdle {
+            assertEquals("1100000000", sent.single().query["startPositionTicks"])
+            assertEquals(1, exits, "the local player gives way to the TV")
+        }
+    }
+
+    /** A touch player under [PlayerViewing], as the app has it: autoplay swaps the host in place, under the chooser. */
+    private fun launchEpisodes(cast: TouchPlayerCast, first: MediaItem): List<PlaybackHostState> {
+        val hosts = mutableListOf<PlaybackHostState>()
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                CompositionLocalProvider(LocalTouchPlayerCast provides cast) {
+                    PlayerViewing(account, first, 0, {}) { current, start, onNext ->
+                        val viewing = remember {
+                            PlaybackHostState(current, start, Media3PlaybackOutput(compose.activity, account.server), onNext, { exits++ }).apply {
+                                playerSource = mutableStateOf(Decoder(true))
+                                stateSource = mutableStateOf(PlaybackState(preparing = false))
+                                duration = 60_000
+                                advanceReported = true
+                            }
+                        }
+                        SideEffect { if (viewing !in hosts) hosts += viewing }
+                        TouchPlayerContent(account, viewing)
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        return hosts
+    }
+
+    private fun PlaybackHostState.reachCredits() {
+        position = 50_000
+        segments = listOf(MediaSegment("outro", SegmentType.Outro, 450_000_000, 600_000_000))
+        nextLookup = EpisodeLookup(0, ClientResult.Success(MediaItem("0123456789abcdef0123456789abcde2", "Next episode")))
+    }
+
+    private val firstEpisode = MediaItem("0123456789abcdef0123456789abcde1", "First episode")
+
+    // CAST-23: the chooser closes when this player goes: left open, a pick told the TV to play the finished episode and
+    // the old host's exit popped the new episode's player.
+    @Test
+    fun anEndOfFileAdvanceClosesAChooserOpenedFromThatPlayer() {
+        val sender = inertCastSender()
+        val hosts = launchEpisodes(TouchPlayerCast(sender, inertRemoteController()), firstEpisode)
+        tapPlayOn()
+        compose.runOnIdle {
+            hosts.single().reachCredits()
+            hosts.single().ended = true
+        }
+        settled()
+        compose.runOnIdle {
+            assertEquals(2, hosts.size, "the end of a file advances whatever is open")
+            assertEquals(false, sender.state.value.chooserOpen, "the player it was opened from has gone")
+            assertEquals(null, sender.chooserRequest)
+            assertEquals(0, exits)
+        }
+    }
+
+    @Test
+    fun anOpenChooserHoldsTheCreditsCountdownAsASheetDoes() {
+        val sender = inertCastSender()
+        val hosts = launchEpisodes(TouchPlayerCast(sender, inertRemoteController()), firstEpisode)
+        tapPlayOn()
+        compose.runOnIdle { hosts.single().reachCredits() }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(1, hosts.size, "the viewer is choosing where this episode goes")
+            assertTrue(sender.state.value.chooserOpen)
+            sender.closeChooser()
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(2, hosts.size, "closing it lets the countdown go on") }
+    }
+
+    @Test
+    fun leavingThePlayerClosesItsChooserAtOnce() {
+        val sender = inertCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        settled()
+        tapPlayOn()
+        compose.runOnIdle { host.finish(reason = "error-back") }
+        compose.runOnIdle { assertEquals(false, sender.state.value.chooserOpen) }
+    }
+
+    @Test
+    fun aChooserOpenedElsewhereStaysWhenThePlayerGoes() {
+        val sender = inertCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        settled()
+        compose.runOnIdle {
+            sender.openChooser(CastPlayRequest(listOf(CastPlayItem("other", "Another"))))
+            host.finish(reason = "error-back")
+        }
+        compose.runOnIdle { assertTrue(sender.state.value.chooserOpen, "not this player's to close") }
+    }
+
+    // M1: Play on is a mark just before Stop on the transport line, so it adds no height at any size.
+    private fun assertMarkBesideStop() {
+        val toggle = bounds("touch:toggle")
+        val mark = bounds("touch:play-on")
+        val stop = bounds("touch:stop")
+        val line = (toggle.top + toggle.bottom).value / 2
+        assertEquals(line, (mark.top + mark.bottom).value / 2, 1f, "on the transport line")
+        assertEquals(line, (stop.top + stop.bottom).value / 2, 1f, "Stop on it too")
+        assertTrue(mark.left >= bounds("touch:forward10").right, "after the transport: $mark")
+        assertTrue(stop.left - mark.right >= 8.dp, "air before Stop, which exits at once: $mark $stop")
+        assertTrue(stop.left - mark.right <= 24.dp, "and beside it: $mark $stop")
+        val density = compose.onNodeWithTag("touch:play-on").fetchSemanticsNode().layoutInfo.density.density
+        val target = compose.onNodeWithTag("touch:play-on").fetchSemanticsNode().touchBoundsInRoot
+        assertTrue(target.width / density >= 47.5f && target.height / density >= 47.5f, "a 48 dp target: $target at $density")
+        assertInsideTheWindow(mark)
+        compose.onNodeWithContentDescription("Play on").assertHasClickAction()
+    }
+
+    private fun assertInsideTheWindow(box: androidx.compose.ui.unit.DpRect) {
+        val window = compose.onNodeWithTag("touch:player").getBoundsInRoot()
+        assertTrue(box.left >= window.left && box.right <= window.right && box.top >= window.top && box.bottom <= window.bottom, "$box in $window")
+    }
+
+    /** Text tops of the options, grouped into lines, as counts per line. */
+    private fun optionsPerLine(tags: List<String>) = tags.map(::bounds).groupBy { it.top.value.toInt() }.toSortedMap().values.map { it.size }
+
+    private val chaptered = (TouchPlayerSheet.entries.map { "touch:open:$it" } + "touch:orientation")
+    private val withoutChapters = chaptered - "touch:open:Chapters"
+
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
     @Test
-    fun playOnSharesTheOptionsLineAndStaysOnScreen() {
-        launch(cast = TouchPlayerCast(inertCastSender(), inertRemoteController()))
+    fun playOnSitsBeforeStopInAPhonesLandscape() {
+        launch()
         settled()
-        val audio = bounds("touch:open:Audio")
-        val playOn = bounds("touch:play-on")
-        assertEquals((audio.top + audio.bottom).value / 2, (playOn.top + playOn.bottom).value / 2, 1f, "same line as the other options")
-        assertTrue(playOn.left >= bounds("touch:orientation").right, "after the toggle")
-        assertTrue(playOn.right <= bounds("touch:panel").right, "inside the panel: $playOn")
-        assertEquals((audio.bottom - audio.top).value, (playOn.bottom - playOn.top).value, 1f, "as tall as the other options")
+        assertMarkBesideStop()
     }
 
-    // Phone portrait: Play on starts a line of its own in the first column, and the panel still fits the window.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "sw800dp-w1280dp-h800dp-land-mdpi")
+    @Test
+    fun playOnSitsBeforeStopOnATabletsOneLine() {
+        launch()
+        settled()
+        assertMarkBesideStop()
+        val row = bounds("touch:toggle").let { (it.top + it.bottom) / 2 }
+        TouchPlayerSheet.entries.map { bounds("touch:open:$it") }.forEach { assertEquals(row.value, ((it.top + it.bottom) / 2).value, 1f) }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
+    @Test
+    fun aChapteredPortraitPanelTakesTwoFullLinesOfOptions() {
+        launch()
+        settled()
+        assertMarkBesideStop()
+        assertEquals(listOf(3, 3), optionsPerLine(chaptered))
+        assertInsideTheWindow(bounds("touch:panel"))
+        // Same columns line after line, on Pause's edge.
+        val audio = bounds("touch:open:Audio")
+        assertEquals(audio.left.value, bounds("touch:open:${TouchPlayerSheet.entries[3]}").left.value, 1f)
+        assertEquals(bounds("touch:toggle").left.value, audio.left.value + 8f, 1f)
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
+    @Test
+    fun aTitleWithoutChaptersTakesThreeThenTwo() {
+        launch()
+        compose.runOnIdle { host.metadata = host.item.copy(chapters = emptyList()) }
+        settled()
+        assertEquals(listOf(3, 2), optionsPerLine(withoutChapters))
+    }
+
+    /** No label wraps: each stays one text line tall and ends before the next one in its line starts. */
+    private fun assertLabelsOnOneLine(columns: Int) {
+        val perLine = optionsPerLine(chaptered)
+        assertEquals(chaptered.size, perLine.sum())
+        assertEquals(columns, perLine.max(), "$columns columns: $perLine")
+        val audio = bounds("touch:open:Audio")
+        chaptered.forEach { assertEquals(audio.bottom.value - audio.top.value, bounds(it).let { b -> b.bottom - b.top }.value, 0.5f, "$it stays one line") }
+        chaptered.map(::bounds).groupBy { it.top.value.toInt() }.values.forEach { line ->
+            line.sortedBy { it.left.value }.zipWithNext { a, b -> assertTrue(a.right - 8.dp <= b.left + 8.dp, "text clear of the next text: $a $b") }
+        }
+        chaptered.forEach { assertTrue(bounds(it).right - 8.dp <= bounds("touch:panel").right - 16.dp, "$it inside the panel's content") }
+        assertInsideTheWindow(bounds("touch:panel"))
+    }
+
+    private fun chooseSpeed(tag: String) {
+        compose.onNodeWithTag("touch:open:Speed").performClick()
+        settled()
+        compose.onNodeWithTag(tag).performScrollTo().performClick()
+        settled()
+        // A choice closes the sheet by itself on a phone-sized list; a sheet with Done waits for it.
+        if (compose.onAllNodesWithTag("touch:sheet:done").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithTag("touch:sheet:done").performClick()
+            settled()
+        }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
+    @Test
+    fun aLargerFontKeepsThreeColumnsOnThisPhoneWithNothingWrapped() {
+        launch(fontScale = 1.3f)
+        settled()
+        assertLabelsOnOneLine(3)
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
+    @Test
+    fun eachWideSpeedStaysOnOneLineAtALargerFont() {
+        launch(fontScale = 1.3f)
+        settled()
+        listOf("touch:speed:175" to "Speed · 1.75×", "touch:speed:125" to "Speed · 1.25×").forEach { (tag, label) ->
+            chooseSpeed(tag)
+            compose.onNodeWithText(label).assertExists()
+            assertLabelsOnOneLine(3)
+            assertEquals(
+                textBounds("Audio").let { it.bottom - it.top }.value,
+                textBounds(label).let { it.bottom - it.top }.value,
+                0.5f,
+                "$label is one text line"
+            )
+        }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h780dp-port-xxhdpi")
+    @Test
+    fun aNarrowPhoneKeepsThreeColumnsAtItsDefaultFont() {
+        launch()
+        settled()
+        assertMarkBesideStop()
+        assertLabelsOnOneLine(3)
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h780dp-port-xxhdpi")
+    @Test
+    fun aNarrowPhoneDropsToTwoColumnsAtALargerFont() {
+        launch(fontScale = 1.3f)
+        settled()
+        assertLabelsOnOneLine(2)
+        // The mark and Stop leave together if the transport line can't hold them, and stay at the far end.
+        assertEquals(bounds("touch:panel").right.value - 8f, bounds("touch:stop").right.value, 1f)
+        val stop = bounds("touch:stop")
+        val mark = bounds("touch:play-on")
+        assertEquals((stop.top + stop.bottom).value / 2, (mark.top + mark.bottom).value / 2, 1f, "the pair stays together")
+        assertTrue(stop.left - mark.right >= 8.dp)
+    }
+
+    @Test fun columnsAreTheMostThatHoldEveryLabel() {
+        assertEquals(3, touchOptionColumns(listOf(100, 100, 292), 900, 8), "292 fits in 300 less the air")
+        assertEquals(2, touchOptionColumns(listOf(100, 100, 293), 900, 8), "one label decides for all")
+        assertEquals(2, touchOptionColumns(listOf(442), 900, 8))
+        assertEquals(1, touchOptionColumns(listOf(443), 900, 8), "still no wrap")
+    }
+
+    // While something plays elsewhere the mark fills in and a reader hears what; the browsing bar is hidden in the player.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
-    fun portraitKeepsPlayOnInTheFirstColumn() {
-        launch(cast = TouchPlayerCast(inertCastSender(), inertRemoteController()))
+    fun theMarkSaysWhenThisViewerIsCasting() {
+        val sender = inertCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
         settled()
-        assertEquals(bounds("touch:open:Audio").left, bounds("touch:play-on").left)
-        assertTrue(bounds("touch:play-on").top >= bounds("touch:open:Speed").bottom)
-        compose.onNodeWithTag("touch:play-on").assertIsDisplayed()
+        val mark = compose.onNodeWithContentDescription("Play on")
+        mark.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        val idle = compose.onNodeWithTag("touch:play-on").captureToImage()
+        val identity = app.pictureshow.core.control.ViewingIdentity("server", "viewer", "route", "cast-1", 1, "cast")
+        compose.runOnIdle {
+            val flow = CastSenderHost::class.java.getDeclaredField("mutable").apply { isAccessible = true }.get(sender)
+            @Suppress("UNCHECKED_CAST")
+            (flow as kotlinx.coroutines.flow.MutableStateFlow<CastUi>).value = CastUi(
+                cast = app.pictureshow.core.control.CastState(app.pictureshow.core.control.OwnerState(identity)),
+                deviceName = "Living room"
+            )
+        }
+        settled()
+        mark.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Living room: checking…"))
+        val casting = compose.onNodeWithTag("touch:play-on").captureToImage()
+        assertTrue(idle.toPixelMap().buffer.toList() != casting.toPixelMap().buffer.toList(), "the mark itself changes")
     }
 
     private fun launch(
         paused: Boolean = false,
         fontScale: Float? = null,
-        cast: TouchPlayerCast? = null,
+        // What the touch app ships: its only player route provides the sender, so layout is proven with Play on in it.
+        cast: TouchPlayerCast? = TouchPlayerCast(inertCastSender(), inertRemoteController()),
         itemId: String = "movie",
         onNext: (MediaItem) -> Unit = {}
     ) {

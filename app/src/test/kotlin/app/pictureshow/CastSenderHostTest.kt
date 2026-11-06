@@ -1413,6 +1413,37 @@ class CastSenderHostTest {
         assertEquals(old, host.generation())
     }
 
+    // CAST-23: a rejoin to replace waits for the receiver; the player it would stop may have gone by then.
+    @Test fun aPlayerThatGoesDuringARejoinTakesItsPickWithIt() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        val old = host.generation()
+        val player = FakeOutput(log)
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player))
+        host.pick(ROUTE)
+        runCurrent()
+        log.clear()
+        host.localClosed(player)
+        link.sink!!.onConnected("Living room")
+        link.sink!!.onStatus(status("playing", generation = old))
+        runCurrent()
+        assertFalse("stop" in log, "nothing is replaced for a player that's gone")
+        assertEquals(old, host.generation())
+    }
+
+    @Test fun aPlayerGoingClosesOnlyItsOwnChooser() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        host.openChooser(request(local = player))
+        host.localClosed(FakeOutput(log))
+        assertTrue(host.state.value.chooserOpen, "another player's")
+        host.closeChooserFor(player)
+        assertFalse(host.state.value.chooserOpen)
+        assertEquals(null, host.chooserRequest)
+    }
+
     @Test fun aRejoinThatFindsTheViewingOverStartsNothingBehindTheNotice() = runTest {
         val host = host()
         casting(host)

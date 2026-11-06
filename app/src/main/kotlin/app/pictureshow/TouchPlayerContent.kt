@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -37,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -83,6 +85,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -161,7 +164,7 @@ private val TOUCH_BAR_TEXT_INSET = 8.dp
 internal fun TouchReservedLabel(label: String, reserve: String, alignment: Alignment = Alignment.Center) {
     Box(contentAlignment = alignment) {
         Text(reserve, Modifier.alpha(0f).clearAndSetSemantics {}, maxLines = 1)
-        Text(label)
+        Text(label, maxLines = 1)
     }
 }
 
@@ -190,6 +193,11 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
     val entry = LocalTouchPlayerCast.current
     val castOutput = remember(host) { PlayerCastOutput(host) }
+    // Null without a sender, so a player that has none reads nothing from it.
+    val castUi = entry?.let { it.cast.state.collectAsState().value }
+    val castStatus = castUi?.let(::castStatusLine)
+    // A chooser left open is holding this viewing's next step, as a sheet does; a Jellyfin pick reads this player's clock.
+    val choosing = castUi?.chooserOpen == true && entry?.cast?.chooserRequest?.local === castOutput
     if (entry != null) {
         DisposableEffect(castOutput) { onDispose { entry.cast.localClosed(castOutput) } }
         LaunchedEffect(host) { if (entry.cast.consumeStartPaused(host.item.id)) host.output.pause() }
@@ -214,6 +222,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         host.onFinishing = {
             ui.sheet = null
             ui.scrubMs = null
+            // From the moment this player starts to leave, a pick has nothing left to act on (CAST-23).
+            entry?.cast?.closeChooserFor(castOutput)
         }
         host.onSeekShown = {
             ui.visible = true
@@ -430,7 +440,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                             Alignment.CenterStart
                                         )
                                     } else {
-                                        Text(sheet.title)
+                                        Text(sheet.title, maxLines = 1)
                                     }
                                 }
                             }
@@ -445,50 +455,47 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                     ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
                                 }
                                 ui.interact()
-                            }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape") }
+                            }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape", maxLines = 1) }
                         }
                     }
-                    if (entry != null) {
-                        add { placement ->
-                            TouchBarButton({
-                                val position = host.output.position().milliseconds
+                }
+                // Stop and the mark stay together, so a very large font moves them as one instead of parting them.
+                val exit: @Composable (Modifier) -> Unit = { placement ->
+                    Row(placement, horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                        if (entry != null) {
+                            TouchPlayOnMark(castStatus) {
                                 entry.cast.openChooser(
                                     CastPlayRequest(
                                         listOf(castPlayItem(account.server, host.item)),
-                                        startMs = position,
+                                        startMs = host.output.position().milliseconds,
                                         paused = paused,
                                         mediaSourceId = host.state.decision?.mediaSourceId,
                                         local = castOutput,
                                         onJellyfinPick = {
-                                            entry.remote.playNow(listOf(host.item.id), position * 10_000)
+                                            // The player keeps playing under the chooser, so where it is now, not at the tap.
+                                            entry.remote.playNow(listOf(host.item.id), host.output.position().milliseconds * MS_TO_TICKS)
                                             host.finish(reason = "remote")
                                         }
                                     )
                                 )
                                 ui.interact()
-                            }, placement.testTag("touch:play-on")) { Text("Play on") }
+                            }
+                            Spacer(Modifier.width(8.dp))
                         }
+                        stop()
                     }
                 }
                 if (this@BoxWithConstraints.maxWidth < 600.dp) {
                     // Transport and exit on one line, then fixed columns: a break never falls where the width runs out.
-                    // A very large font moves Stop to its own line instead of squeezing it.
+                    // A very large font moves the exit to its own line, still at the far end, instead of squeezing it.
                     FlowRow(Modifier.fillMaxWidth()) {
                         toggle()
                         Spacer(Modifier.width(8.dp))
                         back()
                         forward()
-                        Spacer(Modifier.weight(1f))
-                        stop()
+                        exit(Modifier.weight(1f))
                     }
-                    options.chunked(3).forEach { row ->
-                        Row(Modifier.fillMaxWidth().testTag("touch:options-row")) {
-                            row.forEach { option ->
-                                Box(Modifier.weight(1f)) { option(Modifier.offset(x = (-8).dp)) }
-                            }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
+                    TouchOptionGrid(options)
                 } else {
                     TouchWideControls(
                         transport = {
@@ -500,7 +507,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             }
                         },
                         options = options,
-                        stop = stop
+                        stop = { exit(Modifier) }
                     )
                 }
                 host.state.reportError?.let { Text("Could not save progress: $it", color = Color.White) }
@@ -539,7 +546,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 })
                 next?.let {
                     key(host.deferredNext, host.output.stopGeneration) {
-                        val suspended = paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null
+                        val suspended = paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
                         val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
                         val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
@@ -624,6 +631,58 @@ internal fun touchOptionLines(widths: List<Int>, room: Int, gap: Int): List<List
         last.add(0, above.removeAt(above.lastIndex))
     }
     return lines
+}
+
+/** The most columns, up to three, that hold every label on one line with some air before the next column's text. */
+internal fun touchOptionColumns(textWidths: List<Int>, room: Int, air: Int): Int =
+    (3 downTo 2).firstOrNull { columns -> textWidths.all { it <= room / columns - air } } ?: 1
+
+/**
+ * The narrow panel's options, in fixed columns so labels don't move with their neighbours' wording. A button keeps its natural
+ * width rather than the column's, so its label never wraps; the text starts on the column's edge and the target hangs out by
+ * its inset. Measured, so the font scale and the reserved Speed label count.
+ */
+@Composable
+private fun TouchOptionGrid(options: List<@Composable (Modifier) -> Unit>) {
+    Layout(
+        content = { options.forEach { it(Modifier) } },
+        modifier = Modifier.fillMaxWidth().testTag("touch:option-grid")
+    ) { measurables, constraints ->
+        val boxes = measurables.map { it.measure(Constraints()) }
+        val width = constraints.maxWidth
+        val inset = TOUCH_BAR_TEXT_INSET.roundToPx()
+        val columns = touchOptionColumns(boxes.map { it.width - inset * 2 }, width, 8.dp.roundToPx())
+        val lines = boxes.chunked(columns)
+        val lineGap = 4.dp.roundToPx()
+        val height = lines.sumOf { line -> line.maxOf { it.height } } + lineGap * (lines.size - 1).coerceAtLeast(0)
+        layout(width, height) {
+            var y = 0
+            lines.forEach { line ->
+                val lineHeight = line.maxOf { it.height }
+                line.forEachIndexed { column, box ->
+                    box.placeRelative(width * column / columns - inset, y + (lineHeight - box.height) / 2)
+                }
+                y += lineHeight + lineGap
+            }
+        }
+    }
+}
+
+/**
+ * Play on, a mark beside Stop since both move this viewing away from here. [status] is what a sender is doing elsewhere, the
+ * line the browsing bar shows and the player hides: the mark fills in, and a reader hears it.
+ */
+@Composable
+internal fun TouchPlayOnMark(status: String?, onClick: () -> Unit) {
+    TouchBarButton(
+        onClick,
+        Modifier.testTag("touch:play-on").semantics {
+            contentDescription = "Play on"
+            status?.let { stateDescription = it }
+        }
+    ) {
+        Icon(touchActionIcon(if (status != null) "casting" else "cast"), contentDescription = null, modifier = Modifier.size(24.dp))
+    }
 }
 
 /**

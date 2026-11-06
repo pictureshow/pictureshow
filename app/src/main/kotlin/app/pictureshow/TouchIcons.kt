@@ -121,6 +121,43 @@ internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
                 lineTo(10f, 18.5f)
                 close()
             }
+            "cast", "casting" -> {
+                // A screen with its lower-left corner open for the signal.
+                moveTo(3f, 7f)
+                lineTo(3f, 4f)
+                lineTo(21f, 4f)
+                lineTo(21f, 20f)
+                lineTo(16f, 20f)
+                lineTo(16f, 18f)
+                lineTo(19f, 18f)
+                lineTo(19f, 6f)
+                lineTo(5f, 6f)
+                lineTo(5f, 7f)
+                close()
+                moveTo(3f, 17f)
+                arcTo(3f, 3f, 0f, false, true, 6f, 20f)
+                lineTo(3f, 20f)
+                close()
+                moveTo(3f, 13f)
+                arcTo(7f, 7f, 0f, false, true, 10f, 20f)
+                lineTo(8f, 20f)
+                arcTo(5f, 5f, 0f, false, false, 3f, 15f)
+                close()
+                moveTo(3f, 9f)
+                arcTo(11f, 11f, 0f, false, true, 14f, 20f)
+                lineTo(12f, 20f)
+                arcTo(9f, 9f, 0f, false, false, 3f, 11f)
+                close()
+                if (kind == "casting") {
+                    // The screen lit: something is playing over there.
+                    moveTo(7f, 8f)
+                    lineTo(17f, 8f)
+                    lineTo(17f, 16f)
+                    lineTo(15f, 16f)
+                    arcTo(12.65f, 12.65f, 0f, false, false, 7f, 8f)
+                    close()
+                }
+            }
             "chevron-down" -> {
                 moveTo(6f, 8f)
                 lineTo(12f, 14f)

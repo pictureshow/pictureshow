@@ -53,7 +53,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-private const val MS_TO_TICKS = 10_000L
+internal const val MS_TO_TICKS = 10_000L
 
 /** The reducer only compares this for sameness; it is never sent anywhere. */
 private const val LOCAL_DEVICE = "this-device"
@@ -1095,6 +1095,13 @@ internal class CastSenderHost(
     /** The player screen went away, so Resume here has to open a new one. */
     fun localClosed(output: CastLocalOutput) {
         if (handoff?.local === output) localAlive = false
+        closeChooserFor(output)
+        if (pendingPick?.second?.local === output) pendingPick = null
+    }
+
+    /** A chooser opened from this player has nothing to act on once it is leaving; one opened elsewhere is not its business. */
+    fun closeChooserFor(output: CastLocalOutput) {
+        if (request?.local === output) closeChooser()
     }
 
     private fun clear() {

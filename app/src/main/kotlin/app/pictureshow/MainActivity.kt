@@ -610,9 +610,9 @@ internal fun Pictureshow(
                                 it.server.id == removingServer.id && it.server.url == removingServer.url
                             }
                             if (count == 0) {
-                                "This removes ${removingServer.name} from this TV."
+                                "This removes ${state.snapshot.serverLabel(removingServer)} from this TV."
                             } else {
-                                "This removes ${removingServer.name} and $count remembered " +
+                                "This removes ${state.snapshot.serverLabel(removingServer)} and $count remembered " +
                                     "${if (count == 1) "account" else "accounts"} from this TV."
                             }
                         }
