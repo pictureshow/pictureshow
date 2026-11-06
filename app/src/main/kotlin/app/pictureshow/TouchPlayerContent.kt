@@ -461,7 +461,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             val noticeGap = noticeBounds?.takeIf { it.right > actionsLeft }
                 ?.let { with(density) { it.height.toDp() + 12.dp } } ?: 0.dp
             // Whatever is showing keeps its place when the notice ends; the gap closes once the column is empty.
-            val belowNotice = if (actionsHeight > 0) maxOf(noticeGap, heldNoticeGap) else noticeGap
+            val belowNotice = if (actionsHeight > 0 && noticeBounds == null) heldNoticeGap else noticeGap
             SideEffect { heldNoticeGap = belowNotice }
             // One anchor in every state: a tap aimed at Cancel lands on Cancel whether or not the controls just appeared.
             Column(
