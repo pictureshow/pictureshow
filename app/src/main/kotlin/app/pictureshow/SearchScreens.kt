@@ -405,7 +405,7 @@ fun SearchScreen(
         }
         val platformBringIntoView = LocalBringIntoViewSpec.current
         val focusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
-        val reveal = rememberFontChangeReveal(list)
+        val reveal = Modifier.revealFocusAfterFontChange(list)
         val resultsBringIntoView = remember(platformBringIntoView, focusMargin) {
             object : BringIntoViewSpec {
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = focusedCardScrollDistance(

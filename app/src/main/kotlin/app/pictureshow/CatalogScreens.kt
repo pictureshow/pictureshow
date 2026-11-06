@@ -63,6 +63,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -340,7 +341,7 @@ fun CatalogHome(
             )
         }
     }
-    val reveal = rememberFontChangeReveal(list)
+    val reveal = Modifier.revealFocusAfterFontChange(list)
     CompositionLocalProvider(LocalBringIntoViewSpec provides homeBringIntoView) {
         CatalogLoadingFocus(returning && !restored) {
             initialNavigation = true
@@ -667,7 +668,7 @@ fun CatalogGrid(
     }
     // Grid headings/card focus provide context. A navigation destination is not a pane:
     // late pane events from this departing grid would speak its title over detail focus.
-    val reveal = rememberFontChangeReveal(grid)
+    val reveal = Modifier.revealFocusAfterFontChange(grid)
     Box(modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("grid").accessibilityGroup()) {
         CompositionLocalProvider(LocalBringIntoViewSpec provides gridBringIntoView) {
             LazyVerticalGrid(
@@ -856,8 +857,7 @@ private class FocusedInScroller {
  */
 @Suppress("DEPRECATION")
 @OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun rememberFontChangeReveal(scroller: ScrollableState): Modifier {
+internal fun Modifier.revealFocusAfterFontChange(scroller: ScrollableState): Modifier = composed {
     val density = LocalDensity.current
     val margin = with(density) { FocusedCardMargin.toPx() }
     val tracked = remember { FocusedInScroller() }
@@ -872,7 +872,7 @@ internal fun rememberFontChangeReveal(scroller: ScrollableState): Modifier {
         val bounds = viewport.localBoundingBoxOf(focused, clipBounds = false)
         scroller.scrollBy(focusedCardScrollDistance(bounds.top, bounds.height, viewport.size.height.toFloat(), margin, 0f))
     }
-    return Modifier.onGloballyPositioned { tracked.viewport = it }.onFocusedBoundsChanged { tracked.focused = it }
+    Modifier.onGloballyPositioned { tracked.viewport = it }.onFocusedBoundsChanged { tracked.focused = it }
 }
 
 /** The size above which a card's title lines are unbounded. */
@@ -1670,7 +1670,7 @@ fun CatalogDetail(
     val platformBringIntoView = LocalBringIntoViewSpec.current
     val headerFocused by rememberUpdatedState(selectedSection == "header")
     val cardFocusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
-    val reveal = rememberFontChangeReveal(list)
+    val reveal = Modifier.revealFocusAfterFontChange(list)
     val detailBringIntoView = remember(platformBringIntoView, cardFocusMargin) {
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =

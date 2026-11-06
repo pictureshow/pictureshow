@@ -152,7 +152,7 @@ internal fun PlaybackSettingsScreen(
     val configuration = state.configuration
     val scroll = rememberScrollState()
     Column(
-        rememberFontChangeReveal(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
+        Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
