@@ -477,9 +477,6 @@
         font-size: 0.85rem;
         padding: 0.35rem;
     }
-    .player-overlay .orientation-control {
-        display: block;
-    }
     .player-overlay .player-panel::before {
         content: "";
         display: block;
@@ -570,6 +567,14 @@
     .player-overlay .seek-short {
         display: inline;
     }
+    .player-overlay .orientation-control {
+        display: block;
+    }
+}
+
+/* TOUCH-10: a window whose smallest side reaches 600px follows the device, so a
+   600 to 650px portrait tablet gets the narrow layout above without the toggle. */
+@media (max-width: 599.98px) {
     .player-overlay .orientation-control {
         display: block;
     }

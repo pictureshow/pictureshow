@@ -5,13 +5,17 @@
 
 package app.pictureshow.core.control
 
+import app.pictureshow.core.playback.MediaStream
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 
@@ -33,7 +37,19 @@ data class RemoteNowPlaying(
 
 /** A stream of what is playing, offered only to the viewer who is watching it. */
 @Serializable
-data class RemoteTrack(val type: String, val index: Int, val label: String)
+data class RemoteTrack(
+    val type: String,
+    val index: Int,
+    val label: String,
+    /** The server's description of it, so a client can name it as its own player's track lists do. */
+    @Transient val stream: MediaStream? = null
+)
+
+/**
+ * Whether a controller may show [offered] as the TV's current track, where Off is -1. A TV leaves its automatic choice out
+ * of its reports (PLAY-20), so null is "not reported", which never selects anything, Off included.
+ */
+fun remoteTrackSelected(reported: Int?, offered: Int): Boolean = reported != null && reported == offered
 
 /** One session the server says this viewer may control and that really can play. */
 @Serializable
@@ -60,11 +76,18 @@ private fun JsonElement?.ticks(): Long = (this as? JsonPrimitive)?.takeUnless { 
 
 private fun JsonElement?.strings(): List<String> = (this as? JsonArray).orEmpty().mapNotNull { it.text() }
 
+private val trackJson = Json { ignoreUnknownKeys = true }
+
 private fun tracks(streams: JsonElement?): List<RemoteTrack> = (streams as? JsonArray).orEmpty().mapNotNull { element ->
     val stream = element as? JsonObject ?: return@mapNotNull null
     val type = stream["Type"].text()?.takeIf { it == "Audio" || it == "Subtitle" } ?: return@mapNotNull null
     val index = stream["Index"].int() ?: return@mapNotNull null
-    RemoteTrack(type, index, stream["DisplayTitle"].text() ?: stream["Language"].text() ?: "$type $index")
+    RemoteTrack(
+        type,
+        index,
+        stream["DisplayTitle"].text() ?: stream["Language"].text() ?: "$type $index",
+        runCatching { trackJson.decodeFromJsonElement<MediaStream>(stream) }.getOrNull()
+    )
 }
 
 /** Jellyfin writes the same GUID dashed or undashed depending on the DTO. */

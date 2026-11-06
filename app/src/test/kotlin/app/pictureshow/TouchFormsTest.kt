@@ -18,6 +18,9 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -117,6 +120,23 @@ class TouchFormsTest {
         compose.runOnIdle { state = QuickState(busy = false, error = "Network unavailable.") }
         compose.onNodeWithText("Try again").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, retries) }
+    }
+
+    // Five filled buttons read alike, Remove included: one way forward, and the rest quieter.
+    @Test fun accountsHaveOnePrimaryAndItIsTheCurrentAccount() {
+        val other = Account(server, User("other-viewer", "Other"), "other-token")
+        val both = AccountSnapshot(listOf(other, account), account.key, lastServer = server)
+        assertEquals(account.key, touchAccountsPrimary(both))
+        assertEquals(other.key, touchAccountsPrimary(both.copy(currentKey = null)))
+        assertEquals(null, touchAccountsPrimary(both.copy(accounts = emptyList(), currentKey = null)))
+        var state by mutableStateOf(both)
+        compose.setContent { MaterialTheme { TouchAccounts(AccountsState(), state, {}, {}, {}, {}, {}) } }
+        compose.waitForIdle()
+        compose.onAllNodesWithTag("touch:accounts:primary").assertCountEquals(1)
+        compose.onNodeWithTag("touch:accounts:primary").assertTextContains("Continue as Viewer")
+        compose.runOnIdle { state = both.copy(accounts = emptyList(), currentKey = null) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("touch:accounts:primary").assertTextContains("Add a server")
     }
 
     @Test fun removalSurvivesRestorationAndBackCancelsWithoutRemoving() {

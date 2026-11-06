@@ -13,6 +13,8 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -22,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
@@ -36,6 +39,8 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -497,6 +502,28 @@ class TouchPlayerControlsTest {
         assertEquals(first, spoken(), "A paused clock's tick must not change what the reader hears")
     }
 
+    // Skip sits at the card's end, so the inner margin matches both sides, and Cancel stays put whether it comes or goes.
+    @Test fun skipEndsOnTheCardsMarginAndCancelHoldsStill() {
+        var skip by mutableStateOf<String?>(null)
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Box(Modifier.width(360.dp)) {
+                    TouchNextEpisodeCard("Another episode", 12, true, onPlay = {}, onCancel = {}, skipLabel = skip)
+                }
+            }
+        }
+        compose.waitForIdle()
+        val cancel = compose.onNodeWithTag("next:cancel").getBoundsInRoot()
+        compose.runOnIdle { skip = "Skip credits" }
+        compose.waitForIdle()
+        assertEquals(cancel, compose.onNodeWithTag("next:cancel").getBoundsInRoot())
+        assertEquals(
+            compose.onNodeWithTag("next:card").getBoundsInRoot().right.value - 12f,
+            compose.onNodeWithTag("touch:skip").getBoundsInRoot().right.value,
+            1f
+        )
+    }
+
     @Test fun readerHearsTheNextEpisodeArriveAndCanActOnIt() {
         var plays = 0
         var cancels = 0
@@ -736,7 +763,7 @@ class TouchPlayerControlsTest {
         TouchPlayerSheet.entries.map { "touch:open:$it" }.plus(listOf("touch:orientation", "touch:stop")).forEach {
             assertEquals(row.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
         }
-        assertEquals(bounds("touch:panel").right.value - 16f, bounds("touch:stop").right.value, 1f)
+        assertEquals(bounds("touch:panel").right.value - 8f, bounds("touch:stop").right.value, 1f)
         assertTrue(bounds("touch:open:Audio").left - bounds("touch:forward10").right >= 16.dp)
     }
 
@@ -906,6 +933,51 @@ class TouchPlayerControlsTest {
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
     }
 
+    // Folded back, the viewer who chose Portrait still has Portrait, not a fresh landscape.
+    @Test fun foldingAgainKeepsTheViewersToggle() {
+        val probe = playerWindow(360)
+        compose.runOnIdle { compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT }
+        compose.runOnIdle { probe.smallestWidth = 673 }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.smallestWidth = 360 }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.showing = false }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    private fun textBounds(label: String) = compose.onNodeWithText(label, useUnmergedTree = true).getBoundsInRoot()
+
+    // TextButton's minimum centred a short word, so Audio started right of Pause and of whatever shared its column.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun aShortOptionStartsOnItsColumnsLine() {
+        launch()
+        settled()
+        val columns = TouchPlayerSheet.entries.groupBy { bounds("touch:open:$it").left.value }.values
+        assertTrue(columns.any { it.size > 1 }, "the options wrap into columns here")
+        columns.forEach { column ->
+            val starts = column.map { sheet ->
+                val word = if (sheet == TouchPlayerSheet.Speed) "Speed ·" else sheet.title
+                compose.onAllNodesWithText(word, substring = true, useUnmergedTree = true).onFirst().getBoundsInRoot().left.value
+            }
+            assertEquals(starts.first(), starts.max(), 0.5f, "text in ${column.first().title}'s column")
+            assertEquals(starts.first(), starts.min(), 0.5f, "text in ${column.first().title}'s column")
+        }
+        assertEquals(bounds("touch:toggle").left.value, textBounds("Audio").left.value, 0.5f, "and on Pause's edge")
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w914dp-h411dp-land-xxhdpi")
+    @Test
+    fun stopsTextEndsOnThePanelsLine() {
+        launch()
+        settled()
+        assertEquals(bounds("touch:panel").right.value - 16f, textBounds("Stop").right.value, 1f)
+    }
+
     private fun optionBounds() = (
         TouchPlayerSheet.entries.map { "touch:open:$it" } + "touch:orientation"
         ).map(::bounds)
@@ -918,7 +990,7 @@ class TouchPlayerControlsTest {
         listOf("touch:back10", "touch:forward10", "touch:stop").forEach {
             assertEquals(middle.value, bounds(it).let { box -> (box.top + box.bottom) / 2 }.value, 1f, it)
         }
-        assertEquals(bounds("touch:panel").right.value - 16f, stop.right.value, 1f, "Stop at the far end")
+        assertEquals(bounds("touch:panel").right.value - 8f, stop.right.value, 1f, "Stop at the far end, its text on the panel's line")
         val options = optionBounds()
         options.forEach { assertEquals(options[0].top.value, it.top.value, 0.5f, "one line: $options") }
         assertTrue(options[0].top >= toggle.bottom, "options below the transport: ${options[0]} $toggle")

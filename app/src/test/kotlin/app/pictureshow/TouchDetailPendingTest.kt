@@ -21,6 +21,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -336,6 +338,40 @@ class TouchDetailPendingTest {
     @Test fun playFromStartHoldsItsPlaceDuringAReturn() {
         Page(pending())
         compose.onNodeWithTag("touch:detail:from-start").assertExists()
+    }
+
+    // A portrait tablet's 640 dp put "Resume from 0:35" on two lines in five cells; below 720 dp it gets the phone's grid.
+    @Config(qualifiers = "w680dp-h900dp-port-xhdpi")
+    @Test
+    fun aPortraitTabletUsesThePhonesGrid() {
+        Page(fresh(resumable))
+        val primary = compose.onNodeWithTag("touch:detail:primary").getBoundsInRoot()
+        val played = compose.onNodeWithTag("touch:detail:played").getBoundsInRoot()
+        assertTrue(primary.bottom <= played.top, "Watched is below Play: $primary $played")
+    }
+
+    private fun assertFiveCellsOnALine() {
+        Page(fresh(resumable))
+        val primary = compose.onNodeWithTag("touch:detail:primary").getBoundsInRoot()
+        val played = compose.onNodeWithTag("touch:detail:played").getBoundsInRoot()
+        assertEquals(primary.top, played.top)
+    }
+
+    @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
+    @Test
+    fun aLandscapeTabletKeepsFiveCellsOnALine() = assertFiveCellsOnALine()
+
+    // Three rows would take most of a short window's height, which matters more here than a two-line label.
+    @Config(qualifiers = "w914dp-h411dp-land-xxhdpi")
+    @Test
+    fun aLandscapePhoneKeepsFiveCellsOnALine() = assertFiveCellsOnALine()
+
+    // On a line of its own, Play on TV's label shares a centre with Play's, chevron or not.
+    @Test fun playOnTvsLabelSharesPlaysCentre() {
+        Page(fresh())
+        val play = compose.onNodeWithTag("touch:detail:primary").getBoundsInRoot()
+        val label = compose.onAllNodesWithText("Play on TV", useUnmergedTree = true).onFirst().getBoundsInRoot()
+        assertEquals(((play.left + play.right) / 2).value, ((label.left + label.right) / 2).value, 1f)
     }
 
     // Catalog B1: one primary, the state pair, and the TV's actions behind one control, every one reachable.

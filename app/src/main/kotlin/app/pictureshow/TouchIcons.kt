@@ -139,6 +139,46 @@ internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
                 lineTo(6.5f, 6f)
                 close()
             }
+            "previous" -> {
+                moveTo(5f, 5f)
+                lineTo(8f, 5f)
+                lineTo(8f, 19f)
+                lineTo(5f, 19f)
+                close()
+                moveTo(19f, 5f)
+                lineTo(19f, 19f)
+                lineTo(9f, 12f)
+                close()
+            }
+            "next" -> {
+                moveTo(16f, 5f)
+                lineTo(19f, 5f)
+                lineTo(19f, 19f)
+                lineTo(16f, 19f)
+                close()
+                moveTo(5f, 5f)
+                lineTo(15f, 12f)
+                lineTo(5f, 19f)
+                close()
+            }
+            "play" -> {
+                moveTo(7f, 4f)
+                lineTo(20f, 12f)
+                lineTo(7f, 20f)
+                close()
+            }
+            "pause" -> {
+                moveTo(6f, 4f)
+                lineTo(10f, 4f)
+                lineTo(10f, 20f)
+                lineTo(6f, 20f)
+                close()
+                moveTo(14f, 4f)
+                lineTo(18f, 4f)
+                lineTo(18f, 20f)
+                lineTo(14f, 20f)
+                close()
+            }
             else -> {
                 moveTo(12f, 21f)
                 curveTo(5f, 15.5f, 2f, 12f, 2f, 8f)

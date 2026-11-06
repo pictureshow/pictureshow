@@ -87,7 +87,7 @@ internal fun TouchServers(
             },
             Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
-        TouchAction("Search again", !state.scanning, onScan)
+        TouchAction("Search again", !state.scanning, onClick = onScan)
         if (snapshot.accounts.isNotEmpty() ||
             snapshot.rememberedServers.isNotEmpty()
         ) {
@@ -146,7 +146,7 @@ internal fun TouchLogin(
         TouchMessage(state.error)
         TouchMessage(state.notice)
         if (state.loading) Text("Loading sign-in options…")
-        if (state.quickConnect) TouchAction("Use Quick Connect", !state.busy, onQuickConnect)
+        if (state.quickConnect) TouchAction("Use Quick Connect", !state.busy, onClick = onQuickConnect)
         if (state.users.isNotEmpty()) {
             Text("Public users", style = MaterialTheme.typography.titleLarge)
             state.users.forEach { user -> TouchAction(user.name, !state.busy) { onUsername(user.name) } }
@@ -181,6 +181,13 @@ internal fun TouchQuickConnect(state: QuickState, server: Server, onRetry: () ->
     }
 }
 
+/**
+ * The one way forward on Accounts: the current account, else the first remembered one. Null when there are none, and
+ * then adding a server is the way forward.
+ */
+internal fun touchAccountsPrimary(snapshot: AccountSnapshot): String? =
+    snapshot.accounts.firstOrNull { it.key == snapshot.currentKey }?.key ?: snapshot.accounts.firstOrNull()?.key
+
 @Composable
 internal fun TouchAccounts(
     state: AccountsState,
@@ -209,6 +216,7 @@ internal fun TouchAccounts(
             removeServerUrl = null
         }
     }
+    val primary = touchAccountsPrimary(snapshot)
     TouchPage("Accounts", onBack) {
         if (snapshot.accounts.isEmpty()) Text("No remembered accounts. Sign in to start watching.")
         snapshot.accounts.forEach { remembered ->
@@ -218,19 +226,27 @@ internal fun TouchAccounts(
                 snapshot.currentKey == remembered.key -> "Continue as ${remembered.user.name}"
                 else -> "Switch to ${remembered.user.name}"
             }
-            TouchAction(label, !state.busy) { onSelect(remembered) }
-            TouchAction("Remove ${remembered.user.name} on ${remembered.server.name}", !state.busy) { removeKey = remembered.key }
+            if (remembered.key == primary) {
+                TouchAction(label, !state.busy, Modifier.testTag("touch:accounts:primary")) { onSelect(remembered) }
+            } else {
+                TouchSecondaryAction(label, !state.busy) { onSelect(remembered) }
+            }
+            TouchRemoveAction("Remove ${remembered.user.name} on ${remembered.server.name}", !state.busy) { removeKey = remembered.key }
         }
         TouchMessage(state.error)
         snapshot.rememberedServers.forEach { remembered ->
             Text(remembered.name, style = MaterialTheme.typography.titleLarge)
-            TouchAction("Sign in another user on ${remembered.name}", !state.busy) { onSignIn(remembered) }
-            TouchAction("Remove server ${remembered.name}", !state.busy) {
+            TouchSecondaryAction("Sign in another user on ${remembered.name}", !state.busy) { onSignIn(remembered) }
+            TouchRemoveAction("Remove server ${remembered.name}", !state.busy) {
                 removeServerId = remembered.id
                 removeServerUrl = remembered.url
             }
         }
-        TouchAction("Add a server", !state.busy, onAddServer)
+        if (primary == null) {
+            TouchAction("Add a server", !state.busy, Modifier.testTag("touch:accounts:primary"), onAddServer)
+        } else {
+            TouchSecondaryAction("Add a server", !state.busy, onAddServer)
+        }
     }
     if (account != null || server != null) {
         AlertDialog(

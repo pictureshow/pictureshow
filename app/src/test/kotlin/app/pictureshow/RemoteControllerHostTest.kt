@@ -188,7 +188,7 @@ class RemoteControllerHostTest {
         assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime))
         advanceTimeBy(6_000)
         assertEquals(
-            "The TV didn't confirm that. Showing what it reports now.",
+            "The TV didn't confirm that.",
             remoteCommandStatus(host.state.value.controller, currentTime)
         )
         advanceTimeBy(10_000)

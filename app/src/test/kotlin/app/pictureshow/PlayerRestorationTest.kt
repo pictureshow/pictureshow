@@ -56,13 +56,15 @@ class PlayerRestorationTest {
     }
 
     @Test
-    fun manifestHandlesInputAndDisplayChangesButLeavesFontAndLocaleToRecreation() {
+    fun manifestHandlesInputDisplayAndFontChangesButLeavesLocaleToRecreation() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val info = app.packageManager.getActivityInfo(ComponentName(app, MainActivity::class.java), 0)
         val handled = ActivityInfo.CONFIG_KEYBOARD or ActivityInfo.CONFIG_KEYBOARD_HIDDEN or ActivityInfo.CONFIG_NAVIGATION or
             ActivityInfo.CONFIG_SCREEN_SIZE or ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE or ActivityInfo.CONFIG_SCREEN_LAYOUT or
-            ActivityInfo.CONFIG_ORIENTATION or ActivityInfo.CONFIG_DENSITY or ActivityInfo.CONFIG_UI_MODE
+            ActivityInfo.CONFIG_ORIENTATION or ActivityInfo.CONFIG_DENSITY or ActivityInfo.CONFIG_UI_MODE or
+            // Recreating lands a viewer on details, and playback stops, for a text size Compose follows by itself (APP-08).
+            ActivityInfo.CONFIG_FONT_SCALE or ActivityInfo.CONFIG_FONT_WEIGHT_ADJUSTMENT
         assertEquals(handled, info.configChanges and handled)
-        assertEquals(0, info.configChanges and (ActivityInfo.CONFIG_FONT_SCALE or ActivityInfo.CONFIG_LOCALE))
+        assertEquals(0, info.configChanges and ActivityInfo.CONFIG_LOCALE)
     }
 }
