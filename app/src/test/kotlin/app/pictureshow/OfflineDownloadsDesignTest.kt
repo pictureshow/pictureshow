@@ -261,6 +261,10 @@ class OfflineDownloadsDesignTest {
         start(entry("a", OfflinePhase.ready), entry("b", OfflinePhase.ready))
         tv()
         settle()
+        // A real key press: from here on, focus only moves by itself because the control under it went away.
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        settle()
+        tag("downloads:delete:a").assertIsFocused()
         tag("downloads:delete:a").performSemanticsAction(SemanticsActions.OnClick)
         settle()
         tag("downloads:cancel").performSemanticsAction(SemanticsActions.OnClick)
@@ -268,12 +272,21 @@ class OfflineDownloadsDesignTest {
         tag("downloads:delete:a").assertIsFocused()
         tag("downloads:delete:a").performSemanticsAction(SemanticsActions.OnClick)
         settle()
-        val confirmLabel = compose.onNode(hasText("Delete") and hasAnyAncestor(hasTestTag("downloads:confirm")), useUnmergedTree = true)
-        assertEquals(OfflineErrorTone, confirmLabel.textColor())
         tag("downloads:confirm").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { engine.libraries.value[account.key]!!.manifest.entries.none { it.id == "a" } }
         settle()
         tag("downloads:play:b").assertIsFocused()
+    }
+
+    @Test
+    fun `TV final Delete wears the error tone`() {
+        start(entry("a", OfflinePhase.ready))
+        tv()
+        settle()
+        tag("downloads:delete:a").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        val label = compose.onNode(hasText("Delete") and hasAnyAncestor(hasTestTag("downloads:confirm")), useUnmergedTree = true)
+        assertEquals(OfflineErrorTone, label.textColor())
     }
 
     // Follow-ups 4 to 8.
@@ -404,7 +417,11 @@ class OfflineDownloadsDesignTest {
         compose.setContent { OfflineConflictTv(words) {} }
         val text = bounds("downloads:conflict-text")
         val ok = bounds("downloads:conflict-ok")
-        assertTrue("OK is ${ok.left - text.right} from the text", ok.left - text.right < 40f)
+        // The words' own right edge: the node's box stretches to the button whether or not the words do.
+        val layouts = mutableListOf<TextLayoutResult>()
+        tag("downloads:conflict-text").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val wordsEnd = text.left + layouts.first().getLineRight(0) / compose.activity.resources.displayMetrics.density
+        assertTrue("OK is ${ok.left - wordsEnd} from the words", ok.left - wordsEnd < 40f)
         assertTrue("same line", ok.top < text.bottom && text.top < ok.bottom)
     }
 
@@ -485,5 +502,7 @@ class OfflineDownloadsDesignTest {
         tag("downloads:delete:e5").performScrollTo().performClick()
         settle()
         tag("downloads:confirm").assertIsDisplayed()
+        val page = compose.onRoot().getUnclippedBoundsInRoot().bottom.value
+        assertTrue("the answer isn't clipped", bounds("downloads:confirm").bottom <= page)
     }
 }
