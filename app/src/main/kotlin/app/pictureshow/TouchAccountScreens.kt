@@ -36,6 +36,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountSnapshot
 import app.pictureshow.core.Server
+import app.pictureshow.core.serverLabel
 
 @Composable
 internal fun TouchServers(
@@ -72,7 +73,7 @@ internal fun TouchServers(
         if (snapshot.rememberedServers.isNotEmpty()) {
             Text("Remembered servers", style = MaterialTheme.typography.titleLarge)
             snapshot.rememberedServers.forEach { server ->
-                TouchAction("Sign in to ${server.name}", enabled = !state.connecting) { onRemembered(server) }
+                TouchAction("Sign in to ${snapshot.serverLabel(server)}", enabled = !state.connecting) { onRemembered(server) }
             }
         }
         Text("On your network", style = MaterialTheme.typography.titleLarge)
@@ -220,7 +221,7 @@ internal fun TouchAccounts(
     TouchPage("Accounts", onBack) {
         if (snapshot.accounts.isEmpty()) Text("No remembered accounts. Sign in to start watching.")
         snapshot.accounts.forEach { remembered ->
-            Text("${remembered.user.name} · ${remembered.server.name}", style = MaterialTheme.typography.titleMedium)
+            Text("${remembered.user.name} · ${snapshot.serverLabel(remembered.server)}", style = MaterialTheme.typography.titleMedium)
             val label = when {
                 remembered.expired -> "Sign in again as ${remembered.user.name}"
                 snapshot.currentKey == remembered.key -> "Continue as ${remembered.user.name}"
@@ -231,13 +232,15 @@ internal fun TouchAccounts(
             } else {
                 TouchSecondaryAction(label, !state.busy) { onSelect(remembered) }
             }
-            TouchRemoveAction("Remove ${remembered.user.name} on ${remembered.server.name}", !state.busy) { removeKey = remembered.key }
+            TouchRemoveAction("Remove ${remembered.user.name} on ${snapshot.serverLabel(remembered.server)}", !state.busy) {
+                removeKey = remembered.key
+            }
         }
         TouchMessage(state.error)
         snapshot.rememberedServers.forEach { remembered ->
-            Text(remembered.name, style = MaterialTheme.typography.titleLarge)
-            TouchSecondaryAction("Sign in another user on ${remembered.name}", !state.busy) { onSignIn(remembered) }
-            TouchRemoveAction("Remove server ${remembered.name}", !state.busy) {
+            Text(snapshot.serverLabel(remembered), style = MaterialTheme.typography.titleLarge)
+            TouchSecondaryAction("Sign in another user on ${snapshot.serverLabel(remembered)}", !state.busy) { onSignIn(remembered) }
+            TouchRemoveAction("Remove server ${snapshot.serverLabel(remembered)}", !state.busy) {
                 removeServerId = remembered.id
                 removeServerUrl = remembered.url
             }
@@ -257,9 +260,11 @@ internal fun TouchAccounts(
                 androidx.compose.foundation.layout.Column {
                     Text(
                         if (account != null) {
-                            "Remove ${account.user.name} on ${account.server.name} from this device? You can sign in again later."
+                            "Remove ${account.user.name} on ${snapshot.serverLabel(account.server)} from this device? " +
+                                "You can sign in again later."
                         } else {
-                            "Remove ${server!!.name} and its remembered accounts from this device? You can add it again later."
+                            "Remove ${snapshot.serverLabel(server!!)} and its remembered accounts from this device? " +
+                                "You can add it again later."
                         }
                     )
                     TouchMessage(state.error)

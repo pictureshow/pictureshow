@@ -7,6 +7,7 @@ import {
     type Account,
     type Server,
 } from "@pictureshow/core";
+import { serverLabel } from "@pictureshow/core/parity";
 export const accountKey = (a: Account) => a.server.id + ":" + a.user.Id;
 export const newDevice = () =>
     globalThis.crypto?.randomUUID?.() ??
@@ -111,13 +112,13 @@ export function AccountChooser({
                             data-focus={"login:" + s.id}
                             onClick={() => onLogin(s)}
                         >
-                            Sign in another user on {s.name}
+                            Sign in another user on {serverLabel(s, saved.servers)}
                         </button>
                         <button
                             data-focus={"remove-server:" + s.id}
                             onClick={(e) => onRemoveServer(s, e.currentTarget)}
                         >
-                            Remove server {s.name}
+                            Remove server {serverLabel(s, saved.servers)}
                         </button>
                     </div>
                 </section>
@@ -206,7 +207,7 @@ export function ServerForm({
                     <h2>Remembered servers</h2>
                     {remembered.map((s) => (
                         <button key={s.id} onClick={() => onRemembered(s)}>
-                            {s.name}
+                            {serverLabel(s, remembered)}
                         </button>
                     ))}
                 </section>

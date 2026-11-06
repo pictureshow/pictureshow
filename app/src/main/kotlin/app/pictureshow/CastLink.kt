@@ -63,6 +63,9 @@ internal interface CastLinkListener {
     /** A connect never succeeded, so there was never a session to lose. */
     fun onConnectFailed()
     fun onStatus(status: CastStatus)
+
+    /** The receiver's clock moved on between statuses, which say nothing while it simply plays. */
+    fun onProgress(positionMs: Long)
 }
 
 /**
@@ -104,6 +107,9 @@ internal interface CastLink {
     fun stop(onResult: (Boolean) -> Unit)
     fun setActiveTracks(ids: List<Long>, onResult: (Boolean) -> Unit)
     fun requestStatus()
+
+    /** Where the receiver is by now, worked out from its last status and the time since. Null with no media to ask about. */
+    fun positionMs(): Long?
 }
 
 /** The swap to a registered receiver later is this one value. */

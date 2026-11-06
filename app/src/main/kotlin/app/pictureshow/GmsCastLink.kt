@@ -38,6 +38,9 @@ import org.json.JSONObject
 
 private const val LOG_TAG = "PictureshowCast"
 
+/** Often enough for a clock on screen. Reports keep their own, slower pace. */
+private const val PROGRESS_PERIOD_MS = 1_000L
+
 /** Resolved here so no other file names the SDK's constant. */
 private val receiverApplicationId: String
     get() = CastReceiverConfig.applicationId ?: CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID
@@ -46,7 +49,8 @@ private val receiverApplicationId: String
 class CastOptionsProvider : OptionsProvider {
     override fun getCastOptions(context: Context): CastOptions = CastOptions.Builder()
         .setReceiverApplicationId(receiverApplicationId)
-        // A session comes back after a process death; the host decides whether what it finds is ours.
+        // Kept for a session the SDK can bring back while the process lives. After a process death it didn't (2 of 2 on a real
+        // receiver), and the viewer's Reconnect is the way back (CAST-21); whatever comes back, the host decides if it's ours.
         .setResumeSavedSession(true)
         .setEnableReconnectionService(false)
         .setStopReceiverApplicationWhenEndingSession(false)
@@ -101,6 +105,10 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     private val mediaCallback = object : RemoteMediaClient.Callback() {
         override fun onStatusUpdated() = publishStatus()
         override fun onQueueStatusUpdated() = publishStatus()
+    }
+
+    private val progress = RemoteMediaClient.ProgressListener { progressMs, _ ->
+        if (watched?.hasMediaSession() == true) listener?.onProgress(progressMs)
     }
 
     private val sessions = object : SessionManagerListener<CastSession> {
@@ -166,8 +174,10 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
         if (client === watched) return
         lastStatus = null
         watched?.unregisterCallback(mediaCallback)
+        watched?.removeProgressListener(progress)
         watched = client
         client?.registerCallback(mediaCallback)
+        client?.addProgressListener(progress, PROGRESS_PERIOD_MS)
     }
 
     private fun publishRoutes() {
@@ -335,6 +345,8 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
 
     override fun setActiveTracks(ids: List<Long>, onResult: (Boolean) -> Unit) =
         watched?.setActiveMediaTracks(ids.toLongArray()).answer(onResult)
+
+    override fun positionMs(): Long? = watched?.takeIf { it.hasMediaSession() }?.approximateStreamPosition
 
     override fun requestStatus() {
         val client = watched ?: return

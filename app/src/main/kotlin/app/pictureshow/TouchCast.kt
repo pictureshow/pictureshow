@@ -73,11 +73,18 @@ internal fun castReachMessage(category: String): String = when (category) {
     else -> "The TV can't reach this server's address. Use an address the TV can reach."
 }
 
+/**
+ * The likely reason a receiver never got going, and what to try. It's a guess and reads as one: this app can't see the
+ * receiver's side of the network, and a working address on this device says nothing about that device.
+ */
+private fun castUnreachableHint(device: String) =
+    "It may not be able to reach your server at the address this device uses. Try adding your server by an address $device can reach."
+
 /** What happened to a handoff, in the viewer's terms. */
 internal fun castRecoveryMessage(recovery: String?, device: String): String = when (recovery) {
     "unsupported-media" -> "$device can't play this."
-    "receiver-load-failed" -> "$device couldn't load this. It may not be able to reach your server."
-    "receiver-timeout" -> "$device didn't start in time."
+    "receiver-load-failed" -> "$device couldn't load this. ${castUnreachableHint(device)}"
+    "receiver-timeout" -> "$device didn't start in time. ${castUnreachableHint(device)}"
     "receiver-interrupted" -> "Something else started on $device."
     "server-unreachable" -> "Couldn't reach your server."
     "quick-connect-off" -> "Casting needs Quick Connect, and it's off on this server. Its admin can turn it on in the server's settings."

@@ -103,6 +103,7 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
 
         "link-suspended" -> s.copy(
             link = "suspended",
+            owner = s.ownerAtLastPosition(),
             observed = null,
             emptyStatus = false,
             commands = s.commands?.let { reduceCommand(it, CommandEvent("disconnect", owner = it.owner)).copy(effect = "none") }
@@ -133,6 +134,8 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
 
         "observe" -> observe(s, event)
 
+        "progress" -> progress(s, event)
+
         "command" -> command(s, event)
 
         "command-timeout" -> {
@@ -155,6 +158,7 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
         "disconnect" -> viaOwner(s, OwnerEvent("disconnect", identity = s.owner.owner)) {
             it.copy(
                 link = "idle",
+                owner = it.ownerAtLastPosition(),
                 observed = null,
                 mediaSession = null,
                 commands = null,
@@ -293,6 +297,7 @@ private fun linkConnected(state: CastState): CastState {
     // Back on the link, nothing is known until the receiver says so; controls wait for that.
     return s.copy(
         link = "connected",
+        owner = s.ownerAtLastPosition(),
         mediaSession = null,
         observed = null,
         commands = s.commands?.let { reduceCommand(it, CommandEvent("disconnect", owner = it.owner)).copy(effect = "none") },
@@ -309,11 +314,56 @@ private fun linkLost(s: CastState): CastState {
 
         s.owner.owner.kind == "cast" && s.owner.phase == "active" ->
             viaOwner(s, OwnerEvent("disconnect", identity = s.owner.owner)) {
-                it.copy(link = "lost", observed = null, mediaSession = null, commands = null, notice = "link-lost", effect = "none")
+                it.copy(
+                    link = "lost",
+                    owner = it.ownerAtLastPosition(),
+                    observed = null,
+                    mediaSession = null,
+                    commands = null,
+                    notice = "link-lost",
+                    effect = "none"
+                )
             }
 
         else -> s.copy(link = "lost", observed = null)
     }
+}
+
+/**
+ * Detaching forgets the observation, and the owner's intent is the only thing left that a later Stop or Resume here can
+ * read. Left alone that is where the handoff began, however long the receiver has played since.
+ */
+private fun CastState.ownerAtLastPosition(): OwnerState {
+    val last = observed ?: return owner
+    return owner.copy(intent = owner.intent.copy(ticks = last.ticks, paused = pausedOf(last) ?: owner.intent.paused))
+}
+
+/**
+ * The receiver's clock between its statuses. A status says where it was when sent and nothing arrives while it simply plays,
+ * so this is what moves the screen, the reports and what Stop saves. Only a viewing that is playing moves: paused and loading
+ * hold still, and a seek on its way is settled by the status that answers it. Zero is what the SDK says with nothing to go
+ * on, and is never worth a resume point.
+ */
+private fun progress(s: CastState, event: CastEvent): CastState {
+    val ticks = event.ticks ?: return s.copy(reason = "invalid-observation")
+    val observed = s.observed
+    if (observed == null ||
+        s.owner.candidate != null ||
+        s.owner.owner.kind != "cast" ||
+        s.owner.phase != "active" ||
+        s.link != "connected"
+    ) {
+        return s.copy(reason = "stale-observation")
+    }
+    val pending = s.commands?.pending
+    if (observed.playerState != "playing" || ticks <= 0 || (pending?.result == "sent" && pending.ticks != null)) {
+        return s.copy(reason = "position-held")
+    }
+    val bounded = observed.durationTicks?.takeIf { it > 0 }?.let { minOf(ticks, it) } ?: ticks
+    return s.copy(
+        observed = observed.copy(ticks = bounded),
+        commands = s.commands?.let { it.copy(observed = it.observed.copy(ticks = bounded)) }
+    )
 }
 
 /** A connect that never succeeded: nothing was playing there, so this isn't a lost connection. */
@@ -432,13 +482,15 @@ private fun observe(state: CastState, event: CastEvent): CastState {
     // restarted by the receiver, and must not freeze the controls.
     if (s.mediaSession != null && o.mediaSession < s.mediaSession) return s.copy(reason = "stale-observation")
     val bound = s.copy(mediaSession = o.mediaSession, observed = o)
+    // A receiver that has let go can say zero, and that mustn't wipe the resume point. What it said last stands.
+    val endedAt = o.ticks.takeIf { it > 0 } ?: s.observed?.ticks ?: s.owner.intent.ticks
     return when (s.owner.phase) {
         "awaiting-ready" -> awaitingReady(bound, o)
 
         "returning", "return-uncertain" -> if (idle) stopConfirmed(bound) else bound
 
         "disconnected" -> if (idle) {
-            receiverEnded(bound, endedNotice(o.idleReason), o.ticks)
+            receiverEnded(bound, endedNotice(o.idleReason), endedAt)
         } else {
             // Reattach: reduceOwner's disconnect only detached controls, so the same owner and generation carry on.
             bound.copy(
@@ -449,7 +501,7 @@ private fun observe(state: CastState, event: CastEvent): CastState {
         }
 
         "active" -> if (idle) {
-            receiverEnded(bound, endedNotice(o.idleReason), o.ticks)
+            receiverEnded(bound, endedNotice(o.idleReason), endedAt)
         } else {
             bound.copy(commands = observeCommands(bound.commands ?: freshCommands(target, o), o, event.nowMs))
         }
