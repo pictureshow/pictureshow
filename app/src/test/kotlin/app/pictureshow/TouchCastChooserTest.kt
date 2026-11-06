@@ -91,7 +91,9 @@ class TouchCastChooserTest {
     @Test
     fun theSettingSitsOnTheBodysEdge() {
         chooser()
-        assertEquals(compose.onNodeWithTag("cast:this-device").getBoundsInRoot().left.value, text("Turn off Google Cast").left.value, 1f)
+        // Unmerged: the merged node is the whole button, whose edge doesn't move with its padding.
+        val words = compose.onNodeWithText("Turn off Google Cast", useUnmergedTree = true).getBoundsInRoot()
+        assertEquals(compose.onNodeWithTag("cast:this-device").getBoundsInRoot().left.value, words.left.value, 1f)
         val target = compose.onNodeWithTag("cast:disable").fetchSemanticsNode().touchBoundsInRoot
         val density = compose.onNodeWithTag("cast:disable").fetchSemanticsNode().layoutInfo.density.density
         assertTrue(target.height / density >= 47.5f, "still a 48 dp target: $target")
