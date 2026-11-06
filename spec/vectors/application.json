@@ -6499,23 +6499,27 @@
         "server": {
           "id": "a",
           "name": "Home",
-          "url": "https://home.example"
+          "url": "https://home.example",
+          "version": "12"
         },
         "all": [
           {
             "id": "a",
             "name": "Home",
-            "url": "https://home.example"
+            "url": "https://home.example",
+            "version": "12"
           },
           {
             "id": "a",
             "name": "Den",
-            "url": "https://home.example"
+            "url": "https://home.example",
+            "version": "12"
           },
           {
             "id": "b",
             "name": "Den",
-            "url": "https://cabin.example"
+            "url": "https://cabin.example",
+            "version": "12"
           }
         ]
       },
