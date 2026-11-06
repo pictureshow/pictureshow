@@ -194,6 +194,10 @@ test("About, all bundled license text, device JSON and unavailable support are r
     await page.keyboard.press("Escape");
     await expect(hls).toBeFocused();
     await page.keyboard.press("Escape");
+    // Back goes through the browser's history, which answers later, so wait for each step before the next press.
+    await expect(
+        page.getByRole("button", { name: "Open-source licenses", exact: true }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
     await page
         .getByRole("button", { name: "Troubleshooting · This browser" })
