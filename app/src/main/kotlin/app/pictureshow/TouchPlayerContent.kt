@@ -377,7 +377,10 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 }
                 val stop: @Composable () -> Unit = {
                     // Its text ends where the scrubber does; the target hangs into the panel's margin.
-                    TouchBarButton({ host.finish(reason = "stop-button") }, Modifier.offset(x = TOUCH_BAR_TEXT_INSET).testTag("touch:stop")) {
+                    TouchBarButton(
+                        { host.finish(reason = "stop-button") },
+                        Modifier.offset(x = TOUCH_BAR_TEXT_INSET).testTag("touch:stop")
+                    ) {
                         Text("Stop")
                     }
                 }
