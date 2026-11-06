@@ -55,6 +55,7 @@ const pendingPortSuites = new Set([
     "remote-wire",
     "remote-receive",
     "remote-reconnect",
+    "remote-queue",
 ]);
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))

@@ -267,6 +267,13 @@ successor at the removed current index, else final previous; move removes an ID 
 preserving current/clock. During shuffle move changes canonical order while retaining the audible permutation.
 clear-upcoming keeps current/history; clear-all stops. Invalid IDs/blocks/indices are rejected.
 
+Queue state also has automatic (default []): entry IDs that only continue what was asked for. play-now, play-next and
+append events may carry automatic entries besides entries. play-now needs a named entry and orders named then automatic.
+play-next inserts after current; append inserts before the first upcoming automatic entry, else at the end. A named entry
+removes any upcoming automatic entry with the same media. Automatic event entries go last, and only for media no
+entry in the queue holds, including media already played. An edit with only automatic entries is valid; one with neither is invalid.
+Shuffle keeps the permutation's order within non-automatic then automatic entries. Remove, clear and restore keep automatic consistent.
+
 `store` state has committed queue, pending/retry null, ticket 0, effect none, reason null, removed []. `edit` contains
 a queue event; a changed proposal becomes pending and emits persist. No second mutation is accepted while
 pending. `persisted` with the exact ticket publishes; `persist-failed` rolls back to committed, retains the exact proposal in retry and offers retry.
@@ -312,7 +319,7 @@ continuation require platform qualification; these vectors decide routing only.
 
 ## Remote (REM) trace format
 
-`remote-targets`, `remote-wire`, `remote-receive` and `remote-reconnect` use the shared trace format and encoding
+`remote-targets`, `remote-wire`, `remote-receive`, `remote-reconnect` and `remote-queue` use the shared trace format and encoding
 above and run through `RemoteVectorsTest` (Gradle packages them in `remote-vectors`). Web lists them as `it.todo`
 through `pendingPortSuites` until it ports them; delete a name there when the port lands.
 
@@ -321,7 +328,7 @@ expected `targets`), `request` (state `target`, event a command; expected `reque
 `body`, or `rejection`), `parse` (event `text`; expected the validated message), `capabilities`, `advertised`,
 `relay-rights` (`version`; expected `enforces`), `socket-url` (`server`; expected `url`), `targets-path` (`viewer`;
 expected `path`), `receive` (the target's gate: `message`, `viewing`, `resolved`, `field`, `policy`, `tick`, `disconnect`,
-`reconnect`, `account`) and `controller` (the controller's states: `attach`, `detach`, `account`, `refresh`, `resume`,
+`reconnect`, `account`), `queue` (the target's queue, state `{queue}`; events `open`, `add-next`, `add-last`, `observed`, `previous`, `clear`; expected `current` and `upNext`, media IDs) and `controller` (the controller's states: `attach`, `detach`, `account`, `refresh`, `resume`,
 `intent`, `sent`, `tick`).
 
 Fixed behaviour worth reading before porting: a 2xx from a send never confirms anything; only a later `refresh` can.

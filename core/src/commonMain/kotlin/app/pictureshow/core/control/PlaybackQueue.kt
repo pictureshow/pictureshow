@@ -27,7 +27,9 @@ data class QueueState(
     val generation: Long = 0,
     val completion: Long = 0,
     val operations: List<String> = emptyList(),
-    val failed: List<String> = emptyList()
+    val failed: List<String> = emptyList(),
+    /** Entries that only continue what was asked for (a series' remaining episodes). Anything the viewer adds plays ahead of them. */
+    val automatic: List<String> = emptyList()
 )
 
 @Serializable
@@ -37,6 +39,7 @@ data class QueueEvent(
     val generation: Long = 0,
     val operationId: String = "",
     val entries: List<QueueEntry> = emptyList(),
+    val automatic: List<QueueEntry> = emptyList(),
     val entry: String? = null,
     val index: Int = 0,
     val permutation: List<String> = emptyList(),
@@ -60,6 +63,7 @@ private fun validQueue(q: QueueState): Boolean {
         (q.current == null || q.current in ids) &&
         q.history.all { it in ids } &&
         q.visited.all { it in ids } &&
+        q.automatic.all { it in ids } &&
         q.positionTicks >= 0 &&
         q.repeat in listOf("off", "one", "all") &&
         q.revision >= 0 &&
@@ -92,21 +96,25 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
     return when (event.op) {
         "play-now", "play-next", "append" -> {
             val block = event.entries.map { it.id }
-            if (block.isEmpty() ||
-                block.distinct().size != block.size ||
-                event.entries.any { it.id.isBlank() || it.media.isBlank() } ||
-                (event.op != "play-now" && block.any { it in ids })
+            val continuation = event.automatic.map { it.id }
+            val added = block + continuation
+            if (added.isEmpty() ||
+                (event.op == "play-now" && block.isEmpty()) ||
+                added.distinct().size != added.size ||
+                (event.entries + event.automatic).any { it.id.isBlank() || it.media.isBlank() } ||
+                (event.op != "play-now" && added.any { it in ids })
             ) {
                 return invalid("invalid-entries")
             }
             if (event.op == "play-now") {
                 return changed(
                     q.copy(
-                        entries = event.entries,
-                        order = block,
+                        entries = event.entries + event.automatic,
+                        order = added,
                         current = block.first(),
                         history = emptyList(),
                         visited = emptyList(),
+                        automatic = continuation,
                         positionTicks = 0,
                         paused = false,
                         shuffled = false,
@@ -115,23 +123,38 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
                     )
                 )
             }
-            val at = if (q.current == null) {
+            val upcoming = q.order.drop(currentIndex + 1).toSet()
+            // A title the viewer names now plays where they put it, so its automatic copy would only play it twice.
+            val named = event.entries.map { it.media }.toSet()
+            val superseded = q.entries.filter { it.id in q.automatic && it.id in upcoming && it.media in named }.map { it.id }.toSet()
+            val remaining = q.automatic.filter { it !in superseded }
+            val upcomingAutomatic = remaining.filter { it in upcoming }.toSet()
+            fun insertAt(list: List<String>) = if (q.current == null) {
                 0
             } else if (event.op == "play-next") {
-                currentIndex + 1
+                list.indexOf(q.current) + 1
             } else {
-                q.order.size
+                list.indexOfFirst { it in upcomingAutomatic }.takeIf { it >= 0 } ?: list.size
             }
-            val order = q.order.toMutableList().also { it.addAll(at, block) }
-            val canonicalAt = if (q.current == null) {
-                0
-            } else if (event.op == "play-next") {
-                ids.indexOf(q.current) + 1
-            } else {
-                ids.size
+            val order = q.order.filter { it !in superseded }.toMutableList().also { it.addAll(insertAt(it), block) }
+            val canonical = q.entries.filter { it.id !in superseded }.toMutableList().also { list ->
+                list.addAll(insertAt(list.map { it.id }), event.entries)
             }
-            val canonical = q.entries.toMutableList().also { it.addAll(canonicalAt, event.entries) }
-            changed(q.copy(entries = canonical, order = order, paused = if (q.current == null) true else q.paused))
+            // A continuation adds only what the queue does not already hold, at the very end.
+            val present = canonical.map { it.media }.toMutableSet()
+            val fresh = event.automatic.filter { present.add(it.media) }
+            val freshIds = fresh.map { it.id }
+            changed(
+                q.copy(
+                    entries = canonical + fresh,
+                    order = order + freshIds,
+                    automatic = remaining + freshIds,
+                    history = q.history.filter { it !in superseded },
+                    visited = q.visited.filter { it !in superseded },
+                    failed = q.failed.filter { it !in superseded },
+                    paused = if (q.current == null) true else q.paused
+                )
+            )
         }
         "remove" -> {
             if (event.entry !in ids) return invalid("missing-entry")
@@ -145,6 +168,7 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
                     current = current,
                     history = q.history.filter { it != event.entry && it != current },
                     visited = q.visited.filter { it != event.entry && it != current },
+                    automatic = q.automatic.filter { it != event.entry },
                     positionTicks = if (removedCurrent) 0 else q.positionTicks,
                     completion = if (removedCurrent) q.completion + 1 else q.completion,
                     paused = if (current == null) true else q.paused,
@@ -169,13 +193,15 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
                     visited = q.visited.filter {
                         it in
                             keep
-                    }
+                    },
+                    automatic = q.automatic.filter { it in keep }
                 )
             )
         }
         "clear-all" -> changed(
             q.copy(
-                entries = emptyList(), order = emptyList(), current = null, history = emptyList(), visited = emptyList(), positionTicks = 0,
+                entries = emptyList(), order = emptyList(), current = null, history = emptyList(), visited = emptyList(), automatic = emptyList(),
+                positionTicks = 0,
                 paused = true, failed = emptyList(), shuffled = false, completion = q.completion + 1
             )
         )
@@ -188,7 +214,9 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
             ) {
                 return invalid("invalid-permutation")
             }
-            changed(q.copy(order = q.order.filter { it in visited } + event.permutation, shuffled = true))
+            // Shuffle mixes within each group; what the viewer added still plays ahead of the automatic continuation.
+            val (added, automatic) = event.permutation.partition { it !in q.automatic }
+            changed(q.copy(order = q.order.filter { it in visited } + added + automatic, shuffled = true))
         }
         "unshuffle" -> {
             val visited = (q.visited + listOfNotNull(q.current)).toSet()
@@ -341,6 +369,7 @@ fun reduceQueueStore(state: QueueStoreState, event: QueueStoreEvent): QueueStore
                 current = current,
                 history = saved.history.filter { it in keep && it != current },
                 visited = saved.visited.filter { it in keep && it != current },
+                automatic = saved.automatic.filter { it in keep },
                 paused = true,
                 positionTicks = if (current == saved.current) saved.positionTicks else 0,
                 failed = emptyList(),

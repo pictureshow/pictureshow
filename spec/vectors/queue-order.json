@@ -1704,6 +1704,319 @@
           }
         }
       ]
+    },
+    {
+      "id": "queue-order.shuffle-keeps-added-ahead-of-automatic",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          },
+          {
+            "id": "x",
+            "media": "x",
+            "downloaded": false
+          },
+          {
+            "id": "y",
+            "media": "y",
+            "downloaded": false
+          },
+          {
+            "id": "b",
+            "media": "b",
+            "downloaded": false
+          },
+          {
+            "id": "c",
+            "media": "c",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a",
+          "x",
+          "y",
+          "b",
+          "c"
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": [
+          "b",
+          "c"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "shuffle",
+            "permutation": [
+              "c",
+              "y",
+              "b",
+              "x"
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "y",
+                "x",
+                "c",
+                "b"
+              ],
+              "shuffled": true
+            },
+            "outcome": "changed"
+          }
+        },
+        {
+          "event": {
+            "op": "append",
+            "revision": "1",
+            "entries": [
+              {
+                "id": "z",
+                "media": "z",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "y",
+                "x",
+                "z",
+                "c",
+                "b"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "unshuffle",
+            "revision": "2"
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "y",
+                "z",
+                "b",
+                "c"
+              ],
+              "shuffled": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.repeat-all-keeps-identity-and-inserts-ahead-of-the-next-automatic",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          },
+          {
+            "id": "x",
+            "media": "x",
+            "downloaded": false
+          },
+          {
+            "id": "b",
+            "media": "b",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a",
+          "x",
+          "b"
+        ],
+        "current": "b",
+        "paused": false,
+        "automatic": [
+          "b"
+        ],
+        "repeat": "all",
+        "history": [
+          "a",
+          "x"
+        ],
+        "visited": [
+          "a",
+          "x"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "y",
+                "media": "y",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "b",
+                "y"
+              ],
+              "current": "b"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "revision": "1"
+          },
+          "expected": {
+            "queue": {
+              "current": "y"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "revision": "2",
+            "completion": "1"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "visited": []
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "append",
+            "revision": "3",
+            "entries": [
+              {
+                "id": "z",
+                "media": "z",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "z",
+                "b",
+                "y"
+              ],
+              "current": "a"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "queue-order.repeat-one-replays-before-anything-added",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "a",
+            "downloaded": false
+          },
+          {
+            "id": "b",
+            "media": "b",
+            "downloaded": false
+          }
+        ],
+        "order": [
+          "a",
+          "b"
+        ],
+        "current": "a",
+        "paused": false,
+        "automatic": [
+          "b"
+        ],
+        "repeat": "one"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "append",
+            "entries": [
+              {
+                "id": "x",
+                "media": "x",
+                "downloaded": false
+              }
+            ]
+          },
+          "expected": {
+            "queue": {
+              "order": [
+                "a",
+                "x",
+                "b"
+              ]
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "end",
+            "revision": "1"
+          },
+          "expected": {
+            "queue": {
+              "current": "a",
+              "positionTicks": "0"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "next",
+            "revision": "2",
+            "completion": "1"
+          },
+          "expected": {
+            "queue": {
+              "current": "x"
+            }
+          }
+        }
+      ]
     }
   ]
 }

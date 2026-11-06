@@ -51,7 +51,7 @@ tasks.register<Sync>("serverCompatRuntime") {
 // Run the repository parity contract as part of ordinary :core:jvmTest (and check).
 tasks.named<ProcessResources>("jvmTestProcessResources") {
     val controlSuites = listOf("session-owner.json", "session-command.json", "queue-edit.json", "queue-order.json", "playback-mode.json")
-    val remoteSuites = listOf("remote-targets.json", "remote-wire.json", "remote-receive.json", "remote-reconnect.json")
+    val remoteSuites = listOf("remote-targets.json", "remote-wire.json", "remote-receive.json", "remote-reconnect.json", "remote-queue.json")
     from(rootProject.file("spec/vectors")) {
         exclude(controlSuites)
         exclude(remoteSuites)

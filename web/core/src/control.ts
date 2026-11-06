@@ -107,7 +107,7 @@ const intentFields = ["entry", "ticks", "paused", "queue", "repeat", "shuffle", 
 const queueFields = [
     "server", "viewer", "entries", "order", "history", "operations", "failed", "current",
     "positionTicks", "revision", "generation", "completion", "paused", "repeat", "shuffled", "visited",
-];
+ "automatic",];
 const queueEntryFields = ["id", "media", "downloaded"];
 
 function validateQueueInput(value: unknown, label: string) {
@@ -144,7 +144,7 @@ function normalizeQueue(value: unknown): Dict {
     const entries = clone(q.entries ?? []),
         order = clone(q.order ?? entries.map((e: Dict) => e.id)),
         history = clone(q.history ?? []);
-    for (const field of ["entries", "order", "history", "operations", "failed", "visited"])
+    for (const field of ["entries", "order", "history", "operations", "failed", "visited", "automatic"])
         if (!Array.isArray(q[field] ?? (field === "entries" ? entries : field === "order" ? order : field === "history" ? history : [])))
             throw new Error(`queue.${field} must be an array`);
     const seen = new Set<string>();
@@ -169,6 +169,7 @@ function normalizeQueue(value: unknown): Dict {
         repeat: q.repeat ?? "off",
         shuffled: q.shuffled ?? false,
         visited: clone(q.visited ?? distinct(history)),
+        automatic: clone(q.automatic ?? []),
     };
 }
 
@@ -645,39 +646,66 @@ function queueEditEvent(input: Dict, event: Dict): Dict {
         outcome = "changed",
         removed: string[] = [];
     if (op === "play-now" || op === "play-next" || op === "append") {
-        const entries = validNewEntries(q, event.entries, op === "play-now");
-        if (!entries) return rejectQueue(q, "invalid-entries");
-        const ids = entries.map((e) => e.id);
+        const block = (values: unknown) =>
+            values === undefined || (Array.isArray(values) && values.length === 0) ? [] : validNewEntries(q, values, op === "play-now");
+        const named = block(event.entries),
+            automatic = block(event.automatic);
+        if (!named || !automatic) return rejectQueue(q, "invalid-entries");
+        const namedIds = named.map((e) => e.id),
+            continuation = automatic.map((e) => e.id);
+        if (namedIds.length + continuation.length === 0 || new Set([...namedIds, ...continuation]).size !== namedIds.length + continuation.length)
+            return rejectQueue(q, "invalid-entries");
         if (op === "play-now") {
+            if (namedIds.length === 0) return rejectQueue(q, "invalid-entries");
             next = {
                 ...q,
-                entries,
-                order: ids,
-                current: ids[0] ?? null,
+                entries: [...named, ...automatic],
+                order: [...namedIds, ...continuation],
+                current: namedIds[0],
                 positionTicks: "0",
-                paused: ids.length === 0,
+                paused: false,
                 history: [],
                 visited: [],
                 failed: [],
+                automatic: continuation,
                 shuffled: false,
             };
             next = invalidateCompletion(next);
         } else {
-            const at = q.current === null ? 0 : Math.max(0, currentIndex(q) + 1),
-                order = [...q.order];
-            if (op === "play-next") order.splice(at, 0, ...ids);
-            else if (q.current === null) order.splice(0, 0, ...ids);
-            else order.push(...ids);
-            let canonical = [...q.entries];
-            if (op === "play-next") {
-                const currentCanonical = q.entries.findIndex((e: Dict) => e.id === q.current);
-                canonical.splice(currentCanonical < 0 ? 0 : currentCanonical + 1, 0, ...entries);
-            } else if (q.current === null) canonical.unshift(...entries);
-            else canonical.push(...entries);
+            const upcoming = new Set<string>(q.order.slice(currentIndex(q) + 1)),
+                namedMedia = new Set(named.map((e: Dict) => e.media)),
+                superseded = new Set<string>(
+                    q.entries
+                        .filter((e: Dict) => q.automatic.includes(e.id) && upcoming.has(e.id) && namedMedia.has(e.media))
+                        .map((e: Dict) => e.id),
+                ),
+                remaining = q.automatic.filter((id: string) => !superseded.has(id)),
+                ahead = new Set<string>(remaining.filter((id: string) => upcoming.has(id))),
+                insertAt = (list: string[]) => {
+                    if (q.current === null) return 0;
+                    if (op === "play-next") return list.indexOf(q.current) + 1;
+                    const at = list.findIndex((id) => ahead.has(id));
+                    return at < 0 ? list.length : at;
+                },
+                order: string[] = q.order.filter((id: string) => !superseded.has(id));
+            order.splice(insertAt(order), 0, ...namedIds);
+            const canonical: Dict[] = q.entries.filter((e: Dict) => !superseded.has(e.id));
+            canonical.splice(insertAt(canonical.map((e) => e.id)), 0, ...named);
+            const present = new Set(canonical.map((e) => e.media)),
+                fresh = automatic.filter((e: Dict) => {
+                    if (present.has(e.media)) return false;
+                    present.add(e.media);
+                    return true;
+                }),
+                freshIds = fresh.map((e: Dict) => e.id);
             next = {
                 ...q,
-                entries: canonical,
-                order,
+                entries: [...canonical, ...fresh],
+                order: [...order, ...freshIds],
+                automatic: [...remaining, ...freshIds],
+                history: q.history.filter((id: string) => !superseded.has(id)),
+                visited: q.visited.filter((id: string) => !superseded.has(id)),
+                failed: q.failed.filter((id: string) => !superseded.has(id)),
                 ...(q.current === null ? { positionTicks: "0", paused: true } : {}),
             };
         }
@@ -692,7 +720,7 @@ function queueEditEvent(input: Dict, event: Dict): Dict {
             visited = q.visited.filter((x: string) => x !== id),
             failed = q.failed.filter((x: string) => x !== id);
         removed = [id];
-        next = { ...q, order, entries, history, visited, failed };
+        next = { ...q, order, entries, history, visited, failed, automatic: q.automatic.filter((x: string) => x !== id) };
         if (wasCurrent) {
             const following = order[index] ?? order[order.length - 1] ?? null;
             next = {
@@ -720,11 +748,11 @@ function queueEditEvent(input: Dict, event: Dict): Dict {
         const keep = new Set<string>([...q.history, ...(q.current ? [q.current] : [])]);
         removed = q.order.filter((id: string) => !keep.has(id));
         const order = q.order.filter((id: string) => keep.has(id));
-        next = { ...q, entries: q.entries.filter((e: Dict) => keep.has(e.id)), order };
+        next = { ...q, entries: q.entries.filter((e: Dict) => keep.has(e.id)), order, automatic: q.automatic.filter((id: string) => keep.has(id)) };
         if (!removed.length) outcome = "unchanged";
     } else if (op === "clear-all") {
         removed = q.entries.map((e: Dict) => e.id).filter((id: string) => id !== q.current);
-        next = { ...q, entries: [], order: [], current: null, history: [], operations: [], failed: [], visited: [], positionTicks: "0", paused: true, shuffled: false };
+        next = { ...q, entries: [], order: [], current: null, history: [], operations: [], failed: [], visited: [], automatic: [], positionTicks: "0", paused: true, shuffled: false };
         next = invalidateCompletion(next);
     } else if (op === "previous") {
         next = queuePrevious(q);
@@ -752,7 +780,10 @@ function queueEditEvent(input: Dict, event: Dict): Dict {
         if (permutation.length !== expected.length || new Set(permutation).size !== permutation.length ||
             expected.some((id: string) => !permutation.includes(id)))
             return rejectQueue(q, "invalid-permutation");
-        next = { ...q, order: [...prefix, ...permutation], shuffled: true };
+        // Shuffle mixes within each group; what the viewer added still plays ahead of the automatic continuation.
+        const added = permutation.filter((id: string) => !q.automatic.includes(id)),
+            automatic = permutation.filter((id: string) => q.automatic.includes(id));
+        next = { ...q, order: [...prefix, ...added, ...automatic], shuffled: true };
     } else if (op === "unshuffle") {
         const current = currentIndex(q),
             prefix = current < 0 ? [] : q.order.slice(0, current + 1),
@@ -897,6 +928,7 @@ function storeEvent(state: Dict, event: Dict): Dict {
                 history: saved.history.filter((id: string) => keep.has(id)),
                 failed: saved.failed.filter((id: string) => keep.has(id)),
                 visited: saved.visited.filter((id: string) => keep.has(id)),
+                automatic: saved.automatic.filter((id: string) => keep.has(id)),
                 positionTicks: preservePosition ? saved.positionTicks : "0",
                 paused: true,
                 generation: increment(state.committed.generation),
@@ -1010,9 +1042,9 @@ function modeEvent(state: Dict, event: Dict): Dict {
 }
 
 const queueEventFields: Record<string, string[]> = {
-    "play-now": ["op", "revision", "generation", "entries", "operationId"],
-    "play-next": ["op", "revision", "generation", "entries", "operationId"],
-    append: ["op", "revision", "generation", "entries", "operationId"],
+    "play-now": ["op", "revision", "generation", "entries", "automatic", "operationId"],
+    "play-next": ["op", "revision", "generation", "entries", "automatic", "operationId"],
+    append: ["op", "revision", "generation", "entries", "automatic", "operationId"],
     remove: ["op", "revision", "generation", "entry", "operationId"],
     move: ["op", "revision", "generation", "entry", "index", "operationId"],
     "clear-upcoming": ["op", "revision", "generation", "operationId"],

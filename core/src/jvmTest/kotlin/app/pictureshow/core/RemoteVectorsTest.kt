@@ -3,14 +3,18 @@
  */
 package app.pictureshow.core
 
+import app.pictureshow.core.control.QueueState
 import app.pictureshow.core.control.RemoteCommand
 import app.pictureshow.core.control.RemoteControllerEvent
 import app.pictureshow.core.control.RemoteControllerState
+import app.pictureshow.core.control.RemoteQueueEvent
+import app.pictureshow.core.control.RemoteQueueState
 import app.pictureshow.core.control.RemoteReceiveEvent
 import app.pictureshow.core.control.RemoteReceiveState
 import app.pictureshow.core.control.RemoteTarget
 import app.pictureshow.core.control.parseRemoteMessage
 import app.pictureshow.core.control.reduceRemoteController
+import app.pictureshow.core.control.reduceRemoteQueue
 import app.pictureshow.core.control.reduceRemoteReceive
 import app.pictureshow.core.control.remoteAdvertisedCommands
 import app.pictureshow.core.control.remoteCapabilitiesBody
@@ -51,10 +55,13 @@ class RemoteVectorsTest {
 
     @Test fun reconnect() = run("remote-reconnect")
 
+    @Test fun queue() = run("remote-queue")
+
     @Test fun unknownOperationsFail() {
         assertFails { execute("unknown", JsonObject(emptyMap()), JsonObject(emptyMap())) }
         assertFails { reduceRemoteReceive(RemoteReceiveState("s", "v"), RemoteReceiveEvent("unknown")) }
         assertFails { reduceRemoteController(RemoteControllerState("s", "v"), RemoteControllerEvent("unknown")) }
+        assertFails { reduceRemoteQueue(RemoteQueueState(QueueState("s", "v")), RemoteQueueEvent("unknown")) }
     }
 
     private fun run(suite: String) {
@@ -105,6 +112,9 @@ class RemoteVectorsTest {
                 json.decodeFromJsonElement<RemoteTarget>(state.jsonObject.getValue("target")),
                 json.decodeFromJsonElement<RemoteCommand>(event)
             )
+        )
+        "queue" -> json.encodeToJsonElement(
+            reduceRemoteQueue(json.decodeFromJsonElement<RemoteQueueState>(state), json.decodeFromJsonElement<RemoteQueueEvent>(event))
         )
         "parse" -> json.encodeToJsonElement(parseRemoteMessage(event.getValue("text").jsonPrimitive.content))
         "capabilities" -> remoteCapabilitiesBody(

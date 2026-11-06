@@ -8,16 +8,16 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.control.QueueEntry
-import app.pictureshow.core.control.QueueEvent
 import app.pictureshow.core.control.QueueState
 import app.pictureshow.core.control.RemoteEffect
 import app.pictureshow.core.control.RemoteInbound
+import app.pictureshow.core.control.RemoteQueueEvent
+import app.pictureshow.core.control.RemoteQueueState
 import app.pictureshow.core.control.RemoteReceiveEvent
 import app.pictureshow.core.control.RemoteReceiveState
 import app.pictureshow.core.control.RemoteViewing
 import app.pictureshow.core.control.parseRemoteMessage
-import app.pictureshow.core.control.reduceQueue
+import app.pictureshow.core.control.reduceRemoteQueue
 import app.pictureshow.core.control.reduceRemoteReceive
 import app.pictureshow.core.control.remoteAdvertisedCommands
 import app.pictureshow.core.control.remoteRelayEnforcesRights
@@ -102,53 +102,31 @@ internal interface RemotePlayerBridge {
 
 /** The target's queue lives in memory for this signed-in process; a restart forgets it with the viewing. */
 internal class RemoteQueue(private val server: String, private val viewer: String) {
-    private var q = QueueState(server, viewer)
-    private var sequence = 0L
+    private var q = RemoteQueueState(QueueState(server, viewer))
 
-    private fun entries(items: List<String>) = items.map { QueueEntry("r${++sequence}", it) }
-
-    private fun apply(op: String, entries: List<QueueEntry> = emptyList()) {
-        q =
-            reduceQueue(
-                q,
-                QueueEvent(op, revision = q.revision, generation = q.generation, entries = entries, completion = q.completion)
-            ).queue
+    private fun apply(event: RemoteQueueEvent) {
+        q = reduceRemoteQueue(q, event)
     }
 
-    private fun media(id: String?) = q.entries.firstOrNull { it.id == id }?.media
+    val current: String? get() = q.current
 
-    val current: String? get() = media(q.current)
+    val upcoming: String? get() = q.upNext.firstOrNull()
 
-    val upcoming: String? get() = media(q.order.getOrNull(q.order.indexOf(q.current) + 1))
+    fun open(items: List<String>) = apply(RemoteQueueEvent("open", items))
 
-    fun open(items: List<String>) {
-        apply("play-now", entries(items))
-    }
-
-    /** Queueing from a viewing started by hand adopts that viewing as the queue's current entry first. */
-    fun add(watching: String, items: List<String>, next: Boolean) {
-        if (current != watching) open(listOf(watching))
-        apply(if (next) "play-next" else "append", entries(items))
-    }
+    fun add(watching: String, items: List<String>, next: Boolean) =
+        apply(RemoteQueueEvent(if (next) "add-next" else "add-last", items, watching))
 
     fun previous(): String? {
-        if (q.current == null) return null
-        apply("previous")
+        apply(RemoteQueueEvent("previous"))
         return current
     }
 
-    /** Follows what really started: the queue's next entry advances; anything else ends the queue. */
     fun observed(item: String?) {
-        when {
-            item == null || item == current -> Unit
-            item == upcoming -> apply("next")
-            else -> clear()
-        }
+        if (item != null) apply(RemoteQueueEvent("observed", item = item))
     }
 
-    fun clear() {
-        q = QueueState(server, viewer, revision = q.revision + 1)
-    }
+    fun clear() = apply(RemoteQueueEvent("clear"))
 }
 
 /**
@@ -370,8 +348,10 @@ internal class RemoteTargetHost(
                 mutableOpens.tryEmit(effect)
             }
             "queue-next", "queue-add" -> {
-                // The reducer also accepts these during preparation; the requested title is the current entry then.
-                val watching = viewing?.item ?: queue?.current ?: return
+                // The reducer also accepts these during preparation; the requested title is the current entry then,
+                // even while the title being replaced is still reporting.
+                val preparing = queue?.current.takeIf { state?.opening == true }
+                val watching = preparing ?: viewing?.item ?: queue?.current ?: return
                 queueFor().add(watching, effect.items, effect.op == "queue-next")
                 queueRevision++
             }

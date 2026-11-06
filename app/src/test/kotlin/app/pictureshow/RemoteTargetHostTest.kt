@@ -389,6 +389,49 @@ class RemoteTargetHostTest {
         assertNull(rig.host.upcoming, "a title opened by hand ends the queue")
     }
 
+    @Test fun whatTheViewerAddsPlaysAheadOfTheSeriesTheServerExpandedOnto() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        val fourth = "f".repeat(32)
+        // Jellyfin relays one episode as that episode and the rest of its series, for every play command.
+        rig.message(this, play("open", listOf(film, second, third, fourth)))
+        rig.watching(film)
+        assertEquals(second, rig.host.upcoming)
+        rig.message(this, play("add", listOf(third, fourth), "PlayLast"))
+        assertEquals(third, rig.host.upcoming)
+        rig.message(this, state("n", "NextTrack"))
+        assertEquals("next:$third", rig.player.calls.last())
+        rig.host.report(RemoteViewing(third, true, 10_000_000, 0, false, true))
+        assertEquals(second, rig.host.upcoming)
+        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        assertEquals(fourth, rig.host.upcoming, "the added episode played once, at the added place")
+        rig.host.report(RemoteViewing(fourth, true, 10_000_000, 0, false, true))
+        assertNull(rig.host.upcoming)
+    }
+
+    @Test fun anAdditionWhileTheNextTitleOpensJoinsItsQueueNotTheTitleBeingReplaced() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.watching(film)
+        val fourth = "f".repeat(32)
+        rig.message(this, play("open", listOf(second, third)))
+        rig.message(this, play("add", listOf(fourth), "PlayLast"))
+        assertEquals(fourth, rig.host.upcoming)
+        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        assertEquals(fourth, rig.host.upcoming)
+        rig.host.report(RemoteViewing(fourth, true, 10_000_000, 0, false, true))
+        assertEquals(third, rig.host.upcoming)
+    }
+
+    @Test fun addingTheTitleOnScreenDoesNotReplayItForever() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.message(this, play("open", listOf(film, second)))
+        rig.watching(film)
+        rig.message(this, play("add", listOf(film, second), "PlayLast"))
+        assertEquals(second, rig.host.upcoming)
+    }
+
     @Test fun previousRestartsPastThreeSecondsAndGoesBackBeforeThat() = runTest {
         val rig = Rig(this)
         rig.online(this)
