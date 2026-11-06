@@ -97,6 +97,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -2368,15 +2369,7 @@ private fun DetailActions(
                     if (stableLayout) {
                         Modifier.bringIntoViewRequester(childBringIntoView).onGloballyPositioned { coordinates ->
                             if (target in focusedChildren) revealFocusedBounds(coordinates, childBringIntoView)
-                        }.width(
-                            if (target in
-                                listOf("primary", "from-start")
-                            ) {
-                                200.dp
-                            } else {
-                                260.dp
-                            }
-                        ).heightIn(min = 72.dp)
+                        }.width(detailStableWidth(target)).heightIn(min = DETAIL_STABLE_HEIGHT)
                     } else {
                         Modifier
                     }
@@ -2463,9 +2456,10 @@ private fun DetailActions(
                             }
                         )
                 ) {
-                    Text(
+                    DetailActionLabel(
                         labels.getValue("primary"),
-                        modifier = Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary"))
+                        if (stableLayout) "primary" else null,
+                        Modifier.testTag("detail:play$suffix-label").then(labelSemantics("primary"))
                     )
                 }
             }
@@ -2504,9 +2498,10 @@ private fun DetailActions(
                             }
                         }
                 ) {
-                    Text(
+                    DetailActionLabel(
                         labels.getValue("played"),
-                        modifier = Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played"))
+                        if (stableLayout) "played" else null,
+                        Modifier.testTag("detail:played$suffix-label").then(labelSemantics("played"))
                     )
                 }
             }
@@ -2534,9 +2529,10 @@ private fun DetailActions(
                             }
                         }
                 ) {
-                    Text(
+                    DetailActionLabel(
                         labels.getValue("favorite"),
-                        modifier = Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite"))
+                        if (stableLayout) "favorite" else null,
+                        Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite"))
                     )
                 }
             }
@@ -2554,13 +2550,36 @@ private fun DetailActions(
                         modifier = (fromStartFocus?.let { Modifier.focusRequester(it) } ?: Modifier)
                             .then(actionModifier("from-start", "from-start", click))
                     ) {
-                        Text(
+                        DetailActionLabel(
                             labels.getValue("from-start"),
-                            modifier = Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start"))
+                            if (stableLayout) "from-start" else null,
+                            Modifier.testTag("detail:from-start$suffix-label").then(labelSemantics("from-start"))
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+private val DETAIL_STABLE_HEIGHT = 72.dp
+
+private fun detailStableWidth(target: String) = if (target == "primary" || target == "from-start") 200.dp else 260.dp
+
+/**
+ * After playback the pills keep a fixed size so nothing moves as labels change. TV Material's Button leaves its content at
+ * the surface's top start, so the wording has to fill the room inside the button's padding to sit in the middle.
+ */
+@Composable
+private fun DetailActionLabel(label: String, stableTarget: String?, modifier: Modifier) {
+    if (stableTarget == null) {
+        Text(label, modifier = modifier)
+    } else {
+        Box(
+            Modifier.width(detailStableWidth(stableTarget) - 32.dp).heightIn(min = DETAIL_STABLE_HEIGHT - 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(label, modifier = modifier, textAlign = TextAlign.Center)
         }
     }
 }

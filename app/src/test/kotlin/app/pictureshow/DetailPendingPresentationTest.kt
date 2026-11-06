@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -36,6 +37,31 @@ class DetailPendingPresentationTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
     private val film = MediaItem("film", "Invented film", "Movie")
+
+    // The held layout fixes each pill's size, and TV Material leaves content at the top start: "Play" sat in the corner.
+    @Test fun heldPillsKeepTheirWordingInTheMiddle() {
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(
+                    CatalogDetailState(account, film, loading = true, playbackPending = true),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    origin = film,
+                    onPendingAction = { true }
+                )
+            }
+        }
+        compose.waitForIdle()
+        listOf("play", "played", "favorite", "from-start").forEach { tag ->
+            val pill = compose.onNodeWithTag("detail:$tag-pending").getBoundsInRoot()
+            val label = compose.onNodeWithTag("detail:$tag-pending-label", useUnmergedTree = true).getBoundsInRoot()
+            assertEquals(((pill.left + pill.right) / 2).value, ((label.left + label.right) / 2).value, 1f, "$tag across")
+            assertEquals(((pill.top + pill.bottom) / 2).value, ((label.top + label.bottom) / 2).value, 1f, "$tag down")
+        }
+    }
 
     @Test fun aColdReadOffersPlainPlayDuringArrivalWithoutRemovingTheQueue() {
         compose.mainClock.autoAdvance = false
