@@ -1433,12 +1433,81 @@ class CastSenderHostTest {
         assertEquals(old, host.generation())
     }
 
+    // Finishing comes before disposal by a whole stop report, and a rejoin can answer inside it.
+    @Test fun aPlayerStartingToLeaveTakesItsWaitingPickWithIt() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        val old = host.generation()
+        val player = FakeOutput(log)
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player))
+        host.pick(ROUTE)
+        runCurrent()
+        log.clear()
+        host.localLeaving(player)
+        link.sink!!.onConnected("Living room")
+        link.sink!!.onStatus(status("playing", generation = old))
+        runCurrent()
+        assertFalse("stop" in log, "the finished episode isn't cast over the next one: $log")
+        assertFalse("load" in log, "nor loaded: $log")
+        assertEquals(old, host.generation())
+    }
+
+    @Test fun aPickWaitingOnARejoinHoldsItsPlayersNextStep() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        val player = FakeOutput(log)
+        assertFalse(host.holdsNextStep(player))
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player))
+        assertTrue(host.holdsNextStep(player), "choosing")
+        assertFalse(host.holdsNextStep(FakeOutput(log)), "another player's next step is its own")
+        host.pick(ROUTE)
+        runCurrent()
+        assertFalse(host.state.value.chooserOpen)
+        assertTrue(host.holdsNextStep(player), "the chooser has closed, and the viewer's answer is still on its way")
+        assertFalse(host.holdsNextStep(FakeOutput(log)))
+        host.localLeaving(player)
+        assertFalse(host.holdsNextStep(player), "nothing can stay held by a player that's gone")
+    }
+
+    @Test fun aPickReadsWhetherThePlayerIsPausedThen() = runTest {
+        val host = host()
+        var paused = false
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem(ITEM, "A film")), pausedAtPick = { paused }, local = output))
+        paused = true
+        host.pick(ROUTE)
+        assertEquals(true, host.state.value.cast!!.owner.intent.paused)
+    }
+
+    // The dialog holds the request it composed with, for a frame after the player has gone.
+    @Test fun aTapOnAChooserWhosePlayerHasGoneDoesNothing() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        var runs = 0
+        var attached = 0
+        val shown = CastPlayRequest(listOf(CastPlayItem(ITEM, "A film")), local = player, onJellyfinPick = { runs++ })
+        host.openChooser(shown)
+        host.localLeaving(player)
+        assertFalse(host.pickJellyfin(shown) { attached++ })
+        assertEquals(0, runs)
+        assertEquals(0, attached, "no TV is attached for a pick that didn't happen")
+        host.openChooser(shown)
+        assertTrue(host.pickJellyfin(shown) { attached++ })
+        assertEquals(1, runs)
+        assertEquals(1, attached)
+        assertTrue(host.pickJellyfin(null) { attached++ }, "a chooser without a request, opened from the Remote screen, still attaches")
+        assertEquals(2, attached)
+    }
+
     @Test fun aPlayerGoingClosesOnlyItsOwnChooser() = runTest {
         val host = host()
         val player = FakeOutput(log)
         host.openChooser(request(local = player))
         host.localClosed(FakeOutput(log))
-        host.closeChooserFor(FakeOutput(log))
+        host.localLeaving(FakeOutput(log))
         assertTrue(host.state.value.chooserOpen, "another player's")
         // A player that goes without finishing, such as the screen being torn down, still closes its own.
         host.localClosed(player)

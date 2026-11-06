@@ -196,10 +196,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     // Null without a sender, so a player that has none reads nothing from it.
     val castUi = entry?.let { it.cast.state.collectAsState().value }
     val castStatus = castUi?.let(::castStatusLine)
-    // A chooser left open is holding this viewing's next step, as a sheet does; a Jellyfin pick reads this player's clock.
-    val choosing = castUi?.chooserOpen == true && entry.cast.chooserRequest?.local === castOutput
+    // A chooser left open, or a pick waiting on a rejoin, is holding this viewing's next step, as a sheet does (CAST-23).
+    val choosing = entry?.cast?.holdsNextStep(castOutput) == true
+    val atEnd = host.atEnd
     if (entry != null) {
         DisposableEffect(castOutput) { onDispose { entry.cast.localClosed(castOutput) } }
+        // position() is now the last moment, so a pick here would start the TV at the end of a finished title.
+        LaunchedEffect(atEnd) { if (atEnd) entry.cast.localLeaving(castOutput) }
         LaunchedEffect(host) { if (entry.cast.consumeStartPaused(host.item.id)) host.output.pause() }
     }
     val accessible = rememberAccessibilityEnabled()
@@ -217,13 +220,14 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val foreground by host.output.foreground.collectAsState()
     val speed by host.output.speed.collectAsState()
     val paused = playback.paused || pauseIntent
+    val pausedNow by rememberUpdatedState(paused)
     var topCues by remember { mutableStateOf(false) }
     SideEffect {
         host.onFinishing = {
             ui.sheet = null
             ui.scrubMs = null
             // From the moment this player starts to leave, a pick has nothing left to act on (CAST-23).
-            entry?.cast?.closeChooserFor(castOutput)
+            entry?.cast?.localLeaving(castOutput)
         }
         host.onSeekShown = {
             ui.visible = true
@@ -463,12 +467,12 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 val exit: @Composable (Modifier) -> Unit = { placement ->
                     Row(placement, horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                         if (entry != null) {
-                            TouchPlayOnMark(castStatus) {
+                            TouchPlayOnMark(castStatus, filled = castUi?.let(::castIsCasting) == true, enabled = !atEnd) {
                                 entry.cast.openChooser(
                                     CastPlayRequest(
                                         listOf(castPlayItem(account.server, host.item)),
                                         startMs = host.output.position().milliseconds,
-                                        paused = paused,
+                                        pausedAtPick = { pausedNow },
                                         mediaSourceId = host.state.decision?.mediaSourceId,
                                         local = castOutput,
                                         onJellyfinPick = {
@@ -671,18 +675,21 @@ private fun TouchOptionGrid(options: List<@Composable (Modifier) -> Unit>) {
 
 /**
  * Play on, a mark beside Stop since both move this viewing away from here. [status] is what a sender is doing elsewhere, the
- * line the browsing bar shows and the player hides: the mark fills in, and a reader hears it.
+ * line the browsing bar shows and the player hides, and a reader hears it. Only [filled] draws: the line also speaks for a
+ * device that is starting, reconnecting or lost, and a filled mark there would claim the opposite of the truth. Dimmed at the
+ * end of a title, which has nothing left to send: its next-episode card is the way on.
  */
 @Composable
-internal fun TouchPlayOnMark(status: String?, onClick: () -> Unit) {
+internal fun TouchPlayOnMark(status: String?, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
     TouchBarButton(
         onClick,
         Modifier.testTag("touch:play-on").semantics {
             contentDescription = "Play on"
             status?.let { stateDescription = it }
-        }
+        },
+        enabled = enabled
     ) {
-        Icon(touchActionIcon(if (status != null) "casting" else "cast"), contentDescription = null, modifier = Modifier.size(24.dp))
+        Icon(touchActionIcon(if (filled) "casting" else "cast"), contentDescription = null, modifier = Modifier.size(24.dp))
     }
 }
 
@@ -787,8 +794,13 @@ internal fun TouchPlayerScrubber(
  * replaces `TextButton`'s wider one, which centred a short word and took its text off the line it starts from.
  */
 @Composable
-private fun TouchBarButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    TextButton(onClick, modifier.widthIn(min = 48.dp), contentPadding = PaddingValues(horizontal = TOUCH_BAR_TEXT_INSET, vertical = 8.dp)) {
+private fun TouchBarButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable () -> Unit) {
+    TextButton(
+        onClick,
+        modifier.widthIn(min = 48.dp),
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = TOUCH_BAR_TEXT_INSET, vertical = 8.dp)
+    ) {
         content()
     }
 }

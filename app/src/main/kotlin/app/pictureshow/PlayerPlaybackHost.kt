@@ -126,6 +126,9 @@ internal class PlaybackHostState(
     val nextEpisode get() = remoteNext ?: (nextLookup?.result as? ClientResult.Success)?.value
     val findingNext get() = ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure)
 
+    /** This viewing is over, though the player may wait here for the viewer: with a screen reader on, or after a trip away. */
+    val atEnd get() = ended || deferredNext != null || output.reachedEnd
+
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
         onFinishing()
         if (!exitRequested && !switching) {

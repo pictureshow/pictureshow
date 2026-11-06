@@ -127,11 +127,14 @@ internal fun TouchPictureshow(
                 }
             },
             onPickRemote = { target ->
-                remote.attach(target)
-                remotePending?.invoke()
-                castRequest?.onJellyfinPick?.invoke()
-                close()
-                if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote")
+                val picked = cast.pickJellyfin(castRequest) {
+                    remote.attach(target)
+                    remotePending?.invoke()
+                }
+                if (picked) {
+                    close()
+                    if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote")
+                }
             },
             onPickCast = { target ->
                 cast.pick(target)

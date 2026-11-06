@@ -79,6 +79,8 @@ internal class CastPlayRequest(
     /** Where to start when there is no local player to ask. */
     val startMs: Long = 0,
     val paused: Boolean = false,
+    /** Whether a player showing under the chooser is paused now; it can change between the tap and the pick. */
+    val pausedAtPick: (() -> Boolean)? = null,
     val mediaSourceId: String? = null,
     val audioStreamIndex: Int? = null,
     val subtitleStreamIndex: Int? = null,
@@ -87,7 +89,9 @@ internal class CastPlayRequest(
     val onThisDevice: (() -> Unit)? = null,
     /** Runs after a Jellyfin device is attached from this same chooser. */
     val onJellyfinPick: (() -> Unit)? = null
-)
+) {
+    val pausedNow get() = pausedAtPick?.invoke() ?: paused
+}
 
 internal data class CastPlayItem(
     val id: String,
@@ -630,7 +634,7 @@ internal class CastSenderHost(
         val intent = ControlIntent(
             entry = entryId(playRequest.startIndex, item.id),
             ticks = playRequest.startMs * MS_TO_TICKS,
-            paused = playRequest.paused,
+            paused = playRequest.pausedNow,
             queue = playRequest.items.mapIndexed { index, it -> entryId(index, it.id) }
         )
         val before = cast
@@ -1095,13 +1099,31 @@ internal class CastSenderHost(
     /** The player screen went away, so Resume here has to open a new one. */
     fun localClosed(output: CastLocalOutput) {
         if (handoff?.local === output) localAlive = false
-        closeChooserFor(output)
+        localLeaving(output)
+    }
+
+    /**
+     * Once a player starts to leave, or has played to the end, a chooser opened from it and a pick waiting on a rejoin have
+     * nothing left to act on. One opened elsewhere is not its business.
+     */
+    fun localLeaving(output: CastLocalOutput) {
+        if (request?.local === output) closeChooser()
         if (pendingPick?.second?.local === output) pendingPick = null
     }
 
-    /** A chooser opened from this player has nothing to act on once it is leaving; one opened elsewhere is not its business. */
-    fun closeChooserFor(output: CastLocalOutput) {
-        if (request?.local === output) closeChooser()
+    /** The viewer is choosing where this player's viewing goes, or has chosen and is waiting on a rejoin: what's next waits too. */
+    fun holdsNextStep(output: CastLocalOutput) =
+        (state.value.chooserOpen && request?.local === output) || pendingPick?.second?.local === output
+
+    /**
+     * A Jellyfin pick from the dialog on screen. The dialog holds the request it composed with, so a tap that lands after the
+     * player has gone must not run it. [attach] runs first, as the pick depends on the attached TV.
+     */
+    fun pickJellyfin(shown: CastPlayRequest?, attach: () -> Unit): Boolean {
+        if (shown != null && shown !== request) return false
+        attach()
+        shown?.onJellyfinPick?.invoke()
+        return true
     }
 
     private fun clear() {

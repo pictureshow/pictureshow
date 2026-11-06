@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -18,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -25,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -143,6 +146,16 @@ internal fun castStatusLine(ui: CastUi): String? {
     }
 }
 
+/** The mark fills only for this: a viewing on the Cast device, connected, with nothing starting or stopping it. */
+internal fun castIsCasting(ui: CastUi): Boolean {
+    val cast = ui.cast ?: return false
+    return cast.owner.candidate == null &&
+        cast.owner.owner.kind == "cast" &&
+        cast.owner.phase == "active" &&
+        cast.link != "suspended" &&
+        cast.link != "lost"
+}
+
 internal fun Context.openAppSettings() {
     runCatching {
         startActivity(
@@ -181,22 +194,23 @@ internal fun TouchCastChooser(
                 if (onThisDevice != null) {
                     OutlinedButton(
                         onClick = onThisDevice,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:this-device")
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:this-device"),
+                        colors = chooserDestinationColors()
                     ) { Text("This device", modifier = Modifier.fillMaxWidth()) }
                 }
+                ChooserHeading("Pictureshow TVs", first = onThisDevice == null)
                 when {
                     remote.listing -> Text("Looking for TVs…")
 
                     remote.listFailed && remote.targets.isEmpty() -> Text("Couldn't reach the server. Check your connection and try again.")
 
-                    remote.targets.isEmpty() -> Text(
-                        "No Pictureshow TVs are available. Open Pictureshow on your TV and sign in, then try again."
-                    )
+                    remote.targets.isEmpty() -> Text("None found. Open Pictureshow on your TV and sign in.")
                 }
                 remote.targets.forEach { target ->
                     OutlinedButton(
                         onClick = { onPickRemote(target) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:target:${target.session}")
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:target:${target.session}"),
+                        colors = chooserDestinationColors()
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(remoteTargetLabel(target))
@@ -205,7 +219,7 @@ internal fun TouchCastChooser(
                     }
                 }
                 if (showCast && ui.capability.visible) {
-                    Text("Google Cast", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
+                    ChooserHeading("Google Cast")
                     castCapabilityMessage(ui.capability.state)?.let {
                         Text(it, modifier = Modifier.testTag("cast:capability").semantics { liveRegion = LiveRegionMode.Polite })
                     }
@@ -227,7 +241,8 @@ internal fun TouchCastChooser(
                     ui.routes.forEach { route ->
                         OutlinedButton(
                             onClick = { onPickCast(route) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:route:${route.id.takeLast(4)}")
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:route:${route.id.takeLast(4)}"),
+                            colors = chooserDestinationColors()
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(castRouteLabel(route, ui.routes))
@@ -236,34 +251,60 @@ internal fun TouchCastChooser(
                         }
                     }
                     when (ui.capability.state) {
-                        "services-update-required" -> TextButton(
-                            onClick = context::openPlayServicesListing,
-                            Modifier.heightIn(min = 48.dp)
-                        ) {
-                            Text("Update Google Play services")
-                        }
+                        "services-update-required" -> ChooserSetting("Update Google Play services", context::openPlayServicesListing)
 
-                        "permission-denied" -> TextButton(onClick = context::openAppSettings, Modifier.heightIn(min = 48.dp)) {
-                            Text("Open app settings")
-                        }
+                        "permission-denied" -> ChooserSetting("Open app settings", context::openAppSettings)
 
-                        "viewer-disabled" -> TextButton(
-                            onClick = { onSetCastEnabled(true) },
-                            Modifier.heightIn(min = 48.dp).testTag("cast:enable")
-                        ) { Text("Turn on Google Cast") }
+                        "viewer-disabled" -> ChooserSetting(
+                            "Turn on Google Cast",
+                            { onSetCastEnabled(true) },
+                            Modifier.testTag("cast:enable")
+                        )
 
                         "os-too-old", "browser-unsupported", "services-missing" -> Unit
 
-                        else -> TextButton(
-                            onClick = { onSetCastEnabled(false) },
-                            Modifier.heightIn(min = 48.dp).testTag("cast:disable")
-                        ) { Text("Turn off Google Cast") }
+                        else -> ChooserSetting(
+                            "Turn off Google Cast",
+                            { onSetCastEnabled(false) },
+                            Modifier.testTag("cast:disable"),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+/** 8 dp between lines inside a section, and this makes it 16 before a new one. */
+@Composable
+private fun ChooserHeading(text: String, first: Boolean = false) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(top = if (first) 0.dp else 8.dp).semantics { heading() }
+    )
+}
+
+/** Everywhere this can play reads as something to press. */
+@Composable
+private fun chooserDestinationColors() = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+
+/** Not a place to play: on the body's left edge, with its text where the rest of the body's is. */
+@Composable
+private fun ChooserSetting(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentColor: Color = MaterialTheme.colorScheme.primary
+) {
+    TextButton(
+        onClick,
+        modifier.heightIn(min = 48.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
+        contentPadding = PaddingValues(start = 0.dp, end = 12.dp)
+    ) { Text(label) }
 }
 
 /** Stays in reach while browsing. It shows what the receiver reports and opens the controls. */

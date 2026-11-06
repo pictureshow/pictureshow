@@ -112,6 +112,9 @@ internal class Media3PlaybackOutput(
         }
     }
 
+    /** The file played out, whether or not anyone was here to see it; [position] is then its last moment. */
+    val reachedEnd get() = completedPosition != null
+
     override fun position(): PlaybackPosition {
         val snapshot = completedPosition ?: mutablePlayer.value?.let(::boundedPlaybackPosition) ?: saved
         return if (mutablePauseIntent.value || !mutableForeground.value) snapshot.copy(paused = true) else snapshot
