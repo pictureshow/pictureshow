@@ -460,7 +460,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                         mediaSourceId = host.state.decision?.mediaSourceId,
                                         local = castOutput,
                                         onJellyfinPick = {
-                                            entry.remote.playNow(listOf(host.item.id), position)
+                                            entry.remote.playNow(listOf(host.item.id), position * 10_000)
                                             host.finish(reason = "remote")
                                         }
                                     )

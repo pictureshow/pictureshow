@@ -1116,11 +1116,88 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:play-on").assertDoesNotExist()
     }
 
-    private fun launch(paused: Boolean = false, fontScale: Float? = null, cast: TouchPlayerCast? = null, onNext: (MediaItem) -> Unit = {}) {
+    // The chooser's Jellyfin row: the TV starts where this player is, and the wire's position is in ticks.
+    @Test
+    fun aJellyfinPickFromThePlayerStartsTheTvAtThisPosition() {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<app.pictureshow.core.control.RemoteRequest>()
+        val tv = app.pictureshow.core.control.RemoteTarget(
+            session = "s1",
+            device = "tv",
+            name = "Living room",
+            viewer = "viewer",
+            sameViewer = true,
+            commands = listOf("MoveUp", "SendString")
+        )
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined)
+        val remote = RemoteControllerHost(
+            scope,
+            object : RemoteControllerGateway {
+                override suspend fun targets(account: Account) = app.pictureshow.core.ClientResult.Success(listOf(tv))
+                override suspend fun send(account: Account, request: app.pictureshow.core.control.RemoteRequest): Int {
+                    sent += request
+                    return 204
+                }
+            }
+        ) { 0L }
+        try {
+            remote.bind(account)
+            remote.setForeground(true)
+            remote.attach(tv)
+            val sender = inertCastSender()
+            launch(cast = TouchPlayerCast(sender, remote), itemId = "0123456789abcdef0123456789abcdef")
+            compose.runOnIdle {
+                Media3PlaybackOutput::class.java.getDeclaredField("saved").apply { isAccessible = true }
+                    .set(output, PlaybackPosition(90_000, false))
+            }
+            compose.onNodeWithTag("touch:play-on").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+            compose.runOnIdle { requireNotNull(requireNotNull(sender.chooserRequest).onJellyfinPick).invoke() }
+            compose.waitUntil(5_000) { sent.isNotEmpty() }
+            compose.runOnIdle {
+                assertEquals("900000000", sent.single().query["startPositionTicks"])
+                assertEquals(1, exits, "the local player gives way to the TV")
+            }
+        } finally {
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+    }
+
+    // Play on is one more option in the fit, on the size of phone whose row is the tightest.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun playOnSharesTheOptionsLineAndStaysOnScreen() {
+        launch(cast = TouchPlayerCast(inertCastSender(), inertRemoteController()))
+        settled()
+        val audio = bounds("touch:open:Audio")
+        val playOn = bounds("touch:play-on")
+        assertEquals((audio.top + audio.bottom).value / 2, (playOn.top + playOn.bottom).value / 2, 1f, "same line as the other options")
+        assertTrue(playOn.left >= bounds("touch:orientation").right, "after the toggle")
+        assertTrue(playOn.right <= bounds("touch:panel").right, "inside the panel: $playOn")
+        assertEquals((audio.bottom - audio.top).value, (playOn.bottom - playOn.top).value, 1f, "as tall as the other options")
+    }
+
+    // Phone portrait: Play on starts a line of its own in the first column, and the panel still fits the window.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun portraitKeepsPlayOnInTheFirstColumn() {
+        launch(cast = TouchPlayerCast(inertCastSender(), inertRemoteController()))
+        settled()
+        assertEquals(bounds("touch:open:Audio").left, bounds("touch:play-on").left)
+        assertTrue(bounds("touch:play-on").top >= bounds("touch:open:Speed").bottom)
+        compose.onNodeWithTag("touch:play-on").assertIsDisplayed()
+    }
+
+    private fun launch(
+        paused: Boolean = false,
+        fontScale: Float? = null,
+        cast: TouchPlayerCast? = null,
+        itemId: String = "movie",
+        onNext: (MediaItem) -> Unit = {}
+    ) {
         compose.runOnIdle {
             output = Media3PlaybackOutput(compose.activity, account.server)
             decoder = Decoder(!paused)
-            host = PlaybackHostState(MediaItem("movie", "A film"), 20_000, output, onNext, { exits++ })
+            host = PlaybackHostState(MediaItem(itemId, "A film"), 20_000, output, onNext, { exits++ })
             host.playerSource = androidx.compose.runtime.mutableStateOf(decoder)
             host.stateSource = androidx.compose.runtime.mutableStateOf(PlaybackState(preparing = false))
             host.duration = 60_000
