@@ -9,6 +9,7 @@ import androidx.core.net.toUri
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.CastMediaControlIntent
+import com.google.android.gms.cast.CastStatusCodes
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
@@ -17,7 +18,6 @@ import com.google.android.gms.cast.MediaQueueItem
 import com.google.android.gms.cast.MediaSeekOptions
 import com.google.android.gms.cast.MediaStatus
 import com.google.android.gms.cast.MediaTrack
-import com.google.android.gms.cast.CastStatusCodes
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastOptions
 import com.google.android.gms.cast.framework.CastSession
@@ -95,6 +95,9 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
         override fun onRouteChanged(router: MediaRouter, route: MediaRouter.RouteInfo) = publishRoutes()
     }
 
+    private val newest = NewestSession<CastSession>()
+    private var lastStatus: CastStatus? = null
+
     private val mediaCallback = object : RemoteMediaClient.Callback() {
         override fun onStatusUpdated() = publishStatus()
         override fun onQueueStatusUpdated() = publishStatus()
@@ -102,13 +105,19 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
 
     private val sessions = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {
+            newest.note(session)
             listener?.onConnecting()
         }
         override fun onSessionStarted(session: CastSession, id: String) = connected(session)
-        override fun onSessionStartFailed(session: CastSession, error: Int) = connectFailed("start", error)
+        override fun onSessionStartFailed(session: CastSession, error: Int) {
+            if (!newest.isSuperseded(session)) connectFailed("start", error)
+        }
         override fun onSessionEnding(session: CastSession) = Unit
-        override fun onSessionEnded(session: CastSession, error: Int) = ended()
+        override fun onSessionEnded(session: CastSession, error: Int) {
+            if (!newest.isSuperseded(session)) ended()
+        }
         override fun onSessionResuming(session: CastSession, id: String) {
+            newest.note(session)
             listener?.onConnecting()
         }
         override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) = connected(session)
@@ -137,6 +146,7 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
     }
 
     private fun connected(session: CastSession) {
+        newest.note(session)
         watch(session.remoteMediaClient)
         listener?.onConnected(session.castDevice?.friendlyName)
     }
@@ -154,6 +164,7 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
 
     private fun watch(client: RemoteMediaClient?) {
         if (client === watched) return
+        lastStatus = null
         watched?.unregisterCallback(mediaCallback)
         watched = client
         client?.registerCallback(mediaCallback)
@@ -171,9 +182,12 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
         publishRoutes()
     }
 
-    private fun publishStatus() {
+    private fun publishStatus(answer: Boolean = false) {
         val client = watched ?: return
-        listener?.onStatus(client.mediaStatus?.let { status(it, client.approximateStreamPosition) } ?: CastStatus())
+        val status = client.mediaStatus?.let { status(it, client.approximateStreamPosition) } ?: CastStatus()
+        if (!answer && repeatsAnEmptyStatus(status, lastStatus)) return
+        lastStatus = status
+        listener?.onStatus(status)
     }
 
     private fun status(status: MediaStatus, positionMs: Long): CastStatus {
@@ -323,6 +337,9 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
         watched?.setActiveMediaTracks(ids.toLongArray()).answer(onResult)
 
     override fun requestStatus() {
-        watched?.requestStatus()
+        val client = watched ?: return
+        client.requestStatus().setResultCallback { result ->
+            if (result.status.isSuccess && client === watched) publishStatus(answer = true)
+        }
     }
 }

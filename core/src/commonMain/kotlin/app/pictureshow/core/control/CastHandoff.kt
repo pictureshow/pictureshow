@@ -224,20 +224,21 @@ fun castReattachState(cast: ViewingIdentity, local: ViewingIdentity, intent: Con
     notice = "receiver-continues"
 )
 
-private fun select(s: CastState, event: CastEvent): CastState = viaOwner(s, OwnerEvent("select", identity = event.identity, intent = event.intent)) {
-    it.copy(
-        mediaSession = null,
-        observed = null,
-        commands = null,
-        stop = "none",
-        stopPurpose = null,
-        returnPaused = null,
-        returnTicks = null,
-        recovery = null,
-        notice = null,
-        emptyStatus = false
-    )
-}
+private fun select(s: CastState, event: CastEvent): CastState =
+    viaOwner(s, OwnerEvent("select", identity = event.identity, intent = event.intent)) {
+        it.copy(
+            mediaSession = null,
+            observed = null,
+            commands = null,
+            stop = "none",
+            stopPurpose = null,
+            returnPaused = null,
+            returnTicks = null,
+            recovery = null,
+            notice = null,
+            emptyStatus = false
+        )
+    }
 
 /**
  * The viewer picked a device. A sender holds one viewing, so a live one is settled here before anything starts: what is
@@ -255,7 +256,8 @@ private fun pick(s: CastState, event: CastEvent): CastState {
     return when {
         owner.phase == "disconnected" && !sameReceiver -> s.copy(reason = "detached-elsewhere")
         owner.phase == "disconnected" && sameEntry -> s.copy(effect = "reconnect", reason = "already-casting")
-        owner.phase == "disconnected" -> replace(s, event, "replace-rejoin")
+        // Joined first: failing to reach it mustn't cost the viewing that may still be playing there. Then it's a replace on the link.
+        owner.phase == "disconnected" -> s.copy(effect = "reconnect", reason = "rejoin-to-replace")
         s.link != "connected" -> s.copy(reason = "link-not-ready")
         sameReceiver && sameEntry -> s.copy(effect = "show-controls", reason = "already-casting")
         sameReceiver -> replace(s, event, "replace-on-link")

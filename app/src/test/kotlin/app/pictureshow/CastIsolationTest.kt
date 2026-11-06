@@ -148,7 +148,8 @@ class CastEnvironmentTest {
     private val session = CastStoredSessions(TemporaryState(emptyList()), emptyMap())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    @Test fun noWriteHappensOnTheCallersThread() = runTest(UnconfinedTestDispatcher()) {
+    @Test
+    fun noWriteHappensOnTheCallersThread() = runTest(UnconfinedTestDispatcher()) {
         val storage = HeldDispatcher()
         val environment = AndroidCastEnvironment(context, storage)
         val marked = CastStoredSessions(TemporaryState(effect = "keep"), emptyMap())
@@ -161,10 +162,21 @@ class CastEnvironmentTest {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    @Test fun aViewingReadsBackAtOnceAndWritesInOrder() = runTest(UnconfinedTestDispatcher()) {
+    @Test
+    fun aViewingReadsBackAtOnceAndWritesInOrder() = runTest(UnconfinedTestDispatcher()) {
         val storage = HeldDispatcher()
         val environment = AndroidCastEnvironment(context, storage)
-        val record = CastViewingRecord(nonce = "n", server = "s", viewer = "v", route = "r", device = "d", session = "c", generation = 2, items = emptyList())
+        val record =
+            CastViewingRecord(
+                nonce = "n",
+                server = "s",
+                viewer = "v",
+                route = "r",
+                device = "d",
+                session = "c",
+                generation = 2,
+                items = emptyList()
+            )
         val save = launch { environment.saveViewing(record) }
         assertEquals(record, environment.viewing)
         assertNull(AndroidCastEnvironment(context).viewing, "the disk hasn't got it yet")
@@ -176,8 +188,19 @@ class CastEnvironmentTest {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    @Test fun aSavedViewingSurvivesANewEnvironment() = runTest(UnconfinedTestDispatcher()) {
-        val record = CastViewingRecord(nonce = "n", server = "s", viewer = "v", route = "r", device = "d", session = "c", generation = 2, items = emptyList())
+    @Test
+    fun aSavedViewingSurvivesANewEnvironment() = runTest(UnconfinedTestDispatcher()) {
+        val record =
+            CastViewingRecord(
+                nonce = "n",
+                server = "s",
+                viewer = "v",
+                route = "r",
+                device = "d",
+                session = "c",
+                generation = 2,
+                items = emptyList()
+            )
         val storage = HeldDispatcher()
         val save = launch { AndroidCastEnvironment(context, storage).saveViewing(record) }
         storage.drain()

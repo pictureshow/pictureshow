@@ -7820,7 +7820,7 @@
       ]
     },
     {
-      "id": "cast-handoff.pick-while-detached-same-receiver-other-item-joins-and-replaces",
+      "id": "cast-handoff.pick-while-detached-same-receiver-other-item-rejoins-first",
       "operation": "cast",
       "state": {
         "owner": {
@@ -7869,31 +7869,20 @@
             }
           },
           "expected": {
+            "effect": "reconnect",
+            "reason": "rejoin-to-replace",
             "owner": {
               "owner": {
                 "server": "s",
                 "viewer": "v",
-                "device": "phone",
-                "session": "p",
-                "generation": "1",
-                "kind": "local"
-              },
-              "candidate": {
-                "server": "s",
-                "viewer": "v",
                 "device": "rcv",
-                "session": "c3",
-                "generation": "3",
+                "session": "c2",
+                "generation": "2",
                 "kind": "cast"
               },
-              "phase": "selecting",
-              "generation": "3"
-            },
-            "cleanup": "none",
-            "mediaSession": null,
-            "observed": null,
-            "effect": "replace-rejoin",
-            "link": "idle"
+              "phase": "disconnected",
+              "candidate": null
+            }
           }
         }
       ]
