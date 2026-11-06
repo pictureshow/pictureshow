@@ -597,11 +597,11 @@ class CastSenderHostTest {
         assertEquals(emptyList(), gateway.reports)
         link.sink!!.onConnected(null)
         link.sink!!.onStatus(
-            status("playing", positionMs = 900_000)
+            status("playing", positionMs = 500_000)
                 .copy(customData = mapOf("nonce" to nonce, "generation" to generation, "entry" to ENTRY), contentUrl = url)
         )
         runCurrent()
-        assertTrue("stopped:9000000000" in gateway.reports, gateway.reports.toString())
+        assertTrue("stopped:5000000000" in gateway.reports, gateway.reports.toString())
         assertTrue("revoke:$SESSION_TOKEN" in log)
         assertTrue(log.indexOf("reported-stopped") < log.indexOf("revoke:$SESSION_TOKEN"))
     }
@@ -622,7 +622,7 @@ class CastSenderHostTest {
         assertFalse("revoke:$SESSION_TOKEN" in log, "the wait still has a report to make with it")
         link.sink!!.onConnected(null)
         link.sink!!.onStatus(
-            status("playing", positionMs = 900_000).copy(
+            status("playing", positionMs = 500_000).copy(
                 customData = mapOf(
                     "nonce" to first.customData.getValue("nonce"),
                     "generation" to first.customData.getValue("generation"),
@@ -632,7 +632,7 @@ class CastSenderHostTest {
             )
         )
         runCurrent()
-        assertTrue("stopped:9000000000" in gateway.reports, gateway.reports.toString())
+        assertTrue("stopped:5000000000" in gateway.reports, gateway.reports.toString())
         assertEquals(1, log.count { it == "revoke:$SESSION_TOKEN" }, log.toString())
         assertTrue(log.indexOf("reported-stopped") < log.indexOf("revoke:$SESSION_TOKEN"))
     }
