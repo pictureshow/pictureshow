@@ -215,7 +215,7 @@ private fun OfflinePasswordTouch(controller: OfflineDownloadsController) {
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         modifier = Modifier.fillMaxWidth()
     )
-    TouchAction("Continue", password.isNotEmpty()) { controller.providePassword(password) }
+    TouchAction("Continue", enabled = password.isNotEmpty()) { controller.providePassword(password) }
     if (controller.passwordFailed) Text(OFFLINE_PASSWORD_FAILED, color = MaterialTheme.colorScheme.error)
 }
 
@@ -378,7 +378,7 @@ internal fun OfflineDownloadTouchScreen(
                 }
                 TouchAction(
                     "Download",
-                    !controller.started &&
+                    enabled = !controller.started &&
                         controller.selectedItems().isNotEmpty() &&
                         state.preview.choices.any { it.preset == controller.preset && it.available }
                 ) {

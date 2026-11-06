@@ -242,7 +242,7 @@ internal val LocalOfflineHandoff = staticCompositionLocalOf<OfflineHandoffStart?
  * Online viewing normally leaves the device's last-known state behind. After a handoff that would make the next local viewing resume from before
  * this session, and see the session's own progress as a conflict. A failure here only means the device knows less: the next sync reads first.
  */
-internal class OfflineHandoffOnlineGateway(private val delegate: PlaybackGateway, private val refresh: suspend () -> Unit) :
+internal class OfflineOnlineViewingGateway(private val delegate: PlaybackGateway, private val refresh: suspend () -> Unit) :
     PlaybackGateway by delegate {
     private suspend fun learn() {
         try {

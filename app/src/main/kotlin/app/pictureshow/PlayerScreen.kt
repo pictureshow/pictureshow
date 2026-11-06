@@ -133,11 +133,16 @@ internal fun PlayerViewing(
 ) {
     var current by remember(account.key, item.id) { mutableStateOf(item) }
     var start by remember(account.key, item.id) { mutableLongStateOf(startMs) }
+    val offline = LocalOfflinePlayback.current
     LaunchedEffect(current) { onCurrentItem(current) }
     key(current.id) {
         content(current, start) { next ->
-            start = app.pictureshow.core.resumeStartPositionMs(next.userData.playbackPositionTicks)
-            current = next
+            if (offline != null) {
+                offline.next?.advance(next)
+            } else {
+                start = app.pictureshow.core.resumeStartPositionMs(next.userData.playbackPositionTicks)
+                current = next
+            }
         }
     }
 }

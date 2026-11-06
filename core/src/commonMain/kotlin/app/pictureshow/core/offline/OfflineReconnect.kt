@@ -63,3 +63,29 @@ fun offlineHandoffSelection(type: String, index: Int, currentAudio: Int?, curren
         audio = if (type == "audio") index else currentAudio?.takeIf { it >= 0 },
         subtitle = if (type == "subtitle") index else currentSubtitle
     )
+
+/** The ready download of [itemId], the same preset as [preset] when both exist. */
+fun offlineReadyEntry(entries: List<OfflineEntry>, itemId: String, preset: OfflinePreset): OfflineEntry? = entries
+    .filter { it.itemId == itemId && it.job.phase == OfflinePhase.ready }
+    .minWithOrNull(compareBy({ it.preset != preset }, { it.createdSequence }))
+
+/**
+ * What follows [current] at the end of a local viewing. A server that answered knows the true order, so only a download of the episode it
+ * named follows; no download of that episode means the viewing ends rather than skipping ahead. With no answer the manifest can vouch only
+ * for the next number in the same season: it doesn't know how long a season is, so a season's end stops here.
+ */
+fun offlineNextEpisode(entries: List<OfflineEntry>, current: OfflineEntry, serverAnswered: Boolean, serverNext: String?): OfflineEntry? {
+    if (current.kind != OfflineMediaKind.episode) return null
+    if (serverAnswered) return serverNext?.let { offlineReadyEntry(entries, it, current.preset) }
+    val series = current.labels.seriesId ?: return null
+    val season = current.labels.seasonNumber ?: return null
+    val episode = current.labels.episodeNumber ?: return null
+    val next = entries.firstOrNull {
+        it.kind == OfflineMediaKind.episode &&
+            it.labels.seriesId == series &&
+            it.labels.seasonNumber == season &&
+            it.labels.episodeNumber == episode + 1 &&
+            it.job.phase == OfflinePhase.ready
+    } ?: return null
+    return offlineReadyEntry(entries, next.itemId, current.preset)
+}

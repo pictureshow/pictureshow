@@ -1040,6 +1040,18 @@ internal class OfflineEngine(
         return libraries.first()
     }
 
+    /** Nothing waits on this: a viewer leaving the player doesn't wait for a read, and a title with no download reads nothing. */
+    fun onlineViewingEnded(account: Account, itemId: String, read: suspend () -> OfflineUserData): Job = scope.launch {
+        if (ready()[account.key]?.manifest?.entries?.any { it.itemId == itemId } != true) return@launch
+        try {
+            progressStore(account).remember(itemId, read())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (e: Exception) {
+            android.util.Log.w("PictureshowOffline", "Position after online viewing not read: ${e.javaClass.simpleName}")
+        }
+    }
+
     fun userData(account: Account, itemId: String, data: OfflineUserData) {
         scope.launch { progressStore(account).remember(itemId, data) }
     }

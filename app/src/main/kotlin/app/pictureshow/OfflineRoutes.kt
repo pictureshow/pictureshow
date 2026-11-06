@@ -28,6 +28,7 @@ import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflineResourceRole
 import org.koin.compose.koinInject
+import org.koin.core.context.GlobalContext
 
 internal const val OFFLINE_DOWNLOADS_ROUTE = "downloads"
 private const val OFFLINE_STORAGE_ROUTE = "downloads-storage"
@@ -95,7 +96,7 @@ private fun OfflineLocalPlayer(
     account: Account?,
     entryId: String,
     onGone: () -> Unit,
-    onStream: (String) -> Unit,
+    onLeave: (String) -> Unit,
     content: @Composable (Account, MediaItem, Long) -> Unit
 ) {
     val engine: OfflineEngine = koinInject()
@@ -126,14 +127,34 @@ private fun OfflineLocalPlayer(
             { measuredNetwork(context).name },
             OfflineApiReconnectProbe(api, current, entry),
             OfflineStoreHandoff(gateway, store, entry.itemId, OfflineApiProgressRemote(api))
-        ) { start -> onStream(offlineStreamRoute(entry, start)) }
-        val binding = OfflinePlaybackBinding(gateway, entry.sidecarAudio(file), offlineUndownloadedStreams(entry), reconnect)
+        ) { start -> onLeave(offlineStreamRoute(entry, start)) }
+        val next = OfflineNext(
+            engine.ready()[current.key]?.manifest?.entries.orEmpty(),
+            entry,
+            { onLeave(offlinePlayerRoute(it)) },
+            onGone
+        )
+        val binding = OfflinePlaybackBinding(gateway, entry.sidecarAudio(file), offlineUndownloadedStreams(entry), reconnect, next)
         ready = Triple(entry, binding, store.resumeTicks(entry.itemId) / 10_000)
     }
     val loaded = ready ?: return
     val current = account ?: return
     CompositionLocalProvider(LocalOfflinePlayback provides loaded.second) {
         content(current, loaded.first.playerItem(), loaded.third)
+    }
+}
+
+/** Viewing online here moves the server's position; a later local viewing starts there and doesn't see it as someone else's progress. */
+internal fun offlineAwareGateway(
+    context: Context,
+    account: Account,
+    itemId: String,
+    identity: DeviceIdentityStore,
+    server: PlaybackGateway
+): PlaybackGateway {
+    val engine = GlobalContext.getOrNull()?.getOrNull<OfflineEngine>() ?: return server
+    return OfflineOnlineViewingGateway(server) {
+        engine.onlineViewingEnded(account, itemId) { offlineInteractiveApi(context, account, identity).userData(account, itemId) }
     }
 }
 
@@ -199,7 +220,7 @@ private fun OfflineStreamPlayer(
         val api = offlineInteractiveApi(context, current, identity)
         val tracks = PlaybackStartTracks(entry.sourceId, route.text("audio")?.toIntOrNull(), route.text("subtitle")?.toIntOrNull())
         loaded = entry to OfflineHandoffStart(entry.itemId, tracks) { server ->
-            OfflineHandoffOnlineGateway(server) { store.remember(entry.itemId, api.userData(current, entry.itemId)) }
+            OfflineOnlineViewingGateway(server) { store.remember(entry.itemId, api.userData(current, entry.itemId)) }
         }
     }
     val (entry, handoff) = loaded ?: return

@@ -47,6 +47,7 @@ import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryDir
 import app.pictureshow.core.offline.offlineEntryId
 import app.pictureshow.core.offline.offlineHandoffSelection
+import app.pictureshow.core.offline.offlineNextEpisode
 import app.pictureshow.core.offline.offlineOriginalRequest
 import app.pictureshow.core.offline.offlinePresets
 import app.pictureshow.core.offline.offlineRangeHeader
@@ -112,6 +113,8 @@ class OfflineVectorsTest {
     @Test fun plan() = run("offline-plan")
 
     @Test fun reconnect() = run("offline-reconnect")
+
+    @Test fun next() = run("offline-next")
 
     @Test fun fmp4() = run("offline-fmp4")
 
@@ -386,7 +389,17 @@ class OfflineVectorsTest {
             put("action", event.decoded<OfflineEntry>("entry")!!.trackSwitch(event.need("type"), event.int("serverIndex")))
         }
         "reconnect-tracks" -> buildJsonObject {
-            put("indexes", JsonArray(event.decoded<OfflineEntry>("entry")!!.undownloadedTracks(event.need("type")).map { JsonPrimitive(it.serverIndex) }))
+            val tracks = event.decoded<OfflineEntry>("entry")!!.undownloadedTracks(event.need("type"))
+            put("indexes", JsonArray(tracks.map { JsonPrimitive(it.serverIndex) }))
+        }
+        "next-episode" -> buildJsonObject {
+            val next = offlineNextEpisode(
+                event.decoded<List<OfflineEntry>>("entries")!!,
+                event.decoded<OfflineEntry>("current")!!,
+                event.bool("serverAnswered")!!,
+                event.text("serverNext")
+            )
+            put("entry", next?.id)
         }
         "reconnect-decision" -> {
             val decision = offlineReconnectDecision(
@@ -400,13 +413,12 @@ class OfflineVectorsTest {
             }
         }
         "reconnect-track-on-server" -> buildJsonObject {
-            put(
-                "found",
-                offlineTrackOnServer(event.decoded<OfflineTrack>("track")!!, event.text("sourceId"), event.decoded<List<OfflineServerSource>>("sources")!!)
-            )
+            val sources = event.decoded<List<OfflineServerSource>>("sources")!!
+            put("found", offlineTrackOnServer(event.decoded<OfflineTrack>("track")!!, event.text("sourceId"), sources))
         }
         "handoff-selection" -> {
-            val selection = offlineHandoffSelection(event.need("type"), event.int("index")!!, event.int("currentAudio"), event.int("currentSubtitle"))
+            val selection =
+                offlineHandoffSelection(event.need("type"), event.int("index")!!, event.int("currentAudio"), event.int("currentSubtitle"))
             buildJsonObject {
                 put("audio", selection.audio)
                 put("subtitle", selection.subtitle)

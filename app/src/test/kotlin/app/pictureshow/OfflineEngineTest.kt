@@ -999,6 +999,27 @@ class OfflineEngineTest {
     }
 
     @Test
+    fun `online viewing of a downloaded title moves where the local viewing starts, and other titles read nothing`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        var reads = 0
+        engine.onlineViewingEnded(viewerA, "1") {
+            reads++
+            OfflineUserData(positionTicks = 7_000)
+        }.join()
+        assertEquals(7_000, engine.progressStore(viewerA).resumeTicks("1"))
+        engine.onlineViewingEnded(viewerA, "not-downloaded") {
+            reads++
+            OfflineUserData(positionTicks = 9_000)
+        }.join()
+        assertEquals(1, reads)
+        assertEquals(0, engine.progressStore(viewerA).resumeTicks("not-downloaded"))
+        engine.onlineViewingEnded(viewerA, "1") { throw IOException("server gone") }.join()
+        assertEquals(7_000, engine.progressStore(viewerA).resumeTicks("1"))
+    }
+
+    @Test
     fun `after a re-sign-in progress syncs with the new token, even from a screen holding the old account`() = runBlocking<Unit> {
         signIn(viewerA)
         val engine = started()

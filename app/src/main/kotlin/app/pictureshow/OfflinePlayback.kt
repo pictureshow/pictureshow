@@ -22,6 +22,8 @@ import app.pictureshow.core.offline.OfflineEntry
 import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflineResourceRole
 import app.pictureshow.core.offline.OfflineTrack
+import app.pictureshow.core.offline.offlineNextEpisode
+import app.pictureshow.core.offline.offlineReadyEntry
 import app.pictureshow.core.offline.undownloadedTracks
 import app.pictureshow.core.playback.MediaSourceInfo
 import app.pictureshow.core.playback.MediaStream
@@ -42,12 +44,35 @@ internal class OfflinePlaybackBinding(
     val gateway: PlaybackGateway,
     private val sidecars: List<File>,
     val undownloaded: List<MediaStream> = emptyList(),
-    val reconnect: OfflineReconnect? = null
+    val reconnect: OfflineReconnect? = null,
+    val next: OfflineNext? = null
 ) {
     fun output(context: Context, server: Server, title: String): Media3PlaybackOutput =
         Media3PlaybackOutput(context, server, title, DefaultDataSource.Factory(context), sourceWrapper = {
             OfflineMergingFactory(context, it, sidecars)
         })
+}
+
+/**
+ * What follows a local viewing. Everything that would move on, the end of the title or a controller's Next, lands in [advance]: a local
+ * player is bound to one file, so the next title is a new local player or none. Not downloaded means the viewing ends: OFF-11 keeps a change
+ * of source deliberate, and the server's offer (OFF-05) is for a track the viewer picked.
+ */
+internal class OfflineNext(
+    private val entries: List<OfflineEntry>,
+    private val current: OfflineEntry,
+    private val open: (OfflineEntry) -> Unit,
+    private val stop: () -> Unit
+) {
+    fun after(server: ClientResult<MediaItem?>): ClientResult<MediaItem?> {
+        val answered = server as? ClientResult.Success
+        val next = offlineNextEpisode(entries, current, answered != null, answered?.value?.id)
+        return ClientResult.Success(next?.playerItem())
+    }
+
+    fun advance(item: MediaItem) {
+        offlineReadyEntry(entries, item.id, current.preset)?.let(open) ?: stop()
+    }
 }
 
 /** Provided by the local player route only; online playback reads null and nothing changes for it. */

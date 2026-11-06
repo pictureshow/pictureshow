@@ -82,7 +82,7 @@ class OfflineHandoffProgressTest {
         gateway.progress(tick(510))
         gateway.stopped(stop(520))
         gateway.played()
-        assertEquals(1, exits, "the normal exit still runs")
+        assertEquals(2, exits, "stopping and finishing each still ask for a sync")
         assertTrue(store.sync(remote))
         assertEquals<List<Pair<Long?, Boolean?>>>(listOf(500L to null), remote.writes, "nothing further")
         assertTrue(store.conflicts.value.isEmpty(), "no conflict with itself")
@@ -187,7 +187,7 @@ class OfflineHandoffProgressTest {
         val remote = Remote(OfflineUserData(positionTicks = 100))
         handoff(remote).settle(500)
         val server = OnlineServer()
-        val online = OfflineHandoffOnlineGateway(server) { store.remember("i", remote.read(account, "i")) }
+        val online = OfflineOnlineViewingGateway(server) { store.remember("i", remote.read(account, "i")) }
         // The online session reports through the delegate; the server moved to 900.
         remote.data = remote.data.copy(positionTicks = 900)
         online.stopped(stop(900))
@@ -204,7 +204,7 @@ class OfflineHandoffProgressTest {
     fun `learning goes through every ending and can't break one`() = runBlocking<Unit> {
         var refreshes = 0
         val server = OnlineServer()
-        val online = OfflineHandoffOnlineGateway(server) {
+        val online = OfflineOnlineViewingGateway(server) {
             refreshes++
             throw IOException("offline again")
         }

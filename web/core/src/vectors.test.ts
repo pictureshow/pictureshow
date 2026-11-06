@@ -63,6 +63,7 @@ const pendingPortSuites = new Set([
     "offline-outbox",
     "offline-plan",
     "offline-reconnect",
+    "offline-next",
     "offline-fmp4",
 ]);
 const files = readdirSync(spec + "/vectors", { recursive: true })

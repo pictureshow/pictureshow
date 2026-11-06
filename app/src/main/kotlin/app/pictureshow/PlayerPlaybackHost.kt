@@ -406,7 +406,9 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                     ),
                     offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, activeProbe::snapshot, captionLanguage) {
                         catalog.completePlayback(account, item.id, report)
-                    }.let { server -> handoff?.gateway?.invoke(server) ?: server },
+                    }.let { server ->
+                        handoff?.gateway?.invoke(server) ?: offlineAwareGateway(context, account, item.id, identity, server)
+                    },
                     MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
                     item.id
                 ) { reason -> PlaybackDiagnostics.write("owner-report suppressed reason=$reason") }
@@ -472,7 +474,8 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
         LaunchedEffect(extras, metadata.id, metadata.type, metadata.seriesId, nextRetry) {
             val client = extras ?: return@LaunchedEffect
             nextLookup = null
-            nextLookup = EpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
+            val answer = client.nextEpisode(account, metadata)
+            nextLookup = EpisodeLookup(nextRetry, offline?.next?.after(answer) ?: answer)
         }
         val upcoming = remote?.upcoming
         LaunchedEffect(ended, nextLookup, nextCancelled, foreground, pauseIntent, remoteNext, upcoming, remoteNextResolving) {
