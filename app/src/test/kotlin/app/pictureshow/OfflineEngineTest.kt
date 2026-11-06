@@ -12,10 +12,19 @@ import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
 import app.pictureshow.core.offline.OFFLINE_PART_SUFFIX
+import app.pictureshow.core.offline.OfflineEntry
+import app.pictureshow.core.offline.OfflineJob
+import app.pictureshow.core.offline.OfflineLabels
+import app.pictureshow.core.offline.OfflineManifest
+import app.pictureshow.core.offline.OfflineMediaKind
 import app.pictureshow.core.offline.OfflinePhase
 import app.pictureshow.core.offline.OfflinePreset
+import app.pictureshow.core.offline.OfflineUserData
+import app.pictureshow.core.offline.offlineDecodeManifest
+import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryId
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
@@ -87,6 +97,15 @@ class OfflineEngineTest {
     @Volatile
     private var downloadsAlwaysDrop = false
 
+    @Volatile
+    private var holdItems = false
+    private var convertedBody: ByteArray? = null
+    private var afterConversion: ByteArray? = null
+    private var httpOverride: OfflineHttp? = null
+    private var apiClientOverride: okhttp3.OkHttpClient? = null
+    private var restartTrust: (Long) -> Long = { it }
+    private var cleaner: (OfflineFiles) -> Unit = OfflineFiles::emptyTrash
+
     private lateinit var serverInfo: Server
     private lateinit var viewerA: Account
     private lateinit var viewerB: Account
@@ -106,6 +125,7 @@ class OfflineEngineTest {
                 if (portal) return MockResponse().setHeader("Content-Type", "text/html").setBody("<html>Sign in to Wi-Fi</html>")
                 val path = request.path.orEmpty().substringBefore('?')
                 return when {
+                    holdItems && path.contains("/Items/") -> MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
                     path.startsWith("/Users/") && path.contains("/Items/") -> json(itemJson(path.substringAfterLast('/')))
                     path == "/QuickConnect/Enabled" -> json(if (quickConnect) "true" else "false")
                     path == "/QuickConnect/Initiate" -> json("""{"Code":"123456","Secret":"secret"}""")
@@ -121,6 +141,7 @@ class OfflineEngineTest {
                     }
                     path == "/Sessions/Logout" -> MockResponse().setResponseCode(logoutStatus)
                     path.endsWith("/Download") -> download(request)
+                    path.contains("/stream.") -> conversion()
                     path.contains("/Images/") -> MockResponse().setResponseCode(404)
                     else -> MockResponse().setResponseCode(404)
                 }
@@ -153,6 +174,16 @@ class OfflineEngineTest {
     }
 
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
+
+    /** A conversion is chunked: there's no length to say that it stopped early. */
+    private fun conversion(): MockResponse {
+        val body = convertedBody ?: return MockResponse().setResponseCode(404)
+        afterConversion?.let {
+            convertedBody = it
+            afterConversion = null
+        }
+        return MockResponse().setChunkedBody(Buffer().write(body), 4096)
+    }
 
     private fun download(request: RecordedRequest): MockResponse {
         if (downloadsAlwaysDrop) return MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
@@ -190,8 +221,8 @@ class OfflineEngineTest {
                     foreground += activeTitles
                 }
             },
-            http = offlineOkHttp(),
-            apiClient = okhttp3.OkHttpClient(),
+            http = httpOverride ?: offlineOkHttp(),
+            apiClient = apiClientOverride ?: okhttp3.OkHttpClient(),
             networkState = {
                 check(!networkThrows) { "network" }
                 network
@@ -205,6 +236,8 @@ class OfflineEngineTest {
             unreachableDelayMs = { restMs },
             storageRecheckMs = recheckMs,
             revocationRecheckMs = revocationMs,
+            trashCleaner = cleaner,
+            restartTrustedBytes = restartTrust,
             scope = scope
         )
     }
@@ -691,6 +724,467 @@ class OfflineEngineTest {
         delay(400)
         assertEquals("no change in free space, no new attempt", tried, itemRequests("1"))
         free = 10L * 1024 * 1024 * 1024
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    // Fix round: the review's findings, each by what it would have cost the viewer.
+
+    private val converted = OfflinePreset.video720
+    private val convertedId get() = offlineEntryId("c", converted)
+
+    /** Ten seconds in fragments of two, against an item that runs ten. */
+    private fun conversionOf(fragments: Int): ByteArray = Fmp4Builder.file(fragments)
+
+    private fun convertedItem() = item("c").copy(runtimeTicks = 100_000_000)
+
+    private fun OfflineEngine.convertedEntry() = libraries.value[viewerA.key]?.manifest?.entries?.firstOrNull { it.id == convertedId }
+
+    private suspend fun OfflineEngine.awaitConverted(phase: OfflinePhase) = withTimeout(20_000) {
+        libraries.first { all -> all[viewerA.key]?.manifest?.entries?.firstOrNull { it.id == convertedId }?.job?.phase == phase }
+        Unit
+    }
+
+    private fun conversionRequests() = requests.count { it.path.orEmpty().contains("/Videos/") && it.path.orEmpty().contains("/stream.") }
+
+    private fun downloadRequests() = requests.count { it.path.orEmpty().contains("/Download") }
+
+    @Test
+    fun `a conversion that ended early at a fragment boundary never reaches Ready`() = runBlocking<Unit> {
+        signIn(viewerA)
+        convertedBody = conversionOf(2)
+        val engine = started()
+        engine.enqueue(viewerA, convertedItem(), OfflineChoice("c", converted))
+        engine.awaitConverted(OfflinePhase.failed)
+        assertEquals("short", engine.convertedEntry()?.job?.failure)
+        assertEquals(2, conversionRequests())
+    }
+
+    @Test
+    fun `a whole conversion is Ready, and one that came up short the first time gets a second go`() = runBlocking<Unit> {
+        signIn(viewerA)
+        convertedBody = conversionOf(2)
+        afterConversion = conversionOf(5)
+        val engine = started()
+        engine.enqueue(viewerA, convertedItem(), OfflineChoice("c", converted))
+        engine.awaitConverted(OfflinePhase.ready)
+        assertEquals(2, conversionRequests())
+    }
+
+    @Test
+    fun `on a full disk Delete still frees the bytes, nothing escapes, and the record follows when it can`() = runBlocking<Unit> {
+        recheckMs = 20
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        val file = mediaFile(engine, viewerA, "1")
+        assertTrue(file.exists())
+        val manifest = engine.files.manifest(viewerA.key)
+        // The write can't happen, as it can't on a full disk.
+        val temp = File(manifest.parentFile, manifest.name + ".tmp")
+        assertTrue(temp.mkdirs())
+        engine.delete(viewerA.key, entryId("1"))
+        assertFalse(file.exists())
+        assertEquals(null, engine.entry(viewerA, "1"))
+        assertTrue(manifest.readText().contains(entryId("1")))
+        assertTrue(temp.delete())
+        withTimeout(10_000) {
+            while (manifest.readText().contains(entryId("1"))) delay(10)
+        }
+    }
+
+    @Test
+    fun `no button can take the app down, whatever goes wrong behind it`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        networkThrows = true
+        engine.pause(viewerA.key, entryId("1"))
+        engine.resume(viewerA.key, entryId("1"))
+        engine.retry(viewerA.key, entryId("1"))
+        engine.redownload(viewerA.key, entryId("1"))
+        engine.setCellular(viewerA.key, entryId("1"), true)
+        engine.setWifiOnly(viewerA.key, false)
+        engine.setCap(viewerA.key, 1L shl 40)
+        engine.refresh()
+        engine.enqueue(viewerA, item("2"), choice("2"))
+        engine.delete(viewerA.key, entryId("1"))
+        networkThrows = false
+    }
+
+    @Test
+    fun `pause ends a stalled connection at once, and resume doesn't wait out the timeout`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        withTimeout(5_000) {
+            while (downloadRequests() == 0) delay(5)
+        }
+        engine.pause(viewerA.key, entryId("1"))
+        hold = false
+        engine.resume(viewerA.key, entryId("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    /** A read that ignores being told to stop until released, like a call nobody could cancel. */
+    private class StubbornHttp(private val media: ByteArray) : OfflineHttp {
+        val opens = java.util.concurrent.atomic.AtomicInteger()
+        val firstBlocked = java.util.concurrent.CountDownLatch(1)
+        val releaseFirst = java.util.concurrent.CountDownLatch(1)
+        val firstEnded = java.util.concurrent.CountDownLatch(1)
+        val secondBlocked = java.util.concurrent.CountDownLatch(1)
+        val secondCancelled = java.util.concurrent.CountDownLatch(1)
+
+        override fun open(
+            url: String,
+            headers: Map<String, String>,
+            range: String?,
+            onCall: (cancel: () -> Unit) -> Unit
+        ): OfflineHttpResponse {
+            val which = opens.incrementAndGet()
+            if (which == 2) onCall { secondCancelled.countDown() }
+            val answer = mapOf("Last-Modified" to "Mon", "Accept-Ranges" to "bytes")
+            val body = object : java.io.InputStream() {
+                override fun read(): Int = throw IOException("unused")
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (which == 1) {
+                        firstBlocked.countDown()
+                        releaseFirst.await()
+                        firstEnded.countDown()
+                    } else {
+                        secondBlocked.countDown()
+                        secondCancelled.await()
+                    }
+                    throw IOException("ended")
+                }
+            }
+            return OfflineHttpResponse(200, { answer[it] }, body, media.size.toLong()) {}
+        }
+    }
+
+    @Test
+    fun `a new attempt never writes beside an old one, and the old one ending can't take Pause away from it`() = runBlocking<Unit> {
+        val http = StubbornHttp(media)
+        httpOverride = http
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        assertTrue(http.firstBlocked.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        engine.pause(viewerA.key, entryId("1"))
+        engine.resume(viewerA.key, entryId("1"))
+        // Pause and Resume again while it's waiting: a job stopped before it ever ran must not break the chain.
+        engine.pause(viewerA.key, entryId("1"))
+        engine.resume(viewerA.key, entryId("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.preparing)
+        delay(500)
+        assertEquals(1, http.opens.get())
+        http.releaseFirst.countDown()
+        assertTrue(http.firstEnded.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertTrue(http.secondBlocked.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals(2, http.opens.get())
+        // The old attempt's ending had the chance to forget the new one. Pause must still reach it.
+        engine.pause(viewerA.key, entryId("1"))
+        assertTrue(http.secondCancelled.await(5, java.util.concurrent.TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `an old attempt losing its connection late doesn't knock back the one that replaced it`() = runBlocking<Unit> {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        var once = true
+        apiClientOverride = okhttp3.OkHttpClient.Builder().addInterceptor { chain ->
+            if (chain.request().url.encodedPath.contains("/Items/") && synchronized(entered) { once.also { once = false } }) {
+                entered.countDown()
+                release.await()
+                throw IOException("late")
+            }
+            chain.proceed(chain.request())
+        }.build()
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        engine.pause(viewerA.key, entryId("1"))
+        engine.resume(viewerA.key, entryId("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.preparing)
+        val seen = java.util.concurrent.CopyOnWriteArrayList<OfflinePhase>()
+        val watcher = launch(Dispatchers.Default) {
+            engine.libraries.collect { all ->
+                all[viewerA.key]?.manifest?.entries?.firstOrNull()?.job?.phase?.let { seen += it }
+            }
+        }
+        release.countDown()
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        watcher.cancel()
+        assertFalse(seen.toString(), OfflinePhase.waitingNetwork in seen)
+    }
+
+    @Test
+    fun `a drop close to the cap carries on, it doesn't go waiting for storage nobody needs to free`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.setCap(viewerA.key, media.size + 1000L)
+        cutAt = 400_000
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertTrue(downloadRequests() >= 2)
+    }
+
+    @Test
+    fun `after Android's time for the service runs out, the next job run picks the bytes up again`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        engine.foregroundTimedOut()
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        hold = false
+        delay(200)
+        assertEquals(OfflinePhase.waitingNetwork, engine.entry(viewerA, "1")?.job?.phase)
+        engine.wake()
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    private class TokenRemote : OfflineProgressRemote {
+        val tokens = java.util.concurrent.CopyOnWriteArrayList<String>()
+        override suspend fun sameViewer(account: Account): Boolean {
+            tokens += account.accessToken
+            return true
+        }
+
+        override suspend fun read(account: Account, itemId: String) = OfflineUserData()
+        override suspend fun write(account: Account, itemId: String, positionTicks: Long?, played: Boolean?): Int? = 200
+    }
+
+    @Test
+    fun `after a re-sign-in progress syncs with the new token, even from a screen holding the old account`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        val store = engine.progressStore(viewerA)
+        store.viewing("1", store.newSequence(), 50)
+        accounts.remember(viewerA.copy(accessToken = "token-new"))
+        val remote = TokenRemote()
+        engine.progressStore(viewerA).sync(remote)
+        assertEquals(listOf("token-new"), remote.tokens.toList())
+    }
+
+    @Test
+    fun `a player still open at sign-out can't put the viewer's history back on disk`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        val store = engine.progressStore(viewerA)
+        val sequence = store.newSequence()
+        val dir = engine.files.accountDir(viewerA.key)
+        accounts.signOut(viewerA.key)
+        withTimeout(10_000) { engine.libraries.first { viewerA.key !in it } }
+        store.viewing("1", sequence, 50)
+        engine.progressStore(viewerA).viewing("1", sequence, 60)
+        assertFalse(dir.exists())
+        signIn(viewerA)
+        withTimeout(10_000) { engine.libraries.first { viewerA.key in it } }
+        delay(50)
+        val back = engine.progressStore(viewerA)
+        back.viewing("2", back.newSequence(), 50)
+        assertTrue(engine.files.progress(viewerA.key).exists())
+    }
+
+    @Test
+    fun `the notification names only the signed-in viewer's downloads`() = runBlocking<Unit> {
+        signIn(viewerB, viewerA)
+        accounts.select(viewerA.key)
+        hold = true
+        val engine = started()
+        engine.enqueue(viewerB, item("1"), choice("1"))
+        engine.awaitPhase(viewerB, "1", OfflinePhase.transferring)
+        assertFalse(foreground.toString(), foreground.flatten().contains("Title 1"))
+        assertTrue(foreground.flatten().contains(""))
+        accounts.select(viewerB.key)
+        withTimeout(10_000) {
+            while (!foreground.flatten().contains("Title 1")) delay(5)
+        }
+    }
+
+    @Test
+    fun `the notification's words`() {
+        val running = OfflineEntry(
+            id = "x",
+            itemId = "x",
+            kind = OfflineMediaKind.movie,
+            preset = original,
+            labels = OfflineLabels(title = "Mine"),
+            job = OfflineJob(OfflinePhase.transferring)
+        )
+        val theirs = running.copy(labels = OfflineLabels(title = "Theirs"))
+        val libraries = mapOf(
+            "other" to OfflineLibrary(OfflineManifest(entries = listOf(theirs))),
+            "me" to OfflineLibrary(OfflineManifest(entries = listOf(running)))
+        )
+        assertEquals(listOf("Mine", ""), offlineForegroundTitles(libraries, "me"))
+        assertEquals(listOf("", ""), offlineForegroundTitles(libraries, null))
+        assertEquals("Mine", offlineNotificationTitle(listOf("Mine", "")))
+        assertEquals("Downloads", offlineNotificationTitle(listOf("", "")))
+    }
+
+    /** What a kill between the rename and the save leaves. */
+    private suspend fun stopAndForgetFinish(engine: OfflineEngine, key: String, entry: String) {
+        scopes.forEach { it.cancel() }
+        delay(100)
+        val file = engine.files.manifest(key)
+        val manifest = offlineDecodeManifest(file.readText())!!
+        file.writeText(
+            offlineEncodeManifest(
+                manifest.copy(
+                    entries = manifest.entries.map { current ->
+                        if (current.id != entry) {
+                            current
+                        } else {
+                            current.copy(
+                                job = current.job.copy(phase = OfflinePhase.transferring),
+                                resources = current.resources.map { it.copy(complete = false, bytes = null, sha256 = null) }
+                            )
+                        }
+                    }
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `a finished file the manifest didn't hear about is taken up, not downloaded again`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        val before = downloadRequests()
+        stopAndForgetFinish(engine, viewerA.key, entryId("1"))
+        val second = started()
+        second.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertEquals(before, downloadRequests())
+        assertArrayEquals(media, mediaFile(second, viewerA, "1").readBytes())
+    }
+
+    @Test
+    fun `a finished conversion isn't asked of the server twice`() = runBlocking<Unit> {
+        signIn(viewerA)
+        convertedBody = conversionOf(5)
+        val engine = started()
+        engine.enqueue(viewerA, convertedItem(), OfflineChoice("c", converted))
+        engine.awaitConverted(OfflinePhase.ready)
+        val before = conversionRequests()
+        stopAndForgetFinish(engine, viewerA.key, convertedId)
+        val second = started()
+        second.awaitConverted(OfflinePhase.ready)
+        assertEquals(before, conversionRequests())
+    }
+
+    @Test
+    fun `a file left behind that can't be shown whole goes, and doesn't count twice`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        val file = mediaFile(engine, viewerA, "1")
+        val before = downloadRequests()
+        stopAndForgetFinish(engine, viewerA.key, entryId("1"))
+        file.writeBytes(media.copyOf(1000))
+        val second = started()
+        second.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertTrue(downloadRequests() > before)
+        assertArrayEquals(media, file.readBytes())
+        assertEquals(media.size.toLong(), second.libraries.value[viewerA.key]!!.manifest.budget.usedBytes)
+    }
+
+    @Test
+    fun `a Wi-Fi sign-in page answering the Quick Connect question doesn't read as this server wanting a password`() = runBlocking<Unit> {
+        signIn(viewerA)
+        restMs = 200
+        portal = true
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        assertFalse(engine.libraries.value[viewerA.key]!!.needsPassword)
+        portal = false
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `after a restart a partial is cut back to what was surely synced, and not during one`() = runBlocking<Unit> {
+        signIn(viewerA)
+        restartTrust = { 100_000 }
+        cutAt = 400_000
+        offAfterNextCut = true
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.waitingNetwork)
+        val part = File(mediaFile(engine, viewerA, "1").path + OFFLINE_PART_SUFFIX)
+        assertTrue(part.length() > 100_000)
+        scopes.forEach { it.cancel() }
+        delay(100)
+        offAfterNextCut = false
+        serverOff = false
+        cutAt = null
+        requests.clear()
+        val second = started()
+        second.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        assertEquals("bytes=100000-", requests.first { it.path.orEmpty().contains("/Download") }.getHeader("Range"))
+        assertArrayEquals(media, mediaFile(second, viewerA, "1").readBytes())
+    }
+
+    @Test
+    fun `a dropped connection in a running process keeps all it has`() = runBlocking<Unit> {
+        signIn(viewerA)
+        restartTrust = { 0 }
+        cutAt = 400_000
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+        val ranges = requests.filter { it.path.orEmpty().contains("/Download") }.mapNotNull { it.getHeader("Range") }
+        assertTrue(ranges.toString(), ranges.isNotEmpty() && ranges.none { it == "bytes=0-" })
+    }
+
+    @Test
+    fun `a heavy trash never holds up the start, and still empties`() = runBlocking<Unit> {
+        val release = java.util.concurrent.CountDownLatch(1)
+        val emptied = java.util.concurrent.CountDownLatch(1)
+        cleaner = {
+            release.await()
+            emptied.countDown()
+        }
+        signIn(viewerA)
+        val engine = engine()
+        withTimeout(5_000) { engine.start().join() }
+        release.countDown()
+        assertTrue(emptied.await(5, java.util.concurrent.TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `the ending of a film played from a download is synced, not left for the next network change`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        var exits = 0
+        val entry = OfflineEntry("x", "x", OfflineMediaKind.movie, preset = original, labels = OfflineLabels("x"))
+        val gateway = OfflinePlaybackGateway(entry, File("x"), { null }, engine.progressStore(viewerA), 1) { exits++ }
+        gateway.played()
+        assertEquals(1, exits)
+    }
+
+    @Test
+    fun `pause ends a stalled answer from the server too, so the next attempt isn't held behind it`() = runBlocking<Unit> {
+        apiClientOverride = okhttp3.OkHttpClient.Builder().readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build()
+        holdItems = true
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        withTimeout(5_000) {
+            while (requests.none { it.path.orEmpty().contains("/Items/") }) delay(5)
+        }
+        engine.pause(viewerA.key, entryId("1"))
+        holdItems = false
+        engine.resume(viewerA.key, entryId("1"))
         engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
     }
 }

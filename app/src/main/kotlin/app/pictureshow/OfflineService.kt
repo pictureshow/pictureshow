@@ -42,6 +42,9 @@ internal const val OFFLINE_JOB_TRANSFER_MS = 2 * 60_000L
 internal const val OFFLINE_JOB_WAITING_MS = 15 * 60_000L
 private const val OFFLINE_JOB_HOLD_LOOK_MS = 2_000L
 
+/** Another viewer's download counts but has no name here: see [offlineForegroundTitles]. */
+internal fun offlineNotificationTitle(titles: List<String>): String = titles.firstOrNull { it.isNotEmpty() } ?: OFFLINE_CHANNEL_NAME
+
 private fun offlineNotification(context: Context, titles: List<String>): Notification {
     val manager = context.getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -51,7 +54,7 @@ private fun offlineNotification(context: Context, titles: List<String>): Notific
         ?: context.packageManager.getLeanbackLaunchIntentForPackage(context.packageName)
     return NotificationCompat.Builder(context, OFFLINE_CHANNEL)
         .setSmallIcon(android.R.drawable.stat_sys_download)
-        .setContentTitle(titles.firstOrNull() ?: OFFLINE_CHANNEL_NAME)
+        .setContentTitle(offlineNotificationTitle(titles))
         .setContentText(if (titles.size <= 1) "1 download in progress" else "${titles.size} downloads in progress")
         .setOngoing(true)
         .setSilent(true)
@@ -92,7 +95,7 @@ class OfflineTransferService : Service() {
         super.onDestroy()
     }
 
-    /** Android 15 limits this service type's time. Bytes wait; the scheduled job picks them up. */
+    /** Android 15 limits this service type's time. Bytes wait; the next booked run of the job picks them up, through wake(). */
     override fun onTimeout(startId: Int, fgsType: Int) {
         engine.foregroundTimedOut()
         stopSelf()
@@ -111,7 +114,7 @@ class OfflineJobService : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
         foreground.jobStarted()
         holding = CoroutineScope(Dispatchers.Main.immediate).launch {
-            engine.start().join()
+            engine.wake()
             delay(OFFLINE_FOREGROUND_SETTLE_MS * 3)
             while (foreground.transferringUnderJobOnly()) delay(OFFLINE_JOB_HOLD_LOOK_MS)
             jobFinished(params, false)
@@ -132,8 +135,9 @@ internal fun offlineScheduleJob(context: Context, delayMs: Long) {
     val scheduler = context.getSystemService(JobScheduler::class.java) ?: return
     runCatching {
         scheduler.schedule(
+            // No network requirement on purpose. The engine looks at the network itself, and a job waiting on a network can be
+            // held back by the system's batching for half an hour, which outlasts the kill or reboot this job is for.
             JobInfo.Builder(OFFLINE_JOB, ComponentName(context, OfflineJobService::class.java))
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setMinimumLatency(delayMs)
                 .setPersisted(true)
                 .build()

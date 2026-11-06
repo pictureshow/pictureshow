@@ -100,7 +100,7 @@ class OfflineDownloadsScreenTest {
             object : OfflineForeground {
                 override fun update(activeTitles: List<String>) = Unit
             },
-            http = OfflineHttp { _, _, _ -> throw java.io.IOException("no network in this test") },
+            http = OfflineHttp { _, _, _, _ -> throw java.io.IOException("no network in this test") },
             apiClient = okhttp3.OkHttpClient(),
             networkState = { OfflineNetwork.none },
             freeBytes = { 1L shl 40 },

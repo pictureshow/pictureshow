@@ -39,6 +39,7 @@ import app.pictureshow.core.offline.offlineCleanupRequest
 import app.pictureshow.core.offline.offlineDecodeManifest
 import app.pictureshow.core.offline.offlineDefaultCap
 import app.pictureshow.core.offline.offlineDownloadSetDevice
+import app.pictureshow.core.offline.offlineDurableOffset
 import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryDir
 import app.pictureshow.core.offline.offlineEntryId
@@ -333,6 +334,9 @@ class OfflineVectorsTest {
         "body-end" -> buildJsonObject {
             put("action", offlineBodyEnd(event.long("receivedBytes")!!, event.long("totalBytes"), event.bool("cleanEof")!!).action)
         }
+        "durable-offset" -> buildJsonObject {
+            put("offset", offlineDurableOffset(event.long("partialBytes")!!))
+        }
         "verify" -> {
             val result = offlineVerify(
                 OfflineVerifyInput(
@@ -341,7 +345,9 @@ class OfflineVectorsTest {
                     event.need("actualSha256"),
                     event.text("expectedSha256"),
                     event.text("sourceETagBefore"),
-                    event.text("sourceETagNow")
+                    event.text("sourceETagNow"),
+                    event.long("expectedRuntimeTicks"),
+                    event.long("measuredTicks")
                 )
             )
             buildJsonObject {

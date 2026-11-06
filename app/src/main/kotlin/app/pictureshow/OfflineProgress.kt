@@ -48,7 +48,19 @@ internal class OfflineApiProgressRemote(private val api: OfflineApi) : OfflinePr
 }
 
 /** One viewer's durable outbox (OFF-07, OFF-08): writes commit to disk before anything touches the server. */
-internal class OfflineProgressStore(private val file: File, private val account: Account) {
+internal class OfflineProgressStore(private val file: File, account: Account) {
+    /** The newest credentials the app has for this viewer: a re-sign-in replaces the token this store was made with. */
+    @Volatile
+    var account: Account = account
+
+    /** The viewer signed out. A player still open must not put their history back on disk. */
+    @Volatile
+    private var retired = false
+
+    fun retire() {
+        retired = true
+    }
+
     private val mutex = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
     private val mutableConflicts = MutableStateFlow(emptyMap<String, OfflineConflict>())
@@ -71,9 +83,17 @@ internal class OfflineProgressStore(private val file: File, private val account:
     }
 
     private fun save(value: OfflineProgressFile) {
-        file.writeAtomically(json.encodeToString(OfflineProgressFile.serializer(), value))
         cached = value
         publish(value)
+        if (retired) return
+        // A full disk: this device keeps it in memory and tries again at the next save. A viewer mid-film never sees this.
+        try {
+            file.writeAtomically(json.encodeToString(OfflineProgressFile.serializer(), value))
+        } catch (e: IOException) {
+            android.util.Log.w("PictureshowOffline", "Progress not saved: ${e.javaClass.simpleName}")
+        } catch (e: IllegalStateException) {
+            android.util.Log.w("PictureshowOffline", "Progress not saved: ${e.javaClass.simpleName}")
+        }
     }
 
     private fun publish(value: OfflineProgressFile) {

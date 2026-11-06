@@ -113,16 +113,43 @@ fun offlineBodyEnd(receivedBytes: Long, totalBytes: Long?, cleanEof: Boolean): O
     }
 )
 
+private const val TICKS_PER_SECOND = 10_000_000L
+
+/** A resumed body is trusted only up to the last boundary that was synced before anything was written past it. */
+const val OFFLINE_SYNC_BYTES = 16L * 1024 * 1024
+
+/**
+ * A chunked conversion that dies at a fragment boundary ends as cleanly as a finished one, and its length and hash are of
+ * the same short file, so running time is the only witness. Longer never fails. The allowance is the larger of 5 seconds and
+ * 1% of the running time: a container's duration can exceed one track's by a little (measured 359.875 s against 360 s,
+ * 0.035%), and a real cut loses far more than that.
+ */
+fun offlineConversionShort(expectedTicks: Long?, measuredTicks: Long?): Boolean {
+    if (expectedTicks == null || measuredTicks == null || expectedTicks <= 0) return false
+    return expectedTicks - measuredTicks > maxOf(5 * TICKS_PER_SECOND, expectedTicks / 100)
+}
+
+/**
+ * Where to resume a partial after the process was gone, so a power cut may have torn its tail. The largest multiple of
+ * OFFLINE_SYNC_BYTES strictly below the length: a file of exactly that length may not have reached its sync yet.
+ */
+fun offlineDurableOffset(partialBytes: Long): Long =
+    if (partialBytes <= 0) 0 else (partialBytes - 1) / OFFLINE_SYNC_BYTES * OFFLINE_SYNC_BYTES
+
 data class OfflineVerifyInput(
     val actualBytes: Long,
     val expectedBytes: Long?,
     val actualSha256: String,
     val expectedSha256: String? = null,
     val sourceETagBefore: String? = null,
-    val sourceETagNow: String? = null
+    val sourceETagNow: String? = null,
+    /** The item's running time, for a server conversion. Null: nothing to compare with. */
+    val expectedRuntimeTicks: Long? = null,
+    /** The running time the converted file's fragments add up to. Null for a file that isn't fragmented. */
+    val measuredTicks: Long? = null
 )
 
-/** reason: "length" | "hash" | "source-changed". A null sourceETagNow (offline at verify) doesn't fail. */
+/** reason: "length" | "hash" | "short" | "source-changed". A null sourceETagNow (offline at verify) doesn't fail. */
 data class OfflineVerifyResult(val ok: Boolean, val reason: String? = null)
 
 fun offlineVerify(input: OfflineVerifyInput): OfflineVerifyResult = when {
@@ -132,6 +159,7 @@ fun offlineVerify(input: OfflineVerifyInput): OfflineVerifyResult = when {
             input.actualSha256,
             ignoreCase = true
         ) -> OfflineVerifyResult(false, "hash")
+    offlineConversionShort(input.expectedRuntimeTicks, input.measuredTicks) -> OfflineVerifyResult(false, "short")
     differs(input.sourceETagBefore, input.sourceETagNow) -> OfflineVerifyResult(false, "source-changed")
     else -> OfflineVerifyResult(true)
 }

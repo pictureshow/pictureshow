@@ -134,13 +134,17 @@ internal class OfflineApi(private val client: OkHttpClient, private val identity
 
     private suspend fun call(url: String, authorization: String, body: String? = null, method: String? = null): String =
         withContext(Dispatchers.IO) {
-            val request = Request.Builder().url(url).header("Authorization", authorization).apply {
-                if (body != null) post(body.toRequestBody("application/json".toMediaType()))
-                if (method != null) method(method, null)
-            }.build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw OfflineApiException(response.code)
-                response.body.string()
+            withCallCancel { onCall ->
+                val request = Request.Builder().url(url).header("Authorization", authorization).apply {
+                    if (body != null) post(body.toRequestBody("application/json".toMediaType()))
+                    if (method != null) method(method, null)
+                }.build()
+                val call = client.newCall(request)
+                onCall { call.cancel() }
+                call.execute().use { response ->
+                    if (!response.isSuccessful) throw OfflineApiException(response.code)
+                    response.body.string()
+                }
             }
         }
 
@@ -199,8 +203,13 @@ internal class OfflineApi(private val client: OkHttpClient, private val identity
         runCatching { call(url(serverUrl, request), authorization(deviceId, token), method = "DELETE") }
     }
 
+    /** A Wi-Fi sign-in page answers 200 too. Only this server's own two answers count; anything else means it wasn't reached. */
     suspend fun quickConnectEnabled(serverUrl: String): Boolean =
-        call("${serverUrl.trimEnd('/')}/QuickConnect/Enabled", authorization(identity.deviceId, null)).trim() == "true"
+        when (call("${serverUrl.trimEnd('/')}/QuickConnect/Enabled", authorization(identity.deviceId, null)).trim()) {
+            "true" -> true
+            "false" -> false
+            else -> throw IOException("Not this server's answer")
+        }
 
     /** Issues a token for [deviceId] without asking the viewer anything: their own session authorizes the code. */
     suspend fun issueByQuickConnect(account: Account, deviceId: String): Pair<String, String> {

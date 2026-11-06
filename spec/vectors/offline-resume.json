@@ -1652,6 +1652,280 @@
      }
     }
    ]
+  },
+  {
+   "id": "offline-resume.verify-conversion-cut-at-a-fragment-boundary-is-short",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": 36000000000,
+      "measuredTicks": 14400000000
+     },
+     "expected": {
+      "ok": false,
+      "reason": "short"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-conversion-within-one-percent-passes",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": 36000000000,
+      "measuredTicks": 35640000000
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-conversion-just-past-one-percent-is-short",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": 36000000000,
+      "measuredTicks": 35639999999
+     },
+     "expected": {
+      "ok": false,
+      "reason": "short"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-short-clip-allowed-five-seconds",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": 1000000000,
+      "measuredTicks": 950000000
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-short-clip-past-five-seconds-is-short",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": 1000000000,
+      "measuredTicks": 949999999
+     },
+     "expected": {
+      "ok": false,
+      "reason": "short"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-conversion-longer-than-runtime-passes",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": 36000000000,
+      "measuredTicks": 37000000000
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-no-runtime-skips-the-comparison",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": null,
+      "measuredTicks": 100000000
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.verify-not-fragmented-skips-the-comparison",
+   "operation": "verify",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "actualBytes": 10,
+      "expectedBytes": 10,
+      "actualSha256": "abababababababababababababababababababababababababababababababab",
+      "expectedSha256": "abababababababababababababababababababababababababababababababab",
+      "sourceETagBefore": "s",
+      "sourceETagNow": "s",
+      "expectedRuntimeTicks": 36000000000,
+      "measuredTicks": null
+     },
+     "expected": {
+      "ok": true,
+      "reason": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.durable-offset-empty",
+   "operation": "durable-offset",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 0
+     },
+     "expected": {
+      "offset": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.durable-offset-inside-first-span",
+   "operation": "durable-offset",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 5
+     },
+     "expected": {
+      "offset": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.durable-offset-exactly-one-span-may-be-unsynced",
+   "operation": "durable-offset",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 16777216
+     },
+     "expected": {
+      "offset": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.durable-offset-just-past-a-boundary",
+   "operation": "durable-offset",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 16777217
+     },
+     "expected": {
+      "offset": 16777216
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.durable-offset-two-spans-and-a-bit",
+   "operation": "durable-offset",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 33554439
+     },
+     "expected": {
+      "offset": 33554432
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-resume.durable-offset-exactly-two-spans",
+   "operation": "durable-offset",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "partialBytes": 33554432
+     },
+     "expected": {
+      "offset": 16777216
+     }
+    }
+   ]
   }
  ]
 }

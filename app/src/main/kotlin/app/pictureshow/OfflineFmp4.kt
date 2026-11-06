@@ -72,8 +72,29 @@ private fun ByteArray.be32(at: Int): Long = ((this[at].toLong() and 0xff) shl 24
 
 private fun ByteArray.be64(at: Int): Long = (be32(at) shl 32) or be32(at + 4)
 
+private class Fmp4Walk(val track: Fmp4Track?, val placeholder: Long, val fragments: List<Fmp4Fragment>)
+
 /** Walks a finished file and turns its placeholder into `sidx`. False when the file isn't what a conversion should be. */
 internal fun writeFmp4Index(file: File): Boolean = RandomAccessFile(file, "rw").use { raf ->
+    val walk = raf.walkFmp4() ?: return@use false
+    val active = walk.track
+    if (active == null || walk.placeholder < 0 || walk.fragments.isEmpty()) return@use false
+    raf.seek(walk.placeholder)
+    raf.write(fmp4IndexBoxes(active, walk.fragments, OFFLINE_INDEX_PLACEHOLDER_BYTES))
+    raf.fd.sync()
+    true
+}
+
+/** The running time a conversion's fragments add up to, in 100 ns ticks. Null when the file isn't fragmented. */
+internal fun fmp4MeasureTicks(file: File): Long? = RandomAccessFile(file, "r").use { raf ->
+    val walk = raf.walkFmp4() ?: return@use null
+    val track = walk.track ?: return@use null
+    if (track.timescale <= 0 || walk.fragments.isEmpty()) return@use null
+    walk.fragments.sumOf { it.durationInTimescale } * 10_000_000L / track.timescale
+}
+
+private fun RandomAccessFile.walkFmp4(): Fmp4Walk? {
+    val raf = this
     var offset = 0L
     var track: Fmp4Track? = null
     var placeholder = -1L
@@ -91,9 +112,9 @@ internal fun writeFmp4Index(file: File): Boolean = RandomAccessFile(file, "rw").
         } else if (size == 0L) {
             size = raf.length() - offset
         }
-        if (size < headerSize || offset + size > raf.length()) return@use false
+        if (size < headerSize || offset + size > raf.length()) return null
         when (String(head, 4, 4, Charsets.ISO_8859_1)) {
-            "moov" -> track = fmp4ParseMoov(raf.readBox(offset, size) ?: return@use false)
+            "moov" -> track = fmp4ParseMoov(raf.readBox(offset, size) ?: return null)
             "free" -> {
                 if (placeholder < 0 && size == OFFLINE_INDEX_PLACEHOLDER_BYTES.toLong()) {
                     placeholder = offset
@@ -102,8 +123,8 @@ internal fun writeFmp4Index(file: File): Boolean = RandomAccessFile(file, "rw").
                 }
             }
             "moof" -> {
-                val active = track ?: return@use false
-                val fragment = fmp4ParseMoof(raf.readBox(offset, size) ?: return@use false, active.id, active.trexDefaultDuration)
+                val active = track ?: return null
+                val fragment = fmp4ParseMoof(raf.readBox(offset, size) ?: return null, active.id, active.trexDefaultDuration)
                 if (fragment != null) {
                     fragments += fragment.copy(moofOffset = offset, totalSize = size)
                 } else if (fragments.isNotEmpty()) {
@@ -118,12 +139,7 @@ internal fun writeFmp4Index(file: File): Boolean = RandomAccessFile(file, "rw").
         }
         offset += size
     }
-    val active = track
-    if (active == null || placeholder < 0 || fragments.isEmpty()) return@use false
-    raf.seek(placeholder)
-    raf.write(fmp4IndexBoxes(active, fragments, OFFLINE_INDEX_PLACEHOLDER_BYTES))
-    raf.fd.sync()
-    true
+    return Fmp4Walk(track, placeholder, fragments)
 }
 
 /** A moov or moof past this is not a conversion we produced. */

@@ -78,4 +78,15 @@ class OfflineRestartBookingTest {
         assertTrue(job.isPersisted)
         assertEquals(OFFLINE_JOB_TRANSFER_MS, job.minLatencyMillis)
     }
+
+    @Test
+    fun `the booked restart asks for no network, so the system's batching can't hold it past the kill`() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        offlineScheduleJob(context, 60_000)
+        val job = context.getSystemService(android.app.job.JobScheduler::class.java).allPendingJobs.single()
+        @Suppress("DEPRECATION")
+        assertEquals(android.app.job.JobInfo.NETWORK_TYPE_NONE, job.networkType)
+        assertEquals(60_000L, job.minLatencyMillis)
+        assertEquals(true, job.isPersisted)
+    }
 }

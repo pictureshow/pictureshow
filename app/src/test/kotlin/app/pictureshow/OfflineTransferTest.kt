@@ -3,12 +3,18 @@
  */
 package app.pictureshow
 
+import app.pictureshow.core.offline.OFFLINE_SYNC_BYTES
 import app.pictureshow.core.offline.OfflineValidator
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,13 +49,17 @@ class OfflineTransferTest {
             discarded += bytes
         }
 
+        override suspend fun release(bytes: Long) {
+            reserved -= bytes
+        }
+
         override suspend fun progress(received: Long, total: Long?) = Unit
     }
 
     private val whole = ByteArray(700_000) { (it % 251).toByte() }
     private val stored = OfflineValidator(lastModified = "Mon", totalBytes = whole.size.toLong())
 
-    private fun answer(status: Int, body: InputStream?, length: Long?, vararg headers: Pair<String, String>) = OfflineHttp { _, _, _ ->
+    private fun answer(status: Int, body: InputStream?, length: Long?, vararg headers: Pair<String, String>) = OfflineHttp { _, _, _, _ ->
         val map = headers.toMap()
         OfflineHttpResponse(status, { map[it] }, body, length) {}
     }
@@ -85,7 +95,7 @@ class OfflineTransferTest {
         target.writeBytes(whole.copyOf(300_000))
         val ledger = Ledger()
         var asked: String? = null
-        val http = OfflineHttp { _, _, range ->
+        val http = OfflineHttp { _, _, range, _ ->
             asked = range
             val headers = mapOf("Content-Range" to "bytes 300000-699999/700000", "Last-Modified" to "Mon")
             OfflineHttpResponse(206, { headers[it] }, ByteArrayInputStream(whole.copyOfRange(300_000, whole.size)), 400_000) {}
@@ -206,7 +216,7 @@ class OfflineTransferTest {
         val ledger = Ledger()
         var asked: String? = "unset"
         val source = Fmp4Builder.file()
-        val http = OfflineHttp { _, _, range ->
+        val http = OfflineHttp { _, _, range, _ ->
             asked = range
             OfflineHttpResponse(200, { null }, ByteArrayInputStream(source), null) {}
         }
@@ -222,5 +232,125 @@ class OfflineTransferTest {
     fun `an unauthorized answer fails as itself`() {
         val result = run(answer(401, null, null), Ledger(), folder.newFile())
         assertEquals(OfflineTransferResult.Failed("unauthorized"), result)
+    }
+
+    @Test
+    fun `a dropped body hands back what it didn't use, so the retry fits in the same room`() {
+        val target = folder.newFile()
+        val ledger = Ledger(allowance = whole.size.toLong())
+        val dropping = object : InputStream() {
+            var left = 300_000
+            override fun read(): Int = throw IOException("drop")
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (left <= 0) throw IOException("drop")
+                val n = minOf(len, left)
+                left -= n
+                return n
+            }
+        }
+        val first = run(answer(200, dropping, whole.size.toLong(), "Last-Modified" to "Mon"), ledger, target)
+        assertTrue(first is OfflineTransferResult.Interrupted)
+        assertEquals(ledger.committed, ledger.reserved)
+        val at = target.length().toInt()
+        val headers = mapOf("Content-Range" to "bytes $at-699999/700000", "Last-Modified" to "Mon")
+        val rest = OfflineHttp { _, _, _, _ ->
+            val body = ByteArrayInputStream(whole.copyOfRange(at, whole.size))
+            OfflineHttpResponse(206, { headers[it] }, body, (whole.size - at).toLong()) {}
+        }
+        assertTrue(run(rest, ledger, target, stored) is OfflineTransferResult.Complete)
+        assertEquals(whole.size.toLong(), ledger.committed)
+    }
+
+    @Test
+    fun `after a restart only the trusted part of a partial is kept and asked for again from there`() {
+        val target = folder.newFile()
+        target.writeBytes(whole.copyOf(300_000))
+        val ledger = Ledger()
+        var asked: String? = null
+        val http = OfflineHttp { _, _, range, _ ->
+            asked = range
+            val headers = mapOf("Content-Range" to "bytes 100000-699999/700000", "Last-Modified" to "Mon")
+            OfflineHttpResponse(206, { headers[it] }, ByteArrayInputStream(whole.copyOfRange(100_000, whole.size)), 600_000) {}
+        }
+        val result = runBlocking {
+            OfflineResourceTransfer(http, ledger).run(target, "http://x/", emptyMap(), stored, null, false, trustedBytes = { 100_000 })
+        }
+        assertTrue(result is OfflineTransferResult.Complete)
+        assertEquals("bytes=100000-", asked)
+        assertEquals(200_000L, ledger.discarded)
+        assertArrayEquals(whole, target.readBytes())
+    }
+
+    @Test
+    fun `everything before a sync boundary is on disk before anything is written past it`() {
+        val target = folder.newFile()
+        val size = 2 * OFFLINE_SYNC_BYTES + 1000
+        val lengthsAtSync = mutableListOf<Long>()
+        val body = object : InputStream() {
+            var left = size
+            override fun read(): Int = throw IOException("unused")
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (left <= 0) return -1
+                val n = minOf(len.toLong(), left).toInt()
+                left -= n
+                return n
+            }
+        }
+        val http = answer(200, body, size, "Last-Modified" to "Mon")
+        val result = runBlocking {
+            val transfer = OfflineResourceTransfer(http, Ledger(), sync = { lengthsAtSync += target.length() })
+            transfer.run(target, "http://x/", emptyMap(), null, null, false)
+        }
+        assertTrue(result is OfflineTransferResult.Complete)
+        assertEquals(listOf(OFFLINE_SYNC_BYTES, 2 * OFFLINE_SYNC_BYTES, size), lengthsAtSync)
+    }
+
+    @Test
+    fun `cancelling ends a blocked read at once, not at the read timeout`() {
+        val blocked = java.util.concurrent.CountDownLatch(1)
+        val broken = java.util.concurrent.CountDownLatch(1)
+        val http = OfflineHttp { _, _, _, onCall ->
+            onCall { broken.countDown() }
+            OfflineHttpResponse(
+                200,
+                { null },
+                object : InputStream() {
+                    override fun read(): Int {
+                        blocked.countDown()
+                        broken.await()
+                        throw IOException("Canceled")
+                    }
+
+                    override fun read(b: ByteArray, off: Int, len: Int): Int = read()
+                },
+                null
+            ) {}
+        }
+        runBlocking {
+            val job = launch(Dispatchers.IO) {
+                OfflineResourceTransfer(http, Ledger()).run(folder.newFile(), "http://x/", emptyMap(), null, null, false)
+            }
+            assertTrue(blocked.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            job.cancel()
+            assertTrue(broken.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            withTimeout(5_000) { job.join() }
+        }
+    }
+
+    @Test
+    fun `a call registered after the cancel is still ended`() {
+        val ended = java.util.concurrent.CountDownLatch(1)
+        runBlocking {
+            val job = launch(Dispatchers.IO) {
+                withCallCancel { onCall ->
+                    coroutineContext[Job]!!.parent?.cancel()
+                    onCall { ended.countDown() }
+                    // Still in the call: it only ended if the cancel reached it.
+                    ended.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                }
+            }
+            job.join()
+        }
+        assertTrue(ended.await(5, java.util.concurrent.TimeUnit.SECONDS))
     }
 }

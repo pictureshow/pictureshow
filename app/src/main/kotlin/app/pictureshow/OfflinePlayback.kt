@@ -108,6 +108,8 @@ internal class OfflinePlaybackGateway(
 
     override suspend fun played(): ClientResult<Unit> {
         progress.completed(entry.itemId, sequence)
+        // Stopped ran first and its sync found nothing to say about the ending.
+        onExit()
         return ClientResult.Success(Unit)
     }
 }

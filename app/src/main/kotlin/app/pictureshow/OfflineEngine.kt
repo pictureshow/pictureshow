@@ -26,8 +26,10 @@ import app.pictureshow.core.offline.commitReady
 import app.pictureshow.core.offline.discard
 import app.pictureshow.core.offline.offlineAdmit
 import app.pictureshow.core.offline.offlineCleanupRequest
+import app.pictureshow.core.offline.offlineConversionShort
 import app.pictureshow.core.offline.offlineDecodeManifest
 import app.pictureshow.core.offline.offlineDefaultCap
+import app.pictureshow.core.offline.offlineDurableOffset
 import app.pictureshow.core.offline.offlineEncodeManifest
 import app.pictureshow.core.offline.offlineEntryDir
 import app.pictureshow.core.offline.offlineEntryId
@@ -41,6 +43,7 @@ import app.pictureshow.core.offline.setCap
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -114,6 +117,8 @@ internal class OfflineEngine(
     private val unreachableDelayMs: (Int) -> Long = { tries -> minOf(300_000L, 5_000L shl tries.coerceAtMost(6)) },
     private val storageRecheckMs: Long = 30_000L,
     private val revocationRecheckMs: Long = 60_000L,
+    private val trashCleaner: (OfflineFiles) -> Unit = OfflineFiles::emptyTrash,
+    private val restartTrustedBytes: (Long) -> Long = ::offlineDurableOffset,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     /** Background work here must never take the app down with it, and a viewer may be in the middle of a film. */
@@ -124,9 +129,18 @@ internal class OfflineEngine(
     internal val files = OfflineFiles(context.noBackupFilesDir)
     private val mutex = Mutex()
     private val mutableLibraries = MutableStateFlow(emptyMap<String, OfflineLibrary>())
+
+    /** The attempt in charge of each download. [liveAttempts] also has the ones that were told to stop and haven't yet. */
     private val runners = mutableMapOf<String, Job>()
+    private val liveAttempts = java.util.concurrent.ConcurrentHashMap<Job, String>()
     private val verifyFailures = mutableMapOf<String, Int>()
     private val progressStores = mutableMapOf<String, OfflineProgressStore>()
+    private val signedOut = mutableSetOf<String>()
+    private val unsaved = mutableSetOf<String>()
+    private var unsavedWatch: Job? = null
+
+    /** Partials this process has already picked up. Any other came through a restart, and so maybe a power cut. */
+    private val durableParts = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var started: Job? = null
     private var api: OfflineApi? = null
     private var sessionOwner: OfflineSessionOwner? = null
@@ -152,7 +166,7 @@ internal class OfflineEngine(
     fun start(): Job {
         started?.let { return it }
         val job = scope.launch {
-            files.emptyTrash()
+            emptyTrashSoon()
             val snapshot = accounts.load()
             mutex.withLock {
                 purgeOrphansLocked(snapshot.accounts.map(Account::key).toSet())
@@ -169,6 +183,17 @@ internal class OfflineEngine(
         return job
     }
 
+    /** The next booked job run. Starting is once per process, and a warm process still has rows nothing else will move. */
+    suspend fun wake() {
+        start().join()
+        networkChanged()
+    }
+
+    /** However much is in there, deleting it holds nobody up: a cold start offline waits on nothing here. */
+    private fun emptyTrashSoon() {
+        scope.launch { trashCleaner(files) }
+    }
+
     /** Sign-out and removal: bytes go now, without waiting for any server (OFF-09). */
     private suspend fun observeAccounts() {
         accounts.snapshots.collect { snapshot ->
@@ -177,6 +202,7 @@ internal class OfflineEngine(
                 val gone = lastAccountKeys - keys
                 lastAccountKeys = keys
                 gone.forEach { purgeLocked(it) }
+                synchronized(progressStores) { signedOut.removeAll(keys) }
                 (keys - mutableLibraries.value.keys).forEach { loadLocked(it) }
             }
             runCatching { sessions().endAllExcept(snapshot.accounts.map { it.server.id to it.user.id }.toSet()) }
@@ -188,16 +214,19 @@ internal class OfflineEngine(
     private fun purgeOrphansLocked(keys: Set<String>) {
         val owned = keys.map { files.accountDir(it).name }.toSet()
         files.accountDirs().filterNot { it.name in owned }.forEach { files.moveToTrash(it) }
-        files.emptyTrash()
+        emptyTrashSoon()
     }
 
     private fun purgeLocked(key: String) {
         runners.keys.filter { it.startsWith("$key|") }.forEach { runnerKey -> runners.remove(runnerKey)?.cancel() }
-        progressStores.remove(key)
+        synchronized(progressStores) {
+            signedOut += key
+            progressStores.remove(key)?.retire()
+        }
         mutableLibraries.update { it - key }
         // The rename hides everything in one step; a failed slow delete stays private in trash and retries at next start.
         files.moveToTrash(files.accountDir(key))
-        files.emptyTrash()
+        emptyTrashSoon()
         publishForeground()
     }
 
@@ -232,9 +261,50 @@ internal class OfflineEngine(
 
     private fun library(key: String) = mutableLibraries.value[key]
 
+    /**
+     * A full disk can refuse this write, and the viewer's way out of a full disk is Delete, which has to get as far as
+     * removing bytes. So a refused write leaves the state in memory and in effect, and is tried again. A restart before it
+     * lands falls back on the last manifest and reconcile, which recounts from what's really on disk.
+     */
     private fun saveLocked(key: String, manifest: OfflineManifest) {
-        files.manifest(key).writeAtomically(offlineEncodeManifest(manifest))
+        try {
+            files.manifest(key).writeAtomically(offlineEncodeManifest(manifest))
+            unsaved -= key
+        } catch (e: IOException) {
+            manifestNotSavedLocked(key, e)
+        } catch (e: IllegalStateException) {
+            manifestNotSavedLocked(key, e)
+        }
         mutableLibraries.update { all -> all + (key to (all[key] ?: OfflineLibrary()).copy(manifest = manifest, recoverable = false)) }
+    }
+
+    private fun manifestNotSavedLocked(key: String, error: Exception) {
+        android.util.Log.w(OFFLINE_LOG, "Manifest not saved: ${error.javaClass.simpleName}")
+        unsaved += key
+        if (unsavedWatch?.isActive == true) return
+        unsavedWatch = scope.launch {
+            while (true) {
+                delay(storageRecheckMs)
+                val more = mutex.withLock {
+                    unsaved.toList().forEach { waiting ->
+                        val current = library(waiting)?.manifest
+                        if (current != null) saveLocked(waiting, current) else unsaved.remove(waiting)
+                    }
+                    unsaved.isNotEmpty()
+                }
+                if (!more) return@launch
+            }
+        }
+    }
+
+    /** Called from screens, whose scopes end the app on an exception: whatever goes wrong here stays here. */
+    private suspend fun <T> contained(otherwise: T, block: suspend () -> T): T = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        android.util.Log.w(OFFLINE_LOG, "Offline action ended: ${e.javaClass.simpleName}")
+        otherwise
     }
 
     /** In memory only: reconcile recounts bytes from disk, so a kill can't strand them. */
@@ -247,28 +317,38 @@ internal class OfflineEngine(
 
     private fun account(key: String): Account? = accounts.snapshots.value.accounts.firstOrNull { it.key == key }
 
-    fun progressStore(account: Account): OfflineProgressStore =
-        synchronized(progressStores) { progressStores.getOrPut(account.key) { OfflineProgressStore(files.progress(account.key), account) } }
+    fun progressStore(account: Account): OfflineProgressStore = synchronized(progressStores) {
+        if (account.key in signedOut) {
+            OfflineProgressStore(files.progress(account.key), account).apply { retire() }
+        } else {
+            // The app's current record beats the caller's copy, which a screen may have held since before a re-sign-in.
+            val newest = account(account.key) ?: account
+            progressStores.getOrPut(account.key) { OfflineProgressStore(files.progress(account.key), newest) }.also { it.account = newest }
+        }
+    }
 
     fun resourceFile(key: String, entry: OfflineEntry, resource: OfflineResource): File = files.resource(key, entry.id, resource.path)
 
     // Downloads
 
-    suspend fun enqueue(account: Account, item: OfflineApiItem, choice: OfflineChoice, warning: String? = null): Boolean = mutex.withLock {
+    suspend fun enqueue(account: Account, item: OfflineApiItem, choice: OfflineChoice, warning: String? = null): Boolean =
+        contained(false) { mutex.withLock { enqueueLocked(account, item, choice, warning) } }
+
+    private fun enqueueLocked(account: Account, item: OfflineApiItem, choice: OfflineChoice, warning: String?): Boolean {
         val library = library(account.key) ?: run {
             loadLocked(account.key)
             library(account.key)
-        } ?: return@withLock false
-        if (library.recoverable) return@withLock false
+        } ?: return false
+        if (library.recoverable) return false
         val id = offlineEntryId(item.id, choice.preset)
         // A second request for the same media is the same download (OFF-01: deduplicated).
-        if (library.manifest.entries.any { it.id == id }) return@withLock true
+        if (library.manifest.entries.any { it.id == id }) return true
         val entry = offlineBuildEntry(item, choice, library.manifest.nextSequence, warning)
         val manifest = library.manifest.copy(entries = library.manifest.entries + entry, nextSequence = library.manifest.nextSequence + 1)
         saveLocked(account.key, manifest)
-        item.userData?.let { progressStore(account).remember(item.id, it.core()) }
+        item.userData?.let { userData(account, item.id, it.core()) }
         pumpLocked()
-        true
+        return true
     }
 
     suspend fun pause(key: String, entryId: String) = job(key, entryId, OfflineJobEvent("pause"))
@@ -286,8 +366,10 @@ internal class OfflineEngine(
 
     suspend fun deleteMany(key: String, entryIds: List<String>) = entryIds.forEach { delete(key, it) }
 
-    suspend fun setCap(key: String, capBytes: Long) = mutex.withLock {
-        val manifest = library(key)?.manifest ?: return@withLock
+    suspend fun setCap(key: String, capBytes: Long) = contained(Unit) { mutex.withLock { setCapLocked(key, capBytes) } }
+
+    private fun setCapLocked(key: String, capBytes: Long) {
+        val manifest = library(key)?.manifest ?: return
         val newest = manifest.entries.sortedByDescending { it.createdSequence }.map(OfflineEntry::id)
         val result = manifest.budget.setCap(capBytes, newest)
         saveLocked(key, manifest.copy(budget = result.budget))
@@ -296,14 +378,19 @@ internal class OfflineEngine(
         pumpLocked()
     }
 
-    suspend fun setWifiOnly(key: String, wifiOnly: Boolean) = mutex.withLock {
-        val manifest = library(key)?.manifest ?: return@withLock
-        saveLocked(key, manifest.copy(wifiOnly = wifiOnly))
-        applyNetworkLocked()
+    suspend fun setWifiOnly(key: String, wifiOnly: Boolean) = contained<Unit>(Unit) {
+        mutex.withLock {
+            library(key)?.manifest?.let { manifest ->
+                saveLocked(key, manifest.copy(wifiOnly = wifiOnly))
+                applyNetworkLocked()
+            }
+        }
     }
 
     /** The viewer typed the password this server needs because Quick Connect is off. It's not kept. */
-    suspend fun providePassword(account: Account, password: String): Boolean {
+    suspend fun providePassword(account: Account, password: String): Boolean = contained(false) { passwordGiven(account, password) }
+
+    private suspend fun passwordGiven(account: Account, password: String): Boolean {
         val result = sessions().token(account, password)
         mutex.withLock {
             mutableLibraries.update { all ->
@@ -322,7 +409,9 @@ internal class OfflineEngine(
     }
 
     /** A Downloads visit is a good moment to look again without the viewer asking. */
-    suspend fun refresh() = mutex.withLock {
+    suspend fun refresh() = contained(Unit) { mutex.withLock { refreshLocked() } }
+
+    private fun refreshLocked() {
         lastAccountKeys.forEach { key ->
             storageMayHaveFreedLocked(key)
             val library = library(key) ?: return@forEach
@@ -352,10 +441,12 @@ internal class OfflineEngine(
         }
     }
 
-    private suspend fun job(key: String, entryId: String, event: OfflineJobEvent) = mutex.withLock {
-        eventLocked(key, entryId, event)
-        if (event.op == "delete") storageMayHaveFreedLocked(key)
-        pumpLocked()
+    private suspend fun job(key: String, entryId: String, event: OfflineJobEvent) = contained(Unit) {
+        mutex.withLock {
+            eventLocked(key, entryId, event)
+            if (event.op == "delete") storageMayHaveFreedLocked(key)
+            pumpLocked()
+        }
     }
 
     private fun runnerKey(key: String, entryId: String) = "$key|$entryId"
@@ -375,14 +466,28 @@ internal class OfflineEngine(
         saveLocked(key, after)
         result.effects.forEach { effect ->
             when (effect) {
-                "stop-transfer" -> runners.remove(runnerKey(key, entryId))?.cancel()
+                "stop-transfer" -> runners[runnerKey(key, entryId)]?.cancel()
                 "discard-partial" -> discardPartialsLocked(key, entryId)
                 "delete-owned" -> deleteOwnedLocked(key, entryId)
-                "start-attempt" -> runners[runnerKey(key, entryId)] = scope.launch { runAttempt(key, entryId, next?.attempt ?: 0) }
+                "start-attempt" -> startAttemptLocked(key, entryId, next?.attempt ?: 0)
             }
         }
         publishForeground()
         return true
+    }
+
+    /**
+     * Two attempts on one partial would write over each other, so this one waits for every earlier one to end, which being
+     * told to stop makes quick (withCallCancel). It waits for all of them: one cancelled before it ran is gone at once, and
+     * can't stand in for an older one that is still blocked.
+     */
+    private fun startAttemptLocked(key: String, entryId: String, attempt: Long) {
+        val slot = runnerKey(key, entryId)
+        val earlier = liveAttempts.filterValues { it == slot }.keys.toList()
+        val job = scope.launch { runAttempt(key, entryId, attempt, earlier) }
+        liveAttempts[job] = slot
+        job.invokeOnCompletion { liveAttempts.remove(job) }
+        runners[slot] = job
     }
 
     private fun discardPartialsLocked(key: String, entryId: String) {
@@ -459,14 +564,7 @@ internal class OfflineEngine(
     }
 
     private fun publishForeground() {
-        val titles = mutableLibraries.value.values.flatMap { library ->
-            library.manifest.entries.filter {
-                it.job.phase == OfflinePhase.preparing ||
-                    it.job.phase == OfflinePhase.transferring ||
-                    it.job.phase == OfflinePhase.verifying
-            }.map { it.labels.title }
-        }
-        foreground.update(titles)
+        foreground.update(offlineForegroundTitles(mutableLibraries.value, accounts.snapshots.value.currentKey))
         foreground.unfinished(
             mutableLibraries.value.values.any { library ->
                 library.manifest.entries.any { it.job.phase in OFFLINE_UNFINISHED }
@@ -556,10 +654,12 @@ internal class OfflineEngine(
 
     // One attempt
 
-    private suspend fun runAttempt(key: String, entryId: String, attempt: Long) {
+    private suspend fun runAttempt(key: String, entryId: String, attempt: Long, earlier: List<Job>) {
+        val self = coroutineContext[Job]
         val session = UUID.randomUUID().toString().replace("-", "")
         var cleanup: (suspend () -> Unit)? = null
         try {
+            earlier.forEach { it.join() }
             val current = account(key) ?: return
             val api = api()
             val set = when (val token = sessions().token(current)) {
@@ -572,7 +672,7 @@ internal class OfflineEngine(
                     return
                 }
                 is OfflineSetToken.Unavailable -> {
-                    if (token.reason == "network") networkLost(key, entryId) else fail(key, entryId, attempt, token.reason)
+                    if (token.reason == "network") networkLost(key, entryId, attempt) else fail(key, entryId, attempt, token.reason)
                     return
                 }
             }
@@ -581,7 +681,7 @@ internal class OfflineEngine(
                 when {
                     error is CancellationException -> throw error
                     error is OfflineApiException && error.status in 401..404 -> fail(key, entryId, attempt, "denied")
-                    else -> networkLost(key, entryId)
+                    else -> networkLost(key, entryId, attempt)
                 }
                 return
             }
@@ -607,7 +707,7 @@ internal class OfflineEngine(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            networkLost(key, entryId)
+            networkLost(key, entryId, attempt)
         } catch (e: Exception) {
             // Whatever it was ends this one attempt where the viewer can see it and press Retry.
             android.util.Log.w(OFFLINE_LOG, "Offline attempt ended: ${e.javaClass.simpleName}")
@@ -616,7 +716,8 @@ internal class OfflineEngine(
             withContext(kotlinx.coroutines.NonCancellable) {
                 cleanup?.invoke()
                 mutex.withLock {
-                    runners.remove(runnerKey(key, entryId))
+                    // A newer attempt may be waiting on this one to end: it's in charge now, and has reserved nothing yet.
+                    if (runners[runnerKey(key, entryId)] === self) runners.remove(runnerKey(key, entryId))
                     library(key)?.manifest?.budget?.release(entryId)?.let { setBudgetLocked(key, it.budget) }
                     mutableLibraries.update { all ->
                         all[key]?.let { all + (key to it.copy(progress = it.progress - entryId)) } ?: all
@@ -653,8 +754,10 @@ internal class OfflineEngine(
      * The network can look fine while the server is off or out of reach, so an attempt that couldn't reach it rests
      * before the next one, longer each time. Bytes arriving or a real network change end the rest.
      */
-    private suspend fun networkLost(key: String, entryId: String) {
+    private suspend fun networkLost(key: String, entryId: String, attempt: Long) {
         mutex.withLock {
+            // network-lost isn't bound to an attempt in the reducer, because it's also a fact about the device.
+            if (entryOrNull(key, entryId)?.job?.attempt != attempt) return@withLock
             eventLocked(key, entryId, OfflineJobEvent("network-lost"))
             val slot = unreachableSlot(key, entryId)
             val tries = unreachable[slot]?.tries ?: 0
@@ -722,6 +825,10 @@ internal class OfflineEngine(
             library(key)?.manifest?.budget?.discard(entryId, bytes)?.let { setBudgetLocked(key, it.budget) } ?: Unit
         }
 
+        override suspend fun release(bytes: Long) = mutex.withLock {
+            library(key)?.manifest?.budget?.release(entryId)?.let { setBudgetLocked(key, it.budget) } ?: Unit
+        }
+
         override suspend fun progress(received: Long, total: Long?) {
             mutableLibraries.update { all ->
                 val library = all[key] ?: return@update all
@@ -746,24 +853,28 @@ internal class OfflineEngine(
         if (resource.complete && final.exists()) return true
         val entry = entryOrNull(key, entryId) ?: return false
         val part = partFile(key, entryId, resource)
+        if (adoptedFinal(key, entryId, entry, resource, final)) return true
         val url = api.url(serverUrl, entry.requestFor(resource, deviceId, session))
         val transfer = OfflineResourceTransfer(http, ledger(key, entryId))
         val spaced = entry.needsIndex(resource)
         var tries = 0
         while (true) {
             val stored = entryOrNull(key, entryId)?.resources?.firstOrNull { it.id == resource.id }?.validator
-            val result = transfer.run(part, url, headers, stored, entry.sourceETag, spaced) { validator ->
+            val trusted: (Long) -> Long = if (part.path in durableParts) ({ it }) else restartTrustedBytes
+            val result = transfer.run(part, url, headers, stored, entry.sourceETag, spaced, trusted) { validator ->
                 mutex.withLock { updateResourceLocked(key, entryId, resource.id) { it.copy(validator = validator) } }
             }
+            durableParts += part.path
             when (result) {
                 is OfflineTransferResult.Complete -> {
                     if (spaced && !writeFmp4Index(part)) {
                         fail(key, entryId, attempt, "not-indexable")
                         return false
                     }
-                    val sha = part.sha256Hex()
-                    val bytes = part.length()
+                    // The name comes first: from here a kill costs a hash, not a conversion the server may have taken hours over.
                     if (!part.renameTo(final)) throw IOException("Could not commit ${resource.id}")
+                    val sha = final.sha256Hex()
+                    val bytes = final.length()
                     mutex.withLock {
                         updateResourceLocked(key, entryId, resource.id) {
                             it.copy(complete = true, bytes = bytes, sha256 = sha, validator = result.validator ?: it.validator)
@@ -773,6 +884,7 @@ internal class OfflineEngine(
                 }
                 OfflineTransferResult.NoBudget -> {
                     mutex.withLock {
+                        if (entryOrNull(key, entryId)?.job?.attempt != attempt) return false
                         eventLocked(key, entryId, OfflineJobEvent("storage-denied"))
                         freeBytes(files.accountDir(key))?.let { freeAtDenial[key] = it }
                         watchStorageLocked()
@@ -792,7 +904,7 @@ internal class OfflineEngine(
                     tries++
                     if (!resource.required) return true
                     if (networkState() == OfflineNetwork.none) {
-                        networkLost(key, entryId)
+                        networkLost(key, entryId, attempt)
                         return false
                     }
                     if (tries >= OFFLINE_RETRIES) {
@@ -800,7 +912,7 @@ internal class OfflineEngine(
                         if (serverAnswers(key, entry.itemId, api)) {
                             fail(key, entryId, attempt, result.reason)
                         } else {
-                            networkLost(key, entryId)
+                            networkLost(key, entryId, attempt)
                         }
                         return false
                     }
@@ -808,6 +920,28 @@ internal class OfflineEngine(
                 }
             }
         }
+    }
+
+    /**
+     * A kill between the rename and the save leaves a finished file the manifest doesn't know about. It's taken up when it
+     * can be shown whole, and verify still has the last word; otherwise it goes, so it can't count against the cap twice.
+     */
+    private suspend fun adoptedFinal(key: String, entryId: String, entry: OfflineEntry, resource: OfflineResource, final: File): Boolean {
+        if (!final.exists()) return false
+        val whole = if (entry.needsIndex(resource)) {
+            fmp4MeasureTicks(final)?.let { !offlineConversionShort(entry.runtimeTicks, it) } ?: false
+        } else {
+            resource.validator?.totalBytes == final.length()
+        }
+        if (!whole) {
+            val bytes = final.length()
+            if (final.delete()) ledger(key, entryId).discard(bytes)
+            return false
+        }
+        val sha = final.sha256Hex()
+        val bytes = final.length()
+        mutex.withLock { updateResourceLocked(key, entryId, resource.id) { it.copy(complete = true, bytes = bytes, sha256 = sha) } }
+        return true
     }
 
     private fun current(key: String) = account(key)
@@ -835,14 +969,17 @@ internal class OfflineEngine(
         val failure = entry.resources.filter { it.required }.firstNotNullOfOrNull { resource ->
             val file = files.resource(key, entryId, resource.path)
             if (!file.exists()) return@firstNotNullOfOrNull "length"
+            val converted = entry.needsIndex(resource)
             offlineVerify(
                 OfflineVerifyInput(
                     file.length(),
-                    if (entry.needsIndex(resource)) resource.bytes else resource.validator?.totalBytes ?: resource.bytes,
+                    if (converted) resource.bytes else resource.validator?.totalBytes ?: resource.bytes,
                     file.sha256Hex(),
                     resource.sha256,
                     entry.sourceETag,
-                    sourceNow
+                    sourceNow,
+                    if (converted) entry.runtimeTicks else null,
+                    if (converted) fmp4MeasureTicks(file) else null
                 )
             ).reason
         }
@@ -904,6 +1041,19 @@ private fun File.existingParent(): File {
     var at: File? = this
     while (at != null && !at.exists()) at = at.parentFile
     return at ?: this
+}
+
+/**
+ * What the ongoing notification may say. Everyone's running downloads count, but on a shared device only the signed-in
+ * viewer's are named: the rest are blank, after theirs. No viewer signed in, no names.
+ */
+internal fun offlineForegroundTitles(libraries: Map<String, OfflineLibrary>, currentKey: String?): List<String> {
+    fun running(library: OfflineLibrary) = library.manifest.entries.filter {
+        it.job.phase == OfflinePhase.preparing || it.job.phase == OfflinePhase.transferring || it.job.phase == OfflinePhase.verifying
+    }
+    val mine = libraries[currentKey]?.let(::running).orEmpty().map { it.labels.title }
+    val others = libraries.filterKeys { it != currentKey }.values.flatMap(::running).map { "" }
+    return mine + others
 }
 
 private data class OfflineUnreachable(val tries: Int, val untilMs: Long)

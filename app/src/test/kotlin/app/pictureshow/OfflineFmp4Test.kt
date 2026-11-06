@@ -131,4 +131,20 @@ class OfflineFmp4Test {
         assertFalse(writeFmp4Index(noRoom))
         assertEquals(Fmp4Builder.file().size.toLong(), noRoom.length())
     }
+
+    @Test
+    fun `running time is what the fragments add up to, before and after indexing`() {
+        val file = folder.newFile()
+        file.writeBytes(spaced(Fmp4Builder.file(fragments = 3), 7))
+        assertEquals(60_000_000L, fmp4MeasureTicks(file))
+        assertTrue(writeFmp4Index(file))
+        assertEquals(60_000_000L, fmp4MeasureTicks(file))
+    }
+
+    @Test
+    fun `a file with no fragments has no measured running time`() {
+        val file = folder.newFile()
+        file.writeBytes(Fmp4Builder.ftyp() + Fmp4Builder.moov())
+        assertEquals(null, fmp4MeasureTicks(file))
+    }
 }

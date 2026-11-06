@@ -82,6 +82,7 @@ private fun failureText(reason: String?): String = when (reason) {
     "network" -> "The connection kept dropping."
     "internal" -> "Something went wrong with this download. Try again."
     "gone" -> "The server no longer has this file."
+    "short" -> "The server's conversion ended early. Try again, or choose another quality."
     else -> "The download stopped."
 }
 
