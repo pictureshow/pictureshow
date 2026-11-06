@@ -113,7 +113,7 @@ internal fun TouchMessage(message: String?) {
 }
 
 @Composable
-internal fun TouchAction(label: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun TouchAction(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Button(onClick = onClick, enabled = enabled, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
 }
 

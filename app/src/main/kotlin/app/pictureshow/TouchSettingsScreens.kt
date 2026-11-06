@@ -125,7 +125,7 @@ internal fun TouchSettings(
                 it
             }, ready) { onServer("SubtitleMode", it) }
             TouchMessage(state.error)
-            if (state.error != null) TouchAction("Retry", !state.saving, onClick = onRetry)
+            if (state.error != null) TouchAction("Retry", enabled = !state.saving, onClick = onRetry)
         }
         TouchSection("Troubleshooting") { TouchNavRow(device, onClick = onThisDevice) }
         TouchSection("Pictureshow") {
