@@ -201,7 +201,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     var noticeBounds by remember { mutableStateOf<Rect?>(null) }
     var actionsLeft by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     var actionsHeight by remember { mutableIntStateOf(0) }
-    var heldNoticeGap by remember { mutableStateOf(0.dp) }
+    // A font change now arrives in place, and a gap held from the old size would be a guess at the new one.
+    var heldNoticeGap by remember(density.fontScale) { mutableStateOf(0.dp) }
     var playerTop by remember { mutableStateOf(0) }
     val controlsVisible = ui.visible && ui.sheet == null && host.error == null && !host.switching
     val actionsVisible = ui.sheet == null && host.error == null && !host.switching

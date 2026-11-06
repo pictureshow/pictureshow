@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -187,6 +188,8 @@ private fun RemoteReservedText(wording: String) {
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+private val REMOTE_SEEK_HEIGHT = 48.dp
+
 @Composable
 private fun RemoteTransport(now: RemoteNowPlaying, ready: Boolean, host: RemoteControllerHost) {
     Text(now.title ?: "Playing", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("remote:title"))
@@ -207,11 +210,14 @@ private fun RemoteTransport(now: RemoteNowPlaying, ready: Boolean, host: RemoteC
                 drag = null
             },
             enabled = ready,
-            modifier = Modifier.fillMaxWidth().testTag("remote:seek").semantics {
+            modifier = Modifier.fillMaxWidth().height(REMOTE_SEEK_HEIGHT).testTag("remote:seek").semantics {
                 contentDescription = "Position on the TV"
                 stateDescription = remoteClock(now.positionTicks)
             }
         )
+    } else {
+        // REM-04: a second quick tap lands on the control the first one hit, so the row stays put when seeking comes and goes.
+        Spacer(Modifier.height(REMOTE_SEEK_HEIGHT))
     }
     // Fixed places, learned by position: Pause never trades lines with its neighbours at any font, and a title that can't
     // seek keeps the gaps. Marks and short numbers don't grow past their cells the way words do.

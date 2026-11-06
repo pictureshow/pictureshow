@@ -193,6 +193,10 @@ class TouchRemoteScreenTest {
         assertEquals(before, places())
         compose.onNodeWithText("Off").assert(unselected)
         compose.onNodeWithText("Spanish").assert(selected)
+        compose.runOnIdle { state = attached(null, now.copy(audio = 2, subtitle = -1)) }
+        compose.waitForIdle()
+        assertEquals(before, places())
+        compose.onNodeWithText("Off").assert(selected)
     }
 
     // PLAY-20: a TV reports no index for its automatic choice, so "not reported" can't be drawn as Off.
@@ -254,7 +258,7 @@ class TouchRemoteScreenTest {
             "PlayableMediaTypes":["Video"],"SupportedCommands":[],"PlayState":{"CanSeek":true},
             "NowPlayingItem":{"Id":"cccccccccccccccccccccccccccccccc","Name":"A film","RunTimeTicks":36000000000,"MediaStreams":[
             {"Type":"Audio","Index":1,"Codec":"aac","Language":"eng","Channels":2,"DisplayTitle":"English - AAC - Stereo","Mystery":1},
-            {"Type":"Audio","Index":2,"Codec":"ac3","Language":"spa","Channels":6,"DisplayTitle":"Spanish - Dolby Digital - 5.1"},
+            {"Type":"Audio","Index":2,"Codec":"ac3","Language":"spa","Channels":6,"DisplayTitle":"Spanish - Dolby Digital - 5.1","IsDefault":null},
             {"Type":"Subtitle","Index":3,"Codec":"subrip","Language":"eng","DisplayTitle":"English - SUBRIP"}]}}]"""
         ).jsonArray
         val playing = remoteTargets(session, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "phone").single().now!!
@@ -298,7 +302,7 @@ class TouchRemoteScreenTest {
         assertOneFixedRow()
     }
 
-    @Test fun aTitleThatCantSeekKeepsPauseInItsColumn() {
+    @Test fun aTitleThatCantSeekKeepsPauseWhereItWas() {
         var state by mutableStateOf(attached(null))
         compose.setContent { MaterialTheme { TouchRemoteScreen(state, host, {}, {}) } }
         compose.waitForIdle()
@@ -306,11 +310,7 @@ class TouchRemoteScreenTest {
         compose.runOnIdle { state = attached(null, now.copy(canSeek = false)) }
         compose.waitForIdle()
         compose.onNodeWithTag("remote:back").assertDoesNotExist()
-        // The seek bar leaves with seeking, so the row rises; Pause keeps its column and its size.
-        val after = compose.onNodeWithTag("remote:playpause").getBoundsInRoot()
-        assertEquals(pause.left, after.left)
-        assertEquals(pause.right, after.right)
-        assertEquals(pause.bottom - pause.top, after.bottom - after.top)
+        assertEquals(pause, compose.onNodeWithTag("remote:playpause").getBoundsInRoot())
     }
 
     // The reserved slot stays, but the longest wording fits one line, so it no longer leaves a hole under the title.
