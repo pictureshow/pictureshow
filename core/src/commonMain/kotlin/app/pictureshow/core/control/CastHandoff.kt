@@ -437,7 +437,7 @@ private fun stopConfirmed(s: CastState): CastState {
 }
 
 /** The receiver ended this viewing itself. Nothing local starts; the viewer may choose Resume here. */
-private fun receiverEnded(s: CastState, notice: String, ticks: Long?, entry: String?): CastState = stopConfirmed(
+private fun receiverEnded(s: CastState, notice: String, ticks: Long?, entry: String? = s.observed?.entry): CastState = stopConfirmed(
     s.copy(
         owner = s.owner.onItem(entry),
         stopPurpose = "ended",
