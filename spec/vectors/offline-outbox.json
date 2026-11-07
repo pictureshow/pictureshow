@@ -4435,6 +4435,46 @@
       ]
     },
     {
+      "id": "offline-outbox.online-viewing-that-only-marked-it-played-replaces-an-unsent-place",
+      "operation": "outbox",
+      "state": {
+        "server": "srv",
+        "viewer": "u1",
+        "itemId": "i1",
+        "base": {
+          "positionTicks": "100",
+          "played": false,
+          "playCount": 0,
+          "lastPlayedDate": null
+        },
+        "sequence": "1",
+        "positionTicks": "500",
+        "played": null,
+        "phase": "dirty",
+        "conflict": null,
+        "writing": null
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "online-viewing",
+            "current": {
+              "positionTicks": "100",
+              "played": true,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "entry": null,
+            "effect": "none",
+            "write": null,
+            "ignored": null
+          }
+        }
+      ]
+    },
+    {
       "id": "offline-outbox.online-viewing-with-nothing-held-is-nothing",
       "operation": "outbox",
       "state": null,
