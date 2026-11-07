@@ -183,13 +183,13 @@ class AccessibilityContrastTest {
         val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
         compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
         try {
-            // One dp inside the left edge, halfway down: the ring, not the fill.
-            val middle = (box.top.value + box.bottom.value) / 2
-            val edge = bitmap.getPixel(((box.left.value + 1f) * density).roundToInt(), (middle * density).roundToInt())
+            // Across the left edge, halfway down: the ring may sit just inside or just outside the bounds.
+            val middle = ((box.top.value + box.bottom.value) / 2 * density).roundToInt()
             val ring = SelectedSeasonOutline.toArgb()
+            val edge = (-4..4).map { bitmap.getPixel(((box.left.value + it) * density).roundToInt(), middle) }
             assertTrue(
-                listOf(16, 8, 0).all { shift -> abs(((edge shr shift) and 255) - ((ring shr shift) and 255)) <= 24 },
-                "selected button edge is ${Integer.toHexString(edge)}, not the selected ring"
+                edge.any { pixel -> listOf(16, 8, 0).all { shift -> abs(((pixel shr shift) and 255) - ((ring shr shift) and 255)) <= 24 } },
+                "selected button edge is ${edge.map(Integer::toHexString)}, not the selected ring"
             )
         } finally {
             bitmap.recycle()

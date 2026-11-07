@@ -382,9 +382,6 @@ class MusicScreensTest {
         listOf("music:play-next", "music:add-queue", "music:add-playlist", "music:mix", "music:rename").forEach {
             compose.onNodeWithTag(it).assertExists()
         }
-        compose.onNodeWithTag("music:rename").performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitForIdle()
-        compose.onNodeWithTag("music:rename-field").assertExists()
     }
 
     @Test fun tvPageActionsHoldTheRestBehindMore() {
@@ -401,6 +398,10 @@ class MusicScreensTest {
         compose.setContent { TouchTheme { TouchMusicDetail(vm, host, { _, _ -> }, {}) } }
         until { vm.state.value.tracks.size == 2 && vm.state.value.canEdit }
         pageActionsHoldTheRestBehindMore { compose.onNodeWithContentDescription("Add to favorites").assertExists() }
+        // An action behind More still runs. (The TV's text field blinks forever, so Robolectric never idles on its rename dialog.)
+        compose.onNodeWithTag("music:rename").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        compose.onNodeWithTag("music:rename-field").assertExists()
     }
 
     @Test fun anEmptyAlbumSaysItHasNoPlayableTracks() {
