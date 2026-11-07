@@ -499,7 +499,7 @@ class TouchPlayerControlsTest {
             settled()
             compose.onNodeWithTag("touch:panel").assertDoesNotExist()
         }
-        compose.onNodeWithText("a 30 fps copy on the server would play directly", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("a 30 fps copy on the server plays directly", substring = true).assertIsDisplayed()
         val notice = bounds("touch:conversion-notice")
         val root = compose.onRoot().getBoundsInRoot()
         assertTrue(notice.left >= root.left && notice.right <= root.right && notice.bottom <= root.bottom, "inside: $notice in $root")
@@ -532,6 +532,24 @@ class TouchPlayerControlsTest {
     @Test
     fun theNoticeFitsAShortLandscapePhoneAtALargerFont() =
         noticeFitsAtALargerFont("phone-landscape-780x360-font1.3", waitsForControls = true)
+
+    // TalkBack keeps the controls up, so a notice that waited for them would never be heard: it shows at once there.
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun aScreenReaderHearsTheNoticeOnAShortPhoneAtALargerFont() {
+        launch(fontScale = 1.3f)
+        compose.runOnIdle {
+            val manager = compose.activity.getSystemService(
+                android.content.Context.ACCESSIBILITY_SERVICE
+            ) as android.view.accessibility.AccessibilityManager
+            org.robolectric.Shadows.shadowOf(manager).setScreenReader(true)
+        }
+        compose.mainClock.advanceTimeBy(400)
+        decided(PlayMethod.Transcode, reason = "VideoFramerateNotSupported")
+        settled()
+        compose.onNodeWithTag("touch:panel").assertIsDisplayed()
+        compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed()
+    }
 
     @Test
     @Config(qualifiers = "sw800dp-w800dp-h1280dp-xhdpi")

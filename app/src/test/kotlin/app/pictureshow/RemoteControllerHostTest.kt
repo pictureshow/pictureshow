@@ -214,7 +214,7 @@ class RemoteControllerHostTest {
         val ids = request.query.getValue("itemIds").split(",")
         assertEquals(tracks.take(175), ids)
         assertEquals(
-            "Sent the first 175 of 1,200.",
+            "Sending 175 of 1,200 to the TV…",
             remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped)
         )
         // A short list afterwards says nothing about a cut.

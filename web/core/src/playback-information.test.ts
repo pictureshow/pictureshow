@@ -34,7 +34,7 @@ const good = {
 describe("playback-information strict vector runner", () => {
     it("runs a well-formed conversion-notice case", () => {
         expect(runVector(good)).toBe(
-            "Converting this video for this browser\nIts video format won't play on this browser.\nIt still plays, and an H.264 copy on the server would play directly.",
+            "Converting this video for this browser\nIts video format won't play on this browser.\nIt still plays, and a 1080p H.264 copy on the server plays directly.",
         );
     });
     it("fails unknown operations instead of passing them", () => {

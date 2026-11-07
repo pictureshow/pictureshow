@@ -25,12 +25,12 @@ data class ConversionNotice(val title: String, val reason: String, val fix: Stri
          * platform this app runs on decodes 8-bit SDR H.264 at 1080p.
          */
         private val categories: List<Triple<Set<String>, String, String>> = listOf(
-            Triple(setOf("videocodecnotsupported"), "Its video format won't play on %s.", copy("an H.264 copy")),
+            Triple(setOf("videocodecnotsupported"), "Its video format won't play on %s.", copy("a 1080p H.264 copy")),
             Triple(setOf("videorangetypenotsupported"), "Its HDR format won't play on %s.", copy("an SDR copy")),
             Triple(
                 setOf("videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"),
                 "Its video encoding is too demanding for %s.",
-                copy("an 8-bit H.264 copy")
+                copy("an 8-bit 1080p H.264 copy")
             ),
             Triple(setOf("videoresolutionnotsupported"), "Its resolution is too high for %s.", copy("a 1080p copy")),
             Triple(setOf("videoframeratenotsupported"), "Its frame rate is too high for %s.", copy("a 30 fps copy")),
@@ -43,7 +43,7 @@ data class ConversionNotice(val title: String, val reason: String, val fix: Stri
         /** Text subtitles are sent alongside the picture, so choosing them, or none, stops the burn-in. */
         const val SUBTITLE_FIX = "Choose text subtitles, such as SRT, or turn them off to avoid it."
 
-        private fun copy(what: String) = "It still plays, and $what on the server would play directly."
+        private fun copy(what: String) = "It still plays, and $what on the server plays directly."
 
         fun title(device: String = DEVICE): String = "Converting this video for $device"
 

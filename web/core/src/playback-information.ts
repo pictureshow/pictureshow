@@ -151,7 +151,7 @@ export const BROWSER_NOTICE_ACTIONS = {
 export type NoticeInput = keyof typeof BROWSER_NOTICE_ACTIONS;
 
 const copyFix = (copy: string) =>
-    `It still plays, and ${copy} on the server would play directly.`;
+    `It still plays, and ${copy} on the server plays directly.`;
 
 /**
  * Ordered by how useful fixing it is: the first category lets the video play directly.
@@ -162,7 +162,7 @@ const noticeCategories: Array<[string[], string, string]> = [
     [
         ["videocodecnotsupported"],
         "Its video format won't play on %s.",
-        copyFix("an H.264 copy"),
+        copyFix("a 1080p H.264 copy"),
     ],
     [
         ["videorangetypenotsupported"],
@@ -177,7 +177,7 @@ const noticeCategories: Array<[string[], string, string]> = [
             "refframesnotsupported",
         ],
         "Its video encoding is too demanding for %s.",
-        copyFix("an 8-bit H.264 copy"),
+        copyFix("an 8-bit 1080p H.264 copy"),
     ],
     [
         ["videoresolutionnotsupported"],

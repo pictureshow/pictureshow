@@ -449,7 +449,7 @@
         ],
         "device": "this browser"
       },
-      "expected": "Converting this video for this browser\nIts video format won't play on this browser.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this browser\nIts video format won't play on this browser.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.windows-chrome-secondary-audio",
@@ -464,7 +464,7 @@
         ],
         "device": "this browser"
       },
-      "expected": "Converting this video for this browser\nIts video format won't play on this browser.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this browser\nIts video format won't play on this browser.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.windows-chrome-video-only",
@@ -477,7 +477,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.mac-chrome-audio-only",
@@ -583,7 +583,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.subtitle-burn-in",
@@ -729,7 +729,7 @@
         },
         "subtitleIndex": 3
       },
-      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.hdr-range",
@@ -742,7 +742,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts HDR format won't play on this TV.\nIt still plays, and an SDR copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts HDR format won't play on this TV.\nIt still plays, and an SDR copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.framerate-and-hdr",
@@ -756,7 +756,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts HDR format won't play on this TV.\nIt still plays, and an SDR copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts HDR format won't play on this TV.\nIt still plays, and an SDR copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.profile",
@@ -769,7 +769,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.level",
@@ -782,7 +782,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.bit-depth",
@@ -795,7 +795,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.ref-frames",
@@ -808,7 +808,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video encoding is too demanding for this TV.\nIt still plays, and an 8-bit 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.resolution",
@@ -821,7 +821,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts resolution is too high for this TV.\nIt still plays, and a 1080p copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts resolution is too high for this TV.\nIt still plays, and a 1080p copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.framerate",
@@ -835,7 +835,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts frame rate is too high for this TV.\nIt still plays, and a 30 fps copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts frame rate is too high for this TV.\nIt still plays, and a 30 fps copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.interlaced",
@@ -848,7 +848,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts interlaced video won't play on this TV.\nIt still plays, and a deinterlaced copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts interlaced video won't play on this TV.\nIt still plays, and a deinterlaced copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.anamorphic",
@@ -861,7 +861,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts non-square pixels won't display on this TV.\nIt still plays, and a square-pixel copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts non-square pixels won't display on this TV.\nIt still plays, and a square-pixel copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.rotation",
@@ -874,7 +874,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts rotation won't display on this TV.\nIt still plays, and an upright copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts rotation won't display on this TV.\nIt still plays, and an upright copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.lowercase-code",
@@ -887,7 +887,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.unknown-reason",
@@ -1126,7 +1126,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.codec-and-codec-tag-reencode",
@@ -1141,7 +1141,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts video format won't play on this TV.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.container-and-codec-tag-reencode",
@@ -1171,7 +1171,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts resolution is too high for this TV.\nIt still plays, and a 1080p copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts resolution is too high for this TV.\nIt still plays, and a 1080p copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.empty-reason-with-video-reason",
@@ -1186,7 +1186,7 @@
         ],
         "device": "this TV"
       },
-      "expected": "Converting this video for this TV\nIts frame rate is too high for this TV.\nIt still plays, and a 30 fps copy on the server would play directly."
+      "expected": "Converting this video for this TV\nIts frame rate is too high for this TV.\nIt still plays, and a 30 fps copy on the server plays directly."
     },
     {
       "id": "playback-information.conversion-notice.phone-device-noun",
@@ -1200,7 +1200,7 @@
         ],
         "device": "this phone"
       },
-      "expected": "Converting this video for this phone\nIts video format won't play on this phone.\nIt still plays, and an H.264 copy on the server would play directly."
+      "expected": "Converting this video for this phone\nIts video format won't play on this phone.\nIt still plays, and a 1080p H.264 copy on the server plays directly."
     }
   ],
   "sources": [

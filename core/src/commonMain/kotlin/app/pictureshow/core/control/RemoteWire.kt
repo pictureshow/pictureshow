@@ -72,7 +72,7 @@ data class RemoteCap(val sent: Int, val total: Int)
 data class RemoteWire(val request: RemoteRequest? = null, val rejection: String? = null, val capped: RemoteCap? = null)
 
 /** What the controller says when a list was cut to fit one request. */
-fun remoteCapNote(cap: RemoteCap): String = "Sent the first ${groupedCount(cap.sent)} of ${groupedCount(cap.total)}."
+fun remoteCapNote(cap: RemoteCap): String = "Sending ${groupedCount(cap.sent)} of ${groupedCount(cap.total)} to the TV…"
 
 private fun groupedCount(value: Int): String = value.toString().reversed().chunked(3).joinToString(",").reversed()
 

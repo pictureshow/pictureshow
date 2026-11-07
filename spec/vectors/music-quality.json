@@ -287,8 +287,98 @@
         "label": "Converted to AAC, up to 256 kbps (lossy)",
         "lossless": false,
         "converted": true,
-        "reason": "This device can't decode APE, so the server converts it. It still plays, and a FLAC copy on the server would play directly."
+        "reason": "This device can't decode APE, so the server converts it. It still plays, and a FLAC copy on the server plays directly."
       }
+    },
+    {
+      "id": "music-quality.too-many-channels-suggests-stereo",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "Transcode",
+        "route": "device",
+        "ceiling": 320000000,
+        "reasons": [
+          "AudioChannelsNotSupported"
+        ]
+      },
+      "expected": {
+        "label": "Converted to AAC, up to 256 kbps (lossy)",
+        "lossless": false,
+        "converted": true,
+        "reason": "This device can't play FLAC at its channel count, so the server converts it. It still plays, and a stereo copy on the server plays directly."
+      },
+      "description": "A shape the device can't take, not a format it can't decode: the fix names the shape, since a FLAC or AAC copy in the same shape would convert too."
+    },
+    {
+      "id": "music-quality.sample-rate-suggests-48k",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "Transcode",
+        "route": "device",
+        "ceiling": 320000000,
+        "reasons": [
+          "AudioSampleRateNotSupported"
+        ]
+      },
+      "expected": {
+        "label": "Converted to AAC, up to 256 kbps (lossy)",
+        "lossless": false,
+        "converted": true,
+        "reason": "This device can't play FLAC at its sample rate, so the server converts it. It still plays, and a 48 kHz copy on the server plays directly."
+      },
+      "description": "A shape the device can't take, not a format it can't decode: the fix names the shape, since a FLAC or AAC copy in the same shape would convert too."
+    },
+    {
+      "id": "music-quality.bit-depth-suggests-16-bit",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "m4a",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "alac"
+            }
+          ]
+        },
+        "method": "Transcode",
+        "route": "device",
+        "ceiling": 320000000,
+        "reasons": [
+          "AudioBitDepthNotSupported"
+        ]
+      },
+      "expected": {
+        "label": "Converted to AAC, up to 256 kbps (lossy)",
+        "lossless": false,
+        "converted": true,
+        "reason": "This device can't play ALAC at its bit depth, so the server converts it. It still plays, and a 16-bit copy on the server plays directly."
+      },
+      "description": "A shape the device can't take, not a format it can't decode: the fix names the shape, since a FLAC or AAC copy in the same shape would convert too."
     },
     {
       "id": "music-quality.undecodable-lossy-suggests-aac",
@@ -316,7 +406,7 @@
         "label": "Converted to AAC, up to 256 kbps (lossy)",
         "lossless": false,
         "converted": true,
-        "reason": "This device can't decode WMAV2, so the server converts it. It still plays, and an AAC copy on the server would play directly."
+        "reason": "This device can't decode WMAV2, so the server converts it. It still plays, and an AAC copy on the server plays directly."
       }
     },
     {
@@ -345,7 +435,7 @@
         "label": "Converted to AAC, up to 256 kbps (lossy)",
         "lossless": false,
         "converted": true,
-        "reason": "This device can't decode FLAC, so the server converts it. It still plays, and an AAC copy on the server would play directly."
+        "reason": "This device can't decode FLAC, so the server converts it. It still plays, and an AAC copy on the server plays directly."
       }
     }
   ]

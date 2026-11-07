@@ -338,7 +338,9 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             val top = WindowInsets.safeDrawing.getTop(density) + with(density) { TOUCH_PLAYER_EDGE.roundToPx() }
             top + title + line + with(density) { 28.dp.roundToPx() }
         }
-        val noticeClearsControls = !controlsVisible ||
+        // TalkBack keeps the controls up for good, and its user needs the announcement most, so it never waits there.
+        val noticeClearsControls = accessible ||
+            !controlsVisible ||
             noticeBottom == null ||
             controlsTop?.let { noticeBottom <= it - playerTop } == true
         ConversionNoticeHost(

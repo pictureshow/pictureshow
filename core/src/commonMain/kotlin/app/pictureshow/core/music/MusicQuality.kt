@@ -137,11 +137,19 @@ fun musicOutputFacts(
     } else if (reasons.any { "Bitrate" in it }) {
         "It's above the Music quality you picked. Change Music quality in Settings to hear the original."
     } else {
-        // Nothing on the device decodes it, so the next step is a copy it does: FLAC keeps a lossless source lossless,
-        // and AAC is the format the server converts to, so it always plays.
-        val copy = if (sourceLossless && stream?.codec?.lowercase() != "flac") "a FLAC copy" else "an AAC copy"
-        "This device can't decode ${codec.ifBlank { "this file" }}, so the server converts it. " +
-            "It still plays, and $copy on the server would play directly."
+        // The next step is a copy the device plays as it is. A shape it can't take (channels, rate, depth) names the
+        // shape; otherwise nothing here decodes the format, and FLAC keeps a lossless source lossless while AAC, the
+        // format the server converts to, always plays.
+        val name = codec.ifBlank { "this file" }
+        val shape = listOf(
+            "AudioChannelsNotSupported" to ("channel count" to "a stereo copy"),
+            "AudioSampleRateNotSupported" to ("sample rate" to "a 48 kHz copy"),
+            "AudioBitDepthNotSupported" to ("bit depth" to "a 16-bit copy")
+        ).firstOrNull { (code) -> code in reasons }?.second
+        val format = if (sourceLossless && stream?.codec?.lowercase() != "flac") "a FLAC copy" else "an AAC copy"
+        val (why, copy) = shape?.let { (what, copy) -> "This device can't play $name at its $what" to copy }
+            ?: ("This device can't decode $name" to format)
+        "$why, so the server converts it. It still plays, and $copy on the server plays directly."
     }
     return MusicOutput(label, lossless, converted, reason)
 }
