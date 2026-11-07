@@ -149,10 +149,28 @@ internal class MusicClient(private val client: HttpClient, private val identity:
         write(account, "Playlists/${playlist.encodeURLPathPart()}", body = renamePlaylistBody(name).toString())
 
     override suspend fun addToPlaylist(account: Account, playlist: String, items: List<String>): PlaylistWrite =
-        write(account, "Playlists/${playlist.encodeURLPathPart()}/Items", mapOf("ids" to items.joinToString(",")))
+        writeInBatches(items) { batch ->
+            write(account, "Playlists/${playlist.encodeURLPathPart()}/Items", mapOf("ids" to batch.joinToString(",")))
+        }
 
     override suspend fun removeFromPlaylist(account: Account, playlist: String, entries: List<String>): PlaylistWrite =
-        write(account, "Playlists/${playlist.encodeURLPathPart()}/Items", mapOf("entryIds" to entries.joinToString(",")), HttpMethod.Delete)
+        writeInBatches(entries) { batch ->
+            val path = "Playlists/${playlist.encodeURLPathPart()}/Items"
+            write(account, path, mapOf("entryIds" to batch.joinToString(",")), HttpMethod.Delete)
+        }
+
+    /**
+     * A long list goes in several requests, each well under the server's request-line limit. The first one that isn't "ok"
+     * ends it; once an earlier batch was applied the edit is partly saved, which only a read-back can tell, so it is "unknown".
+     */
+    private suspend fun writeInBatches(ids: List<String>, send: suspend (List<String>) -> PlaylistWrite): PlaylistWrite {
+        var last = PlaylistWrite("ok")
+        musicIdBatches(ids).forEachIndexed { index, batch ->
+            last = send(batch)
+            if (last.outcome != "ok") return if (index > 0) PlaylistWrite("unknown") else last
+        }
+        return last
+    }
 
     override suspend fun movePlaylistEntry(account: Account, playlist: String, entry: String, index: Int): PlaylistWrite =
         write(account, "Playlists/${playlist.encodeURLPathPart()}/Items/${entry.encodeURLPathPart()}/Move/$index")

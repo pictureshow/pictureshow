@@ -71,6 +71,21 @@ internal class MusicSessionPlayer(player: Player, private val host: MusicHost) :
 
     override fun pause() = host.pause()
 
+    override fun setPlayWhenReady(playWhenReady: Boolean) = if (playWhenReady) host.play() else host.pause()
+
+    // A controller that picks another row of the output (a queue list on a watch or a car) picks that queue entry.
+    override fun seekTo(mediaItemIndex: Int, positionMs: Long) = route(mediaItemIndex, positionMs)
+
+    override fun seekToDefaultPosition(mediaItemIndex: Int) = route(mediaItemIndex, 0)
+
+    override fun seekTo(positionMs: Long) = host.seekTo(positionMs)
+
+    private fun route(index: Int, positionMs: Long) {
+        if (index == currentMediaItemIndex) return host.seekTo(positionMs.coerceAtLeast(0))
+        val entry = if (index in 0 until mediaItemCount) getMediaItemAt(index).mediaId else return
+        host.jump(entry, positionMs.takeIf { it != androidx.media3.common.C.TIME_UNSET } ?: 0)
+    }
+
     override fun stop() = host.stop()
 
     override fun seekToNext() = host.next()

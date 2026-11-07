@@ -153,6 +153,12 @@ const val MUSIC_RANDOM_LIMIT = 200
 /** Most a queue holds. A context longer than this plays its first entries, and says so. */
 const val MUSIC_QUEUE_LIMIT = 2000
 
+/** Ids per request: a Jellyfin id is 32 characters, so 100 of them and their commas are about 3.3 KB of the server's 8 KB line. */
+const val MUSIC_ID_BATCH = 100
+
+/** A list of ids split for requests that name them in the URL, in order, none empty and none over [MUSIC_ID_BATCH]. */
+fun musicIdBatches(ids: List<String>, size: Int = MUSIC_ID_BATCH): List<List<String>> = ids.chunked(size)
+
 /** Disc, then track, then name, then identity, so missing and duplicate tags still give one stable order (MUS-02). */
 fun orderTracks(tracks: List<MediaItem>): List<MediaItem> = tracks.sortedWith(
     compareBy<MediaItem> { it.parentIndexNumber ?: 1 }

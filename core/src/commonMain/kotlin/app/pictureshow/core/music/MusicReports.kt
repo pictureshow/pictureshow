@@ -30,7 +30,10 @@ data class MusicReportEvent(
     val media: String? = null,
     val ticks: Long = 0,
     val paused: Boolean = false,
-    val failed: Boolean = false
+    val failed: Boolean = false,
+    /** On "load": the track before it ran to its end, so its stop reports [durationTicks] rather than the last position seen. */
+    val natural: Boolean = false,
+    val durationTicks: Long = 0
 )
 
 /**
@@ -42,7 +45,9 @@ fun reduceMusicReport(state: MusicReportState, event: MusicReportEvent): MusicRe
     val s = state.copy(effects = emptyList())
     val viewing = s.viewing
     fun close(failed: Boolean = false) = if (viewing?.started == true) {
-        listOf(MusicReportEffect("stopped", viewing.media, viewing.serial, event.ticks, failed = failed))
+        // A track that played out was heard to its end, though the last position seen is up to a second short of it.
+        val at = if (event.natural && event.durationTicks > 0) event.durationTicks else event.ticks
+        listOf(MusicReportEffect("stopped", viewing.media, viewing.serial, at, failed = failed))
     } else {
         emptyList()
     }
