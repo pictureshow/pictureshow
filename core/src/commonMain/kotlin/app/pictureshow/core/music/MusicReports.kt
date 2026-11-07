@@ -14,7 +14,14 @@ data class MusicViewing(val entry: String, val media: String, val serial: Long, 
 data class MusicReportState(val viewing: MusicViewing? = null, val serial: Long = 0, val effects: List<MusicReportEffect> = emptyList())
 
 @Serializable
-data class MusicReportEffect(val report: String, val media: String, val serial: Long, val ticks: Long = 0, val paused: Boolean = false, val failed: Boolean = false)
+data class MusicReportEffect(
+    val report: String,
+    val media: String,
+    val serial: Long,
+    val ticks: Long = 0,
+    val paused: Boolean = false,
+    val failed: Boolean = false
+)
 
 @Serializable
 data class MusicReportEvent(

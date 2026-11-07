@@ -15,6 +15,7 @@ import androidx.media3.test.utils.TestExoPlayerBuilder
 import app.pictureshow.core.Account
 import app.pictureshow.core.AccountStore
 import app.pictureshow.core.ClientResult
+import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
@@ -76,7 +77,14 @@ class MusicHostTest {
             negotiated += media
             return ClientResult.Success(
                 PlayOutcome.Play(
-                    PlayDecision(media, MediaSourceInfo(id = media), PlayMethod.DirectPlay, server.url("/$media.wav").toString(), emptyMap(), "session-$media")
+                    PlayDecision(
+                        media,
+                        MediaSourceInfo(id = media),
+                        PlayMethod.DirectPlay,
+                        server.url("/$media.wav").toString(),
+                        emptyMap(),
+                        "session-$media"
+                    )
                 )
             )
         }
@@ -92,6 +100,12 @@ class MusicHostTest {
         }
 
         override suspend fun check(account: Account, media: List<String>) = ClientResult.Success(media.filter { it !in gone })
+
+        override suspend fun items(account: Account, media: List<String>) = ClientResult.Success(
+            media.map {
+                MediaItem(id = it, name = "Title $it", type = if (it.startsWith("v")) "Movie" else "Audio", runTimeTicks = 1_000_000)
+            }
+        )
     }
 
     private class Memory : TextPersistence {
@@ -189,7 +203,12 @@ class MusicHostTest {
     private fun until(what: String, check: () -> Boolean) {
         val end = System.currentTimeMillis() + 20_000
         while (!check()) {
-            assertTrue(System.currentTimeMillis() < end, "Waited for: $what. Log: $log. Ui: ${hosts.lastOrNull()?.state?.value?.let { it.message to it.queue?.order }}")
+            assertTrue(
+                System.currentTimeMillis() < end,
+                "Waited for: $what. Log: $log. Ui: ${hosts.lastOrNull()?.state?.value?.let {
+                    it.message to it.queue?.order
+                }}"
+            )
             ShadowLooper.idleMainLooper()
             Thread.sleep(5)
         }
@@ -370,6 +389,18 @@ class MusicHostTest {
         music.retrySave()
         until("the row") { music.state.value.current != null }
         assertFalse(music.state.value.canRetrySave)
+    }
+
+    @Test fun aRemoteNamingMusicPlaysItHereAndAnythingElseIsLeftForTheVideoPath() {
+        val music = host()
+        ready(music)
+        assertFalse(runBlocking { music.openFromRemote(account, listOf("v1", "a"), 0) })
+        pump(50)
+        assertTrue(negotiated.isEmpty())
+        assertTrue(runBlocking { music.openFromRemote(account, listOf("a", "b"), 1) })
+        until("the chosen track") { "start b" in log }
+        assertFalse("start a" in log, "Index 1 starts at the second track")
+        assertEquals(listOf("a", "b"), music.state.value.queue!!.entries.map { it.media })
     }
 
     @Test fun addingToAnEmptyQueueWaitsForPlay() {

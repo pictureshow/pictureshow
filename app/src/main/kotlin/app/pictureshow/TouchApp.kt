@@ -122,6 +122,20 @@ internal fun TouchPictureshow(
             openCast = { nav.navigate("cast") { launchSingleTop = true } }
         )
     }
+    val music: MusicHost = koinInject()
+    TouchMusicPrompts(music) { play ->
+        val tracks = play.tracks.drop(play.start ?: 0)
+        if (remoteState.controller?.phase == "attached") {
+            remote.playNow(tracks.map(MusicTrack::id))
+        } else {
+            cast.openChooser(
+                CastPlayRequest(
+                    tracks.map { CastPlayItem(it.id, it.title, it.artUrl, it.durationTicks?.let { ticks -> ticks / 10_000 }) },
+                    onThisDevice = { music.playHere(play) }
+                )
+            )
+        }
+    }
     TouchCastAttention(castState, cast)
     TouchCastDroppedNotice(castState, cast)
     // Play here, or Resume here with no player left open: the receiver's position, in a new local player.
@@ -134,6 +148,7 @@ internal fun TouchPictureshow(
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
     TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer, above = {
+        if (!inPlayer && route != MUSIC_NOW_ROUTE) TouchMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
         if (!inPlayer && route != "remote") TouchRemoteBar(remoteState, remote.now()) { nav.navigate("remote") { launchSingleTop = true } }
         if (!inPlayer && route != "cast") TouchCastBar(castState) { nav.navigate("cast") { launchSingleTop = true } }
     }) {
@@ -358,6 +373,8 @@ internal fun TouchPictureshow(
             ) { entry ->
                 state.snapshot.currentAccount?.let { account ->
                     val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                    // Video and music never share the speakers: the queue stays saved for a deliberate return (MUS-11).
+                    LaunchedEffect(entry) { music.beforeVideo() }
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
@@ -374,6 +391,36 @@ internal fun TouchPictureshow(
                     }
                 }
             }
+            composable(
+                MUSIC_ROUTE_PATTERN,
+                arguments = listOf(
+                    navArgument("item") { type = NavType.StringType },
+                    navArgument("role") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                    navArgument("library") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    }
+                )
+            ) { entry ->
+                state.snapshot.currentAccount?.let { account ->
+                    val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                    val library = entry.arguments?.getString("library").orEmpty()
+                    if (item.collectionType == "music") {
+                        val vm: MusicLibraryViewModel = koinViewModel(parameters = { parametersOf(account, item) })
+                        TouchMusicLibrary(vm, music, { next, role -> nav.navigate(musicRoute(next, role, item.id)) }) { nav.popBackStack() }
+                    } else {
+                        val role = entry.arguments?.getString("role").orEmpty()
+                        val vm: MusicDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, role, library, catalog) })
+                        TouchMusicDetail(vm, music, { next, nextRole ->
+                            nav.navigate(musicRoute(next, nextRole, library))
+                        }) { nav.popBackStack() }
+                    }
+                }
+            }
+            composable(MUSIC_NOW_ROUTE) { TouchMusicNow(music) { nav.popBackStack() } }
             composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
                 state.snapshot.currentAccount?.let { account ->
                     val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }

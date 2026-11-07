@@ -107,7 +107,8 @@ internal class MusicClient(private val client: HttpClient, private val identity:
     /** A playlist the server doesn't name this user on (or any failure) is read-only: edits are refused here, not after. */
     override suspend fun playlistCanEdit(account: Account, playlist: String): Boolean = try {
         val answer = send(account, "Playlists/${playlist.encodeURLPathPart()}/Users/${account.user.id.encodeURLPathPart()}", emptyMap())
-        answer != null && answer.first in 200..299 &&
+        answer != null &&
+            answer.first in 200..299 &&
             json.parseToJsonElement(answer.second).let { (it as? JsonObject)?.get("CanEdit") }
                 ?.let { (it as? JsonPrimitive)?.content } == "true"
     } catch (cancelled: CancellationException) {

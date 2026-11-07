@@ -198,7 +198,20 @@ internal fun PlaybackSettingsScreen(
         ) {
             Text("Conversion notice: ${if (local.conversionNotice) "On" else "Off"}")
         }
-        Text("Shows a short note when the server has to convert a video for this TV.")
+        Text("Shows a short note when the server has to convert a video or a song for this TV.")
+        Button(
+            onClick = {
+                onLocal {
+                    val order = musicQualityOptions.map { option -> option.first }
+                    it.copy(musicQuality = order[(order.indexOf(it.musicQuality) + 1) % order.size])
+                }
+            },
+            modifier = Modifier.testTag("settings:music-quality").semantics {
+                stateDescription = musicQualityLabel(local.musicQuality)
+            }
+        ) {
+            Text("Music quality: ${musicQualityLabel(local.musicQuality)}")
+        }
         val phoneRemote = when (local.remoteReceiver) {
             "off" -> "Off"
             "server-allowed" -> "Anyone this server allows"

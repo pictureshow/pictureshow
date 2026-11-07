@@ -105,7 +105,25 @@ fun musicArtistTracksRequest(artist: String, role: ArtistRole, library: String?,
 fun musicGenreAlbumsRequest(genre: String, library: String, start: Int = 0, limit: Int = MUSIC_PAGE) = MusicRequest(
     "Items",
     paged(start, limit) + sorted("SortName", false) +
-        mapOf("parentId" to library, "genreIds" to genre, "recursive" to "true", "includeItemTypes" to "MusicAlbum", "fields" to MUSIC_CARD_FIELDS)
+        mapOf(
+            "parentId" to library,
+            "genreIds" to genre,
+            "recursive" to "true",
+            "includeItemTypes" to "MusicAlbum",
+            "fields" to MUSIC_CARD_FIELDS
+        )
+)
+
+fun musicGenreTracksRequest(genre: String, library: String, start: Int = 0, limit: Int = 200) = MusicRequest(
+    "Items",
+    paged(start, limit) + sorted("Album,$TRACK_ORDER", false) +
+        mapOf(
+            "parentId" to library,
+            "genreIds" to genre,
+            "recursive" to "true",
+            "includeItemTypes" to "Audio",
+            "fields" to MUSIC_TRACK_REQUEST_FIELDS
+        )
 )
 
 fun musicPlaylistItemsRequest(playlist: String, start: Int = 0, limit: Int = 200) = MusicRequest(
@@ -169,12 +187,7 @@ fun albumArtistLine(album: MediaItem): String =
     album.albumArtists.map { it.name }.filter(String::isNotBlank).joinToString(", ").ifBlank { album.albumArtist.orEmpty() }
 
 @Serializable
-data class MusicPageState(
-    val ids: List<String> = emptyList(),
-    val offset: Int = 0,
-    val total: Int = 0,
-    val ended: Boolean = false
-)
+data class MusicPageState(val ids: List<String> = emptyList(), val offset: Int = 0, val total: Int = 0, val ended: Boolean = false)
 
 /**
  * Offset moves by what the server sent, and a short page isn't the end: only the total or an empty page is. A row
