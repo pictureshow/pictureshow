@@ -4581,6 +4581,51 @@
       ]
     },
     {
+      "id": "offline-outbox.resume-not-from-a-conflicts-played-flag",
+      "operation": "resume",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entry": {
+              "server": "srv",
+              "viewer": "u1",
+              "itemId": "i1",
+              "base": {
+                "positionTicks": "900",
+                "played": false,
+                "playCount": 0,
+                "lastPlayedDate": null
+              },
+              "sequence": "1",
+              "positionTicks": "500",
+              "played": true,
+              "phase": "conflict",
+              "conflict": {
+                "serverPositionTicks": "900",
+                "serverPlayed": false,
+                "localPositionTicks": "500",
+                "localPlayed": false,
+                "fields": [
+                  "position"
+                ]
+              },
+              "writing": null
+            },
+            "lastKnown": {
+              "positionTicks": "900",
+              "played": false,
+              "playCount": 0,
+              "lastPlayedDate": null
+            }
+          },
+          "expected": {
+            "ticks": "900"
+          }
+        }
+      ]
+    },
+    {
       "id": "offline-outbox.resume-not-from-a-conflict-with-nothing-known",
       "operation": "resume",
       "state": {},
