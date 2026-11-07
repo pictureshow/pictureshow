@@ -73,7 +73,10 @@ object PlayDecisions {
             response.mediaSources
         }
         val source = candidates.firstOrNull(::playable)
-            ?: return PlayOutcome.Unplayable(UnplayableReason.NO_COMPATIBLE_SOURCE, if (audio) "This track cannot be played on this device." else "This video cannot be played on this device.")
+            ?: return PlayOutcome.Unplayable(
+                UnplayableReason.NO_COMPATIBLE_SOURCE,
+                if (audio) "This track cannot be played on this device." else "This video cannot be played on this device."
+            )
         val headers = buildMap {
             source.requiredHttpHeaders.forEach { (name, value) ->
                 if (value != null &&
@@ -123,14 +126,21 @@ object PlayDecisions {
         source.supportsDirectPlay || source.supportsDirectStream || !source.transcodingUrl.isNullOrBlank()
 
     /** `GET /Videos/{itemId}/stream?static=true` (`/Audio/` for a track): the original file, byte-range seekable. */
-    internal fun staticStreamUrl(server: Server, itemId: String, source: MediaSourceInfo, playSessionId: String?, audio: Boolean = false): String {
+    internal fun staticStreamUrl(
+        server: Server,
+        itemId: String,
+        source: MediaSourceInfo,
+        playSessionId: String?,
+        audio: Boolean = false
+    ): String {
         val query = buildList {
             add("static" to "true")
             source.id?.let { add("mediaSourceId" to it) }
             playSessionId?.let { add("playSessionId" to it) }
             source.eTag?.let { add("tag" to it) }
         }
-        return base(server) + (if (audio) "/Audio/" else "/Videos/") + encode(itemId) + "/stream?" + query.joinToString("&") { (key, value) -> "$key=${encode(value)}" }
+        return base(server) + (if (audio) "/Audio/" else "/Videos/") + encode(itemId) + "/stream?" +
+            query.joinToString("&") { (key, value) -> "$key=${encode(value)}" }
     }
 
     /**

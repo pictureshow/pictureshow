@@ -109,6 +109,9 @@ internal fun TouchSettings(
                 local.conversionNotice,
                 "touch:settings:conversion-notice"
             ) { checked -> onLocal { it.copy(conversionNotice = checked) } }
+            TouchChoice("Music quality", local.musicQuality, musicQualityOptions.map { it.first }, ::musicQualityLabel) { value ->
+                onLocal { it.copy(musicQuality = value) }
+            }
             TouchChoice("Subtitle size", local.subtitleSize, SubtitleSize.entries, { settingLabel(it.name) }) { value ->
                 onLocal { it.copy(subtitleSize = value) }
             }

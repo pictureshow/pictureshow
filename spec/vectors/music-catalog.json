@@ -590,6 +590,28 @@
         }
       },
       "expected": "http://s/Items/t/Images/Primary?tag=own&maxWidth=100&quality=85"
+    },
+    {
+      "id": "music-catalog.genre-tracks-stay-in-the-library-in-album-order",
+      "operation": "genre-tracks",
+      "input": {
+        "genre": "g",
+        "library": "lib",
+        "start": 200
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "parentId": "lib",
+          "genreIds": "g",
+          "recursive": "true",
+          "includeItemTypes": "Audio",
+          "startIndex": "200",
+          "limit": "200",
+          "sortBy": "Album,ParentIndexNumber,IndexNumber,SortName",
+          "sortOrder": "Ascending"
+        }
+      }
     }
   ]
 }

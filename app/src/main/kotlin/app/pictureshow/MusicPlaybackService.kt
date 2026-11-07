@@ -39,11 +39,7 @@ internal class MusicPlaybackService : MediaSessionService() {
 internal const val MUSIC_SESSION_ID = "pictureshow-music"
 
 internal class MusicSessionCallback(private val host: MusicHost) : MediaSession.Callback {
-    override fun onMediaButtonEvent(
-        session: MediaSession,
-        controllerInfo: MediaSession.ControllerInfo,
-        intent: Intent
-    ): Boolean {
+    override fun onMediaButtonEvent(session: MediaSession, controllerInfo: MediaSession.ControllerInfo, intent: Intent): Boolean {
         val key = intent.keyEventExtra() ?: return false
         if (key.action != KeyEvent.ACTION_DOWN) return false
         // True ends it here: this press already acted.

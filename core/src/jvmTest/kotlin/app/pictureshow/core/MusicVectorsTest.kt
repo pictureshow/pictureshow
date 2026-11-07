@@ -23,6 +23,7 @@ import app.pictureshow.core.music.musicArtistAlbumsRequest
 import app.pictureshow.core.music.musicBitrateCeiling
 import app.pictureshow.core.music.musicDeviceProfile
 import app.pictureshow.core.music.musicEntries
+import app.pictureshow.core.music.musicGenreTracksRequest
 import app.pictureshow.core.music.musicListState
 import app.pictureshow.core.music.musicOutputFacts
 import app.pictureshow.core.music.musicOutputRepeats
@@ -116,7 +117,9 @@ class MusicVectorsTest {
     }
 
     private fun step(operation: String, state: JsonElement, event: JsonElement): JsonElement = when (operation) {
-        "queue" -> json.encodeToJsonElement(reduceQueue(json.decodeFromJsonElement<QueueState>(state), json.decodeFromJsonElement<QueueEvent>(event)))
+        "queue" -> json.encodeToJsonElement(
+            reduceQueue(json.decodeFromJsonElement<QueueState>(state), json.decodeFromJsonElement<QueueEvent>(event))
+        )
         "session" -> json.encodeToJsonElement(
             reduceMusicSession(json.decodeFromJsonElement<MusicSessionState>(state), json.decodeFromJsonElement<MusicSessionEvent>(event))
         )
@@ -129,7 +132,9 @@ class MusicVectorsTest {
         else -> error("Unknown music operation: $operation")
     }
 
-    private fun tracks(input: JsonObject): List<MediaItem> = input.getValue("tracks").jsonArray.map { json.decodeFromJsonElement<MediaItem>(it) }
+    private fun tracks(input: JsonObject): List<MediaItem> = input.getValue("tracks").jsonArray.map {
+        json.decodeFromJsonElement<MediaItem>(it)
+    }
 
     private fun text(input: JsonObject, name: String): String? = input[name]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
 
@@ -143,6 +148,9 @@ class MusicVectorsTest {
         )
         "artist-albums" -> json.encodeToJsonElement(
             musicArtistAlbumsRequest(text(input, "artist")!!, ArtistRole.valueOf(text(input, "role")!!), text(input, "library"))
+        )
+        "genre-tracks" -> json.encodeToJsonElement(
+            musicGenreTracksRequest(text(input, "genre")!!, text(input, "library")!!, input["start"]?.jsonPrimitive?.int ?: 0)
         )
         "order" -> json.encodeToJsonElement(orderTracks(tracks(input)).map { it.id })
         "discs" -> json.encodeToJsonElement(albumDiscs(tracks(input)))
@@ -166,7 +174,9 @@ class MusicVectorsTest {
             ).name
         )
         "playable" -> json.encodeToJsonElement(playableTracks(tracks(input)).map { it.id })
-        "image" -> JsonPrimitive(imageUrl(Server("s", "s", "http://s", "12"), json.decodeFromJsonElement<MediaItem>(input.getValue("item")), 100))
+        "image" -> JsonPrimitive(
+            imageUrl(Server("s", "s", "http://s", "12"), json.decodeFromJsonElement<MediaItem>(input.getValue("item")), 100)
+        )
         "entries" -> json.encodeToJsonElement(
             musicEntries(input.getValue("media").jsonArray.map { it.jsonPrimitive.content }, text(input, "first")!!.toLong())
         ).jsonArray.let { rows ->
@@ -208,7 +218,11 @@ class MusicVectorsTest {
                 put("direct", json.encodeToJsonElement(profile.directPlayProfiles.map { "${it.container}:${it.audioCodec}" }))
                 put(
                     "conversion",
-                    json.encodeToJsonElement(profile.transcodingProfiles.map { "${it.container}:${it.audioCodec}:${it.protocol}:${it.videoCodec}" })
+                    json.encodeToJsonElement(
+                        profile.transcodingProfiles.map {
+                            "${it.container}:${it.audioCodec}:${it.protocol}:${it.videoCodec}"
+                        }
+                    )
                 )
             }
         }

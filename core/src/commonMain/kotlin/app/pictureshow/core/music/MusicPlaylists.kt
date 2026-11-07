@@ -51,7 +51,13 @@ fun reducePlaylistEdit(state: PlaylistEditState, event: PlaylistEditEvent): Play
             else -> s.copy(phase = "sending", pending = event.edit, effect = "send")
         }
         "sent" -> if (s.phase == "sending") s.copy(phase = "reading", effect = "read-back") else s
-        "denied" -> if (s.phase == "sending") s.copy(phase = "idle", pending = null, message = "The server didn't allow that change.") else s
+        "denied" -> if (s.phase ==
+            "sending"
+        ) {
+            s.copy(phase = "idle", pending = null, message = "The server didn't allow that change.")
+        } else {
+            s
+        }
         "failed" -> if (s.phase == "sending") s.copy(phase = "idle", pending = null, message = "That change didn't save. Try again.") else s
         "ambiguous" -> if (s.phase == "sending") {
             s.copy(phase = "unknown", effect = "read-back", message = "The server didn't answer, so the change may have saved.")

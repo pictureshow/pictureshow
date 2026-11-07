@@ -104,7 +104,13 @@ private fun audioStream(source: MediaSourceInfo): MediaStream? = source.mediaStr
  * carries it: Bluetooth and Cast re-encode, so they never get the word (MUS-06). Route is "device", "wired", "usb",
  * "bluetooth", "cast" or "remote".
  */
-fun musicOutputFacts(source: MediaSourceInfo, method: PlayMethod, route: String, ceiling: Int, reasons: List<String> = emptyList()): MusicOutput {
+fun musicOutputFacts(
+    source: MediaSourceInfo,
+    method: PlayMethod,
+    route: String,
+    ceiling: Int,
+    reasons: List<String> = emptyList()
+): MusicOutput {
     val stream = audioStream(source)
     val codec = stream?.codec?.uppercase().orEmpty().ifBlank { source.container?.uppercase().orEmpty() }
     val converted = method == PlayMethod.Transcode
@@ -129,7 +135,7 @@ fun musicOutputFacts(source: MediaSourceInfo, method: PlayMethod, route: String,
     val reason = if (!converted) {
         null
     } else if (reasons.any { "Bitrate" in it }) {
-        "It's above the Music quality you picked."
+        "It's above the Music quality you picked. Change Music quality in Settings to hear the original."
     } else {
         "This device can't decode ${codec.ifBlank { "this file" }}, so the server converts it."
     }

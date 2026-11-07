@@ -64,10 +64,10 @@ import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
 import app.pictureshow.core.playback.PlayOutcome
 import app.pictureshow.core.playback.PlaybackClient
+import app.pictureshow.core.playback.PlaybackPreferences
 import app.pictureshow.core.playback.PlaybackProgressInfo
 import app.pictureshow.core.playback.PlaybackRequest
 import app.pictureshow.core.playback.PlaybackStopInfo
-import app.pictureshow.core.playback.PlaybackPreferences
 import app.pictureshow.core.playback.Ticks
 import com.google.common.util.concurrent.ListenableFuture
 import kotlin.random.Random
@@ -138,6 +138,9 @@ internal interface MusicGateway {
 
     /** The saved IDs this viewer can still open, or a failure. */
     suspend fun check(account: Account, media: List<String>): ClientResult<List<String>>
+
+    /** The rows themselves, for a list a remote names by ID. */
+    suspend fun items(account: Account, media: List<String>): ClientResult<List<MediaItem>>
 }
 
 internal class ClientMusicGateway(
@@ -170,6 +173,14 @@ internal class ClientMusicGateway(
         return when (val page = music.music(account, MusicRequest("Items", parameters))) {
             is ClientResult.Failure -> page
             is ClientResult.Success -> ClientResult.Success(page.value.items.map(MediaItem::id))
+        }
+    }
+
+    override suspend fun items(account: Account, media: List<String>): ClientResult<List<MediaItem>> {
+        val parameters = mapOf("ids" to media.joinToString(","), "limit" to media.size.toString(), "fields" to "MediaSources")
+        return when (val page = music.music(account, MusicRequest("Items", parameters))) {
+            is ClientResult.Failure -> page
+            is ClientResult.Success -> ClientResult.Success(page.value.items)
         }
     }
 }
@@ -207,7 +218,7 @@ internal class MusicHost(
     private var queue = QueueStoreState(QueueState("", ""))
     private var session = MusicSessionState()
     private var reports = MusicReportState()
-    private var context_: String? = null
+    private var playContext: String? = null
     private var contextName: String? = null
     private var sequence = 0L
     private var tracks: Map<String, MusicTrack> = emptyMap()
@@ -241,7 +252,7 @@ internal class MusicHost(
         account = next
         reports = MusicReportState()
         session = MusicSessionState()
-        context_ = null
+        playContext = null
         contextName = null
         sequence = 0
         tracks = emptyMap()
@@ -262,12 +273,16 @@ internal class MusicHost(
         if (restored.effect != "persist") return
         queue = restored
         tracks = saved.tracks.associateBy(MusicTrack::id)
-        context_ = saved.context
+        playContext = saved.context
         contextName = saved.contextName
         sequence = saved.sequence
         val removed = restored.removed.size
         commitPending(account)
-        if (removed > 0) publish { it.copy(message = "$removed saved ${if (removed == 1) "track is" else "tracks are"} no longer available.") }
+        if (removed >
+            0
+        ) {
+            publish { it.copy(message = "$removed saved ${if (removed == 1) "track is" else "tracks are"} no longer available.") }
+        }
     }
 
     // What the screens and the session call.
@@ -278,7 +293,7 @@ internal class MusicHost(
             MusicPlayRequest(
                 context = play.context,
                 queueEntries = q.entries.size,
-                queueContext = context_,
+                queueContext = playContext,
                 remoteAttached = remoteAttached() != null,
                 castAttached = castAttached() != null
             )
@@ -295,12 +310,30 @@ internal class MusicHost(
         val prompt = mutable.value.prompt ?: return@enqueue
         publish { it.copy(prompt = null) }
         val q = queue.committed
-        if (prompt.kind == "destination" && q.entries.isNotEmpty() && prompt.play.context != context_) {
+        if (prompt.kind == "destination" && q.entries.isNotEmpty() && prompt.play.context != playContext) {
             // Choosing this device is one question; replacing its own queue is still another.
             publish { it.copy(prompt = MusicPrompt("replace", prompt.play)) }
         } else {
             start(prompt.play)
         }
+    }
+
+    /** The chooser's "This device": the question was already answered, so nothing is asked again. */
+    fun playHere(play: MusicPlay) = enqueue { start(play) }
+
+    /**
+     * A remote's Play on this device, when what it named is music: true means it's handled here, since the video route
+     * can't open an audio item. Anything else, or a failed read, goes on to the video path as before.
+     */
+    suspend fun openFromRemote(account: Account, ids: List<String>, index: Int): Boolean {
+        val rows = (gateway.items(account, ids) as? ClientResult.Success)?.value?.associateBy(MediaItem::id) ?: return false
+        val chosen = ids.getOrNull(index)?.let(rows::get)
+        if (chosen?.type != "Audio") return false
+        val tracks = ids.mapNotNull(rows::get).filter { it.type == "Audio" }
+        val play =
+            MusicPlay(tracks.map(account::musicTrack), tracks.indexOf(chosen), "remote:${ids.joinToString(",").hashCode()}", null, false)
+        enqueue { start(play) }
+        return true
     }
 
     fun dismissPrompt() = enqueue { publish { it.copy(prompt = null) } }
@@ -322,7 +355,7 @@ internal class MusicHost(
         val entries = musicEntries(limited.map(MusicTrack::id), sequence)
         sequence += entries.size
         tracks = (tracks + limited.associateBy(MusicTrack::id))
-        context_ = play.context
+        playContext = play.context
         contextName = play.contextName
         val ids = entries.map(QueueEntry::id)
         val selected = play.start?.let(ids::getOrNull)
@@ -361,7 +394,8 @@ internal class MusicHost(
         val added = if (wasEmpty) {
             commit {
                 QueueEvent("play-now", revision = it.revision, generation = it.generation, entries = entries)
-            } && commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
+            } &&
+                commit { QueueEvent("pause", revision = it.revision, generation = it.generation) }
         } else {
             commit { QueueEvent(op, revision = it.revision, generation = it.generation, entries = entries) }
         }
@@ -392,7 +426,7 @@ internal class MusicHost(
         applySession("queue-clear")
         commit { QueueEvent("clear-all", revision = it.revision, generation = it.generation) }
         teardown()
-        context_ = null
+        playContext = null
         contextName = null
     }
 
@@ -565,7 +599,7 @@ internal class MusicHost(
 
     private fun snapshot(q: QueueState): MusicSnapshot {
         val media = q.entries.map(QueueEntry::media).toSet()
-        return MusicSnapshot(q, context_, contextName, sequence, media.mapNotNull(tracks::get))
+        return MusicSnapshot(q, playContext, contextName, sequence, media.mapNotNull(tracks::get))
     }
 
     private inline fun publish(change: (MusicUi) -> MusicUi = { it }) {
@@ -575,7 +609,7 @@ internal class MusicHost(
             change(it).copy(
                 account = account,
                 queue = q.takeIf { account != null },
-                context = context_,
+                context = playContext,
                 contextName = contextName,
                 tracks = tracks,
                 outputActive = running != null,

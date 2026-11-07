@@ -258,7 +258,7 @@
         "label": "Converted to AAC, up to 128 kbps (lossy)",
         "lossless": false,
         "converted": true,
-        "reason": "It's above the Music quality you picked."
+        "reason": "It's above the Music quality you picked. Change Music quality in Settings to hear the original."
       }
     },
     {

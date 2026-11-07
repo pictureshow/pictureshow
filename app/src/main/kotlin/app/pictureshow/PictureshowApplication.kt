@@ -132,7 +132,11 @@ class PictureshowApplication : Application() {
                                 client = { account ->
                                     app.pictureshow.core.playback.PlaybackClient(
                                         http,
-                                        app.pictureshow.core.ClientIdentity(name, identity.getOrCreate(), BuildConfig.VERSION_NAME).forAccount(account)
+                                        app.pictureshow.core.ClientIdentity(
+                                            name,
+                                            identity.getOrCreate(),
+                                            BuildConfig.VERSION_NAME
+                                        ).forAccount(account)
                                     )
                                 },
                                 music = get(),
@@ -154,6 +158,27 @@ class PictureshowApplication : Application() {
                         PersonViewModel(account, item, session)
                     }
                     viewModel { SessionViewModel(get(), get()) }
+                    viewModel { (account: Account, item: app.pictureshow.core.MediaItem) ->
+                        MusicLibraryViewModel(account, item, get(), get())
+                    }
+                    viewModel { parameters ->
+                        val account: Account = parameters.get()
+                        val item: app.pictureshow.core.MediaItem = parameters.get()
+                        val role: String = parameters[2]
+                        val library: String = parameters[3]
+                        val session: CatalogSession = parameters.get()
+                        MusicDetailViewModel(
+                            account,
+                            item,
+                            app.pictureshow.core.music.ArtistRole.entries.firstOrNull { it.name == role }
+                                ?: app.pictureshow.core.music.ArtistRole.ALBUM_ARTIST,
+                            library.ifBlank { null },
+                            get(),
+                            get(),
+                            session
+                        )
+                    }
+                    viewModel { (account: Account, items: List<String>) -> MusicPlaylistPickerViewModel(account, items, get()) }
                     viewModel { (account: Account) -> PlaybackSettingsViewModel(account, get(), get(), get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
@@ -211,10 +236,8 @@ internal class PersistentIdentityService(
     override suspend fun playlistCanEdit(account: Account, playlist: String) =
         runCatching { client(account.deviceId) }.getOrNull()?.playlistCanEdit(account, playlist) ?: false
 
-    private suspend fun playlistWrite(
-        account: Account,
-        block: suspend (JellyfinClient) -> app.pictureshow.core.music.PlaylistWrite
-    ) = runCatching { client(account.deviceId) }.getOrNull()?.let { block(it) } ?: app.pictureshow.core.music.PlaylistWrite("failed")
+    private suspend fun playlistWrite(account: Account, block: suspend (JellyfinClient) -> app.pictureshow.core.music.PlaylistWrite) =
+        runCatching { client(account.deviceId) }.getOrNull()?.let { block(it) } ?: app.pictureshow.core.music.PlaylistWrite("failed")
 
     override suspend fun createPlaylist(account: Account, name: String, items: List<String>, isPublic: Boolean) =
         playlistWrite(account) { it.createPlaylist(account, name, items, isPublic) }
