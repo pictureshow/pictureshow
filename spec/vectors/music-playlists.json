@@ -3,6 +3,56 @@
   "suite": "music-playlists",
   "cases": [
     {
+      "id": "music-playlists.new-playlist-is-private-by-default",
+      "operation": "create-body",
+      "input": {
+        "name": "Mine",
+        "viewer": "v",
+        "items": [
+          "a",
+          "a"
+        ]
+      },
+      "expected": {
+        "Name": "Mine",
+        "MediaType": "Audio",
+        "UserId": "v",
+        "Ids": [
+          "a",
+          "a"
+        ],
+        "IsPublic": false
+      }
+    },
+    {
+      "id": "music-playlists.public-only-when-the-viewer-chose-it",
+      "operation": "create-body",
+      "input": {
+        "name": "Ours",
+        "viewer": "v",
+        "items": [],
+        "isPublic": true
+      },
+      "expected": {
+        "Name": "Ours",
+        "MediaType": "Audio",
+        "UserId": "v",
+        "Ids": [],
+        "IsPublic": true
+      }
+    },
+    {
+      "id": "music-playlists.rename-sends-only-the-name",
+      "operation": "rename-body",
+      "input": {
+        "name": "New"
+      },
+      "expected": {
+        "Name": "New"
+      },
+      "exact": true
+    },
+    {
       "id": "music-playlists.edit-sends-then-reads-back",
       "operation": "playlist",
       "state": {

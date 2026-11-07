@@ -17,6 +17,7 @@ import app.pictureshow.core.music.MusicSessionState
 import app.pictureshow.core.music.PlaylistEditEvent
 import app.pictureshow.core.music.PlaylistEditState
 import app.pictureshow.core.music.albumDiscs
+import app.pictureshow.core.music.createPlaylistBody
 import app.pictureshow.core.music.mergeMusicPage
 import app.pictureshow.core.music.musicArtistAlbumsRequest
 import app.pictureshow.core.music.musicBitrateCeiling
@@ -35,6 +36,7 @@ import app.pictureshow.core.music.playableTracks
 import app.pictureshow.core.music.reduceMusicReport
 import app.pictureshow.core.music.reduceMusicSession
 import app.pictureshow.core.music.reducePlaylistEdit
+import app.pictureshow.core.music.renamePlaylistBody
 import app.pictureshow.core.music.trackArtistLine
 import app.pictureshow.core.playback.AudioCodec
 import app.pictureshow.core.playback.MediaSourceInfo
@@ -89,7 +91,10 @@ class MusicVectorsTest {
             val operation = case.getValue("operation").jsonPrimitive.content
             val steps = case["steps"]
             if (steps == null) {
-                check(case.getValue("expected"), once(operation, case.getValue("input").jsonObject), id)
+                val actual = once(operation, case.getValue("input").jsonObject)
+                check(case.getValue("expected"), actual, id)
+                // A projection can't see an added field, and an added field is exactly what some cases forbid.
+                if (case["exact"] != null) assertEquals(case.getValue("expected"), actual, id)
             } else {
                 var state = case.getValue("state")
                 steps.jsonArray.forEachIndexed { index, entry ->
@@ -184,6 +189,13 @@ class MusicVectorsTest {
             )
         )
         "decision" -> JsonPrimitive(musicPlayDecision(json.decodeFromJsonElement<MusicPlayRequest>(input)))
+        "create-body" -> createPlaylistBody(
+            text(input, "name")!!,
+            text(input, "viewer")!!,
+            input.getValue("items").jsonArray.map { it.jsonPrimitive.content },
+            input["isPublic"]?.jsonPrimitive?.content == "true"
+        )
+        "rename-body" -> renamePlaylistBody(text(input, "name")!!)
         "ceiling" -> JsonPrimitive(musicBitrateCeiling(text(input, "quality")!!, input.getValue("metered").jsonPrimitive.content == "true"))
         "profile" -> musicDeviceProfile(
             input.getValue("decoders").jsonArray.map { AudioCodec.valueOf(it.jsonPrimitive.content) }.toSet(),

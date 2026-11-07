@@ -26,10 +26,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 
 @Serializable
 data class PlaylistCreated(@SerialName("Id") val id: String = "")
@@ -44,7 +42,7 @@ interface MusicService {
 
     suspend fun playlistCanEdit(account: Account, playlist: String): Boolean
 
-    suspend fun createPlaylist(account: Account, name: String, items: List<String>): PlaylistWrite
+    suspend fun createPlaylist(account: Account, name: String, items: List<String>, isPublic: Boolean = false): PlaylistWrite
 
     suspend fun renamePlaylist(account: Account, playlist: String, name: String): PlaylistWrite
 
@@ -143,22 +141,11 @@ internal class MusicClient(private val client: HttpClient, private val identity:
         PlaylistWrite("unknown")
     }
 
-    override suspend fun createPlaylist(account: Account, name: String, items: List<String>): PlaylistWrite = write(
-        account,
-        "Playlists",
-        body = buildJsonObject {
-            put("Name", JsonPrimitive(name))
-            put("MediaType", JsonPrimitive("Audio"))
-            put("UserId", JsonPrimitive(account.user.id))
-            put("Ids", JsonArray(items.map { JsonPrimitive(it) }))
-        }.toString()
-    )
+    override suspend fun createPlaylist(account: Account, name: String, items: List<String>, isPublic: Boolean): PlaylistWrite =
+        write(account, "Playlists", body = createPlaylistBody(name, account.user.id, items, isPublic).toString())
 
-    override suspend fun renamePlaylist(account: Account, playlist: String, name: String): PlaylistWrite = write(
-        account,
-        "Playlists/${playlist.encodeURLPathPart()}",
-        body = buildJsonObject { put("Name", JsonPrimitive(name)) }.toString()
-    )
+    override suspend fun renamePlaylist(account: Account, playlist: String, name: String): PlaylistWrite =
+        write(account, "Playlists/${playlist.encodeURLPathPart()}", body = renamePlaylistBody(name).toString())
 
     override suspend fun addToPlaylist(account: Account, playlist: String, items: List<String>): PlaylistWrite =
         write(account, "Playlists/${playlist.encodeURLPathPart()}/Items", mapOf("ids" to items.joinToString(",")))

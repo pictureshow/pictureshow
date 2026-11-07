@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.android.application)
     id("pictureshow.media3-controller-identity")
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktlint)
     id("com.mikepenz.aboutlibraries.plugin") version "15.3.0"
 }
