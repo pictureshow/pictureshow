@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -23,6 +24,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.ClientError
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.ErrorKind
+import app.pictureshow.core.ItemPage
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
@@ -34,6 +36,7 @@ import app.pictureshow.core.playback.PlaybackStopInfo
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -126,7 +129,7 @@ class MusicScreensTest {
     private fun tracks(vararg ids: String) = ids.map { MusicTrack(it, "Title $it", "Artist", durationTicks = 1_000_000) }
 
     private fun queueOf(vararg ids: String) {
-        host.append(tracks(*ids))
+        host.append(account, tracks(*ids))
         until { host.state.value.queue?.entries?.size == ids.size }
     }
 
@@ -204,8 +207,38 @@ class MusicScreensTest {
         compose.onNodeWithText("1").assertExists()
         compose.onNodeWithText("2").assertExists()
         compose.onNodeWithText("7").assertDoesNotExist()
+        val row = compose.onNodeWithTag("music:track:e1").getUnclippedBoundsInRoot()
+        val edit = compose.onNodeWithTag("music:edit:Move down:e1").getUnclippedBoundsInRoot()
+        assertTrue(edit.top >= row.bottom, "The row's changes sit beneath it: $edit under $row")
         compose.onNodeWithTag("music:edit:Move down:e1").performSemanticsAction(SemanticsActions.OnClick)
         until { music.writes == listOf("move e1 1") }
+    }
+
+    private fun songsTab(): MusicLibraryViewModel {
+        val music = MusicModelsTest.FakeMusic()
+        music.pages = {
+            ClientResult.Success(ItemPage(listOf(MediaItem(id = "s", name = "Title s", type = "Audio", indexNumber = 7)), 1))
+        }
+        val store = AccountStore(Memory())
+        runBlocking { store.remember(account) }
+        return MusicLibraryViewModel(account, MediaItem(id = "lib", name = "Music"), music, store).also {
+            it.select(app.pictureshow.core.music.MusicSection.SONGS)
+        }
+    }
+
+    /** A song's number belongs to its album, and the Songs list mixes albums. */
+    @Test fun touchSongsListShowsNoAlbumNumbers() {
+        val vm = songsTab()
+        compose.setContent { TouchTheme { TouchMusicLibrary(vm, host, { _, _ -> }, {}) } }
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Title s").assertExists() }.isSuccess }
+        compose.onNodeWithText("7").assertDoesNotExist()
+    }
+
+    @Test fun tvSongsListShowsNoAlbumNumbers() {
+        val vm = songsTab()
+        compose.setContent { TvTheme { TvMusicLibrary(vm, host) { _, _ -> } } }
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Title s").assertExists() }.isSuccess }
+        compose.onNodeWithText("7").assertDoesNotExist()
     }
 
     @Test fun touchPlaylistEditShowsEachRowsChanges() {
@@ -237,7 +270,7 @@ class MusicScreensTest {
     @Test fun replacingAQueueAsksAndKeepQueueKeepsIt() {
         queueOf("a", "b")
         compose.setContent { TouchTheme { TouchMusicPrompts(host) {} } }
-        host.request(MusicPlay(tracks("z"), null, "album:z", "Other album", false))
+        host.request(MusicPlay(account.key, tracks("z"), null, "album:z", "Other album", false))
         until { host.state.value.prompt != null }
         compose.onNodeWithText("Other album replaces what's in the queue now.").assertExists()
         compose.onNodeWithText("Keep queue").performClick()
@@ -248,7 +281,7 @@ class MusicScreensTest {
     @Test fun tvPromptPutsFocusOnTheSafeAnswer() {
         queueOf("a")
         compose.setContent { TvTheme { TvMusicPrompts(host) {} } }
-        host.request(MusicPlay(tracks("z"), null, "album:z", "Other album", false))
+        host.request(MusicPlay(account.key, tracks("z"), null, "album:z", "Other album", false))
         until { host.state.value.prompt != null }
         compose.waitForIdle()
         compose.onNodeWithText("Keep queue").assertIsFocused()

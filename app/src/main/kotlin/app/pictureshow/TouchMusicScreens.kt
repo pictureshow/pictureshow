@@ -249,7 +249,7 @@ internal fun TouchMusicLibrary(vm: MusicLibraryViewModel, host: MusicHost, onOpe
                 if (item.type == "Audio") GridItemSpan(maxLineSpan) else GridItemSpan(1)
             }) { index, item ->
                 if (item.type == "Audio") {
-                    TouchMusicTrackRow(item, null, account, host, onPlay = {
+                    TouchMusicTrackRow(item, null, account, host, number = "", onPlay = {
                         val tracks = section.items.filter { it.type == "Audio" }
                         account.musicPlay(
                             tracks,
@@ -322,8 +322,8 @@ private fun TouchMusicTrackRow(
     var picking by rememberSaveable { mutableStateOf(false) }
     val track = remember(item) { account.musicTrack(item) }
     val actions = buildList {
-        add("Play next" to { host.playNext(listOf(track)) })
-        add("Add to queue" to { host.append(listOf(track)) })
+        add("Play next" to { host.playNext(account, listOf(track)) })
+        add("Add to queue" to { host.append(account, listOf(track)) })
         add("Add to playlist" to { picking = true })
         onFavorite?.let { add((if (item.userData.isFavorite) "Remove from favorites" else "Add to favorites") to it) }
         item.albumId?.takeIf { albumArtist == null }?.let { album ->
@@ -511,12 +511,12 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                         Text("Shuffle")
                     }
                     OutlinedButton(
-                        onClick = { vm.allTracks { tracks -> host.playNext(playableMusic(account, tracks)) } },
+                        onClick = { vm.allTracks { tracks -> host.playNext(account, playableMusic(account, tracks)) } },
                         enabled = canPlay && !state.busy,
                         modifier = Modifier.heightIn(min = 48.dp).testTag("music:play-next")
                     ) { Text("Play next") }
                     OutlinedButton(
-                        onClick = { vm.allTracks { tracks -> host.append(playableMusic(account, tracks)) } },
+                        onClick = { vm.allTracks { tracks -> host.append(account, playableMusic(account, tracks)) } },
                         enabled = canPlay && !state.busy,
                         modifier = Modifier.heightIn(min = 48.dp).testTag("music:add-queue")
                     ) { Text("Add to queue") }
@@ -604,27 +604,29 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                     } else {
                         emptyList()
                     }
-                    TouchMusicTrackRow(
-                        row,
-                        albumArtistLine(state.item).ifBlank {
-                            null
-                        },
-                        account,
-                        host,
-                        { play(false, row) },
-                        onOpen,
-                        { vm.favorite(row.id) },
-                        edits,
-                        musicRowNumber(state.item, index)
-                    )
-                    // Edit shows the row's changes where they're used, as well as in its menu and to a screen reader.
-                    if (edits.isNotEmpty()) {
-                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            edits.forEach { (name, run) ->
-                                TextButton(
-                                    onClick = run,
-                                    modifier = Modifier.testTag("music:edit:$name:$entry")
-                                ) { Text(name) }
+                    Column {
+                        TouchMusicTrackRow(
+                            row,
+                            albumArtistLine(state.item).ifBlank {
+                                null
+                            },
+                            account,
+                            host,
+                            { play(false, row) },
+                            onOpen,
+                            { vm.favorite(row.id) },
+                            edits,
+                            musicRowNumber(state.item, index)
+                        )
+                        // Edit shows the row's changes where they're used, as well as in its menu and to a screen reader.
+                        if (edits.isNotEmpty()) {
+                            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                edits.forEach { (name, run) ->
+                                    TextButton(
+                                        onClick = run,
+                                        modifier = Modifier.testTag("music:edit:$name:$entry")
+                                    ) { Text(name) }
+                                }
                             }
                         }
                     }
