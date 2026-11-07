@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -20,6 +21,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.lifecycle.ViewModelStore
 import app.pictureshow.core.Account
@@ -77,6 +80,7 @@ class CatalogGridPageFailureTest {
     }
 
     private val pages = Pages()
+    private var retries = 0
     private val secondPage = ClientResult.Success(ItemPage((30 until 60).map(::film), 60))
 
     @After fun cleanup() = stores.forEach(ViewModelStore::clear)
@@ -91,7 +95,12 @@ class CatalogGridPageFailureTest {
         stores += ViewModelStore().apply { put("vm", vm) }
         compose.setContent {
             val state by vm.state.collectAsState()
-            PictureshowTheme { CatalogGrid(state, {}, vm::nearEnd, { sort, descending -> vm.sort(sort, descending) }, vm::retry) }
+            PictureshowTheme {
+                CatalogGrid(state, {}, vm::nearEnd, { sort, descending -> vm.sort(sort, descending) }, {
+                    retries++
+                    vm.retry()
+                })
+            }
         }
         settle()
     }
@@ -180,10 +189,35 @@ class CatalogGridPageFailureTest {
         assertEquals("Loading…", line.joinToString(""))
         press(Key.DirectionCenter)
         assertEquals(listOf(0, 30, 30), pages.asked, "A second press while one is in flight asks for nothing")
+        assertEquals(1, retries, "and doesn't reach the view model")
         answer.complete(secondPage)
         settle()
         assertOnCardInColumnAfterRetry(from)
     }
+
+    // A reader moves focus itself, so Retry's own keys never see the viewer leave.
+    private fun retryLandsAfterFocusMovedTo(tag: String, scrollTo: Int? = null) {
+        show()
+        walkToLastRow()
+        press(Key.DirectionDown)
+        val answer = CompletableDeferred<ClientResult<ItemPage>>()
+        pages.next = { answer.await() }
+        press(Key.DirectionCenter)
+        assertEquals("grid:page-retry", focusedTag())
+        // The header leaves composition once scrolled away, so a reader or a touch would scroll it back first.
+        if (scrollTo != null) compose.onNodeWithTag("grid:items").performScrollToIndex(scrollTo)
+        settle()
+        compose.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.RequestFocus)
+        settle()
+        assertEquals(tag, focusedTag())
+        answer.complete(secondPage)
+        settle()
+        assertEquals(tag, focusedTag(), "The page that arrived took focus")
+    }
+
+    @Test fun aRetryThatLandsAfterTheViewerMovedToACardLeavesFocusThere() = retryLandsAfterFocusMovedTo("grid:film-20")
+
+    @Test fun aRetryThatLandsAfterTheViewerMovedToTheHeaderLeavesFocusThere() = retryLandsAfterFocusMovedTo("grid:sort-order", scrollTo = 0)
 
     @Test fun anEmptyPageOnRetryReturnsToTheCard() {
         show()

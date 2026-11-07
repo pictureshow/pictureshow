@@ -223,8 +223,8 @@ whether that head is instead the first item of the list below it, as the library
 gets the screen and Up scrolls back to the field or Back.
 
 1.15 is one constant with the size above which a card's title has no line limit (`UNBOUNDED_TITLE_FONT_SCALE` in core): that
-limit is why a card can outgrow the room under a fixed head. A port that changes one changes both. A platform whose text size
-isn't a number, such as tvOS Dynamic Type, maps its sizes onto it and records the mapping here.
+limit is why a card can outgrow the room under a fixed head. A port that changes one changes both. tvOS Dynamic Type isn't
+a number, and no mapping onto these scales exists yet: the Apple port has to choose one when it ports this suite.
 
 An assistive service is one that needs what it acts on to be on screen, not any accessibility API that happens to be active:
 
@@ -232,8 +232,8 @@ An assistive service is one that needs what it acts on to be on screen, not any 
   or one that can perform gestures (TalkBack, Switch Access, Voice Access). A password manager, an autofill service or a
   `uiautomator dump` turns `isEnabled` on and doesn't count, so that viewer's head still collapses.
 - tvOS: VoiceOver or Switch Control running.
-- Web: the browser doesn't say whether a reader is on, so the input is always false there. Web's head scrolls with the page
-  and never needs to collapse, so it owes these two only if it adds a fixed head.
+- Web: the browser doesn't say whether a reader is on, so the input is always false there. Web owes these two vectors like
+  any other suite here, and calls them on screen only if it adds a fixed head; today its head scrolls with the page.
 
 Owed: Android runs these. Web lists the suite in `pendingPortSuites`, and it shows as todo there until ported. Apple has no
 vector runner on main, so it owes the suite with the rest.

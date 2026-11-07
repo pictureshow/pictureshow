@@ -556,9 +556,10 @@ class CatalogGridLargeFontTest {
     private val threeRowsOfLongTitles =
         longTitles + longTitles.map { it.copy(id = it.id + "-more") } + longTitles.map { it.copy(id = it.id + "-last") }
 
-    private fun showPerson(items: List<MediaItem> = longTitles, scale: Float = 1.3f) = showLarge(scale) {
+    private fun showPerson(items: List<MediaItem> = longTitles, scale: Float = 1.3f, refreshError: String? = null) = showLarge(scale) {
         val person = MediaItem("person", "A Person", "Person")
-        PersonScreen(PersonState(CatalogGridState(account, person, items, items.size), person), {}, {}, {}, {})
+        val grid = CatalogGridState(account, person, items, items.size, refreshError = refreshError)
+        PersonScreen(PersonState(grid, person), {}, {}, {}, {})
     }
 
     /** Nothing fixed sits over it: the head has moved into the grid, above it. */
@@ -570,6 +571,38 @@ class CatalogGridLargeFontTest {
         assertTrue(found.boundsInRoot.height > 0f, "$text is hidden")
         assertTrue(compose.onNode(hasText(text)).getUnclippedBoundsInRoot().top >= head, "$text is under the head")
     }
+
+    /** A section title is whole inside the list or wholly out of it: never a cut word under the strip. */
+    private fun assertSectionTitleWholeOrGone(title: String, context: String) {
+        val list = compose.onNodeWithTag("search:results").getBoundsInRoot()
+        val node = compose.onAllNodes(hasText(title)).fetchSemanticsNodes().singleOrNull() ?: return
+        val bounds = compose.onNode(hasText(title)).getUnclippedBoundsInRoot()
+        val whole = bounds.top >= list.top && bounds.bottom <= list.bottom
+        val gone = bounds.bottom <= list.top || node.boundsInRoot.height == 0f
+        val card = compose.onNodeWithTag(focusedTag()).getUnclippedBoundsInRoot()
+        assertTrue(whole || gone, "$context: $title cut by the list's edge: $bounds in $list, card $card")
+    }
+
+    private fun walkSearchRowsCheckingTitles(scale: Float) {
+        showSearch(scale = scale, rows = longRows)
+        assertSectionTitleWholeOrGone("Movies", "arrival at $scale")
+        press(Key.DirectionDown)
+        assertSectionTitleWholeOrGone("Shows", "second row at $scale")
+        assertSectionTitleWholeOrGone("Movies", "second row at $scale")
+        press(Key.DirectionDown)
+        assertSectionTitleWholeOrGone("More", "third row at $scale")
+        press(Key.DirectionUp)
+        assertSectionTitleWholeOrGone("Shows", "back up at $scale")
+        assertSectionTitleWholeOrGone("Movies", "back up at $scale")
+    }
+
+    @Test fun searchSectionTitlesAreNeverHalfHiddenAtDefaultFont() = walkSearchRowsCheckingTitles(1f)
+
+    @Test fun searchSectionTitlesAreNeverHalfHiddenAtTheCollapseSize() = walkSearchRowsCheckingTitles(1.15f)
+
+    @Test fun searchSectionTitlesAreNeverHalfHiddenAtLargestFont() = walkSearchRowsCheckingTitles(1.3f)
+
+    @Test fun searchSectionTitlesAreNeverHalfHiddenPastTheLargestFont() = walkSearchRowsCheckingTitles(1.6f)
 
     @Test fun searchHasItsHeadInTheListForAScreenReader() {
         accessibility.setScreenReader(true)
@@ -658,6 +691,14 @@ class CatalogGridLargeFontTest {
         assertFocus("person:back")
         compose.onNodeWithTag("person:name").assertIsDisplayed()
         assertNotCutByTheHead("Movies and shows")
+    }
+
+    // As on a library grid: the Retry the viewer must act on comes before Back.
+    @Test fun upFromPersonsFirstRowReachesARefreshErrorsRetryBeforeBack() {
+        accessibility.setScreenReader(true)
+        showPerson(refreshError = "Unavailable")
+        press(Key.DirectionUp)
+        assertFocus("grid:retry")
     }
 
     @Test fun aPasswordManagerDoesNotStopSearchsHeadCollapsing() {
@@ -754,6 +795,44 @@ class CatalogGridLargeFontTest {
         settle()
         assertEquals("person:back", focusedTag(), "reader turned on")
         compose.onNodeWithTag("person:name").assertIsDisplayed()
+    }
+
+    private fun flipReaderKeeps(tag: String) {
+        accessibility.setScreenReader(true)
+        settle()
+        assertEquals(tag, focusedTag(), "reader turned on")
+        accessibility.setScreenReader(false)
+        settle()
+        assertEquals(tag, focusedTag(), "reader turned off")
+    }
+
+    @Test fun aReaderTurnedOnKeepsFocusOnSearchsRetry() {
+        val state = SearchState("film", longRows, completed = true, someFailed = true)
+        showLarge { SearchScreen(state, account, false, {}, {}, {}, {}, {}, {}) }
+        var guard = 0
+        while (focusedTag() != "search:retry") {
+            press(Key.DirectionUp)
+            assertTrue(guard++ < 4, "Never reached Retry")
+        }
+        flipReaderKeeps("search:retry")
+    }
+
+    @Test fun aReaderTurnedOnKeepsFocusOnARecentSearch() {
+        showLarge { SearchScreen(SearchState(recent = listOf("clock", "film")), account, false, {}, {}, {}, {}, {}, {}) }
+        compose.onNodeWithTag("recent:0").performSemanticsAction(SemanticsActions.RequestFocus)
+        settle()
+        flipReaderKeeps("recent:0")
+    }
+
+    @Test fun aReaderTurnedOnWhileTypingKeepsTheKeyboard() {
+        showSearch()
+        press(Key.DirectionUp)
+        press(Key.DirectionCenter)
+        assertTrue(SemanticsActions.SetText in compose.onNodeWithTag("search:field").fetchSemanticsNode().config, "typing")
+        accessibility.setScreenReader(true)
+        settle()
+        assertFocus("search:field")
+        assertTrue(SemanticsActions.SetText in compose.onNodeWithTag("search:field").fetchSemanticsNode().config, "still typing")
     }
 
     @Test fun aReaderTurnedOnKeepsWhatTheFieldHolds() {

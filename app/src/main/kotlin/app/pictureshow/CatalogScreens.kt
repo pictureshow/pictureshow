@@ -693,6 +693,9 @@ fun CatalogGrid(
 
     // Up from the first row lands on what's selected, wherever the card was.
     fun focusSelectedSort(): Boolean {
+        // A failed first load has no cards to come from, and a failed later page shows after the last card. A refresh error's
+        // Retry is in the header, next above the first row, and is what the viewer has to act on.
+        if (state.refreshError != null) return false
         if (!showSort) {
             val above = headFocus ?: return false
             startMove(down = false) {
@@ -701,8 +704,6 @@ fun CatalogGrid(
             }
             return true
         }
-        // A failed first load has no cards to come from, and a failed later page shows after the last card.
-        if (state.refreshError != null) return false
         startMove(down = false) {
             if (grid.layoutInfo.visibleItemsInfo.none { it.index == 0 }) grid.requestScrollToItem(0)
             if (!requestAttached(sortRequests, state.sortBy)) focusManager.moveFocus(FocusDirection.Up)
@@ -814,7 +815,11 @@ fun CatalogGrid(
                         // Sits on the screen's 48 dp keyline, not the cards' 56 dp one.
                         Modifier.offset(x = -GridHeaderOutset).padding(bottom = 12.dp).onFocusChanged {
                             headerFocused = it.hasFocus
-                            if (it.hasFocus) heldDownFrom = -1
+                            if (it.hasFocus) {
+                                heldDownFrom = -1
+                                // A viewer who has moved on, by key or by a reader, isn't pulled back when a retry lands.
+                                retryingFrom = -1
+                            }
                         },
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
@@ -881,7 +886,7 @@ fun CatalogGrid(
                             restored = false
                             if (state.error == null) retryFocusRequest++
                             onRetry()
-                        }, Modifier.focusRequester(retry))
+                        }, Modifier.focusRequester(retry).testTag("grid:retry"))
                         if (state.loading && state.items.isEmpty()) Text("Loading…")
                         if (!state.loading && state.items.isEmpty() && state.error == null) Text(emptyGridLabel(state.parent))
                     }
@@ -904,6 +909,7 @@ fun CatalogGrid(
                                 focusedIndex = index
                                 onNearEnd(index)
                                 heldDownFrom = -1
+                                retryingFrom = -1
                             }
                         }.onPreviewKeyEvent {
                             when {
@@ -1160,6 +1166,27 @@ internal fun focusedCardScrollDistance(
         top + size + overhang > containerSize -> offset + size + overhang - containerSize
         else -> wanted
     }
+}
+
+/**
+ * A shelf's section title sits [above] the card's top and ends [gap] above it. After [distance], the title is whole in the list
+ * or wholly out of it, never cut by the top edge into half a word. It comes into view with the card when both fit; when they
+ * don't, it goes wholly under the edge, unless the card's own scaled edge would follow it, which only a card taller than
+ * the screen can do.
+ */
+internal fun sectionTitleScrollDistance(
+    distance: Float,
+    offset: Float,
+    size: Float,
+    containerSize: Float,
+    margin: Float,
+    above: Float,
+    gap: Float
+): Float {
+    val top = offset - distance
+    if (top >= above || top <= gap) return distance
+    if (above + size + size * FOCUS_SCALE_OVERHANG + margin <= containerSize) return offset - above
+    return offset - maxOf(gap, size * FOCUS_SCALE_OVERHANG)
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)

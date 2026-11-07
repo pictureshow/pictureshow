@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -53,6 +54,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -78,6 +82,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.fixedHeadCollapses
 import app.pictureshow.core.fixedHeadInList
 import app.pictureshow.core.normalizeSearch
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -114,6 +119,8 @@ fun SearchScreen(
     val field = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val recentFirst = remember { FocusRequester() }
+    var headControl by remember { mutableStateOf(field) }
+    var headFocused by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -254,16 +261,24 @@ fun SearchScreen(
             seenQuery = state.query
             if (state.query != fieldValue.text) fieldValue = TextFieldValue(state.query, TextRange(state.query.length))
         }
-        // The field is composed anew when the head changes place, so it takes focus back if it held it.
-        val fieldHeldFocus = remember(headInList) { fieldFocused }
+        // The head is composed anew when it changes place, so whichever of its controls held focus takes it back, and a
+        // viewer typing keeps the keyboard. A recent search or Clear comes back to the first recent search.
+        val headHeld = remember(headInList) { headControl.takeIf { headFocused } }
+        val headWasEditing = remember(headInList) { editing && fieldFocused }
         LaunchedEffect(headInList) {
-            if (fieldHeldFocus) {
-                if (headInList) list.jumpTo(0)
-                awaitCatalogFocus(field)
+            val control = headHeld ?: return@LaunchedEffect
+            if (headInList) list.jumpTo(0)
+            awaitCatalogFocus(control)
+            if (headWasEditing && control == field) {
+                editing = true
+                keyboard?.show()
             }
         }
         val head: @Composable () -> Unit = {
-            Column(Modifier.collapsedOffScreen(headCollapsed), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                Modifier.collapsedOffScreen(headCollapsed).onFocusChanged { headFocused = it.hasFocus },
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Text(
                     "Search",
                     style = MaterialTheme.typography.headlineLarge,
@@ -322,6 +337,7 @@ fun SearchScreen(
                                 if (fieldFocused && !it.isFocused) editing = false
                                 if (!it.isFocused) navigation.clear()
                                 fieldFocused = it.isFocused
+                                if (it.isFocused) headControl = field
                             }
                             .onPreviewKeyEvent {
                                 when {
@@ -362,6 +378,7 @@ fun SearchScreen(
                                         .catalogFocusTarget(!handoff) {
                                             !returning || (restored && !handoff) || interacted
                                         }.testTag("recent:$index")
+                                        .onFocusChanged { if (it.isFocused) headControl = recentFirst }
                                         .staysInRow(index == 0, last = false)
                                         .onPreviewKeyEvent {
                                             if (it.key == Key.DirectionUp && it.type == KeyEventType.KeyDown) {
@@ -384,7 +401,7 @@ fun SearchScreen(
                                     modifier = Modifier.catalogFocusTarget(
                                         !handoff,
                                         { !returning || (restored && !handoff) || interacted }
-                                    ).testTag("search:clear")
+                                    ).testTag("search:clear").onFocusChanged { if (it.isFocused) headControl = recentFirst }
                                 ) {
                                     Text("Clear")
                                 }
@@ -419,7 +436,9 @@ fun SearchScreen(
                         modifier = arrivalTarget(
                             Modifier,
                             returningToRetry
-                        ).focusRequester(retry).testTag("search:retry").onPreviewKeyEvent {
+                        ).focusRequester(retry).testTag("search:retry").onFocusChanged {
+                            if (it.isFocused) headControl = retry
+                        }.onPreviewKeyEvent {
                             if (it.type != KeyEventType.KeyDown) {
                                 false
                             } else {
@@ -459,15 +478,21 @@ fun SearchScreen(
         val platformBringIntoView = LocalBringIntoViewSpec.current
         val focusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
         val reveal = Modifier.revealFocusAfterFontChange(list, key = headInList to landings)
+        val focusedResult = remember { FocusedResult() }
         val resultsBringIntoView = remember(platformBringIntoView, focusMargin) {
             object : BringIntoViewSpec {
-                override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = focusedCardScrollDistance(
-                    offset,
-                    size,
-                    containerSize,
-                    focusMargin,
-                    platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
-                )
+                override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                    val distance = focusedCardScrollDistance(
+                        offset,
+                        size,
+                        containerSize,
+                        focusMargin,
+                        platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+                    )
+                    val above = focusedResult.cardTopInRow(size) ?: return distance
+                    val gap = above - focusedResult.titleHeight
+                    return sectionTitleScrollDistance(distance, offset, size, containerSize, focusMargin, above, gap)
+                }
             }
         }
         CompositionLocalProvider(LocalBringIntoViewSpec provides resultsBringIntoView) {
@@ -483,13 +508,18 @@ fun SearchScreen(
                 if (headInList) item(key = "search:head") { head() }
                 state.rows.forEachIndexed { rowIndex, row ->
                     item(key = row.key) {
-                        Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val section = remember { ShelfSection() }
+                        Column(
+                            modifier = Modifier.accessibilityGroup().onGloballyPositioned { section.row = it },
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             Text(
                                 row.title,
                                 style = MaterialTheme.typography.headlineSmall,
-                                modifier = Modifier.fillMaxWidth().catalogFocusTarget(!handoff).semantics {
-                                    heading()
-                                }
+                                modifier = Modifier.fillMaxWidth()
+                                    .onSizeChanged { section.titleHeight = it.height }
+                                    .catalogFocusTarget(!handoff)
+                                    .semantics { heading() }
                             )
                             // Only the outer vertical list keeps a whole card; shelves retain platform scrolling.
                             CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
@@ -517,7 +547,13 @@ fun SearchScreen(
                                                     .focusRequester(requests.getValue(target)).testTag("search:$target")
                                                     .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
                                                     .then(endCard(itemIndex))
+                                                    .onGloballyPositioned { focusedResult.cards[target] = it }
                                                     .onFocusChanged {
+                                                        if (it.isFocused) {
+                                                            focusedResult.row = section.row
+                                                            focusedResult.titleHeight = section.titleHeight
+                                                            focusedResult.target = target
+                                                        }
                                                         if (it.isFocused && (!returning || (restored && !handoff) || interacted)) {
                                                             selected = target
                                                             selections =
@@ -625,7 +661,6 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
     val grid = rememberLazyGridState()
     LaunchedEffect(headInList) {
         if (backHeldFocus) {
-            if (headInList) grid.requestScrollToItem(0)
             awaitCatalogFocus(back)
             // The way into the grid is its focus restorer, which picks the last card. From inside, Back takes it.
             if (headInList) back.requestFocus()
@@ -662,4 +697,25 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
             )
         }
     }
+}
+
+/** Where the focused result card sits in its shelf, read when the list scrolls to it. */
+private class FocusedResult {
+    var row: LayoutCoordinates? = null
+    var titleHeight = 0
+    var target: String? = null
+    val cards = mutableMapOf<String, LayoutCoordinates>()
+
+    /** The card's top below its row's top, if the request is for the focused card. */
+    fun cardTopInRow(size: Float): Float? {
+        val card = cards[target ?: return null]?.takeIf { it.isAttached && abs(it.size.height - size) < 1f } ?: return null
+        val row = row?.takeIf { it.isAttached } ?: return null
+        return row.localPositionOf(card, Offset.Zero).y
+    }
+}
+
+/** A shelf's row and title, measured as laid out. */
+private class ShelfSection {
+    var row: LayoutCoordinates? = null
+    var titleHeight = 0
 }
