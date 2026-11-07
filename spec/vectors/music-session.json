@@ -1,0 +1,490 @@
+{
+  "schemaVersion": 1,
+  "suite": "music-session",
+  "cases": [
+    {
+      "id": "music-session.call-interrupts-and-resumes",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "interrupted"
+          },
+          "expected": {
+            "intent": "play",
+            "interrupted": true,
+            "effect": "pause"
+          }
+        },
+        {
+          "event": {
+            "op": "interruption-ended"
+          },
+          "expected": {
+            "intent": "play",
+            "interrupted": false,
+            "effect": "play"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.viewer-pause-during-interruption-stays-paused",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "interrupted"
+          },
+          "expected": {
+            "effect": "pause"
+          }
+        },
+        {
+          "event": {
+            "op": "viewer-pause"
+          },
+          "expected": {
+            "intent": "pause",
+            "effect": "pause"
+          }
+        },
+        {
+          "event": {
+            "op": "interruption-ended"
+          },
+          "expected": {
+            "intent": "pause",
+            "interrupted": false,
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.duplicate-interruption-acts-once",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "interrupted"
+          },
+          "expected": {
+            "effect": "pause"
+          }
+        },
+        {
+          "event": {
+            "op": "interrupted"
+          },
+          "expected": {
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.focus-lost-stays-paused",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "focus-lost"
+          },
+          "expected": {
+            "intent": "pause",
+            "effect": "pause"
+          }
+        },
+        {
+          "event": {
+            "op": "interruption-ended"
+          },
+          "expected": {
+            "effect": "none",
+            "intent": "pause"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.headphones-out-pauses-and-back-in-stays-quiet",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "noisy"
+          },
+          "expected": {
+            "intent": "pause",
+            "effect": "pause"
+          }
+        },
+        {
+          "event": {
+            "op": "route-connected"
+          },
+          "expected": {
+            "intent": "pause",
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.noisy-while-paused-does-nothing",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "viewer-pause"
+          },
+          "expected": {
+            "effect": "pause"
+          }
+        },
+        {
+          "event": {
+            "op": "noisy"
+          },
+          "expected": {
+            "intent": "pause",
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.duck-leaves-intent",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "duck"
+          },
+          "expected": {
+            "intent": "play",
+            "ducked": true,
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "unduck"
+          },
+          "expected": {
+            "ducked": false,
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.video-stops-audio-once-keeping-the-queue",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "video-start"
+          },
+          "expected": {
+            "intent": "stopped",
+            "effect": "stop-keep"
+          }
+        },
+        {
+          "event": {
+            "op": "video-start"
+          },
+          "expected": {
+            "intent": "stopped",
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.stop-keeps-queue",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "intent": "stopped",
+            "effect": "stop-keep"
+          }
+        },
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.sign-out-ends-audio-and-queue",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "sign-out"
+          },
+          "expected": {
+            "intent": "stopped",
+            "effect": "stop-clear"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.revocation-ends-audio-and-queue",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "revoked"
+          },
+          "expected": {
+            "intent": "stopped",
+            "effect": "stop-clear"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.clear-ends-audio-and-queue",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "queue-clear"
+          },
+          "expected": {
+            "intent": "stopped",
+            "effect": "stop-clear"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.play-after-stop-plays",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "stop"
+          },
+          "expected": {
+            "effect": "stop-keep"
+          }
+        },
+        {
+          "event": {
+            "op": "viewer-play"
+          },
+          "expected": {
+            "intent": "play",
+            "effect": "play"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.second-play-is-no-effect",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "viewer-play"
+          },
+          "expected": {
+            "intent": "play",
+            "effect": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.same-key-press-acts-once",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "key",
+            "key": "85@100"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "85@100"
+          },
+          "expected": {
+            "effect": "ignore"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "85@200"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-session.key-stamps-are-bounded",
+      "operation": "session",
+      "state": {
+        "intent": "play"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "key",
+            "key": "k0"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k1"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k2"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k3"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k4"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k5"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k6"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k7"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k8"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        },
+        {
+          "event": {
+            "op": "key",
+            "key": "k0"
+          },
+          "expected": {
+            "effect": "accept"
+          }
+        }
+      ]
+    }
+  ]
+}

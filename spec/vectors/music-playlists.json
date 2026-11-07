@@ -1,0 +1,387 @@
+{
+  "schemaVersion": 1,
+  "suite": "music-playlists",
+  "cases": [
+    {
+      "id": "music-playlists.edit-sends-then-reads-back",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "phase": "sending",
+            "effect": "send"
+          }
+        },
+        {
+          "event": {
+            "op": "sent"
+          },
+          "expected": {
+            "phase": "reading",
+            "effect": "read-back"
+          }
+        },
+        {
+          "event": {
+            "op": "read",
+            "entries": [
+              "e1",
+              "e2",
+              "e3"
+            ]
+          },
+          "expected": {
+            "phase": "idle",
+            "entries": [
+              "e1",
+              "e2",
+              "e3"
+            ],
+            "message": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.second-edit-waits",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "a"
+          },
+          "expected": {
+            "phase": "sending"
+          }
+        },
+        {
+          "event": {
+            "op": "submit",
+            "edit": "b"
+          },
+          "expected": {
+            "phase": "sending",
+            "pending": "a",
+            "effect": "none",
+            "message": "Still saving the last change."
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.ambiguous-never-resends",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "effect": "send"
+          }
+        },
+        {
+          "event": {
+            "op": "ambiguous"
+          },
+          "expected": {
+            "phase": "unknown",
+            "effect": "read-back"
+          }
+        },
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "phase": "unknown",
+            "effect": "read-back"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.ambiguous-reconciled-as-saved",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "effect": "send"
+          }
+        },
+        {
+          "event": {
+            "op": "ambiguous"
+          },
+          "expected": {
+            "phase": "unknown"
+          }
+        },
+        {
+          "event": {
+            "op": "read",
+            "entries": [
+              "e1",
+              "e2",
+              "e3"
+            ]
+          },
+          "expected": {
+            "phase": "idle",
+            "entries": [
+              "e1",
+              "e2",
+              "e3"
+            ],
+            "message": "That change saved."
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.ambiguous-reconciled-as-not-saved",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "effect": "send"
+          }
+        },
+        {
+          "event": {
+            "op": "ambiguous"
+          },
+          "expected": {
+            "phase": "unknown"
+          }
+        },
+        {
+          "event": {
+            "op": "read",
+            "entries": [
+              "e1",
+              "e2"
+            ]
+          },
+          "expected": {
+            "phase": "idle",
+            "message": "That change didn't save. Try again."
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.read-back-failure-stays-unknown",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "effect": "send"
+          }
+        },
+        {
+          "event": {
+            "op": "sent"
+          },
+          "expected": {
+            "phase": "reading"
+          }
+        },
+        {
+          "event": {
+            "op": "read-failed"
+          },
+          "expected": {
+            "phase": "unknown"
+          }
+        },
+        {
+          "event": {
+            "op": "submit",
+            "edit": "x"
+          },
+          "expected": {
+            "phase": "unknown",
+            "effect": "read-back"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.denied-keeps-rows",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "effect": "send"
+          }
+        },
+        {
+          "event": {
+            "op": "denied"
+          },
+          "expected": {
+            "phase": "idle",
+            "entries": [
+              "e1",
+              "e2"
+            ],
+            "message": "The server didn't allow that change."
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.failed-can-try-again",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "effect": "send"
+          }
+        },
+        {
+          "event": {
+            "op": "failed"
+          },
+          "expected": {
+            "phase": "idle"
+          }
+        },
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "phase": "sending",
+            "effect": "send"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.read-only-sends-nothing",
+      "operation": "playlist",
+      "state": {
+        "entries": [
+          "e1",
+          "e2"
+        ],
+        "phase": "read-only"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "submit",
+            "edit": "append"
+          },
+          "expected": {
+            "phase": "read-only",
+            "effect": "none",
+            "message": "You can't edit this playlist."
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-playlists.duplicate-song-rows-stay-two-entries",
+      "operation": "playlist",
+      "state": {
+        "entries": []
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "loaded",
+            "entries": [
+              "e1",
+              "e2"
+            ]
+          },
+          "expected": {
+            "entries": [
+              "e1",
+              "e2"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

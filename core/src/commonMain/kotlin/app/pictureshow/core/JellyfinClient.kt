@@ -49,6 +49,7 @@ class JellyfinClient(private val client: HttpClient, private val identity: Clien
     JellyfinService,
     CatalogService by CatalogClient(client, identity),
     SearchService by SearchClient(client, identity),
+    app.pictureshow.core.music.MusicService by app.pictureshow.core.music.MusicClient(client, identity),
     UserConfigurationService by UserConfigurationClient(client, identity) {
     private val json = Json { ignoreUnknownKeys = true }
 

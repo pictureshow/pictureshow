@@ -1,0 +1,294 @@
+{
+  "schemaVersion": 1,
+  "suite": "music-quality",
+  "cases": [
+    {
+      "id": "music-quality.auto-unmetered-uncapped",
+      "operation": "ceiling",
+      "input": {
+        "quality": "auto",
+        "metered": false
+      },
+      "expected": 320000000
+    },
+    {
+      "id": "music-quality.auto-metered-is-256",
+      "operation": "ceiling",
+      "input": {
+        "quality": "auto",
+        "metered": true
+      },
+      "expected": 256000
+    },
+    {
+      "id": "music-quality.original-ignores-metered",
+      "operation": "ceiling",
+      "input": {
+        "quality": "original",
+        "metered": true
+      },
+      "expected": 320000000
+    },
+    {
+      "id": "music-quality.128",
+      "operation": "ceiling",
+      "input": {
+        "quality": "128",
+        "metered": false
+      },
+      "expected": 128000
+    },
+    {
+      "id": "music-quality.256",
+      "operation": "ceiling",
+      "input": {
+        "quality": "256",
+        "metered": false
+      },
+      "expected": 256000
+    },
+    {
+      "id": "music-quality.unknown-is-auto",
+      "operation": "ceiling",
+      "input": {
+        "quality": "nonsense",
+        "metered": true
+      },
+      "expected": 256000
+    },
+    {
+      "id": "music-quality.profile-lists-only-this-devices-decoders",
+      "operation": "profile",
+      "input": {
+        "decoders": [
+          "MP3",
+          "AAC"
+        ],
+        "ceiling": 128000
+      },
+      "expected": {
+        "MaxStreamingBitrate": 128000,
+        "MaxStaticMusicBitrate": 128000,
+        "MusicStreamingTranscodingBitrate": 128000,
+        "direct": [
+          "mp3:mp3",
+          "aac:aac",
+          "m4a,m4b,mp4,mov:aac,mp3",
+          "mka,mkv:aac,mp3"
+        ],
+        "conversion": [
+          "ts:aac:Hls:"
+        ]
+      }
+    },
+    {
+      "id": "music-quality.no-aac-decoder-means-no-conversion",
+      "operation": "profile",
+      "input": {
+        "decoders": [
+          "MP3"
+        ],
+        "ceiling": 256000
+      },
+      "expected": {
+        "MaxStreamingBitrate": 256000,
+        "MaxStaticMusicBitrate": 256000,
+        "MusicStreamingTranscodingBitrate": 256000,
+        "direct": [
+          "mp3:mp3",
+          "m4a,m4b,mp4,mov:mp3",
+          "mka,mkv:mp3"
+        ],
+        "conversion": []
+      }
+    },
+    {
+      "id": "music-quality.flac-on-device-is-lossless",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "DirectPlay",
+        "route": "device",
+        "ceiling": 320000000
+      },
+      "expected": {
+        "label": "FLAC (lossless)",
+        "lossless": true,
+        "converted": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "music-quality.flac-wired-is-lossless",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "DirectPlay",
+        "route": "wired",
+        "ceiling": 320000000
+      },
+      "expected": {
+        "label": "FLAC (lossless)",
+        "lossless": true,
+        "converted": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "music-quality.flac-over-bluetooth-never-claims-lossless",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "DirectPlay",
+        "route": "bluetooth",
+        "ceiling": 320000000
+      },
+      "expected": {
+        "label": "FLAC sent over Bluetooth (lossy)",
+        "lossless": false,
+        "converted": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "music-quality.flac-to-cast-never-claims-lossless",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "DirectPlay",
+        "route": "cast",
+        "ceiling": 320000000
+      },
+      "expected": {
+        "label": "FLAC sent to another device",
+        "lossless": false,
+        "converted": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "music-quality.mp3-is-original-not-lossless",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "mp3",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "mp3"
+            }
+          ]
+        },
+        "method": "DirectPlay",
+        "route": "device",
+        "ceiling": 320000000
+      },
+      "expected": {
+        "label": "MP3 (original)",
+        "lossless": false,
+        "converted": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "music-quality.picked-128-says-so",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "Transcode",
+        "route": "device",
+        "ceiling": 128000,
+        "reasons": [
+          "ContainerBitrateExceedsLimit"
+        ]
+      },
+      "expected": {
+        "label": "Converted to AAC, up to 128 kbps (lossy)",
+        "lossless": false,
+        "converted": true,
+        "reason": "It's above the Music quality you picked."
+      }
+    },
+    {
+      "id": "music-quality.undecodable-says-why",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "ape",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "ape"
+            }
+          ]
+        },
+        "method": "Transcode",
+        "route": "device",
+        "ceiling": 320000000,
+        "reasons": [
+          "AudioCodecNotSupported"
+        ]
+      },
+      "expected": {
+        "label": "Converted to AAC, up to 256 kbps (lossy)",
+        "lossless": false,
+        "converted": true,
+        "reason": "This device can't decode APE, so the server converts it."
+      }
+    }
+  ]
+}
