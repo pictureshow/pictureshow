@@ -91,7 +91,7 @@ class DetailPendingCueTest {
         init {
             owner.registry.currentState = Lifecycle.State.RESUMED
             compose.mainClock.autoAdvance = false
-            Shadows.shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(true)
+            Shadows.shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(true)
             ViewCompat.setAccessibilityDelegate(
                 host,
                 object : AccessibilityDelegateCompat() {

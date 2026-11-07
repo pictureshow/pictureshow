@@ -230,7 +230,7 @@ class NextEpisodePlayedTest {
         })
         catalog = CatalogSession(service, accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             PictureshowTheme {
                 PlayerItemScreen(account, episode, 42_000, catalog, { next += it.id }, { exits++ }, providedOutput = output)

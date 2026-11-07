@@ -243,7 +243,7 @@ class PlayerBackFeedbackTest {
         })
         val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent { PictureshowTheme { PlayerItemScreen(account, item, 0, catalog, {}, { exits++ }, providedOutput = output) } }
         compose.waitUntil(10_000) {
             shadowOf(android.os.Looper.getMainLooper()).idle()

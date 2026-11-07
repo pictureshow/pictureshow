@@ -197,7 +197,7 @@ class PlayerPanelAccessibilityTest {
 
     private fun verifyInitialTrackAccessibilityGate(acknowledge: Boolean) {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         var focused by mutableStateOf(false)
         var acknowledged = false
         val provider = object : AccessibilityNodeProvider() {
@@ -252,7 +252,7 @@ class PlayerPanelAccessibilityTest {
 
     @Test fun chapterArrivalUsesOneTargetAcrossABoundaryUntilFocusIsAcknowledged() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         var focused by mutableStateOf(false)
         var position by mutableLongStateOf(30_000)
         val view = object : View(compose.activity) {
@@ -320,7 +320,7 @@ class PlayerPanelAccessibilityTest {
         var enabledSeen = false
         compose.setContent {
             compositionManager = LocalContext.current.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-            enabledSeen = rememberAccessibilityEnabled()
+            enabledSeen = rememberScreenReaderInUse()
             val parent = LocalWindowInfo.current
             val window = object : WindowInfo by parent {
                 override val isWindowFocused: Boolean get() = true
@@ -344,7 +344,7 @@ class PlayerPanelAccessibilityTest {
             val listener = AccessibilityManager.AccessibilityStateChangeListener { notified = it }
             compositionManager.addAccessibilityStateChangeListener(listener)
             try {
-                Shadows.shadowOf(compositionManager).setEnabled(true)
+                Shadows.shadowOf(compositionManager).setScreenReader(true)
                 assertTrue(compositionManager.isEnabled, "The Compose-local manager must be enabled")
                 assertTrue(notified, "The platform state callback must be delivered")
                 androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()

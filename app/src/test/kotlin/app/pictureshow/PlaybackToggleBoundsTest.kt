@@ -49,7 +49,7 @@ class PlaybackToggleBoundsTest {
 
     private fun pillFitsTheAccessibilityBounds(fontScale: Float, seekBack: Boolean = false) {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        shadowOf(manager).setEnabled(true)
+        shadowOf(manager).setScreenReader(true)
         lateinit var host: View
         compose.setContent {
             host = LocalView.current

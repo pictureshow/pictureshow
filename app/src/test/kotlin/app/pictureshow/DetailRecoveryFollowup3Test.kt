@@ -193,7 +193,6 @@ class DetailRecoveryFollowup3Test {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         compose.runOnUiThread {
-            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
             org.robolectric.Shadows.shadowOf(manager).setEnabledAccessibilityServiceList(
                 listOf(
                     android.accessibilityservice.AccessibilityServiceInfo().apply {
@@ -201,6 +200,7 @@ class DetailRecoveryFollowup3Test {
                     }
                 )
             )
+            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
         }
         var readerOnText = false
         val announcements = mutableListOf<String>()

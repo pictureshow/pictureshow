@@ -47,7 +47,7 @@ class AccessibilityRc3Test {
 
     @Test fun positionCanTakeFocusAndOffersSeekEvenWithoutAKnownTotal() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         compose.setContent { PictureshowTheme { PlayerTimeline(30_000, 30_000, 0) {} } }
         val position = compose.onNodeWithContentDescription("Playback position")
         position.performSemanticsAction(SemanticsActions.RequestFocus) { assertTrue(it()) }

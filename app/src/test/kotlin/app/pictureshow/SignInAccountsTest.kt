@@ -437,7 +437,7 @@ class SignInAccountsTest {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         val shadow = org.robolectric.Shadows.shadowOf(manager)
-        shadow.setEnabled(true)
+        shadow.setScreenReader(true)
         try {
             chooser()
             compose.mainClock.autoAdvance = false

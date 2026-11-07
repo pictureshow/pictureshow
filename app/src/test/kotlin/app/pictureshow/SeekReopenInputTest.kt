@@ -204,7 +204,7 @@ class SeekReopenInputTest {
                 }
             }
         }
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             host = androidx.compose.ui.platform.LocalView.current
             PictureshowTheme { PlayerItemScreen(account, item, 80_000, catalog, {}, {}, providedOutput = output) }

@@ -343,7 +343,7 @@ class NextEpisodeResolutionTest {
                 WaitingSource { if (holdReopenedManifest.get()) reopenedManifest.await() }
             }
         )
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             PictureshowTheme {
                 PlayerItemScreen(account, episode, 42_000, catalog, { next += it.id }, { exits++ }, providedOutput = output)
@@ -429,7 +429,7 @@ class NextEpisodeResolutionTest {
         }
         if (enableAccessibilityAtEnd) {
             compose.runOnIdle {
-                shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(true)
+                shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(true)
             }
             compose.waitForIdle()
         }
