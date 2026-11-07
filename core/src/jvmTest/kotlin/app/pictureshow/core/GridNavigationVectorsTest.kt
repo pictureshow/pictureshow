@@ -33,25 +33,31 @@ class GridNavigationVectorsTest {
             GridVerticalMove.Stay -> put("outcome", "stay")
 
             GridVerticalMove.Above -> put("outcome", "above")
+
+            GridVerticalMove.PageRetry -> put("outcome", "page-retry")
         }
     }
 
     private fun value(operation: String, input: JsonObject): JsonElement {
         fun int(name: String) = input.getValue(name).jsonPrimitive.int
         fun bool(name: String) = input.getValue(name).jsonPrimitive.boolean
+        fun failed() = input["pageFailed"]?.jsonPrimitive?.boolean == true
         return when (operation) {
             "grid-vertical-outcome" ->
-                outcome(gridVerticalMove(int("index"), int("columns"), int("count"), bool("down"), bool("loadingMore")))
+                outcome(gridVerticalMove(int("index"), int("columns"), int("count"), bool("down"), bool("loadingMore"), failed()))
 
-            "grid-hold-release" -> outcome(gridHoldRelease(int("index"), int("columns"), int("count")))
+            "grid-hold-release" -> outcome(gridHoldRelease(int("index"), int("columns"), int("count"), failed()))
 
             "grid-strip-detail" ->
                 JsonPrimitive(gridStripDetail(input.getValue("sortBy").jsonPrimitive.content, bool("descending")))
 
             "fixed-head-collapses" ->
                 JsonPrimitive(
-                    fixedHeadCollapses(input.getValue("fontScale").jsonPrimitive.float, bool("contentFocused"), bool("screenReaderOn"))
+                    fixedHeadCollapses(input.getValue("fontScale").jsonPrimitive.float, bool("contentFocused"), bool("assistiveServiceInUse"))
                 )
+
+            "fixed-head-in-list" ->
+                JsonPrimitive(fixedHeadInList(input.getValue("fontScale").jsonPrimitive.float, bool("assistiveServiceInUse")))
 
             else -> error("Unknown operation $operation")
         }
@@ -74,6 +80,7 @@ class GridNavigationVectorsTest {
         for (count in 1..24) {
             for (index in 0 until count) {
                 assertTrue(gridHoldRelease(index, 5, count) != GridVerticalMove.Hold, "$index of $count")
+                assertTrue(gridHoldRelease(index, 5, count, pageFailed = true) != GridVerticalMove.Hold, "$index of $count, failed")
             }
         }
     }

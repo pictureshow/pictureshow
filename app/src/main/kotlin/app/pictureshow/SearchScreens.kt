@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
@@ -33,6 +34,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -74,6 +76,7 @@ import androidx.tv.material3.Text
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.fixedHeadCollapses
+import app.pictureshow.core.fixedHeadInList
 import app.pictureshow.core.normalizeSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -154,18 +157,36 @@ fun SearchScreen(
             row.items.forEach { item -> key(item.id) { requests["${row.key}:${item.id}"] = remember { FocusRequester() } } }
         }
     }
+    val assistiveService = rememberAssistiveServiceInUse()
+    val headInList = fixedHeadInList(LocalDensity.current.fontScale, assistiveService)
+    val headItems = if (headInList) 1 else 0
+    var landings by remember { mutableIntStateOf(0) }
+
+    // In the list the head may have scrolled away, and a lazy item that far off isn't composed.
+    fun focusInHead(requester: FocusRequester) {
+        if (headInList && list.layoutInfo.visibleItemsInfo.none { it.index == 0 }) {
+            scope.launch {
+                list.jumpTo(0)
+                awaitCatalogFocus(requester)
+            }
+        } else {
+            requester.requestFocus()
+        }
+    }
     fun focusField() {
         editing = false
         keyboard?.hide()
-        field.requestFocus()
+        focusInHead(field)
     }
     suspend fun focusRow(index: Int, target: String? = null): Boolean {
         val row = state.rows.getOrNull(index) ?: return false
         val itemIndex = row.items.indexOfFirst { "${row.key}:${it.id}" == (target ?: selections[row.key]) }.coerceAtLeast(0)
-        list.jumpTo(index)
+        val position = index + headItems
+        // The first row stays under the head while the card fits there.
+        list.jumpTo(if (index == 0) 0 else position)
         val horizontal = rowStates.getValue(row.key)
         return withTimeoutOrNull(1_500) {
-            snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.index == index } }.first { it }
+            snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.index == position } }.first { it }
             horizontal.jumpTo(itemIndex)
             snapshotFlow { horizontal.layoutInfo.visibleItemsInfo.any { it.index == itemIndex } }.first { it }
             while (true) {
@@ -174,6 +195,8 @@ fun SearchScreen(
                         requests.getValue("${row.key}:${row.items[itemIndex].id}").requestFocus()
                     }
                 ) {
+                    // Jumped to the head, so a tall card may still run past the bottom.
+                    if (headInList) landings++
                     return@withTimeoutOrNull true
                 }
             }
@@ -223,8 +246,23 @@ fun SearchScreen(
     ) {
         var resultsFocused by remember { mutableStateOf(false) }
         // A long title at the largest sizes is taller than the space under the field: it goes while results hold focus.
-        val headCollapsed = fixedHeadCollapses(LocalDensity.current.fontScale, resultsFocused, rememberAccessibilityEnabled())
-        Box {
+        val headCollapsed = fixedHeadCollapses(LocalDensity.current.fontScale, resultsFocused, assistiveService)
+        // Text can arrive from outside the keyboard (a recent search, a phone remote). The caret goes after it.
+        var fieldValue by remember { mutableStateOf(TextFieldValue(state.query, TextRange(state.query.length))) }
+        var seenQuery by remember { mutableStateOf(state.query) }
+        if (state.query != seenQuery) {
+            seenQuery = state.query
+            if (state.query != fieldValue.text) fieldValue = TextFieldValue(state.query, TextRange(state.query.length))
+        }
+        // The field is composed anew when the head changes place, so it takes focus back if it held it.
+        val fieldHeldFocus = remember(headInList) { fieldFocused }
+        LaunchedEffect(headInList) {
+            if (fieldHeldFocus) {
+                if (headInList) list.jumpTo(0)
+                awaitCatalogFocus(field)
+            }
+        }
+        val head: @Composable () -> Unit = {
             Column(Modifier.collapsedOffScreen(headCollapsed), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     "Search",
@@ -235,13 +273,6 @@ fun SearchScreen(
                             -2f
                     }
                 )
-                // Text can arrive from outside the keyboard (a recent search, a phone remote). The caret goes after it.
-                var fieldValue by remember { mutableStateOf(TextFieldValue(state.query, TextRange(state.query.length))) }
-                var seenQuery by remember { mutableStateOf(state.query) }
-                if (state.query != seenQuery) {
-                    seenQuery = state.query
-                    if (state.query != fieldValue.text) fieldValue = TextFieldValue(state.query, TextRange(state.query.length))
-                }
                 InterceptPlatformTextInput(interceptor = { request, next -> next.startInputMethod(searchInputRequest(request)) }) {
                     BasicTextField(
                         value = fieldValue,
@@ -412,13 +443,22 @@ fun SearchScreen(
                     Text("No results for “${normalizeSearch(state.query)}”", modifier = Modifier.catalogFocusTarget(!handoff))
                 }
             }
-            if (headCollapsed) {
-                ContextStrip("Results for \"${state.query}\"", null, Modifier.pinnedToScreenTop(48.dp, 24.dp).testTag("search:strip"))
+        }
+        if (!headInList) {
+            Box {
+                head()
+                if (headCollapsed) {
+                    ContextStrip(
+                        "Results for “${normalizeSearch(state.query)}”",
+                        null,
+                        Modifier.pinnedToScreenTop(48.dp, 24.dp, 16.dp).testTag("search:strip")
+                    )
+                }
             }
         }
         val platformBringIntoView = LocalBringIntoViewSpec.current
         val focusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
-        val reveal = Modifier.revealFocusAfterFontChange(list)
+        val reveal = Modifier.revealFocusAfterFontChange(list, layoutKey = headInList to landings)
         val resultsBringIntoView = remember(platformBringIntoView, focusMargin) {
             object : BringIntoViewSpec {
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = focusedCardScrollDistance(
@@ -440,6 +480,7 @@ fun SearchScreen(
                 contentPadding = PaddingValues(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
+                if (headInList) item(key = "search:head") { head() }
                 state.rows.forEachIndexed { rowIndex, row ->
                     item(key = row.key) {
                         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -493,7 +534,7 @@ fun SearchScreen(
                                                                         0
                                                                     ) {
                                                                         if (state.someFailed || state.allFailed) {
-                                                                            retry.requestFocus()
+                                                                            focusInHead(retry)
                                                                         } else {
                                                                             focusField()
                                                                         }
@@ -574,22 +615,51 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
         if (!state.grid.loading && state.grid.items.isEmpty() && state.grid.error == null) back.requestFocus()
     }
     var gridFocused by remember { mutableStateOf(false) }
-    val headCollapsed = fixedHeadCollapses(LocalDensity.current.fontScale, gridFocused, rememberAccessibilityEnabled())
-    Column(Modifier.fillMaxSize().background(Color(0xFF10131C))) {
-        Row(
-            Modifier.collapsedOffScreen(headCollapsed)
-                .padding(start = 48.dp, top = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
+    val assistiveService = rememberAssistiveServiceInUse()
+    val fontScale = LocalDensity.current.fontScale
+    val headCollapsed = fixedHeadCollapses(fontScale, gridFocused, assistiveService)
+    val headInList = fixedHeadInList(fontScale, assistiveService)
+    var backFocused by remember { mutableStateOf(false) }
+    // Back is composed anew when the head changes place, so it takes focus back if it held it.
+    val backHeldFocus = remember(headInList) { backFocused }
+    val grid = rememberLazyGridState()
+    LaunchedEffect(headInList) {
+        if (backHeldFocus) {
+            if (headInList) grid.requestScrollToItem(0)
+            awaitCatalogFocus(back)
+            // The way into the grid is its focus restorer, which picks the last card. From inside, Back takes it.
+            if (headInList) back.requestFocus()
+        }
+    }
+    val head: @Composable (Modifier) -> Unit = { modifier ->
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             CatalogArtwork(state.person, state.grid.account, false, Modifier.width(64.dp).height(96.dp))
             Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(state.person.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.testTag("person:name"))
-                Button(onClick = onBack, modifier = Modifier.focusRequester(back).testTag("person:back")) { Text("Back") }
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier.focusRequester(back).testTag("person:back").onFocusChanged { backFocused = it.isFocused }
+                ) { Text("Back") }
             }
         }
+    }
+    Column(Modifier.fillMaxSize().background(Color(0xFF10131C))) {
+        if (!headInList) head(Modifier.collapsedOffScreen(headCollapsed).padding(start = 48.dp, top = 24.dp))
         Box(Modifier.weight(1f).onFocusChanged { gridFocused = it.hasFocus }) {
-            CatalogGrid(state.grid.copy(parent = state.person.copy(name = "Movies and shows")), onOpen, onNearEnd, { _, _ ->
-            }, onRetry, showSort = false, stripTitle = state.person.name.takeIf { headCollapsed }, pinStrip = headCollapsed)
+            CatalogGrid(
+                state.grid.copy(parent = state.person.copy(name = "Movies and shows")),
+                onOpen,
+                onNearEnd,
+                { _, _ -> },
+                onRetry,
+                showSort = false,
+                stripTitle = state.person.name.takeIf { headCollapsed },
+                pinStrip = headCollapsed,
+                head = if (headInList) ({ head(Modifier) }) else null,
+                headFocus = back.takeIf { headInList },
+                revealKey = headInList,
+                grid = grid
+            )
         }
     }
 }

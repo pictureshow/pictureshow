@@ -392,8 +392,9 @@ A seek confirms within `CAST_SEEK_TOLERANCE_TICKS` (50000000 ticks, 5 s) of its 
 
 ## grid-navigation
 
-A vertical D-pad move's outcome, the end of a held Down, the pinned strip's words and when a fixed head collapses, in `APPLICATION.md`. Runs through
-`GridNavigationVectorsTest` (Gradle packages it in `grid-vectors`). Web lists it as `it.todo` through `pendingPortSuites` until it ports it.
+A vertical D-pad move's outcome, the end of a held Down, the pinned strip's words and where a fixed head goes, in
+`APPLICATION.md`. Runs through `GridNavigationVectorsTest` (Gradle packages it in `grid-vectors`). Web lists it as
+`it.todo` through `pendingPortSuites` until it ports it.
 
 ## Remote (REM) trace format
 

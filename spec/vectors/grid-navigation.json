@@ -187,6 +187,72 @@
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     },
     {
+      "id": "grid-vertical-outcome.down-from-last-row-goes-to-retry-after-a-failed-page",
+      "operation": "grid-vertical-outcome",
+      "input": {
+        "index": 11,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": false,
+        "pageFailed": true
+      },
+      "expected": {
+        "outcome": "page-retry"
+      },
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-outcome.down-to-a-later-row-comes-before-the-retry",
+      "operation": "grid-vertical-outcome",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": false,
+        "pageFailed": true
+      },
+      "expected": {
+        "outcome": "card",
+        "index": 11
+      },
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-outcome.a-loading-page-comes-before-the-retry",
+      "operation": "grid-vertical-outcome",
+      "input": {
+        "index": 11,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": true,
+        "pageFailed": true
+      },
+      "expected": {
+        "outcome": "hold"
+      },
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-outcome.up-from-last-row-ignores-a-failed-page",
+      "operation": "grid-vertical-outcome",
+      "input": {
+        "index": 11,
+        "columns": 5,
+        "count": 12,
+        "down": false,
+        "loadingMore": false,
+        "pageFailed": true
+      },
+      "expected": {
+        "outcome": "card",
+        "index": 6
+      },
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
       "id": "grid-hold-release.page-lands-in-the-column",
       "operation": "grid-hold-release",
       "input": {
@@ -290,6 +356,21 @@
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     },
     {
+      "id": "grid-hold-release.failure-on-the-last-row-goes-to-retry",
+      "operation": "grid-hold-release",
+      "input": {
+        "index": 11,
+        "columns": 5,
+        "count": 12,
+        "releasedBy": "failure",
+        "pageFailed": true
+      },
+      "expected": {
+        "outcome": "page-retry"
+      },
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
       "id": "grid-strip-detail.name-ascending",
       "operation": "grid-strip-detail",
       "input": {
@@ -335,7 +416,7 @@
       "input": {
         "fontScale": 1.3,
         "contentFocused": true,
-        "screenReaderOn": false
+        "assistiveServiceInUse": false
       },
       "expected": true,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
@@ -346,7 +427,7 @@
       "input": {
         "fontScale": 1.15,
         "contentFocused": true,
-        "screenReaderOn": false
+        "assistiveServiceInUse": false
       },
       "expected": false,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
@@ -357,29 +438,102 @@
       "input": {
         "fontScale": 1.3,
         "contentFocused": false,
-        "screenReaderOn": false
+        "assistiveServiceInUse": false
       },
       "expected": false,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     },
     {
-      "id": "fixed-head-collapses.stays-for-a-screen-reader",
+      "id": "fixed-head-collapses.stays-for-an-assistive-service",
       "operation": "fixed-head-collapses",
       "input": {
         "fontScale": 1.3,
         "contentFocused": true,
-        "screenReaderOn": true
+        "assistiveServiceInUse": true
       },
       "expected": false,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     },
     {
-      "id": "fixed-head-collapses.stays-for-a-screen-reader-at-the-largest",
+      "id": "fixed-head-collapses.stays-for-an-assistive-service-at-the-largest",
       "operation": "fixed-head-collapses",
       "input": {
         "fontScale": 2.0,
         "contentFocused": true,
-        "screenReaderOn": true
+        "assistiveServiceInUse": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.collapses-just-above-the-size",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 1.16,
+        "contentFocused": true,
+        "assistiveServiceInUse": false
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.collapses-between-the-menu-sizes",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 1.2,
+        "contentFocused": true,
+        "assistiveServiceInUse": false
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.stays-at-the-default-size",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 1.0,
+        "contentFocused": true,
+        "assistiveServiceInUse": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-in-list.above-the-size-for-an-assistive-service",
+      "operation": "fixed-head-in-list",
+      "input": {
+        "fontScale": 1.3,
+        "assistiveServiceInUse": true
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-in-list.just-above-the-size",
+      "operation": "fixed-head-in-list",
+      "input": {
+        "fontScale": 1.16,
+        "assistiveServiceInUse": true
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-in-list.fixed-at-the-size-itself",
+      "operation": "fixed-head-in-list",
+      "input": {
+        "fontScale": 1.15,
+        "assistiveServiceInUse": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-in-list.fixed-without-an-assistive-service",
+      "operation": "fixed-head-in-list",
+      "input": {
+        "fontScale": 1.3,
+        "assistiveServiceInUse": false
       },
       "expected": false,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"

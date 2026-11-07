@@ -196,15 +196,19 @@ if it is on a later row, and null from the last row. Null when `columns` is not 
 Owed: web runs these. Apple has no vector runner on main, so `grid-vertical-move` is owed there with the rest of the
 application suite.
 
-## `grid-navigation.json`: `grid-vertical-outcome`, `grid-hold-release`, `grid-strip-detail`, `fixed-head-collapses`
+## `grid-navigation.json`: `grid-vertical-outcome`, `grid-hold-release`, `grid-strip-detail`, `fixed-head-collapses`, `fixed-head-in-list`
 
 `grid-vertical-outcome` has the input of `grid-vertical-move`, with `loadingMore` required. Expected is one of
 `{"outcome":"card","index":n}`, `{"outcome":"hold"}` (the press waits for the page), `{"outcome":"stay"}` (the press is
-spent and focus stays) and `{"outcome":"above"}` (Up from the first row).
+spent and focus stays), `{"outcome":"above"}` (Up from the first row) and `{"outcome":"page-retry"}` (focus goes to the Retry
+after the last card). Optional boolean `pageFailed`, absent meaning false, says the next page failed and nothing is loading:
+Down from the last row then goes to that Retry rather than staying, so a failed page can't look dead at the end of a long
+grid. A retry that fails again keeps focus on Retry. One that succeeds lands as a release from the card the viewer last held.
 
 A hold has an end. `grid-hold-release` is where it goes: input `index`, `columns`, `count` (loaded by then) and
 `releasedBy`, one of `page`, `empty-page`, `failure` and `cap`. The result doesn't depend on `releasedBy`, and it is a card
-or a stay, never another hold: a page landing in the column, and otherwise the last card if it is on a later row. The cap is
+or a stay, never another hold: a page landing in the column, and otherwise the last card if it is on a later row. With
+`pageFailed` (`releasedBy` `failure`), the last row goes on to the Retry. The cap is
 1.5 s from the first press, and a repeating key doesn't restart it. After it, a late page leaves focus where the viewer
 is. Any other key, a sort change by any route (a screen reader's click included) and focus moving drop the hold with no
 landing. A newer key also replaces a move still waiting on a card to compose, and a repeat of the same key doesn't.
@@ -212,9 +216,24 @@ landing. A newer key also replaces a move still waiting on a card to compose, an
 `grid-strip-detail`: input `sortBy`, boolean `descending`; expected the pinned strip's words for the sort in force, in the
 sort chips' own titles. An unknown `sortBy` reads as the first sort.
 
-`fixed-head-collapses`: input number `fontScale`, booleans `contentFocused`, `screenReaderOn`; expected a boolean, whether
-the Search or Person head goes off screen. Above font scale 1.15, while the results or grid below it hold focus, and never
-with a screen reader on: a TV reader moves by what's on screen and couldn't get back up to the field or Back.
+`fixed-head-collapses`: input number `fontScale`, booleans `contentFocused`, `assistiveServiceInUse`; expected a boolean,
+whether the Search or Person head goes off screen. Above font scale 1.15, while the results or grid below it hold focus, and
+never with an assistive service in use. `fixed-head-in-list`: input `fontScale`, `assistiveServiceInUse`; expected a boolean,
+whether that head is instead the first item of the list below it, as the library grid's header already is, so a tall card
+gets the screen and Up scrolls back to the field or Back.
+
+1.15 is one constant with the size above which a card's title has no line limit (`UNBOUNDED_TITLE_FONT_SCALE` in core): that
+limit is why a card can outgrow the room under a fixed head. A port that changes one changes both. A platform whose text size
+isn't a number, such as tvOS Dynamic Type, maps its sizes onto it and records the mapping here.
+
+An assistive service is one that needs what it acts on to be on screen, not any accessibility API that happens to be active:
+
+- Android: `AccessibilityManager` enabled, and touch exploration on, or an enabled service with spoken or braille feedback,
+  or one that can perform gestures (TalkBack, Switch Access, Voice Access). A password manager, an autofill service or a
+  `uiautomator dump` turns `isEnabled` on and doesn't count, so that viewer's head still collapses.
+- tvOS: VoiceOver or Switch Control running.
+- Web: the browser doesn't say whether a reader is on, so the input is always false there. Web's head scrolls with the page
+  and never needs to collapse, so it owes these two only if it adds a fixed head.
 
 Owed: Android runs these. Web lists the suite in `pendingPortSuites`, and it shows as todo there until ported. Apple has no
 vector runner on main, so it owes the suite with the rest.

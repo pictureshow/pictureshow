@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
@@ -22,6 +23,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -52,6 +54,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
+import org.robolectric.util.ReflectionHelpers
 
 /** The library grid on a 960x540 dp TV: column kept, focused card whole, at each size the TV's Settings offer and above. */
 @RunWith(RobolectricTestRunner::class)
@@ -522,47 +525,225 @@ class CatalogGridLargeFontTest {
     @Test fun searchStripKeepsTheQueryOnceTheHeadCollapses() {
         showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
         // Search arrives on its results, so the head has already collapsed.
-        assertEquals("Results for \"film\"", stripText("search:strip"))
+        assertEquals("Results for “film”", stripText("search:strip"))
         assertStripClearsTheCard("search:strip")
         press(Key.DirectionUp)
         assertFocus("search:field")
         compose.onNodeWithTag("search:strip").assertDoesNotExist()
         press(Key.DirectionDown)
-        assertEquals("Results for \"film\"", stripText("search:strip"))
+        assertEquals("Results for “film”", stripText("search:strip"))
     }
 
-    private fun screenReaderOn() {
-        val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        shadowOf(manager).setEnabled(true)
-    }
+    private val accessibility get() = shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager)
 
-    @Test fun searchKeepsItsHeadOnScreenForAScreenReader() {
-        screenReaderOn()
-        showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
-        press(Key.DirectionDown)
-        assertTrue(compose.onNodeWithTag("search:field").getUnclippedBoundsInRoot().top.value >= 0f, "the field left the screen")
-        compose.onNodeWithTag("search:strip").assertDoesNotExist()
-    }
-
-    @Test fun personKeepsItsHeadOnScreenForAScreenReader() {
-        screenReaderOn()
-        showLarge {
-            val person = MediaItem("person", "A Person", "Person")
-            PersonScreen(PersonState(CatalogGridState(account, person, longTitles, longTitles.size), person), {}, {}, {}, {})
+    private fun enabledService(feedback: Int, capabilities: Int = 0) {
+        val service = AccessibilityServiceInfo().apply {
+            feedbackType = feedback
+            ReflectionHelpers.callInstanceMethod<Unit>(
+                this,
+                "setCapabilities",
+                ReflectionHelpers.ClassParameter.from(Int::class.java, capabilities)
+            )
         }
-        press(Key.DirectionDown)
-        assertTrue(compose.onNodeWithTag("person:back").getUnclippedBoundsInRoot().top.value >= 0f, "Back left the screen")
-        compose.onNodeWithTag("person:name").assertIsDisplayed()
+        accessibility.setEnabledAccessibilityServiceList(listOf(service))
+        accessibility.setEnabled(true)
     }
 
-    @Test fun aReaderTurnedOnWhileTheHeadIsGoneBringsItBack() {
-        showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
-        assertEquals("Results for \"film\"", stripText("search:strip"))
-        val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        shadowOf(manager).setEnabled(true)
-        settle()
+    private fun showSearch(scale: Float = 1.3f, rows: List<HomeRow> = longRows.take(1)) =
+        showLarge(scale) { SearchScreen(SearchState("film", rows, completed = true), account, false, {}, {}, {}, {}, {}, {}) }
+
+    private fun showPerson(items: List<MediaItem> = longTitles) = showLarge {
+        val person = MediaItem("person", "A Person", "Person")
+        PersonScreen(PersonState(CatalogGridState(account, person, items, items.size), person), {}, {}, {}, {})
+    }
+
+    /** Nothing fixed sits over it: the head has moved into the grid, above it. */
+    private fun assertNotCutByTheHead(text: String) {
+        val head = compose.onAllNodes(hasTestTag("person:name")).fetchSemanticsNodes().singleOrNull()?.let {
+            compose.onNodeWithTag("person:back").getUnclippedBoundsInRoot().bottom
+        } ?: return
+        val found = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().singleOrNull() ?: return
+        assertTrue(found.boundsInRoot.height > 0f, "$text is hidden")
+        assertTrue(compose.onNode(hasText(text)).getUnclippedBoundsInRoot().top >= head, "$text is under the head")
+    }
+
+    @Test fun searchHasItsHeadInTheListForAScreenReader() {
+        accessibility.setScreenReader(true)
+        showSearch()
         compose.onNodeWithTag("search:strip").assertDoesNotExist()
-        assertTrue(compose.onNodeWithTag("search:field").getUnclippedBoundsInRoot().top.value >= 0f, "the field stayed off screen")
+        assertFocusedCardWhole("the long title", clippedBy = "search:results")
+        press(Key.DirectionUp)
+        assertFocus("search:field")
+        assertTrue(compose.onNodeWithTag("search:field").getUnclippedBoundsInRoot().top.value >= 0f, "the field left the screen")
+        press(Key.DirectionDown)
+        assertFocusedCardWhole("back on the card", clippedBy = "search:results")
+    }
+
+    @Test fun aScreenReaderReachesTheFieldFromADeepSearchRow() {
+        accessibility.setScreenReader(true)
+        showSearch(rows = longRows)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        assertFocusedCardWhole("the third row", clippedBy = "search:results")
+        repeat(2) { press(Key.DirectionUp) }
+        assertFocusedCardWhole("the first row", clippedBy = "search:results")
+        press(Key.DirectionUp)
+        assertFocus("search:field")
+    }
+
+    @Test fun personHasItsHeadInTheGridForAScreenReader() {
+        accessibility.setScreenReader(true)
+        showPerson()
+        compose.onNodeWithTag("grid:strip").assertDoesNotExist()
+        assertFocusedCardWhole("the long title")
+        assertNotCutByTheHead("Movies and shows")
+        press(Key.DirectionUp)
+        assertFocus("person:back")
+        compose.onNodeWithTag("person:name").assertIsDisplayed()
+        assertNotCutByTheHead("Movies and shows")
+    }
+
+    @Test fun aPasswordManagerDoesNotStopSearchsHeadCollapsing() {
+        enabledService(AccessibilityServiceInfo.FEEDBACK_GENERIC)
+        showSearch()
+        assertEquals("Results for “film”", stripText("search:strip"))
+    }
+
+    @Test fun aPasswordManagerDoesNotStopPersonsHeadCollapsing() {
+        enabledService(AccessibilityServiceInfo.FEEDBACK_GENERIC)
+        showPerson()
+        assertEquals("A Person", stripText("grid:strip"))
+    }
+
+    @Test fun aGestureServiceCountsLikeAReader() {
+        enabledService(AccessibilityServiceInfo.FEEDBACK_GENERIC, AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES)
+        showSearch()
+        compose.onNodeWithTag("search:strip").assertDoesNotExist()
+        press(Key.DirectionUp)
+        assertFocus("search:field")
+    }
+
+    @Test fun touchExplorationAloneCountsLikeAReader() {
+        accessibility.setTouchExplorationEnabled(true)
+        accessibility.setEnabled(true)
+        showPerson()
+        compose.onNodeWithTag("grid:strip").assertDoesNotExist()
+    }
+
+    private fun flipReaderBothWays(whole: String?) {
+        val focused = focusedTag()
+        accessibility.setScreenReader(true)
+        settle()
+        assertFocus(focused)
+        assertFocusedCardWhole("reader turned on", clippedBy = whole)
+        accessibility.setScreenReader(false)
+        settle()
+        assertFocus(focused)
+        assertFocusedCardWhole("reader turned off", clippedBy = whole)
+        accessibility.setScreenReader(true)
+        settle()
+        assertFocus(focused)
+        assertFocusedCardWhole("reader turned on again", clippedBy = whole)
+    }
+
+    @Test fun aReaderTurnedOnAndOffKeepsTheCardOnSearch() {
+        showSearch(rows = longRows)
+        press(Key.DirectionDown)
+        assertEquals("Results for “film”", stripText("search:strip"))
+        flipReaderBothWays("search:results")
+        compose.onNodeWithTag("search:strip").assertDoesNotExist()
+    }
+
+    @Test fun aReaderTurnedOnAndOffKeepsTheCardOnSearchsFirstRow() {
+        showSearch()
+        flipReaderBothWays("search:results")
+    }
+
+    @Test fun aReaderTurnedOnAndOffKeepsTheCardOnPerson() {
+        showPerson(longTitles + longTitles.map { it.copy(id = it.id + "-more") } + longTitles.map { it.copy(id = it.id + "-last") })
+        press(Key.DirectionDown)
+        flipReaderBothWays(null)
+    }
+
+    @Test fun aReaderTurnedOnKeepsFocusOnSearchsField() {
+        showSearch()
+        press(Key.DirectionUp)
+        assertFocus("search:field")
+        accessibility.setScreenReader(true)
+        settle()
+        assertFocus("search:field")
+        accessibility.setScreenReader(false)
+        settle()
+        assertFocus("search:field")
+    }
+
+    @Test fun aReaderTurnedOnKeepsFocusOnPersonsBack() {
+        showPerson()
+        press(Key.DirectionUp)
+        assertFocus("person:back")
+        accessibility.setScreenReader(true)
+        settle()
+        assertEquals("person:back", focusedTag(), "reader turned on")
+        accessibility.setScreenReader(false)
+        settle()
+        assertEquals("person:back", focusedTag(), "reader turned off")
+    }
+
+    @Test fun aReaderTurnedOnKeepsWhatTheFieldHolds() {
+        showSearch()
+        press(Key.DirectionUp)
+        accessibility.setScreenReader(true)
+        settle()
+        val field = compose.onNodeWithTag("search:field").fetchSemanticsNode().config
+        assertEquals("film", field[SemanticsProperties.EditableText].text)
+    }
+
+    /** The strip's text clears the overscan margin: its centre is fixed, so a size can't push the ink up. */
+    private fun assertStripTextCentre(tag: String, text: String) {
+        val node = compose.onNode(hasText(text, substring = true) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
+        val bounds = node.getUnclippedBoundsInRoot()
+        assertEquals(38f, (bounds.top + bounds.bottom).value / 2, .75f, "$tag text at $bounds")
+        val strip = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
+        assertEquals(0f, strip.top.value, .5f)
+        assertEquals(56f, strip.bottom.value, .5f)
+    }
+
+    private fun assertGridStripBelowTheMargin(scale: Float) {
+        show(scale = scale)
+        repeat(3) { press(Key.DirectionDown) }
+        assertStripTextCentre("grid:strip", "Films")
+    }
+
+    @Test fun gridStripTextSitsBelowTheMarginAtDefaultFont() = assertGridStripBelowTheMargin(1f)
+
+    @Test fun gridStripTextSitsBelowTheMarginAtLargestFont() = assertGridStripBelowTheMargin(1.3f)
+
+    @Test fun searchsListStartsAtTheStripsBottom() {
+        showSearch()
+        assertStripTextCentre("search:strip", "Results")
+        assertEquals(
+            compose.onNodeWithTag("search:strip").getUnclippedBoundsInRoot().bottom.value,
+            compose.onNodeWithTag("search:results").getUnclippedBoundsInRoot().top.value,
+            .5f
+        )
+    }
+
+    @Test fun theStripShowsTheQueryAsNormalized() {
+        showLarge { SearchScreen(SearchState("  film  ", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
+        assertEquals("Results for “film”", stripText("search:strip"))
+    }
+
+    @Test fun aNextPageLoadingDoesNotPushTheFirstRowDown() {
+        showState(filmsState(films.take(12)))
+        val before = compose.onNodeWithTag("grid:film-0").getUnclippedBoundsInRoot().top
+        gridState = filmsState(films.take(12), loading = true)
+        settle()
+        assertEquals(before.value, compose.onNodeWithTag("grid:film-0").getUnclippedBoundsInRoot().top.value, .5f)
+    }
+
+    @Test fun aFirstLoadStillSaysLoading() {
+        showState(filmsState(emptyList(), loading = true))
+        compose.onNode(hasText("Loading…")).assertIsDisplayed()
     }
 
     @Test fun searchKeepsItsHeadAndNoStripBelowTheCollapseSize() {
