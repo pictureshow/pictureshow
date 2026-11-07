@@ -61,7 +61,11 @@ class PerTestTimeLimitTest {
     }
 
     // Twenty seconds rather than forever, so a limit that stops working fails this test and doesn't hang it.
-    @Test fun aBlockedThreadFailsByNameAtTheLimit() = assertRanOver(assertFailsWith { limited { Thread.sleep(20_000) } })
+    @Test fun aBlockedThreadFailsByNameAtTheLimit() {
+        val started = System.nanoTime()
+        assertRanOver(assertFailsWith { limited { Thread.sleep(20_000) } })
+        assertTrue(System.nanoTime() - started < 10_000_000_000, "Waited out the sleep rather than interrupting it")
+    }
 
     @Test fun theNextTestRunsCleanAfterAHang() {
         assertRanOver(assertFailsWith { limited { Thread.sleep(20_000) } })

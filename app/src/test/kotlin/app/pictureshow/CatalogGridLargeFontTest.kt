@@ -560,6 +560,38 @@ class CatalogGridLargeFontTest {
         assertFocus("grid:film-7")
     }
 
+    @Test fun anUpThatGoesNowhereStillDropsTheHold() {
+        val few = films.take(3)
+        gridState = filmsState(few)
+        showLarge(1f) { CatalogGrid(gridState, {}, {}, { _, _ -> }, {}, showSort = false) }
+        gridState = filmsState(few, loading = true)
+        settle()
+        holdDown()
+        assertFocus("grid:film-0")
+        // No sort controls above: Up falls to a focus search that finds nothing.
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        runFrames(100)
+        assertFocus("grid:film-0")
+        gridState = filmsState(films.take(20))
+        settle()
+        assertFocus("grid:film-0")
+    }
+
+    @Test fun aHeldDownIsDroppedWhenFocusGoesToTheSortWithNoKey() {
+        val few = films.take(3)
+        showState(filmsState(few))
+        gridState = filmsState(few, loading = true)
+        settle()
+        holdDown()
+        assertFocus("grid:film-0")
+        compose.onNodeWithTag("grid:sort:SortName").performSemanticsAction(SemanticsActions.RequestFocus)
+        runFrames(100)
+        assertFocus("grid:sort:SortName")
+        gridState = filmsState(films.take(20))
+        settle()
+        assertFocus("grid:sort:SortName")
+    }
+
     @Test fun aHeldDownIsDroppedWhenFocusMovesWithNoKey() {
         holdDownOnFilm8()
         // A screen reader moves focus itself, and the card's key handler never sees it.

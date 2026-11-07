@@ -636,9 +636,8 @@ fun CatalogGrid(
     val loadingMore by rememberUpdatedState(state.loading)
     val scrolled by remember { derivedStateOf { grid.firstVisibleItemIndex > 0 } }
 
-    // Every focus job goes through here, so a later one replaces an earlier one and there is never a second running.
+    // There is never a second job to replace: a key cancels the last one first, and a hold only starts with none running.
     fun startMove(down: Boolean, block: suspend () -> Unit) {
-        moving?.cancel()
         movingDown = down
         moving = scope.launch { block() }
     }
@@ -850,8 +849,6 @@ fun CatalogGrid(
                                 selectedId = item.id
                                 focusedIndex = index
                                 onNearEnd(index)
-                                heldDownFrom = -1
-                            } else if (index == heldDownFrom) {
                                 heldDownFrom = -1
                             }
                         }.onPreviewKeyEvent {
