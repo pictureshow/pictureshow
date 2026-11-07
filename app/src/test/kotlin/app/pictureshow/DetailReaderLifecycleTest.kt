@@ -101,7 +101,6 @@ class DetailReaderLifecycleTest {
     private fun host(): Pair<View, RetainedFocusProvider> {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
-        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
         org.robolectric.Shadows.shadowOf(manager).setEnabledAccessibilityServiceList(
             listOf(
                 android.accessibilityservice.AccessibilityServiceInfo().apply {
@@ -109,6 +108,7 @@ class DetailReaderLifecycleTest {
                 }
             )
         )
+        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
         val host = View(compose.activity)
         val original = RetainedFocusProvider(host)
         ViewCompat.setAccessibilityDelegate(

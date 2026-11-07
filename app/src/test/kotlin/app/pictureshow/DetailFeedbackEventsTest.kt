@@ -220,7 +220,7 @@ class DetailFeedbackEventsTest {
         val manager = context.getSystemService(
             android.content.Context.ACCESSIBILITY_SERVICE
         ) as android.view.accessibility.AccessibilityManager
-        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+        org.robolectric.Shadows.shadowOf(manager).setScreenReader(true)
         val messages = mutableListOf<String>()
         lateinit var host: View
         val original = object : android.view.accessibility.AccessibilityNodeProvider() {

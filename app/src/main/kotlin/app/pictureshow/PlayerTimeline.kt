@@ -51,7 +51,7 @@ internal fun PlayerTimeline(
     CurrentPositionAccessibility(setOf("player:position")) {
         spokenPlaybackPosition(if (ended) completedPlaybackPosition(positionMs, durationMs) else positionMs, durationMs)
     }
-    val accessibleControls = rememberAccessibilityEnabled()
+    val accessibleControls = rememberAssistiveServiceInUse()
     val timelinePosition = if (ended) completedPlaybackPosition(positionMs, durationMs) else playbackEndPosition(positionMs, durationMs)
     var spokenPosition by remember(announcedPositionMs, ended) { mutableLongStateOf(if (ended) timelinePosition else announcedPositionMs) }
     val spokenTimelinePosition = playbackEndPosition(spokenPosition, durationMs)

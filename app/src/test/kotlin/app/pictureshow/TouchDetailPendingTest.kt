@@ -132,7 +132,7 @@ class TouchDetailPendingTest {
     private fun fresh(item: MediaItem = film) = CatalogDetailState(account, item, loading = false, readSucceeded = true)
 
     private fun enableReader() {
-        Shadows.shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(true)
+        Shadows.shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(true)
     }
 
     private fun textOf(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().config

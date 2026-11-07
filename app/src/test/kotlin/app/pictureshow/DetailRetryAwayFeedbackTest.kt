@@ -219,7 +219,7 @@ class DetailRetryAwayFeedbackTest {
         fixture.state.value = fixture.state.value.copy(loading = false, error = failure, readFailed = true)
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(100)
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         unrelatedFailureOnHeading(fixture)
         assertTrue(retryAwayCues(fixture).isEmpty(), "Enabling accessibility cannot revive an old Retry cue")
     }
@@ -312,7 +312,7 @@ class DetailRetryAwayFeedbackTest {
             val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
                 as android.view.accessibility.AccessibilityManager
             Shadows.shadowOf(manager).apply {
-                setEnabled(true)
+                setScreenReader(true)
             }
 
             compose.setContent {

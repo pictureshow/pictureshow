@@ -115,7 +115,7 @@ class SeekReturnFocusTest {
             compose.runOnIdle {
                 val manager = host.context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
                 assertTrue(!manager.isEnabled, "Accessibility must start disabled for this transition")
-                shadowOf(manager).setEnabled(true)
+                shadowOf(manager).setScreenReader(true)
                 assertTrue(manager.isEnabled)
             }
             compose.waitForIdle()
@@ -793,7 +793,7 @@ class SeekReturnFocusTest {
         })
         val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             host = androidx.compose.ui.platform.LocalView.current
             androidx.compose.runtime.CompositionLocalProvider(

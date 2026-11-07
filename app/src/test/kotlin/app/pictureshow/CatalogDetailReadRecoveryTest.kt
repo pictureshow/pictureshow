@@ -379,7 +379,7 @@ class CatalogDetailReadRecoveryTest {
 
     @Test fun anEnabledNonReaderServiceDoesNotRetainTheOldErrorForTheReaderTimeout() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        compose.runOnUiThread { shadowOf(manager).setEnabled(true) }
+        compose.runOnUiThread { shadowOf(manager).setScreenReader(true) }
         val item = MediaItem("film", "Invented film", "Movie")
         val state = mutableStateOf(CatalogDetailState(account, item, loading = false, error = "Unavailable"))
         compose.setContent {
@@ -407,7 +407,6 @@ class CatalogDetailReadRecoveryTest {
     private fun readerAcknowledgement(acknowledge: Boolean, secondRead: Boolean = false) {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
         compose.runOnUiThread {
-            shadowOf(manager).setEnabled(true)
             shadowOf(manager).setEnabledAccessibilityServiceList(
                 listOf(
                     AccessibilityServiceInfo().apply {
@@ -415,6 +414,7 @@ class CatalogDetailReadRecoveryTest {
                     }
                 )
             )
+            shadowOf(manager).setEnabled(true)
         }
         var readerOnAction = false
         val host = object : View(compose.activity) {

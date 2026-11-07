@@ -152,9 +152,16 @@ class AccessibilityPlayerTest {
     @Test
     fun tvAccessibilityDetectionDoesNotRequireTouchExploration() {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        Shadows.shadowOf(manager).setEnabledAccessibilityServiceList(
+            listOf(
+                android.accessibilityservice.AccessibilityServiceInfo().apply {
+                    feedbackType = android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_SPOKEN
+                }
+            )
+        )
         Shadows.shadowOf(manager).setEnabled(true)
         var enabled = false
-        compose.setContent { enabled = rememberAccessibilityEnabled() }
+        compose.setContent { enabled = rememberAssistiveServiceInUse() }
         compose.runOnIdle { assertTrue(enabled) }
         assertEquals(false, manager.isTouchExplorationEnabled)
     }

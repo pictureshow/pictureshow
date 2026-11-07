@@ -8,6 +8,7 @@ package app.pictureshow
 
 import android.app.Application
 import android.os.Looper
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -22,6 +23,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
@@ -30,6 +32,42 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlayerControlsTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = kotlinx.coroutines.test.StandardTestDispatcher())
+
+    @Test
+    fun theTimeToTakeActionSettingLengthensTheWait() {
+        shadowOf(compose.activity.getSystemService(AccessibilityManager::class.java)).setInteractiveUiTimeout(60_000)
+        var hides = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent { ControlsAutoHide(true, false, 0L) { hides++ } }
+        compose.mainClock.advanceTimeBy(59_000)
+        compose.runOnIdle { assertEquals(0, hides) }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.runOnIdle { assertEquals(1, hides) }
+    }
+
+    @Test
+    fun theTimeToReadSettingLengthensTheWait() {
+        shadowOf(compose.activity.getSystemService(AccessibilityManager::class.java)).setNonInteractiveUiTimeout(30_000)
+        var hides = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent { ControlsAutoHide(true, false, 0L) { hides++ } }
+        compose.mainClock.advanceTimeBy(29_000)
+        compose.runOnIdle { assertEquals(0, hides) }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.runOnIdle { assertEquals(1, hides) }
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun beforeApi29TheWaitStaysTenSeconds() {
+        var hides = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent { ControlsAutoHide(true, false, 0L) { hides++ } }
+        compose.mainClock.advanceTimeBy(9_000)
+        compose.runOnIdle { assertEquals(0, hides) }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.runOnIdle { assertEquals(1, hides) }
+    }
 
     @Test
     fun idleControlsHideAfterTenSeconds() {

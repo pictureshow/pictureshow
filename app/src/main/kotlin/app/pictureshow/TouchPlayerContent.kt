@@ -206,7 +206,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         LaunchedEffect(atEnd) { if (atEnd) entry.cast.localAdvancing(castOutput) }
         LaunchedEffect(host) { if (entry.cast.consumeStartPaused(host.item.id)) host.output.pause() }
     }
-    val accessible = rememberAccessibilityEnabled()
+    val accessible = rememberAssistiveServiceInUse()
     // Prepared with the player, as on TV: a sheet that prepared its own would measure its waiting line, then grow.
     val trackMenus = rememberPlayerTrackMenus(
         host.state.decision?.mediaSourceId,
