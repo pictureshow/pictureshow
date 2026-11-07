@@ -32,7 +32,9 @@ data class PlaybackRequest(
     val allowVideoStreamCopy: Boolean = true,
     val allowAudioStreamCopy: Boolean = true,
     /** Audio recovery after this video already played directly; require copy in the stream URL too. */
-    val requireVideoStreamCopy: Boolean = false
+    val requireVideoStreamCopy: Boolean = false,
+    /** A track: its file is opened from the audio route. */
+    val audio: Boolean = false
 )
 
 /** Jellyfin ticks are 100 ns. */
@@ -129,7 +131,8 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                     result.value,
                     identity.forAccount(account),
                     account.accessToken,
-                    boundSourceId
+                    boundSourceId,
+                    playback.audio
                 ).let { outcome ->
                     if (playback.requireVideoStreamCopy && outcome is PlayOutcome.Play) {
                         AudioOnlyRecovery.preserveVideo(outcome.decision, playback.subtitleStreamIndex)

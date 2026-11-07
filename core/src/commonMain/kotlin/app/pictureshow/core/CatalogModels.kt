@@ -25,6 +25,10 @@ data class MediaPerson(
     @SerialName("PrimaryImageTag") val primaryImageTag: String? = null
 )
 
+/** A name with the server's item identity, as album artist and artist credits arrive. */
+@Serializable
+data class NamedItem(@SerialName("Id") val id: String = "", @SerialName("Name") val name: String = "")
+
 @Serializable
 data class MediaItem(
     @SerialName("Id") val id: String,
@@ -55,7 +59,18 @@ data class MediaItem(
     @SerialName("Chapters") val chapters: List<Chapter> = emptyList(),
     @SerialName("Trickplay") val trickplay: Map<String, Map<String, TrickplayInfo>> = emptyMap(),
     @SerialName("People") val people: List<MediaPerson> = emptyList(),
-    @SerialName("UserData") val userData: ItemUserData = ItemUserData()
+    @SerialName("UserData") val userData: ItemUserData = ItemUserData(),
+    @SerialName("SortName") val sortName: String? = null,
+    @SerialName("MediaType") val mediaType: String? = null,
+    @SerialName("LocationType") val locationType: String? = null,
+    @SerialName("Album") val album: String? = null,
+    @SerialName("AlbumId") val albumId: String? = null,
+    @SerialName("AlbumPrimaryImageTag") val albumPrimaryImageTag: String? = null,
+    @SerialName("AlbumArtist") val albumArtist: String? = null,
+    @SerialName("AlbumArtists") val albumArtists: List<NamedItem> = emptyList(),
+    @SerialName("ArtistItems") val artistItems: List<NamedItem> = emptyList(),
+    @SerialName("PlaylistItemId") val playlistItemId: String? = null,
+    @SerialName("CanDownload") val canDownload: Boolean? = null
 )
 
 /** Counts are nullable: older/partial responses without cardinality do not establish emptiness. */

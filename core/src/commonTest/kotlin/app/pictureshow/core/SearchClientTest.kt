@@ -162,6 +162,7 @@ class SearchClientTest {
                         assertTrue(item.imageTags.isEmpty())
                         assertEquals(null, item.overview)
                     }
+                    else -> error("No fixture for $kind")
                 }
             } finally {
                 http.close()

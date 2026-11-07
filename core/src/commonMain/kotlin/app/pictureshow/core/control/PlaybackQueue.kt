@@ -107,17 +107,26 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
                 return invalid("invalid-entries")
             }
             if (event.op == "play-now") {
+                // A chosen track starts that entry inside its whole context; a permutation is Shuffle's whole audible order.
+                val shuffled = event.permutation.isNotEmpty()
+                if (shuffled && (event.permutation.size != added.size || event.permutation.toSet() != added.toSet())) {
+                    return invalid("invalid-permutation")
+                }
+                val order = if (shuffled) event.permutation else added
+                val start = event.entry ?: order.first()
+                if (start !in added) return invalid("missing-entry")
+                val before = order.take(order.indexOf(start))
                 return changed(
                     q.copy(
                         entries = event.entries + event.automatic,
-                        order = added,
-                        current = block.first(),
+                        order = order,
+                        current = start,
                         history = emptyList(),
-                        visited = emptyList(),
+                        visited = before,
                         automatic = continuation,
                         positionTicks = 0,
                         paused = false,
-                        shuffled = false,
+                        shuffled = shuffled,
                         completion = q.completion + 1,
                         failed = emptyList()
                     )

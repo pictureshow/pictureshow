@@ -76,7 +76,14 @@ class ControlVectorsTest {
             "playback-mode",
             "cast-handoff",
             "cast-capability",
-            "cast-session"
+            "cast-session",
+            // Packaged with these and run by MusicVectorsTest.
+            "music-catalog",
+            "music-queue",
+            "music-session",
+            "music-reports",
+            "music-quality",
+            "music-playlists"
         )
 
     @Test fun sessionOwner() = run("session-owner")

@@ -13,7 +13,13 @@ enum class SearchKind(val itemType: String, val title: String) {
     SHOWS("Series", "Shows"),
     EPISODES("Episode", "Episodes"),
     COLLECTIONS("BoxSet", "Collections"),
-    PEOPLE("Person", "People")
+    PEOPLE("Person", "People"),
+
+    // Music groups come after every video group, so a video library's results keep their order.
+    ALBUMS("MusicAlbum", "Albums"),
+    ARTISTS("MusicArtist", "Artists"),
+    SONGS("Audio", "Songs"),
+    PLAYLISTS("Playlist", "Playlists")
 }
 
 interface SearchService {
@@ -30,15 +36,24 @@ internal class SearchClient(client: HttpClient, identity: ClientIdentity) : Sear
         val term = normalizeSearch(query)
         if (term.length < 2) return ClientResult.Success(ItemPage())
         val parameters = mutableMapOf("searchTerm" to term, "limit" to "24")
-        if (kind != SearchKind.PEOPLE) {
+        if (kind == SearchKind.ARTISTS) {
+            parameters += mapOf("enableTotalRecordCount" to "true", "fields" to SEARCH_CARD_FIELDS)
+        } else if (kind != SearchKind.PEOPLE) {
             parameters += mapOf(
                 "recursive" to "true",
                 "includeItemTypes" to kind.itemType,
                 "enableTotalRecordCount" to "true",
-                "fields" to SEARCH_CARD_FIELDS
+                "fields" to if (kind == SearchKind.SONGS) "$SEARCH_CARD_FIELDS,$MUSIC_TRACK_FIELDS" else SEARCH_CARD_FIELDS
             )
+            if (kind == SearchKind.PLAYLISTS) parameters += "mediaTypes" to "Audio"
         }
-        return transport.request(account, if (kind == SearchKind.PEOPLE) "Persons" else "Items", parameters)
+        // Artists aren't library items: /Items searches them badly, and /Artists is where the browse tabs read them.
+        val path = when (kind) {
+            SearchKind.PEOPLE -> "Persons"
+            SearchKind.ARTISTS -> "Artists"
+            else -> "Items"
+        }
+        return transport.request(account, path, parameters)
     }
 
     override suspend fun personItems(account: Account, personId: String, startIndex: Int, limit: Int): ClientResult<ItemPage> =
@@ -59,4 +74,5 @@ internal class SearchClient(client: HttpClient, identity: ClientIdentity) : Sear
         )
 }
 
+internal const val MUSIC_TRACK_FIELDS = "SortName,ParentId"
 internal const val SEARCH_CARD_FIELDS = "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"

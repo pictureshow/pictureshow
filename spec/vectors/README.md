@@ -408,3 +408,14 @@ Fixed behaviour worth reading before porting: a 2xx from a send never confirms a
 Seek confirms when the observed position lands in [target - 1 s, target + 6 s]; pause, stop and play-now confirm by
 state, and next, previous, track and volume by their own observation. Nothing is retried, held input dies at 5 s or on
 reconnect, and PlayPause resolves against the viewing's observed state.
+
+### music-catalog, music-queue, music-session, music-reports, music-quality, music-playlists
+
+Frozen by the Android reference for MUS-01 to MUS-09, run on Kotlin by `MusicVectorsTest`, and owed by the web and Apple
+runners as visible todos. `music-catalog` freezes each browse request's route and scope, disc-then-track order with its
+fallbacks, page merging, and the empty, inaccessible and failed states. `music-queue` adds `entry` and `permutation` to
+`play-now`, so a selected track starts inside its context and Shuffle plays a whole order, and freezes the output window,
+the smallest edit to it, the replace-queue decision and the seeded shuffle. `music-session` keeps the listener's intent
+apart from what the OS did. `music-reports` gives one viewing per time a track is heard. `music-quality` freezes the
+ceilings, the audio profile and the lossless claim. `music-playlists` refuses to send an edit again after an ambiguous
+answer until the list has been read back.
