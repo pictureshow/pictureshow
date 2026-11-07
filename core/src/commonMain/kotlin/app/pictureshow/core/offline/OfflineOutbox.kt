@@ -229,7 +229,7 @@ fun reduceOfflineOutbox(entry: OfflineOutboxEntry?, event: OfflineOutboxEvent): 
  */
 fun offlineResumeTicks(entry: OfflineOutboxEntry?, lastKnown: OfflineUserData?): Long = when {
     entry != null && entry.phase != CONFLICT && entry.played == true -> 0
-    entry != null && entry.phase != CONFLICT && entry.positionTicks != null -> entry.positionTicks ?: 0
+    entry != null && entry.phase != CONFLICT && entry.positionTicks != null -> entry.positionTicks
     else -> lastKnown?.takeIf { !it.played }?.positionTicks ?: 0
 }
 

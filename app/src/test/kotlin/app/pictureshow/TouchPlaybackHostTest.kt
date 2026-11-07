@@ -173,11 +173,7 @@ class TouchPlaybackHostTest {
     ) { store, _ -> assertEquals(500L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
 
     /** A downloaded title holding an unsent place of 500, base 100, then one online viewing against a server answering these. */
-    private fun onlineViewing(
-        me: () -> String?,
-        userData: String,
-        check: (OfflineProgressStore, List<String>) -> Unit
-    ) {
+    private fun onlineViewing(me: () -> String?, userData: String, check: (OfflineProgressStore, List<String>) -> Unit) {
         val paths = java.util.concurrent.CopyOnWriteArrayList<String>()
         val server = okhttp3.mockwebserver.MockWebServer()
         server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
@@ -208,8 +204,8 @@ class TouchPlaybackHostTest {
                 parentFile!!.mkdirs()
                 writeText(
                     app.pictureshow.core.offline.offlineEncodeManifest(
-                        app.pictureshow.core.offline.OfflineManifest(entries = listOf(entry)),
-                    ),
+                        app.pictureshow.core.offline.OfflineManifest(entries = listOf(entry))
+                    )
                 )
             }
             val accounts = AccountStore(
@@ -355,7 +351,7 @@ class TouchPlaybackHostTest {
         accessible: Boolean = false,
         noNext: Boolean = false,
         failAlways: Boolean = false,
-        offlineEngine: OfflineEngine? = null,
+        offlineEngine: OfflineEngine? = null
     ) {
         val store = object : DataStore<Preferences> {
             override val data = MutableStateFlow(emptyPreferences())

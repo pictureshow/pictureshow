@@ -54,6 +54,7 @@ import app.pictureshow.core.offline.offlineRangeHeader
 import app.pictureshow.core.offline.offlineReadyBlockers
 import app.pictureshow.core.offline.offlineReconnectDecision
 import app.pictureshow.core.offline.offlineResumeDecision
+import app.pictureshow.core.offline.offlineResumeTicks
 import app.pictureshow.core.offline.offlineSafePath
 import app.pictureshow.core.offline.offlineSelect
 import app.pictureshow.core.offline.offlineSha256Hex
@@ -64,7 +65,6 @@ import app.pictureshow.core.offline.offlineVerify
 import app.pictureshow.core.offline.offlineVideoRequest
 import app.pictureshow.core.offline.reconcile
 import app.pictureshow.core.offline.reduceOfflineJob
-import app.pictureshow.core.offline.offlineResumeTicks
 import app.pictureshow.core.offline.reduceOfflineOutbox
 import app.pictureshow.core.offline.release
 import app.pictureshow.core.offline.reserve

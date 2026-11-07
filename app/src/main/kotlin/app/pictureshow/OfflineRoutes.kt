@@ -154,7 +154,9 @@ internal fun offlineAwareGateway(
 ): PlaybackGateway {
     val engine = GlobalContext.getOrNull()?.getOrNull<OfflineEngine>() ?: return server
     return OfflineOnlineViewingGateway(server) {
-        engine.onlineViewingEnded(account, itemId) { offlineInteractiveApi(context, account, identity).placeAfterOnlineViewing(account, itemId) }
+        engine.onlineViewingEnded(account, itemId) {
+            offlineInteractiveApi(context, account, identity).placeAfterOnlineViewing(account, itemId)
+        }
     }
 }
 
