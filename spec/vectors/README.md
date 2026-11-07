@@ -390,6 +390,11 @@ Vocabulary. A port needs these as written, because the vectors assert them.
 
 A seek confirms within `CAST_SEEK_TOLERANCE_TICKS` (50000000 ticks, 5 s) of its target. Field encoding follows the rules above: `ticks` and `generation` are decimal strings. These vectors are the reference for the reducer only; the hold on the next step, the drop at the end of a file, and what the adapter does with the receiver session live in the host and are specified in CAST-15 and CAST-23.
 
+## grid-navigation
+
+A vertical D-pad move's outcome, the end of a held Down and the pinned strip's words, in `APPLICATION.md`. Runs through
+`GridNavigationVectorsTest`. Web lists it as `it.todo` through `pendingPortSuites` until it ports it.
+
 ## Remote (REM) trace format
 
 `remote-targets`, `remote-wire`, `remote-receive`, `remote-reconnect` and `remote-queue` use the shared trace format and encoding

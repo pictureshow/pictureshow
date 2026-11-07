@@ -27,6 +27,9 @@ import org.robolectric.annotation.Config
 @Config(sdk = [30], application = Application::class)
 @Suppress("DEPRECATION")
 class DetailFeedbackInteropTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
     @Test fun interleavedPlayerAndDetailLifetimesReuseOnePresentationBridge() {

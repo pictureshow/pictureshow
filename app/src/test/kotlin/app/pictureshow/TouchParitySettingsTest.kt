@@ -41,6 +41,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h850dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchParitySettingsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun settings(

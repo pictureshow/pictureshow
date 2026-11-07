@@ -26,6 +26,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 class RemoteTextDestinationTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private var sink: ((String) -> Unit)? = null
     private val typed = mutableListOf<String>()

@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -37,7 +38,9 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -360,6 +363,11 @@ class CatalogGridLargeFontTest {
 
     @Test fun libraryTilesAreWideAtLargestFont() = assertLibraryTilesAreWide(1.3f)
 
+    /** At 1.6 each row fills the screen, so the row below isn't composed and a move has to scroll for it. */
+    private fun tallCards(count: Int) = (0 until count).map {
+        MediaItem("film-$it", "A title long enough to fill the whole screen ".repeat(30), "Movie")
+    }
+
     private fun showState(state: CatalogGridState, scale: Float = 1f) {
         gridState = state
         showLarge(scale) { CatalogGrid(gridState, {}, {}, { _, _ -> }, {}) }
@@ -425,18 +433,88 @@ class CatalogGridLargeFontTest {
         assertTrue(sort.right <= strip.right, "Sort pushed off the strip: $sort in $strip")
     }
 
-    @Test fun aCardTallerThanTheScreenStartsBelowTheStrip() = assertEquals(
-        50f - (950f * .05f + 8f) - 40f,
-        focusedCardScrollDistance(50f, 950f, 1000f, 8f, wanted = 0f, topInset = 40f),
-        .01f
-    )
+    /** Down the grid and back up, with the strip clear of the focused card, measured as composed, at every stop it shows. */
+    private fun assertEveryStopClearsTheStrip(strip: String, rows: Int = 4) {
+        var stops = 0
+        fun check() {
+            if (compose.onAllNodes(hasTestTag(strip)).fetchSemanticsNodes().isNotEmpty()) {
+                assertStripClearsTheCard(strip)
+                stops++
+            }
+        }
+        repeat(rows) {
+            press(Key.DirectionDown)
+            check()
+        }
+        repeat(rows - 1) {
+            press(Key.DirectionUp)
+            check()
+        }
+        assertTrue(stops >= rows, "The strip showed at only $stops stops")
+    }
 
-    @Test fun aCardTooCloseToTheTopDropsBelowTheStrip() = assertEquals(
-        // Card 100 at 20 in 1000: 13 of scale and margin plus the strip's 40 above it.
-        20f - 13f - 40f,
-        focusedCardScrollDistance(20f, 100f, 1000f, 8f, wanted = 0f, topInset = 40f),
-        .01f
-    )
+    @Test fun aCardComingBackUpStaysClearOfTheStripAtDefaultFont() {
+        show(films, 1f)
+        assertEveryStopClearsTheStrip("grid:strip")
+    }
+
+    @Test fun aCardComingBackUpStaysClearOfTheStripAtLargestFont() {
+        show(films, 1.3f)
+        assertEveryStopClearsTheStrip("grid:strip")
+    }
+
+    @Test fun aCardFillingTheScreenStaysClearOfTheStripAtBeyondLargestFont() {
+        show(tallCards(25), 1.6f)
+        assertEveryStopClearsTheStrip("grid:strip")
+    }
+
+    @Test fun personGridStaysClearOfItsStripAtLargestFont() {
+        showLarge {
+            val person = MediaItem("person", "A Person", "Person")
+            PersonScreen(PersonState(CatalogGridState(account, person, longTitles, longTitles.size), person), {}, {}, {}, {})
+        }
+        assertEquals("A Person", stripText("grid:strip"))
+        assertEveryStopClearsTheStrip("grid:strip")
+    }
+
+    private class Landing(val refused: Set<String> = emptySet()) {
+        val asked = mutableListOf<String>()
+        var lookedAround = false
+        fun land(card: String, now: String?) = runBlocking {
+            landOnCard(card, { now }, {
+                asked += it
+                it !in refused
+            }) { lookedAround = true }
+        }
+    }
+
+    @Test fun aCardThatRefusesFocusIsAskedOnceBeforeLookingAround() {
+        val landing = Landing(refused = setOf("a"))
+        landing.land("a", "a")
+        assertEquals(listOf("a"), landing.asked)
+        assertTrue(landing.lookedAround)
+    }
+
+    @Test fun aCardThatLandsLooksNowhereElse() {
+        val landing = Landing()
+        landing.land("a", "b")
+        assertEquals(listOf("a"), landing.asked)
+        assertFalse(landing.lookedAround)
+    }
+
+    @Test fun whatHoldsThePlaceNowIsAskedWhenTheCardIsGone() {
+        val landing = Landing(refused = setOf("a"))
+        landing.land("a", "b")
+        assertEquals(listOf("a", "b"), landing.asked)
+        assertFalse(landing.lookedAround)
+    }
+
+    @Test fun aPlaceWithNothingInItLooksAround() {
+        val landing = Landing(refused = setOf("a"))
+        landing.land("a", null)
+        assertEquals(listOf("a"), landing.asked)
+        assertTrue(landing.lookedAround)
+    }
 
     @Test fun searchStripKeepsTheQueryOnceTheHeadCollapses() {
         showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
@@ -466,23 +544,27 @@ class CatalogGridLargeFontTest {
     }
 
     @Test fun downWaitsForTheLoadingPageAndLandsInTheColumn() {
-        showPageLoading()
-        repeat(3) { press(Key.DirectionRight) }
-        press(Key.DirectionDown)
+        holdDownOnFilm8()
+        runFrames(500)
         assertFocus("grid:film-8")
-        press(Key.DirectionDown)
-        assertFocus("grid:film-8")
-        gridState = filmsState(films.take(20))
-        settle()
-        assertFocus("grid:film-13")
+        assertLandsAtOnce(filmsState(films.take(20)), "grid:film-13")
     }
 
     @Test fun aHeldDownIsDroppedOnceFocusMoves() {
-        showPageLoading()
-        repeat(3) { press(Key.DirectionRight) }
-        press(Key.DirectionDown)
-        press(Key.DirectionDown)
-        press(Key.DirectionLeft)
+        holdDownOnFilm8()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
+        runFrames(100)
+        assertFocus("grid:film-7")
+        gridState = filmsState(films.take(20))
+        settle()
+        assertFocus("grid:film-7")
+    }
+
+    @Test fun aHeldDownIsDroppedWhenFocusMovesWithNoKey() {
+        holdDownOnFilm8()
+        // A screen reader moves focus itself, and the card's key handler never sees it.
+        compose.onNodeWithTag("grid:film-7").performSemanticsAction(SemanticsActions.RequestFocus)
+        runFrames(100)
         assertFocus("grid:film-7")
         gridState = filmsState(films.take(20))
         settle()
@@ -490,13 +572,8 @@ class CatalogGridLargeFontTest {
     }
 
     @Test fun aHeldDownLandsOnTheLastCardWhenThePageFails() {
-        showPageLoading()
-        repeat(3) { press(Key.DirectionRight) }
-        press(Key.DirectionDown)
-        press(Key.DirectionDown)
-        gridState = filmsState(films.take(12)).copy(error = "Could not load")
-        settle()
-        assertFocus("grid:film-11")
+        holdDownOnFilm8()
+        assertLandsAtOnce(filmsState(films.take(12)).copy(error = "Could not load"), "grid:film-11")
     }
 
     @Test fun upFromTheFirstRowLandsOnTheSelectedSort() {
@@ -516,7 +593,7 @@ class CatalogGridLargeFontTest {
     }
 
     @Test fun aCardTooTallForTheScreenStaysBelowTheStripInTheGrid() {
-        val tall = (0 until 15).map { MediaItem("film-$it", "A title long enough to fill the whole screen ".repeat(30), "Movie") }
+        val tall = tallCards(15)
         showState(filmsState(tall), scale = 1.6f)
         press(Key.DirectionDown)
         assertFocus("grid:film-5")
@@ -525,7 +602,7 @@ class CatalogGridLargeFontTest {
 
     @Test fun aMoveWhoseCardIsGoneTakesWhatHoldsItsPlaceNow() {
         // Each row fills the screen, so the row below isn't composed and the move has to scroll for it.
-        val tall = (0 until 15).map { MediaItem("film-$it", "A title long enough to fill the whole screen ".repeat(30), "Movie") }
+        val tall = tallCards(15)
         showState(filmsState(tall), scale = 1.6f)
         assertFocus("grid:film-0")
         compose.mainClock.autoAdvance = false
@@ -536,6 +613,198 @@ class CatalogGridLargeFontTest {
         compose.mainClock.autoAdvance = true
         settle()
         assertFocus("grid:film-6")
+    }
+
+    /** Frame by frame with the looper drained between them, as a screen runs. A long advance runs less than it says. */
+    private fun runFrames(millis: Long) = repeat((millis / 16).toInt()) {
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+    }
+
+    /** A Down that holds, with the clock stopped: the cap counts frames, and an idling test would run straight past it. */
+    private fun holdDown() {
+        compose.mainClock.autoAdvance = false
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        runFrames(100)
+    }
+
+    /** Down on a card the page below hasn't reached: film-8 of twelve, in the fourth column. */
+    private fun holdDownOnFilm8() {
+        showPageLoading()
+        repeat(3) { press(Key.DirectionRight) }
+        press(Key.DirectionDown)
+        assertFocus("grid:film-8")
+        holdDown()
+    }
+
+    @Test fun aHeldDownLandsOnTheLastCardAtTheCap() {
+        holdDownOnFilm8()
+        runFrames(1_200)
+        assertFocus("grid:film-8")
+        runFrames(500)
+        assertFocus("grid:film-11")
+    }
+
+    @Test fun aPageArrivingAfterTheCapLeavesFocusWhereTheViewerIs() {
+        holdDownOnFilm8()
+        runFrames(2_000)
+        assertFocus("grid:film-11")
+        gridState = filmsState(films.take(20))
+        settle()
+        assertFocus("grid:film-11")
+    }
+
+    @Test fun aRepeatingDownDoesNotPutTheCapOff() {
+        holdDownOnFilm8()
+        repeat(5) {
+            runFrames(400)
+            compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        }
+        assertFocus("grid:film-11")
+    }
+
+    /** Well before the cap, so the release is the page's doing. */
+    private fun assertLandsAtOnce(state: CatalogGridState, tag: String) {
+        gridState = state
+        runFrames(200)
+        assertFocus(tag)
+    }
+
+    @Test fun aHeldDownLandsOnTheLastCardWhenThePageIsEmpty() {
+        holdDownOnFilm8()
+        assertLandsAtOnce(filmsState(films.take(12)), "grid:film-11")
+    }
+
+    @Test fun theCapFromTheLastRowLeavesFocusThere() {
+        showPageLoading()
+        repeat(2) { press(Key.DirectionDown) }
+        assertFocus("grid:film-10")
+        press(Key.DirectionDown)
+        settle()
+        assertFocus("grid:film-10")
+        gridState = filmsState(films.take(20))
+        settle()
+        assertFocus("grid:film-10")
+    }
+
+    /** Up on a held card with the page arriving in the same frame, before Up's own focus job has had one. */
+    private fun pressUpAsThePageArrives(page: CatalogGridState) {
+        compose.mainClock.autoAdvance = false
+        gridState = page
+        compose.onRoot().performKeyInput {
+            keyDown(Key.DirectionUp)
+            keyUp(Key.DirectionUp)
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.mainClock.autoAdvance = true
+        settle()
+    }
+
+    @Test fun upFromTheFirstRowWhileHeldLandsOnlyOnTheSort() {
+        val few = tallCards(3)
+        showState(filmsState(few), scale = 1.6f)
+        gridState = filmsState(few, loading = true)
+        settle()
+        assertFocus("grid:film-0")
+        holdDown()
+        assertFocus("grid:film-0")
+        pressUpAsThePageArrives(filmsState(tallCards(15)))
+        assertFocus("grid:sort:SortName")
+    }
+
+    @Test fun upToARowNotComposedWhileHeldLandsOnlyThere() {
+        val tall = tallCards(8)
+        showState(filmsState(tall), scale = 1.6f)
+        gridState = filmsState(tall, loading = true)
+        settle()
+        press(Key.DirectionDown)
+        assertFocus("grid:film-5")
+        holdDown()
+        assertFocus("grid:film-5")
+        pressUpAsThePageArrives(filmsState(tallCards(15)))
+        assertFocus("grid:film-0")
+    }
+
+    private fun assertSortChangeDropsTheHold(chip: String, change: CatalogGridState.() -> CatalogGridState) {
+        val few = films.take(3)
+        gridState = filmsState(few)
+        showLarge(1f) { CatalogGrid(gridState, {}, {}, { _, _ -> gridState = gridState.change() }, {}) }
+        gridState = filmsState(few, loading = true)
+        settle()
+        holdDown()
+        assertFocus("grid:film-0")
+        // A reader's click: it reaches the chip with no key and no focus move.
+        compose.onNodeWithTag(chip).performSemanticsAction(SemanticsActions.OnClick)
+        runFrames(200)
+        gridState = gridState.copy(items = films.take(20), total = 20, loading = false)
+        settle()
+        val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes().map { it.config[SemanticsProperties.TestTag] }
+        assertTrue("grid:film-5" !in focused, "The old hold landed: $focused")
+    }
+
+    @Test fun aSortClickWhileHeldDropsTheHold() = assertSortChangeDropsTheHold("grid:sort:DateCreated") {
+        copy(sortBy = "DateCreated", items = emptyList(), loading = true)
+    }
+
+    @Test fun anOrderClickWhileHeldDropsTheHold() = assertSortChangeDropsTheHold("grid:sort-order") {
+        copy(descending = true, items = emptyList(), loading = true)
+    }
+
+    // The grid's own view model empties the list on a sort, which drops focus and the hold with it. The drop doesn't lean on that.
+    @Test fun aSortClickKeepingTheListWhileHeldDropsTheHold() = assertSortChangeDropsTheHold("grid:sort:DateCreated") {
+        copy(sortBy = "DateCreated", loading = true)
+    }
+
+    @Test fun anOrderClickKeepingTheListWhileHeldDropsTheHold() = assertSortChangeDropsTheHold("grid:sort-order") {
+        copy(descending = true, loading = true)
+    }
+
+    @Test fun aKeyThatMovesNothingStillDropsTheHold() {
+        showPageLoading()
+        repeat(2) { press(Key.DirectionDown) }
+        assertFocus("grid:film-10")
+        holdDown()
+        // First column: Left has nowhere to go.
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionLeft) }
+        gridState = filmsState(films.take(20))
+        settle()
+        settle()
+        assertFocus("grid:film-10")
+    }
+
+    /** Both keys go in before the grid has had a frame to compose the row the first one is scrolling for. */
+    private fun pressTwoInOneFrame(first: Key, second: Key) {
+        compose.mainClock.autoAdvance = false
+        compose.onRoot().performKeyInput {
+            keyDown(first)
+            keyUp(first)
+            keyDown(second)
+            keyUp(second)
+        }
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.mainClock.autoAdvance = true
+        settle()
+    }
+
+    @Test fun aRightDuringAMoveGivesOnlyTheRight() {
+        showState(filmsState(tallCards(15)), scale = 1.6f)
+        assertFocus("grid:film-0")
+        pressTwoInOneFrame(Key.DirectionDown, Key.DirectionRight)
+        assertFocus("grid:film-1")
+    }
+
+    @Test fun anUpDuringADownGivesOnlyTheUp() {
+        showState(filmsState(tallCards(15)), scale = 1.6f)
+        press(Key.DirectionDown)
+        assertFocus("grid:film-5")
+        pressTwoInOneFrame(Key.DirectionDown, Key.DirectionUp)
+        assertFocus("grid:film-0")
+    }
+
+    @Test fun aSecondDownDuringAMoveIsTheSameMove() {
+        showState(filmsState(tallCards(15)), scale = 1.6f)
+        pressTwoInOneFrame(Key.DirectionDown, Key.DirectionDown)
+        assertFocus("grid:film-5")
     }
 
     private fun assertReturnRestoresTheDeepRow(scale: Float) {

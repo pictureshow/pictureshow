@@ -41,6 +41,9 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
 )
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlayerCaptionListenerTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test

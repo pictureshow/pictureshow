@@ -26,13 +26,16 @@ class PerTestTimeLimit(private val seconds: Long) : TestRule {
         override fun evaluate() {
             val testThread = Thread.currentThread()
             val expired = AtomicBoolean(false)
+            // No main looper in a plain JVM test, where the interrupt is what's left.
+            val mainLooper = runCatching { Handler(Looper.getMainLooper()) }.getOrNull()
+            val expire = Runnable { throw Expired() }
             val watchdog = Thread {
                 try {
                     Thread.sleep(seconds * 1_000)
                     expired.set(true)
                     // Again and again: Compose's teardown idles the same looper and has to be got out of too.
                     while (true) {
-                        Handler(Looper.getMainLooper()).post { throw Expired() }
+                        runCatching { mainLooper?.post(expire) }
                         testThread.interrupt()
                         Thread.sleep(2_000)
                     }
@@ -50,8 +53,14 @@ class PerTestTimeLimit(private val seconds: Long) : TestRule {
                 failure = thrown
             } finally {
                 watchdog.interrupt()
-                watchdog.join()
+                // The watchdog's own interrupt may still be set on this thread, and join would throw it.
+                do {
+                    Thread.interrupted()
+                    runCatching { watchdog.join() }
+                } while (watchdog.isAlive)
                 Thread.interrupted()
+                // A hang that ended by interrupt leaves the posted failure behind, for the next test to trip on.
+                runCatching { mainLooper?.removeCallbacks(expire) }
             }
             if (expired.get()) throw AssertionError("${description.displayName} ran over its $seconds s limit", failure)
             failure?.let { throw it }

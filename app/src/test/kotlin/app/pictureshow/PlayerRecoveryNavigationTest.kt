@@ -31,6 +31,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlayerRecoveryNavigationTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun recover(autoNext: Boolean) {

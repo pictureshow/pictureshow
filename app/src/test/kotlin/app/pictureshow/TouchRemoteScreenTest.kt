@@ -62,6 +62,9 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h2400dp-port-xhdpi")
 class TouchRemoteScreenTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val now = RemoteNowPlaying(

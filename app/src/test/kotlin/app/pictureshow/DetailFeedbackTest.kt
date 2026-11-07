@@ -51,6 +51,9 @@ import org.robolectric.annotation.LooperMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class DetailFeedbackTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Demo", "https://example.test", "12"), User("u", "Viewer"), "fake")
     private val film = MediaItem("film", "Invented feature", "Movie", overview = "An invented description.")

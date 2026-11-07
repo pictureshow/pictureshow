@@ -61,6 +61,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -125,9 +126,14 @@ import androidx.tv.material3.LocalTextStyle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
+import app.pictureshow.core.GRID_HOLD_CAP_MILLIS
+import app.pictureshow.core.GridSorts
+import app.pictureshow.core.GridVerticalMove
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.episodeLabel
-import app.pictureshow.core.gridVerticalTarget
+import app.pictureshow.core.gridHoldRelease
+import app.pictureshow.core.gridStripDetail
+import app.pictureshow.core.gridVerticalMove
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.isEmptyContainer
 import app.pictureshow.core.isWatched
@@ -616,17 +622,32 @@ fun CatalogGrid(
     val requests = remember { mutableMapOf<String, FocusRequester>() }
     val scope = rememberCoroutineScope()
     var moving by remember { mutableStateOf<Job?>(null) }
+    var movingDown by remember { mutableStateOf(false) }
     var focusedIndex by remember { mutableIntStateOf(-1) }
     var headerFocused by remember { mutableStateOf(false) }
     val sortBottoms = remember { mutableMapOf<Int, Float>() }
     var focusedSort by remember { mutableIntStateOf(-1) }
     val sortRequests = remember { mutableMapOf<String, FocusRequester>() }
-    // The card a Down is waiting on the next page from, until the page arrives or focus moves.
+    // The card a Down is waiting on the next page from. Released by the page, a failure, an empty page or the cap; dropped
+    // by a newer key, a sort change or focus moving.
     var heldDownFrom by remember { mutableIntStateOf(-1) }
     val focusManager = LocalFocusManager.current
     val items by rememberUpdatedState(state.items)
     val loadingMore by rememberUpdatedState(state.loading)
     val scrolled by remember { derivedStateOf { grid.firstVisibleItemIndex > 0 } }
+
+    // Every focus job goes through here, so a later one replaces an earlier one and there is never a second running.
+    fun startMove(down: Boolean, block: suspend () -> Unit) {
+        moving?.cancel()
+        movingDown = down
+        moving = scope.launch { block() }
+    }
+
+    // A newer press replaces whatever the last one left waiting: the viewer gets the press they just made.
+    fun dropWaitingMoves() {
+        moving?.cancel()
+        heldDownFrom = -1
+    }
 
     // The header is the grid's item 0, so a card's grid index is its position in the list plus one.
     fun focusCard(index: Int, direction: FocusDirection): Boolean {
@@ -638,14 +659,16 @@ fun CatalogGrid(
             // No frame to wait for, and a held key repeats faster than a frame can be spared.
             requests[item.id]?.let { return it.requestFocus() }
         }
-        moving = scope.launch {
+        startMove(direction == FocusDirection.Down) {
             // A row that isn't composed can't be a focus target. The bring-into-view spec settles the rest. Requested
             // rather than scrollToItem, which a bring-into-view still running would cancel, losing the move.
             if (!visible) grid.requestScrollToItem(position, -(layout.viewportSize.height * GRID_ARRIVAL_FRACTION).toInt())
-            if (requestAttached(requests, item.id)) return@launch
-            // The list changed under the move: take whatever holds that place now, and only then look around for a card.
-            val now = items.getOrNull(index)
-            if (now == null || !requestAttached(requests, now.id)) focusManager.moveFocus(direction)
+            landOnCard(
+                card = item.id,
+                holdingThePlaceNow = { items.getOrNull(index)?.id },
+                request = { requestAttached(requests, it) },
+                lookAround = { focusManager.moveFocus(direction) }
+            )
         }
         return true
     }
@@ -653,7 +676,7 @@ fun CatalogGrid(
     // Up from the first row lands on what's selected, wherever the card was.
     fun focusSelectedSort(): Boolean {
         if (!showSort || state.error != null || state.refreshError != null) return false
-        moving = scope.launch {
+        startMove(down = false) {
             if (grid.layoutInfo.visibleItemsInfo.none { it.index == 0 }) grid.requestScrollToItem(0)
             if (!requestAttached(sortRequests, state.sortBy)) focusManager.moveFocus(FocusDirection.Up)
         }
@@ -666,23 +689,32 @@ fun CatalogGrid(
      * next row won: Down from column 4 landed in column 1. Moving by index holds the column whatever is composed.
      */
     fun moveVertically(index: Int, down: Boolean): Boolean {
-        if (moving?.isActive == true) return true
-        val direction = if (down) FocusDirection.Down else FocusDirection.Up
-        val target = gridVerticalTarget(index, grid.layoutInfo.maxSpan, items.size, down, loadingMore)
-        return when {
-            target != null -> focusCard(target, direction)
+        // A repeat of the key being carried out is part of that move. The other direction replaces it.
+        if (moving?.isActive == true && movingDown == down) return true
+        moving?.cancel()
+        if (!down) heldDownFrom = -1
+        return when (val move = gridVerticalMove(index, grid.layoutInfo.maxSpan, items.size, down, loadingMore)) {
+            is GridVerticalMove.Card -> focusCard(move.index, if (down) FocusDirection.Down else FocusDirection.Up)
 
-            // Held for the page on its way, which lands in this column if focus is still here.
-            down && loadingMore -> {
+            // The page on its way lands in this column if focus is still here. A repeat doesn't restart the cap.
+            GridVerticalMove.Hold -> {
                 heldDownFrom = index
                 true
             }
 
-            // Down from the last row stays.
-            down -> true
+            GridVerticalMove.Stay -> true
 
-            else -> focusSelectedSort()
+            GridVerticalMove.Above -> focusSelectedSort()
         }
+    }
+
+    // A hold ends in a plain Down on what's loaded by then, whichever way it ended.
+    fun releaseHold() {
+        val from = heldDownFrom
+        if (from < 0) return
+        heldDownFrom = -1
+        val landing = gridHoldRelease(from, grid.layoutInfo.maxSpan, items.size)
+        if (landing is GridVerticalMove.Card) focusCard(landing.index, FocusDirection.Down)
     }
 
     val platformBringIntoView = LocalBringIntoViewSpec.current
@@ -746,13 +778,15 @@ fun CatalogGrid(
                                 ).onPreviewKeyEvent {
                                     // Down from the controls returns to the card Up left, in its column. A control on
                                     // an upper wrapped line goes to the line below it first.
-                                    if (it.type == KeyEventType.KeyDown &&
-                                        it.key == Key.DirectionDown &&
+                                    if (it.type != KeyEventType.KeyDown) {
+                                        false
+                                    } else if (it.key == Key.DirectionDown &&
                                         items.isNotEmpty() &&
                                         sortBottoms[focusedSort] == sortBottoms.values.maxOrNull()
                                     ) {
                                         moving?.isActive == true || focusCard(focusedIndex.coerceAtLeast(0), FocusDirection.Down)
                                     } else {
+                                        dropWaitingMoves()
                                         false
                                     }
                                 },
@@ -821,10 +855,16 @@ fun CatalogGrid(
                                 heldDownFrom = -1
                             }
                         }.onPreviewKeyEvent {
-                            if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionDown || it.key == Key.DirectionUp)) {
-                                moveVertically(index, it.key == Key.DirectionDown)
-                            } else {
-                                false
+                            when {
+                                it.type != KeyEventType.KeyDown -> false
+
+                                it.key == Key.DirectionDown || it.key == Key.DirectionUp ->
+                                    moveVertically(index, it.key == Key.DirectionDown)
+
+                                else -> {
+                                    dropWaitingMoves()
+                                    false
+                                }
                             }
                         }
                     )
@@ -835,11 +875,17 @@ fun CatalogGrid(
             ContextStrip(stripTitle, gridStripDetail(state.sortBy, state.descending).takeIf { showSort }, Modifier.testTag("grid:strip"))
         }
     }
-    LaunchedEffect(state.loading, state.items.size) {
-        val from = heldDownFrom
-        if (from >= 0 && !state.loading) {
-            heldDownFrom = -1
-            gridVerticalTarget(from, grid.layoutInfo.maxSpan, state.items.size, true, false)?.let { focusCard(it, FocusDirection.Down) }
+    // Keyed on the state rather than the chips' clicks, so a reader's click and anything else that changes the sort count.
+    LaunchedEffect(state.sortBy, state.descending) { dropWaitingMoves() }
+    LaunchedEffect(state.loading, state.items.size) { if (!state.loading) releaseHold() }
+    LaunchedEffect(heldDownFrom) {
+        if (heldDownFrom >= 0) {
+            // In frames, so a repeat of the key can't starve it and it stops with the screen.
+            val pressed = withFrameMillis { it }
+            do {
+                val now = withFrameMillis { it }
+            } while (now - pressed < GRID_HOLD_CAP_MILLIS)
+            releaseHold()
         }
     }
     LaunchedEffect(state.items.map(MediaItem::id), state.loading, retryFocusRequest) {
@@ -874,14 +920,6 @@ fun CatalogGrid(
 
 /** The grid's items before its first card: the header. */
 private const val GRID_HEADER_ITEMS = 1
-
-private val GridSorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
-
-/** The chips' own words for the sort in force. */
-internal fun gridStripDetail(sortBy: String, descending: Boolean): String {
-    val title = GridSorts.firstOrNull { it.first == sortBy }?.second ?: GridSorts.first().second
-    return "$title, ${if (descending) "descending" else "ascending"}"
-}
 
 /** Above the focused card's lifted top at the 30% pivot, so a strip over the content never covers it. */
 internal val ContextStripHeight = 40.dp
@@ -2274,8 +2312,8 @@ fun CatalogDetail(
             playbackReturn = false
             semanticsRevealed = true
             restored = false
-            list.jumpTo(0)
-            withFrameNanos { }
+            if (list.firstVisibleItemIndex != 0 || list.firstVisibleItemScrollOffset != 0) list.requestScrollToItem(0)
+            repeat(2) { withFrameNanos { } }
             restored = retry.requestFocus()
             recoveryFocusOwned = restored
             reportFocus("retry", restored)
@@ -2989,6 +3027,21 @@ internal suspend fun LazyListState.jumpTo(index: Int) {
     if (firstVisibleItemIndex == index && firstVisibleItemScrollOffset == 0) return
     requestScrollToItem(index)
     withFrameNanos { }
+}
+
+/**
+ * Focus for a move's card once it's composed. The list may have changed under the move, so take what holds that place now,
+ * and only then look around: asking the same card again would repeat frames it has already refused.
+ */
+internal suspend fun landOnCard(
+    card: String,
+    holdingThePlaceNow: () -> String?,
+    request: suspend (String) -> Boolean,
+    lookAround: () -> Unit
+) {
+    if (request(card)) return
+    val now = holdingThePlaceNow()
+    if (now == null || now == card || !request(now)) lookAround()
 }
 
 /** Lazy targets are registered only while attached, including across navigation restoration. */

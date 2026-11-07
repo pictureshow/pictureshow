@@ -93,6 +93,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h800dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchPlayerControlsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = kotlinx.coroutines.test.StandardTestDispatcher())
     private val account = Account(Server("server", "Server", "https://example.test", "12"), User("viewer", "Viewer"), "fake")
     private lateinit var output: Media3PlaybackOutput

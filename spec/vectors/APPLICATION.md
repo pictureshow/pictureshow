@@ -186,15 +186,34 @@ when `suspended` and not `ended`. A nonpositive `mediaLeftMs` or `speed` keeps `
 
 ## `grid-vertical-move`
 
-Input: integers `index`, `columns`, `count`, boolean `down`, optional boolean `loadingMore` (default false: a page is on
-its way). Expected is the index a vertical D-pad move lands on in a grid laid out row by row, or null. Up is
-`index - columns`, null from the first row (the caller decides what is above the grid). Down is `index + columns`. When
-that passes the end: null while `loadingMore`, and the caller holds the press and applies it when the page arrives, if
-focus hasn't moved. Otherwise the last item if it is on a later row, and null from the last row. Null when `columns` is
-not positive or `index` is outside `0 until count`. See CAT-19.
+Input: integers `index`, `columns`, `count`, boolean `down`, optional boolean `loadingMore` (default false; true while a
+page is on its way). Expected is the index a vertical D-pad move lands on in a grid laid out row by row, or null when it
+lands on no card. Up is `index - columns`, null from the first row (the caller decides what is above the grid). Down is
+`index + columns`. When that passes the end: null while `loadingMore`, where the press is held. Otherwise the last item
+if it is on a later row, and null from the last row. Null when `columns` is not positive or `index` is outside
+`0 until count`. Null can mean three different things here, and `grid-navigation.json` tells them apart. See CAT-19.
 
 Owed: web runs these. Apple has no vector runner on main, so `grid-vertical-move` is owed there with the rest of the
 application suite.
+
+## `grid-navigation.json`: `grid-vertical-outcome`, `grid-hold-release`, `grid-strip-detail`
+
+`grid-vertical-outcome` has the input of `grid-vertical-move`, with `loadingMore` required. Expected is one of
+`{"outcome":"card","index":n}`, `{"outcome":"hold"}` (the press waits for the page), `{"outcome":"stay"}` (the press is
+spent and focus stays) and `{"outcome":"above"}` (Up from the first row).
+
+A hold has an end. `grid-hold-release` is where it goes: input `index`, `columns`, `count` (loaded by then) and
+`releasedBy`, one of `page`, `empty-page`, `failure` and `cap`. The result doesn't depend on `releasedBy`, and it is a card
+or a stay, never another hold: a page landing in the column, and otherwise the last card if it is on a later row. The cap is
+1.5 s from the first press, and a repeating key doesn't restart it. After it, a late page leaves focus where the viewer
+is. Any other key, a sort change by any route (a screen reader's click included) and focus moving drop the hold with no
+landing. A newer key also replaces a move still waiting on a card to compose, and a repeat of the same key doesn't.
+
+`grid-strip-detail`: input `sortBy`, boolean `descending`; expected the pinned strip's words for the sort in force, in the
+sort chips' own titles. An unknown `sortBy` reads as the first sort.
+
+Owed: Android runs these. Web lists the suite in `pendingPortSuites`, and it shows as todo there until ported. Apple has no
+vector runner on main, so it owes the suite with the rest.
 
 ## `next-adjacency`
 

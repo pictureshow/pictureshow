@@ -59,6 +59,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class CatalogOpenerRestorationTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("server", "Test", "https://media.example.test", "12"), User("user", "Viewer"), "token")
     private val films = (0..5).map { MediaItem("film-$it", "Fixture $it", "Movie") }

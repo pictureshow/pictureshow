@@ -71,6 +71,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h850dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchNavigationTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val restoration = StateRestorationTester(compose)
     private val screenContent: @Composable () -> Unit = {

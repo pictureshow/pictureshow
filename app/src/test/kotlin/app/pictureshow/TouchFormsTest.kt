@@ -49,6 +49,9 @@ import org.robolectric.shadows.ShadowDialog
 @Config(sdk = [30], application = Application::class, qualifiers = "w411dp-h891dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchFormsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val server = Server("fixture-server", "Fixture server", "https://media.example.test", "12.0.0")
     private val account = Account(server, User("fixture-viewer", "Viewer"), "fixture-token")
