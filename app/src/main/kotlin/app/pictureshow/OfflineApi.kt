@@ -63,6 +63,17 @@ internal data class OfflineApiUserData(
     fun core() = OfflineUserData(positionTicks, played, playCount, lastPlayedDate)
 }
 
+/** No defaults for the two fields a held place is judged by: an answer without them isn't position 0. */
+@Serializable
+internal data class OfflineApiStrictUserData(
+    @SerialName("PlaybackPositionTicks") val positionTicks: Long,
+    @SerialName("Played") val played: Boolean,
+    @SerialName("PlayCount") val playCount: Int = 0,
+    @SerialName("LastPlayedDate") val lastPlayedDate: String? = null
+) {
+    fun core() = OfflineUserData(positionTicks, played, playCount, lastPlayedDate)
+}
+
 @Serializable
 internal data class OfflineApiItem(
     @SerialName("Id") val id: String,
@@ -184,6 +195,17 @@ internal class OfflineApi(private val client: OkHttpClient, private val identity
     suspend fun userData(account: Account, itemId: String): OfflineUserData = json.decodeFromString<OfflineApiUserData>(
         call("${account.server.url.trimEnd('/')}/UserItems/$itemId/UserData?userId=${account.user.id}", interactive(account))
     ).core()
+
+    /**
+     * What the server holds once an online viewing stops. This answer can replace what the download has unsent, so the same proof
+     * as a sync comes first: null when the login answers as someone else, and a failure or an incomplete body throws.
+     */
+    suspend fun placeAfterOnlineViewing(account: Account, itemId: String): OfflineUserData? {
+        if (!sameViewer(account)) return null
+        return json.decodeFromString<OfflineApiStrictUserData>(
+            call("${account.server.url.trimEnd('/')}/UserItems/$itemId/UserData?userId=${account.user.id}", interactive(account))
+        ).core()
+    }
 
     /** Dirty fields only; a field left out stays as the server has it. */
     suspend fun writeUserData(account: Account, itemId: String, write: OfflineUserDataWrite) {

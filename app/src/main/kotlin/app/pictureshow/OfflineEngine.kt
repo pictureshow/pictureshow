@@ -1043,14 +1043,14 @@ internal class OfflineEngine(
     }
 
     /** Nothing waits on this: a viewer leaving the player doesn't wait for a read, and a title with no download reads nothing. */
-    fun onlineViewingEnded(account: Account, itemId: String, read: suspend () -> OfflineUserData): Job = scope.launch(
+    fun onlineViewingEnded(account: Account, itemId: String, read: suspend () -> OfflineUserData?): Job = scope.launch(
         start = CoroutineStart.UNDISPATCHED
     ) {
         // In call order: Stopped's read arriving after Played's would put the title back at 99%.
         onlineViewingReads.withLock {
             if (ready()[account.key]?.manifest?.entries?.any { it.itemId == itemId } != true) return@withLock
             try {
-                progressStore(account).onlineViewingEnded(itemId, read())
+                read()?.let { progressStore(account).onlineViewingEnded(itemId, it) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
