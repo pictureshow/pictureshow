@@ -287,7 +287,65 @@
         "label": "Converted to AAC, up to 256 kbps (lossy)",
         "lossless": false,
         "converted": true,
-        "reason": "This device can't decode APE, so the server converts it."
+        "reason": "This device can't decode APE, so the server converts it. It still plays, and a FLAC copy on the server would play directly."
+      }
+    },
+    {
+      "id": "music-quality.undecodable-lossy-suggests-aac",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "asf",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "wmav2"
+            }
+          ]
+        },
+        "method": "Transcode",
+        "route": "device",
+        "ceiling": 320000000,
+        "reasons": [
+          "AudioCodecNotSupported"
+        ]
+      },
+      "expected": {
+        "label": "Converted to AAC, up to 256 kbps (lossy)",
+        "lossless": false,
+        "converted": true,
+        "reason": "This device can't decode WMAV2, so the server converts it. It still plays, and an AAC copy on the server would play directly."
+      }
+    },
+    {
+      "id": "music-quality.undecodable-flac-suggests-aac",
+      "operation": "output",
+      "input": {
+        "source": {
+          "Id": "src",
+          "Protocol": "Http",
+          "Container": "flac",
+          "MediaStreams": [
+            {
+              "Type": "Audio",
+              "Codec": "flac"
+            }
+          ]
+        },
+        "method": "Transcode",
+        "route": "device",
+        "ceiling": 320000000,
+        "reasons": [
+          "AudioCodecNotSupported"
+        ]
+      },
+      "expected": {
+        "label": "Converted to AAC, up to 256 kbps (lossy)",
+        "lossless": false,
+        "converted": true,
+        "reason": "This device can't decode FLAC, so the server converts it. It still plays, and an AAC copy on the server would play directly."
       }
     }
   ]

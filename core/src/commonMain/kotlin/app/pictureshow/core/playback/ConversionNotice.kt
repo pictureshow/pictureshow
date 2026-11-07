@@ -10,27 +10,40 @@ package app.pictureshow.core.playback
  * conversion, remux (container or codec-tag changes) and direct play never produce a notice;
  * Playback info (PLAY-26) explains those and carries the full remedy.
  *
- * [title] and [reason] are short on purpose: the notice is on screen for 10 s. Each platform
- * appends its own one-line path to Playback info (for example "Press Down, then choose Playback info.").
+ * [title], [reason] and [fix] are short on purpose: the notice is on screen for 10 s. [reason] says why, [fix] is the one
+ * true thing the viewer (or whoever keeps the server's files) can do about it. Each platform shows them as one line and
+ * appends its own path to Playback info (for example "Press Down, then choose Playback info.").
  */
-data class ConversionNotice(val title: String, val reason: String) {
+data class ConversionNotice(val title: String, val reason: String, val fix: String) {
     companion object {
         /** The default device noun; each platform passes its own ("this TV", "this phone", "this browser"). */
         const val DEVICE = "this device"
 
-        /** Ordered by how useful fixing it is: the first category is what lets the video play directly. */
-        private val categories: List<Pair<Set<String>, String>> = listOf(
-            setOf("videocodecnotsupported") to "Its video format won't play on %s.",
-            setOf("videorangetypenotsupported") to "Its HDR format won't play on %s.",
-            setOf("videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported") to
+        /**
+         * Ordered by how useful fixing it is: the first category is what lets the video play directly. Nothing on the
+         * device fixes a video limit, so its fix says playback goes on and names a copy that would play as it is: every
+         * platform this app runs on decodes 8-bit SDR H.264 at 1080p.
+         */
+        private val categories: List<Triple<Set<String>, String, String>> = listOf(
+            Triple(setOf("videocodecnotsupported"), "Its video format won't play on %s.", copy("an H.264 copy")),
+            Triple(setOf("videorangetypenotsupported"), "Its HDR format won't play on %s.", copy("an SDR copy")),
+            Triple(
+                setOf("videoprofilenotsupported", "videolevelnotsupported", "videobitdepthnotsupported", "refframesnotsupported"),
                 "Its video encoding is too demanding for %s.",
-            setOf("videoresolutionnotsupported") to "Its resolution is too high for %s.",
-            setOf("videoframeratenotsupported") to "Its frame rate is too high for %s.",
-            setOf("interlacedvideonotsupported") to "Its interlaced video won't play on %s.",
-            setOf("anamorphicvideonotsupported") to "Its non-square pixels won't display on %s.",
-            setOf("videorotationnotsupported") to "Its rotation won't display on %s."
+                copy("an 8-bit H.264 copy")
+            ),
+            Triple(setOf("videoresolutionnotsupported"), "Its resolution is too high for %s.", copy("a 1080p copy")),
+            Triple(setOf("videoframeratenotsupported"), "Its frame rate is too high for %s.", copy("a 30 fps copy")),
+            Triple(setOf("interlacedvideonotsupported"), "Its interlaced video won't play on %s.", copy("a deinterlaced copy")),
+            Triple(setOf("anamorphicvideonotsupported"), "Its non-square pixels won't display on %s.", copy("a square-pixel copy")),
+            Triple(setOf("videorotationnotsupported"), "Its rotation won't display on %s.", copy("an upright copy"))
         )
         private const val SUBTITLE = "The selected subtitles must be burned in for %s."
+
+        /** Text subtitles are sent alongside the picture, so choosing them, or none, stops the burn-in. */
+        const val SUBTITLE_FIX = "Choose text subtitles, such as SRT, or turn them off to avoid it."
+
+        private fun copy(what: String) = "It still plays, and $what on the server would play directly."
 
         fun title(device: String = DEVICE): String = "Converting this video for $device"
 
@@ -46,12 +59,12 @@ data class ConversionNotice(val title: String, val reason: String) {
             // A copied video stream is a remux, so its video reasons did not force encoding. Burning subtitles
             // into the picture always re-encodes it, so a burn-in report wins over a `VideoCodec=copy` URL.
             val copied = PlaybackInformation.method(decision) != "Transcode" || PlaybackInformation.videoCopied(decision)
-            val why = when {
-                copied -> SUBTITLE.takeIf { burnedIn }
-                else -> categories.firstOrNull { (codes, _) -> codes.any(reasons::contains) }?.second
-                    ?: SUBTITLE.takeIf { burnedIn }
+            val subtitle = (SUBTITLE to SUBTITLE_FIX).takeIf { burnedIn }
+            val (why, fix) = when {
+                copied -> subtitle
+                else -> categories.firstOrNull { (codes) -> codes.any(reasons::contains) }?.let { it.second to it.third } ?: subtitle
             } ?: return null
-            return ConversionNotice(title(device), why.replace("%s", device))
+            return ConversionNotice(title(device), why.replace("%s", device), fix)
         }
     }
 }

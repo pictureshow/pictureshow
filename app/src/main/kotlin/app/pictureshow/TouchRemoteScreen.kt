@@ -76,7 +76,7 @@ internal fun remoteClock(ticks: Long): String {
 internal fun TouchRemoteBar(state: RemoteControllerUi, nowMs: Long, onOpen: () -> Unit) {
     val target = state.controller?.target ?: return
     val line = remoteProblem(state.controller.phase)?.let { "Needs attention" }
-        ?: remoteCommandStatus(state.controller, nowMs)
+        ?: remoteCommandStatus(state.controller, nowMs, state.capped)
         ?: target.now?.let { now -> "${now.title ?: "Playing"}${if (now.paused) ", paused" else ""}" }
         ?: "Nothing playing"
     TextButton(
@@ -100,7 +100,7 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
     val ready = attached && controller?.command?.fresh == true
     val now = target?.now?.takeIf { attached }
     val problem = remoteProblem(controller?.phase)
-    val status = remoteCommandStatus(controller, host.now())
+    val status = remoteCommandStatus(controller, host.now(), state.capped)
     TouchPage(target?.let(::remoteTargetLabel) ?: "Remote", onBack) {
         Column(
             modifier = Modifier.fillMaxWidth().testTag("touch:remote"),

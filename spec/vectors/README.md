@@ -164,8 +164,8 @@ server's negotiated method. These vectors do not prove real decoder speed, pitch
 `conversion-notice` (PLAY-27) takes a report-enum `method`, invented playback `url`, `reasons` (array of
 TranscodeReason strings as the server sent them), the platform's `device` noun (`this TV`, `this phone`, `this
 browser`), optional Jellyfin `source` (default empty) and optional `subtitleIndex` (default -1, Off). It returns
-`title` + newline + `reason`, or the string `none` when no notice applies. Each platform appends its own one-line path
-to Playback info after the reason. The cases model observed reason sets: a browser without an HEVC path
+`title` + newline + `reason` + newline + `fix`, or the string `none` when no notice applies. Each platform shows
+`reason fix` as one line and appends its own path to Playback info after it. The cases model observed reason sets: a browser without an HEVC path
 (video+audio codec, notice), a browser that copies video and converts audio (no notice), and a Safari remux
 (container+codec tag, no notice), plus caps, burn-in, unknown reasons and the all-copy URL. Boundary cases carry a
 `description` with the reasoning: a `VideoCodec=copy` URL means remux whatever reasons are listed, except that a

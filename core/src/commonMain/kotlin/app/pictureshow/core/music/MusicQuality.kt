@@ -137,7 +137,11 @@ fun musicOutputFacts(
     } else if (reasons.any { "Bitrate" in it }) {
         "It's above the Music quality you picked. Change Music quality in Settings to hear the original."
     } else {
-        "This device can't decode ${codec.ifBlank { "this file" }}, so the server converts it."
+        // Nothing on the device decodes it, so the next step is a copy it does: FLAC keeps a lossless source lossless,
+        // and AAC is the format the server converts to, so it always plays.
+        val copy = if (sourceLossless && stream?.codec?.lowercase() != "flac") "a FLAC copy" else "an AAC copy"
+        "This device can't decode ${codec.ifBlank { "this file" }}, so the server converts it. " +
+            "It still plays, and $copy on the server would play directly."
     }
     return MusicOutput(label, lossless, converted, reason)
 }

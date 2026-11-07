@@ -6,6 +6,8 @@ package app.pictureshow
 import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.ErrorKind
+import app.pictureshow.core.control.REMOTE_PLAY_ITEM_LIMIT
+import app.pictureshow.core.control.RemoteCap
 import app.pictureshow.core.control.RemoteCommand
 import app.pictureshow.core.control.RemoteControllerEvent
 import app.pictureshow.core.control.RemoteControllerState
@@ -13,6 +15,7 @@ import app.pictureshow.core.control.RemoteRequest
 import app.pictureshow.core.control.RemoteTarget
 import app.pictureshow.core.control.RemoteWire
 import app.pictureshow.core.control.reduceRemoteController
+import app.pictureshow.core.control.remoteCapNote
 import app.pictureshow.core.control.remoteRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -26,8 +29,12 @@ internal data class RemoteControllerUi(
     val controller: RemoteControllerState? = null,
     val targets: List<RemoteTarget> = emptyList(),
     val listing: Boolean = false,
-    val listFailed: Boolean = false
+    val listFailed: Boolean = false,
+    /** The command whose list was cut to fit one request, and what to tell the viewer about it. */
+    val capped: RemoteCapped? = null
 )
+
+internal data class RemoteCapped(val id: Long, val note: String)
 
 /** The controller's server access. It lists and sends only: this seam has no way to report playback. */
 internal interface RemoteControllerGateway {
@@ -202,7 +209,9 @@ internal class RemoteControllerHost(
         reduce(RemoteControllerEvent("intent", id = id, nowMs = nowMs(), value = value, entry = entry, index = index))
         val after = controller ?: return
         if (after.effect != "dispatch") return
-        val request = after.target?.let { remoteRequest(it, command(after)).request }
+        val wire = after.target?.let { remoteRequest(it, command(after)) }
+        val request = wire?.request
+        mutable.value = mutable.value.copy(capped = wire?.capped?.let { RemoteCapped(id, remoteCapNote(it)) })
         if (request == null) {
             reduce(RemoteControllerEvent("sent", id = id, status = 0))
             return
@@ -242,6 +251,7 @@ private const val STATUS_SHOWN_MS = 15_000L
 
 /** Every wording of [remoteCommandStatus] and the slot's other lines: the screen reserves room for the longest. */
 internal val REMOTE_STATUS_WORDINGS = listOf(
+    remoteCapNote(RemoteCap(REMOTE_PLAY_ITEM_LIMIT, 1_000_000)),
     "Sent to the TV.",
     "Sending to the TV…",
     "Sent. Check the queue on the TV.",
@@ -255,7 +265,7 @@ internal val REMOTE_STATUS_WORDINGS = listOf(
  * What the screen may claim about the last command. A 204 only ever reads as sending, and an old outcome leaves the
  * screen rather than sitting under whatever has happened since.
  */
-internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long): String? {
+internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long, capped: RemoteCapped? = null): String? {
     if (state?.phase != "attached") return null
     val follow = state.followUp
     val pending = state.command?.pending
@@ -266,6 +276,9 @@ internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long): St
     } ?: return null
     val (operation, result, sentAtMs) = latest
     if (nowMs - sentAtMs >= STATUS_SHOWN_MS) return null
+    val latestId = if (follow != null && (pending == null || follow.id > pending.id)) follow.id else pending?.id
+    // A cut list says how much went for as long as its command is the one on screen and nothing has gone wrong.
+    if (capped != null && capped.id == latestId && result == "sent") return capped.note
     return when (result) {
         "sent" -> if (operation == "queue") "Sent to the TV." else "Sending to the TV…"
         "unknown" -> if (operation == "queue") {

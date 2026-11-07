@@ -2291,7 +2291,7 @@ export function Player({
         setNoticePhase("active");
         // Announced once per viewing; a later return from under a panel is silent.
         setAnnouncement(
-            `${conversion.title}. ${conversion.reason} ${BROWSER_NOTICE_ACTIONS[noticeInput]}`,
+            `${conversion.title}. ${conversion.reason} ${conversion.fix} ${BROWSER_NOTICE_ACTIONS[noticeInput]}`,
         );
         // The 10 seconds keep running while something hides the notice.
         noticeTimer.current = setTimeout(() => {
@@ -2957,7 +2957,7 @@ export function Player({
                 <div
                     className="conversion-notice"
                     role="button"
-                    aria-label={`${conversion.title}. ${conversion.reason} Opens Playback info.`}
+                    aria-label={`${conversion.title}. ${conversion.reason} ${conversion.fix} Opens Playback info.`}
                     style={
                         noticeTop !== undefined ? { top: noticeTop } : undefined
                     }
@@ -2978,7 +2978,7 @@ export function Player({
                         {conversion.title}
                     </p>
                     <p className="conversion-notice-line">
-                        {conversion.reason}{" "}
+                        {conversion.reason} {conversion.fix}{" "}
                         {BROWSER_NOTICE_ACTIONS[noticeInput]}
                     </p>
                 </div>

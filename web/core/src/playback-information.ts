@@ -150,10 +150,25 @@ export const BROWSER_NOTICE_ACTIONS = {
 } as const;
 export type NoticeInput = keyof typeof BROWSER_NOTICE_ACTIONS;
 
-/** Ordered by how useful fixing it is: the first category lets the video play directly. */
-const noticeCategories: Array<[string[], string]> = [
-    [["videocodecnotsupported"], "Its video format won't play on %s."],
-    [["videorangetypenotsupported"], "Its HDR format won't play on %s."],
+const copyFix = (copy: string) =>
+    `It still plays, and ${copy} on the server would play directly.`;
+
+/**
+ * Ordered by how useful fixing it is: the first category lets the video play directly.
+ * Each carries the one true next step (core ConversionNotice): nothing in the browser fixes a
+ * video limit, so it names a copy that would play as it is.
+ */
+const noticeCategories: Array<[string[], string, string]> = [
+    [
+        ["videocodecnotsupported"],
+        "Its video format won't play on %s.",
+        copyFix("an H.264 copy"),
+    ],
+    [
+        ["videorangetypenotsupported"],
+        "Its HDR format won't play on %s.",
+        copyFix("an SDR copy"),
+    ],
     [
         [
             "videoprofilenotsupported",
@@ -162,21 +177,43 @@ const noticeCategories: Array<[string[], string]> = [
             "refframesnotsupported",
         ],
         "Its video encoding is too demanding for %s.",
+        copyFix("an 8-bit H.264 copy"),
     ],
-    [["videoresolutionnotsupported"], "Its resolution is too high for %s."],
-    [["videoframeratenotsupported"], "Its frame rate is too high for %s."],
-    [["interlacedvideonotsupported"], "Its interlaced video won't play on %s."],
+    [
+        ["videoresolutionnotsupported"],
+        "Its resolution is too high for %s.",
+        copyFix("a 1080p copy"),
+    ],
+    [
+        ["videoframeratenotsupported"],
+        "Its frame rate is too high for %s.",
+        copyFix("a 30 fps copy"),
+    ],
+    [
+        ["interlacedvideonotsupported"],
+        "Its interlaced video won't play on %s.",
+        copyFix("a deinterlaced copy"),
+    ],
     [
         ["anamorphicvideonotsupported"],
         "Its non-square pixels won't display on %s.",
+        copyFix("a square-pixel copy"),
     ],
-    [["videorotationnotsupported"], "Its rotation won't display on %s."],
+    [
+        ["videorotationnotsupported"],
+        "Its rotation won't display on %s.",
+        copyFix("an upright copy"),
+    ],
 ];
 const burnedInReason = "The selected subtitles must be burned in for %s.";
+const burnedInFix =
+    "Choose text subtitles, such as SRT, or turn them off to avoid it.";
 
 export type ConversionNotice = {
     title: string;
     reason: string;
+    /** The one next step the viewer, or whoever keeps the server's files, can take. */
+    fix: string;
     /** True when the reason is subtitle burn-in rather than a video limit. */
     burnIn: boolean;
 };
@@ -240,17 +277,23 @@ export function conversionNotice(
     const copied =
         playbackMethod(decision.method, decision.url) !== "Transcode" ||
         urlParameter(decision.url, "VideoCodec") === "copy";
-    const why = copied
-        ? burnedIn
-            ? burnedInReason
-            : undefined
-        : (noticeCategories.find(([codes]) =>
+    const subtitle: [string, string] | undefined = burnedIn
+        ? [burnedInReason, burnedInFix]
+        : undefined;
+    const category = copied
+        ? undefined
+        : noticeCategories.find(([codes]) =>
               codes.some((code) => reasons.has(code)),
-          )?.[1] ?? (burnedIn ? burnedInReason : undefined));
-    if (!why) return null;
+          );
+    const chosen: [string, string] | undefined = category
+        ? [category[1], category[2]]
+        : subtitle;
+    if (!chosen) return null;
+    const [why, fix] = chosen;
     return {
         title: conversionNoticeTitle(device),
         reason: why.replaceAll("%s", device),
+        fix,
         burnIn: why === burnedInReason,
     };
 }
@@ -379,7 +422,7 @@ export function conversionNoticeVector(input: unknown): string {
         i.subtitleIndex ?? -1,
         i.device,
     );
-    return notice ? `${notice.title}\n${notice.reason}` : "none";
+    return notice ? `${notice.title}\n${notice.reason}\n${notice.fix}` : "none";
 }
 
 function record(input: unknown) {

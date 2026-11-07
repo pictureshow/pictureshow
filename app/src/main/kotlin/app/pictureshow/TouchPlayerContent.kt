@@ -881,7 +881,7 @@ internal fun TouchConversionNoticeCard(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(notice.title, style = MaterialTheme.typography.titleMedium)
-            Text("${notice.reason} $TOUCH_CONVERSION_NOTICE_ACTION", fontSize = 16.sp)
+            Text("${notice.reason} ${notice.fix} $TOUCH_CONVERSION_NOTICE_ACTION", fontSize = 16.sp)
         }
     }
 }

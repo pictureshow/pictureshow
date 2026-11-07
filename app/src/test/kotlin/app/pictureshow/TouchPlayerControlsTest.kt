@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -48,6 +49,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -479,6 +481,39 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
     }
 
+    // The notice says why and how to fix it; at 1.3 font its longest line still clears the controls on the smallest phone.
+    private fun noticeFitsAtALargerFont(render: String) {
+        launch(fontScale = 1.3f)
+        decided(PlayMethod.Transcode, reason = "VideoFramerateNotSupported")
+        settled()
+        compose.onNodeWithText("a 30 fps copy on the server would play directly", substring = true).assertIsDisplayed()
+        val notice = bounds("touch:conversion-notice")
+        val root = compose.onRoot().getBoundsInRoot()
+        assertTrue(notice.left >= root.left && notice.right <= root.right && notice.bottom <= root.bottom, "inside: $notice in $root")
+        val panel = bounds("touch:panel")
+        assertTrue(notice.bottom <= panel.top, "notice $notice clears the controls $panel")
+        val actions = bounds("touch:actions")
+        val beside = notice.right <= actions.left + 16.dp
+        assertTrue(beside || notice.bottom <= actions.top + 16.dp, "notice $notice clears the action column $actions")
+        saveRender(render)
+    }
+
+    private fun saveRender(name: String) {
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val dir = java.io.File("build/reports/notice-renders").apply { mkdirs() }
+        java.io.FileOutputStream(java.io.File(dir, "$name.png")).use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w360dp-h780dp-port-xxhdpi")
+    @Test
+    fun theNoticeFitsANarrowPhoneAtALargerFont() = noticeFitsAtALargerFont("phone-portrait-360x780-font1.3")
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun theNoticeFitsAShortLandscapePhoneAtALargerFont() = noticeFitsAtALargerFont("phone-landscape-780x360-font1.3")
+
     @Test
     @Config(qualifiers = "sw800dp-w800dp-h1280dp-xhdpi")
     fun conversionNoticeNamesThisTablet() {
@@ -907,19 +942,19 @@ class TouchPlayerControlsTest {
         }
     }
 
-    private fun decision(method: PlayMethod) = PlayDecision(
+    private fun decision(method: PlayMethod, reason: String = "VideoCodecNotSupported") = PlayDecision(
         "movie",
         MediaSourceInfo(id = "source"),
         method,
         "https://example.test/video",
         emptyMap(),
         "session",
-        if (method == PlayMethod.Transcode) listOf("VideoCodecNotSupported") else emptyList()
+        if (method == PlayMethod.Transcode) listOf(reason) else emptyList()
     )
 
-    private fun decided(method: PlayMethod) {
+    private fun decided(method: PlayMethod, reason: String = "VideoCodecNotSupported") {
         compose.runOnIdle {
-            val state = PlaybackState(preparing = false, decision = decision(method))
+            val state = PlaybackState(preparing = false, decision = decision(method, reason))
             host.stateSource = androidx.compose.runtime.mutableStateOf(state)
         }
         compose.waitForIdle()

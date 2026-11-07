@@ -75,7 +75,7 @@ class PlaybackInformationVectorsTest {
             )
             "bitrate" -> PlaybackInformation.bitrate(input["bitrate"]?.jsonPrimitive?.intOrNull)
             "speed" -> PlaybackSpeeds.allowed(input.getValue("speed").jsonPrimitive.float, text("encoded") == "true").toString()
-            // Expected is "title\nreason", or "none" when no notice applies.
+            // Expected is "title\nreason\nfix", or "none" when no notice applies.
             "conversion-notice" -> ConversionNotice.of(
                 PlayDecision(
                     "item",
@@ -88,7 +88,7 @@ class PlaybackInformationVectorsTest {
                 ),
                 input["subtitleIndex"]?.jsonPrimitive?.intOrNull ?: -1,
                 text("device")
-            )?.let { "${it.title}\n${it.reason}" } ?: "none"
+            )?.let { "${it.title}\n${it.reason}\n${it.fix}" } ?: "none"
             else -> error("Unknown operation")
         }
     }

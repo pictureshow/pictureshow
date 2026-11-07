@@ -199,6 +199,31 @@ class RemoteControllerHostTest {
         assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
     }
 
+    // REM-03: a long list starts on the TV with what fits in one request line, and the phone says how many went.
+    @Test
+    fun aLongListSendsWhatFitsAndSaysHowMany() = runTest {
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        val tracks = (1..1_200).map { "%032x".format(it) }
+        host.playNow(tracks)
+        runCurrent()
+        val request = gateway.sent.single()
+        val ids = request.query.getValue("itemIds").split(",")
+        assertEquals(tracks.take(175), ids)
+        assertEquals(
+            "The TV gets the first 175 of 1,200, as many as one send can carry.",
+            remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped)
+        )
+        // A short list afterwards says nothing about a cut.
+        host.playNow(tracks.take(3))
+        runCurrent()
+        assertEquals(3, gateway.sent.last().query.getValue("itemIds").split(",").size)
+        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped))
+    }
+
     @Test
     fun aConfirmedCommandShowsNothingAfterTheLockScreen() = runTest {
         val gateway = Gateway()

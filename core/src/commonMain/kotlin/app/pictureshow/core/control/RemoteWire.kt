@@ -22,7 +22,16 @@ import kotlinx.serialization.json.putJsonObject
 
 const val REMOTE_TEXT_LIMIT = 256
 private const val REMOTE_MESSAGE_LIMIT = 65_536
+/** Most ids a Play message from the server may carry; it arrives over the socket, inside [REMOTE_MESSAGE_LIMIT]. */
 private const val REMOTE_ITEM_LIMIT = 1_000
+
+/**
+ * Most ids one Play request sends. They travel in the query (`itemIds`), and Jellyfin's Kestrel refuses a request line
+ * over its 8 KB default with 414 (no Jellyfin version sets its own limit; measured on 10.10.7: 220 ids answered, 232
+ * got 414). nginx's default is 8 KB too. An id is 32 hex digits plus an encoded comma, 35 bytes, so 175 ids are about
+ * 6.1 KB, leaving room for a reverse proxy's base path, the session and the other parameters.
+ */
+const val REMOTE_PLAY_ITEM_LIMIT = 175
 
 /** Exactly the commands this target implements. A command is advertised here only once its handler exists. */
 val RemoteNavigationCommands = listOf("MoveUp", "MoveDown", "MoveLeft", "MoveRight", "Select", "Back", "GoHome")
@@ -54,8 +63,18 @@ data class RemoteCommand(
 @Serializable
 data class RemoteRequest(val method: String, val path: String, val query: Map<String, String> = emptyMap(), val body: JsonObject? = null)
 
+/** A list longer than [REMOTE_PLAY_ITEM_LIMIT] went as its first [sent] of [total]; the viewer is told (REM-03). */
 @Serializable
-data class RemoteWire(val request: RemoteRequest? = null, val rejection: String? = null)
+data class RemoteCap(val sent: Int, val total: Int)
+
+@Serializable
+data class RemoteWire(val request: RemoteRequest? = null, val rejection: String? = null, val capped: RemoteCap? = null)
+
+/** What the controller says when a list was cut to fit one request. */
+fun remoteCapNote(cap: RemoteCap): String =
+    "The TV gets the first ${groupedCount(cap.sent)} of ${groupedCount(cap.total)}, as many as one send can carry."
+
+private fun groupedCount(value: Int): String = value.toString().reversed().chunked(3).joinToString(",").reversed()
 
 private val PlayCommands = mapOf("play-now" to "PlayNow", "play-next" to "PlayNext", "add-to-queue" to "PlayLast")
 private val PlaystateCommands = mapOf(
@@ -91,16 +110,22 @@ fun remoteRequest(target: RemoteTarget, command: RemoteCommand): RemoteWire {
         )
     }
     PlayCommands[command.op]?.let { play ->
-        val items = command.items.map { normalizedId(it) ?: return RemoteWire(rejection = "invalid-item") }
-        if (items.isEmpty() || items.size > REMOTE_ITEM_LIMIT) return RemoteWire(rejection = "invalid-item")
+        val all = command.items.map { normalizedId(it) ?: return RemoteWire(rejection = "invalid-item") }
+        if (all.isEmpty()) return RemoteWire(rejection = "invalid-item")
         if ((command.ticks ?: 0) < 0) return RemoteWire(rejection = "invalid-ticks")
         if (command.op != "play-now" && (command.ticks != null || command.index != null)) return RemoteWire(rejection = "invalid-position")
-        val index = command.index
-        if (index != null && index !in items.indices) return RemoteWire(rejection = "invalid-index")
+        if (command.index != null && command.index !in all.indices) return RemoteWire(rejection = "invalid-index")
+        // A long list sends the part that fits, starting with the title that starts (so it and what follows play) and
+        // reaching back only when the start is near the end. Queue commands send their first part. Follow-up queue
+        // commands for the rest aren't sent: a target may drop them while it is still opening the first.
+        val from = (command.index ?: 0).coerceAtMost(all.size - REMOTE_PLAY_ITEM_LIMIT).coerceAtLeast(0)
+        val items = all.subList(from, (from + REMOTE_PLAY_ITEM_LIMIT).coerceAtMost(all.size))
+        val index = command.index?.minus(from)
         val query = linkedMapOf("playCommand" to play, "itemIds" to items.joinToString(","))
         command.ticks?.let { query["startPositionTicks"] = it.toString() }
         index?.let { query["startIndex"] = it.toString() }
-        return RemoteWire(RemoteRequest("POST", "$base/Playing", query))
+        val capped = RemoteCap(items.size, all.size).takeIf { all.size > items.size }
+        return RemoteWire(RemoteRequest("POST", "$base/Playing", query), capped = capped)
     }
     PlaystateCommands[command.op]?.let { return RemoteWire(RemoteRequest("POST", "$base/Playing/$it")) }
     return when (command.op) {
