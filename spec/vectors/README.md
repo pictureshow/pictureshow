@@ -418,4 +418,5 @@ fallbacks, page merging, and the empty, inaccessible and failed states. `music-q
 the smallest edit to it, the replace-queue decision and the seeded shuffle. `music-session` keeps the listener's intent
 apart from what the OS did. `music-reports` gives one viewing per time a track is heard. `music-quality` freezes the
 ceilings, the audio profile and the lossless claim. `music-playlists` refuses to send an edit again after an ambiguous
-answer until the list has been read back.
+answer until the list has been read back, and pins the create body: `IsPublic` is always sent and false unless the viewer chose
+otherwise, since the server's own default is public.

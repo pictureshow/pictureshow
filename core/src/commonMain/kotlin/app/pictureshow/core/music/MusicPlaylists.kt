@@ -4,6 +4,25 @@
 package app.pictureshow.core.music
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+
+/**
+ * A new playlist is its creator's alone unless they say otherwise. The server's create default is public, which shows it
+ * to everyone on the server, so this is always sent and never left to the default (MUS-09).
+ */
+fun createPlaylistBody(name: String, viewer: String, items: List<String>, isPublic: Boolean = false): JsonObject = buildJsonObject {
+    put("Name", JsonPrimitive(name))
+    put("MediaType", JsonPrimitive("Audio"))
+    put("UserId", JsonPrimitive(viewer))
+    put("Ids", JsonArray(items.map(::JsonPrimitive)))
+    put("IsPublic", JsonPrimitive(isPublic))
+}
+
+/** Names only what changes: the server leaves an absent IsPublic as it was, so a rename can't change who sees a playlist. */
+fun renamePlaylistBody(name: String): JsonObject = buildJsonObject { put("Name", JsonPrimitive(name)) }
 
 /**
  * One saved-playlist edit at a time (MUS-09). "unknown" means the server may have done it: the only way out is reading

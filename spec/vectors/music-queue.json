@@ -243,6 +243,110 @@
       ]
     },
     {
+      "id": "music-queue.queue-row-jumps-there",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "a",
+        "positionTicks": "50"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "jump",
+            "revision": "0",
+            "entry": "c"
+          },
+          "expected": {
+            "queue": {
+              "current": "c",
+              "history": [
+                "a"
+              ],
+              "visited": [
+                "a",
+                "b"
+              ],
+              "positionTicks": "0",
+              "paused": false,
+              "completion": "1"
+            },
+            "outcome": "changed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-queue.queue-row-must-exist",
+      "operation": "queue",
+      "state": {
+        "server": "s",
+        "viewer": "v",
+        "entries": [
+          {
+            "id": "a",
+            "media": "song-a"
+          },
+          {
+            "id": "b",
+            "media": "song-b"
+          },
+          {
+            "id": "c",
+            "media": "song-c"
+          },
+          {
+            "id": "d",
+            "media": "song-d"
+          }
+        ],
+        "order": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "current": "a"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "jump",
+            "revision": "0",
+            "entry": "z"
+          },
+          "expected": {
+            "outcome": "missing-entry"
+          }
+        }
+      ]
+    },
+    {
       "id": "music-queue.unavailable-track-skips",
       "operation": "queue",
       "state": {
