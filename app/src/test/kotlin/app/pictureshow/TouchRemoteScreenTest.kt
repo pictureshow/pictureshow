@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -322,6 +323,22 @@ class TouchRemoteScreenTest {
         val page = compose.onNodeWithTag("touch:remote").getBoundsInRoot()
         val title = compose.onNodeWithTag("remote:title", useUnmergedTree = true).getBoundsInRoot()
         assertTrue(title.top - page.top <= 48.dp, "slot and its gap: ${title.top - page.top}")
+    }
+
+    // REM-03: a list cut to one request says how much is going, on the remote and on the bar, for its own command only.
+    private val cutNote = "Sending 175 of 1,200 to the TV…"
+    private val cut get() = attached("sent").copy(capped = RemoteCapped(1, cutNote))
+
+    @Test fun aCutListSaysHowMuchIsGoingOnTheRemote() {
+        show(cut)
+        compose.onNodeWithText(cutNote).assertIsDisplayed()
+        val later = cut.controller!!.copy(followUp = RemoteFollowUp(2, "next", 0, result = "sent"))
+        assertTrue(remoteCommandStatus(later, 0, cut.capped) != cutNote, "a later command doesn't carry the old cut")
+    }
+
+    @Test fun aCutListSaysHowMuchIsGoingOnTheBar() {
+        compose.setContent { MaterialTheme { TouchRemoteBar(cut, 0) {} } }
+        compose.onNodeWithText(cutNote, substring = true).assertIsDisplayed()
     }
 
     @Test fun everyStatusWordingHasItsRoomReserved() {
