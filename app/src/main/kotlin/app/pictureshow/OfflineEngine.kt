@@ -1050,7 +1050,7 @@ internal class OfflineEngine(
         onlineViewingReads.withLock {
             if (ready()[account.key]?.manifest?.entries?.any { it.itemId == itemId } != true) return@withLock
             try {
-                progressStore(account).remember(itemId, read())
+                progressStore(account).onlineViewingEnded(itemId, read())
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {

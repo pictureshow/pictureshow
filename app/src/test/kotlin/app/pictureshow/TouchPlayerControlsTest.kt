@@ -929,12 +929,12 @@ class TouchPlayerControlsTest {
         var smallestWidth by mutableStateOf(smallestWidth)
     }
 
-    @Test fun aPhonePlayerRequestsLandscapeAndGivesBackWhatWasThereOnExit() {
-        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_SENSOR)
+    @Test fun aPhonePlayerRequestsLandscapeAndLeavesNoLockOnExit() {
+        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
         compose.runOnIdle { probe.showing = false }
         compose.waitForIdle()
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR, compose.activity.requestedOrientation)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
     }
 
     private class OverlappingPlayers {
@@ -963,7 +963,7 @@ class TouchPlayerControlsTest {
     }
 
     /** The next episode's route composes while the last one is still leaving; the phone stayed landscape until a force-stop. */
-    @Test fun theNextEpisodeTakingOverGivesBackWhatWasThereBeforeTheFirst() {
+    @Test fun theNextEpisodeTakingOverLeavesNoLockBehindOnceTheLastPlayerGoes() {
         val players = overlappingPlayers(ActivityInfo.SCREEN_ORIENTATION_SENSOR)
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
         show { players.second = true }
@@ -972,7 +972,16 @@ class TouchPlayerControlsTest {
         show { players.first = false }
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
         show { players.second = false }
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR, compose.activity.requestedOrientation)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    /** Android keeps the lock across a process death; the player that comes back must not take it for what was there before. */
+    @Test fun aLockLeftOverFromBeforeARestartIsNotGivenBack() {
+        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.showing = false }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
     }
 
     @Test fun theViewersPortraitChoiceCarriesIntoTheNextEpisode() {

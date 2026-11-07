@@ -126,12 +126,14 @@ internal fun OfflineDownloadsTvScreen(
     // Where the remote goes after a press that takes the focused control away: a delete, or a notice's OK.
     var moveTo by remember { mutableStateOf<OfflineFirstFocus?>(null) }
     var afterMove by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val cameBackTo = returnToRow?.takeIf { id -> sections.ready.any { it.entry.id == id } }
     val moved = moveTo?.takeIf { it !is OfflineFirstFocus.Row || offlineRowPosition(sections, it.entryId) != null }
     val target = when {
         passwordNeeded -> OfflineFirstFocus.Password
         moved != null -> moved
         returnToStorage -> OfflineFirstFocus.Storage
-        sections.ready.any { it.entry.id == returnToRow } -> OfflineFirstFocus.Row(returnToRow.orEmpty(), OfflineAction.Play)
+        // A viewing's sync is how a notice usually appears, so coming back it goes first: the row would push it off the top.
+        cameBackTo != null && conflictIds.isEmpty() -> OfflineFirstFocus.Row(cameBackTo, OfflineAction.Play)
         else -> offlineFirstFocus(false, sections, conflictIds)
     }
     // The first key press hands focus to the viewer: a list that changes afterwards mustn't pull the remote away.
@@ -195,7 +197,12 @@ internal fun OfflineDownloadsTvScreen(
                     offlineConflictText(view.conflictTitle(itemId)),
                     focus = conflictFocus.takeIf { target == OfflineFirstFocus.Conflict(itemId) }
                 ) {
-                    moveTo = offlineFirstFocus(false, sections, conflictIds - itemId)
+                    val others = conflictIds - itemId
+                    moveTo = if (others.isEmpty() && cameBackTo != null) {
+                        OfflineFirstFocus.Row(cameBackTo, OfflineAction.Play)
+                    } else {
+                        offlineFirstFocus(false, sections, others)
+                    }
                     refocus++
                     controller.dismissConflict(itemId)
                 }
@@ -378,7 +385,8 @@ internal fun OfflineRowTv(
                 LaunchedEffect(returnToDelete) {
                     if (returnToDelete) {
                         withFrameNanos { }
-                        runCatching { deleteFocus.requestFocus() }
+                        // A question on another row is the third way out, and the remote stays in that one.
+                        if (controller.confirm == null) runCatching { deleteFocus.requestFocus() }
                         // Last: changing this restarts the effect, and earlier that cancelled it before focus moved.
                         returnToDelete = false
                     }

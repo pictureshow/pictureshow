@@ -55,7 +55,7 @@ class OfflineNextTest {
     private val opened = mutableListOf<String>()
     private var stops = 0
 
-    private fun next(vararg entries: OfflineEntry) = OfflineNext(entries.toList(), first, { opened += it.id }, { stops++ })
+    private fun next(vararg entries: OfflineEntry) = OfflineNext({ entries.toList() }, first, { opened += it.id }, { stops++ })
 
     private object Gateway : PlaybackGateway {
         override suspend fun prepare(request: PlaybackRequest) = ClientResult.Failure(ClientError(ErrorKind.SERVER, "local"))

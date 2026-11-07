@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -206,6 +207,21 @@ class OfflineReconnectTest {
         assertIs<OfflineReconnectState.Leaving>(reconnect.state)
         // The picked audio, and the subtitle state the viewer already had, explicit Off included.
         assertEquals(listOf(OfflineStreamStart(123_000, 6, -1)), streams)
+    }
+
+    /** The store's lock can be held by a background sync, and each call inside has its own 6 s: one limit for all of it. */
+    @Test
+    fun `saving the place has one overall limit, then local viewing carries on`() = runTest {
+        handoff.hold = CompletableDeferred()
+        val reconnect = offered()
+        val player = Player()
+        reconnect.accept(player)
+        advanceTimeBy(14_000)
+        assertTrue(reconnect.state is OfflineReconnectState.Connecting)
+        advanceTimeBy(2_000)
+        assertEquals("server-unreachable", (reconnect.state as OfflineReconnectState.Refused).outcome)
+        assertTrue("reopen" in log)
+        assertTrue(streams.isEmpty())
     }
 
     @Test

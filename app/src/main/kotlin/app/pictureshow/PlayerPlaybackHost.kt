@@ -78,6 +78,9 @@ internal class PlaybackHostState(
     var metadata by mutableStateOf(item)
     var segments by mutableStateOf(emptyList<MediaSegment>())
     internal var nextLookup by mutableStateOf<EpisodeLookup?>(null)
+
+    /** What the server said, before a local viewing's download rule: asked again at the end, because a season may still be downloading. */
+    internal var nextAnswer: ClientResult<MediaItem?>? = null
     var nextRetry by mutableIntStateOf(0)
 
     /** A title queued from a controller goes first. With no controller this is always null, and nothing below changes. */
@@ -475,12 +478,21 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
             val client = extras ?: return@LaunchedEffect
             nextLookup = null
             val answer = client.nextEpisode(account, metadata)
+            nextAnswer = answer
             nextLookup = EpisodeLookup(nextRetry, offline?.next?.after(answer) ?: answer)
         }
         val upcoming = remote?.upcoming
         LaunchedEffect(ended, nextLookup, nextCancelled, foreground, pauseIntent, remoteNext, upcoming, remoteNextResolving) {
             if (!ended || !foreground || pauseIntent) return@LaunchedEffect
             val lookup = nextLookup
+            // The next episode may have finished downloading during this one. A nothing that's still nothing ends the viewing below.
+            if ((lookup?.result as? ClientResult.Success)?.value == null && lookup != null) {
+                val now = nextAnswer?.let { offline?.next?.after(it) }
+                if ((now as? ClientResult.Success)?.value != null) {
+                    nextLookup = lookup.copy(result = now)
+                    return@LaunchedEffect
+                }
+            }
             if (nextCancelled) {
                 finish(reason = "natural-end")
             } else if (!remoteQueueHoldsEnd(upcoming, remoteNext, remoteNextResolving)) {

@@ -49,6 +49,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
+import androidx.compose.ui.test.assertIsNotFocused
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -270,6 +271,45 @@ class OfflineDownloadsScreenTest {
         settle()
         compose.onNodeWithTag("downloads:conflict-ok").assertDoesNotExist()
         compose.onNodeWithTag("downloads:play:r0").assertIsFocused()
+    }
+
+    /** Back from the player: a viewing's sync is the usual way a notice appears, and the row would push it off the top. */
+    @Test
+    @Config(qualifiers = "w960dp-h200dp")
+    fun `TV back from the player goes to a notice, whole, and OK returns to the row`() {
+        install(*Array(4) { entry("r$it", OfflinePhase.ready) })
+        val back = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        back.setContent { OfflineDownloadsTvScreen(account, true, { played = it.id }, {}, {}, {}) }
+        settle()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag("downloads:play:r2"))
+        compose.onNodeWithTag("downloads:play:r2").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        assertTrue("played", played != null)
+        conflictOn("r2")
+        back.emulateSavedInstanceStateRestore()
+        settle()
+        compose.onNodeWithTag("downloads:conflict-ok").assertIsFocused()
+        val card = compose.onNodeWithTag("downloads:conflict-text").getBoundsInRoot()
+        assertTrue("the sentence isn't under the top edge: ${card.top}", card.top >= 0.dp)
+        compose.onNodeWithTag("downloads:conflict-ok").performKeyInput { pressKey(Key.DirectionCenter) }
+        settle()
+        compose.onNodeWithTag("downloads:play:r2").assertIsFocused()
+    }
+
+    /** Only one question is open, and the remote stays in it. Sending focus back to the first row's Delete made the two rows bounce. */
+    @Test
+    fun `TV asking about a second row moves the question and focus there, once`() {
+        install(entry("a", OfflinePhase.ready), entry("b", OfflinePhase.ready))
+        tv()
+        settle()
+        ask("a")
+        ask("b")
+        settle()
+        compose.onNodeWithTag("downloads:cancel").assertIsFocused()
+        compose.onNodeWithTag("downloads:delete:a").assertIsNotFocused()
+        compose.onNodeWithTag("downloads:cancel").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        compose.onNodeWithTag("downloads:delete:b").assertIsFocused()
     }
 
     /** The first sync after reconnecting often finishes with the list already open and scrolled to its first row. */

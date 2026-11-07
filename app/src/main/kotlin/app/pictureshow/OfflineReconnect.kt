@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 
 /** What the offer is showing. Playback keeps running through Checking and Offer; it holds only through Connecting. */
@@ -143,7 +144,8 @@ internal class OfflineReconnect(
         state = OfflineReconnectState.Connecting(track)
         job = scope.launch {
             val settled = try {
-                handoff.settle(positionMs * TICKS_PER_MS)
+                // One limit for all of it: the wait for a background sync's lock, then each call with its own bound.
+                withTimeoutOrNull(SETTLE_LIMIT_MS) { handoff.settle(positionMs * TICKS_PER_MS) } ?: OfflineSettleResult.Failed
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -178,6 +180,7 @@ internal class OfflineReconnect(
 
     private companion object {
         const val TICKS_PER_MS = 10_000L
+        const val SETTLE_LIMIT_MS = 15_000L
     }
 }
 

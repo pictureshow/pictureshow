@@ -94,7 +94,9 @@ internal fun TouchPlayerWindow() {
     val holds = activity?.let { touchPlayerWindowHolds.getOrPut(it) { TouchPlayerWindowHolds() } }
     DisposableEffect(activity, locksOrientation) {
         val hold = holds?.orientation?.takeIf { locksOrientation }
-        if (activity != null) hold?.acquire({ activity.requestedOrientation }) { activity.requestedOrientation = request[0] }
+        // Always back to no request, never what's there now. Nothing else in the app asks for a rotation, and what's there can be this
+        // player's own lock: Android keeps it across a process death, and the restored player would hand it back as if it came first.
+        if (activity != null) hold?.acquire({ ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }) { activity.requestedOrientation = request[0] }
         onDispose {
             if (activity != null) {
                 hold?.release { before ->

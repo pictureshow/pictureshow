@@ -64,6 +64,7 @@ import app.pictureshow.core.offline.offlineVerify
 import app.pictureshow.core.offline.offlineVideoRequest
 import app.pictureshow.core.offline.reconcile
 import app.pictureshow.core.offline.reduceOfflineJob
+import app.pictureshow.core.offline.offlineResumeTicks
 import app.pictureshow.core.offline.reduceOfflineOutbox
 import app.pictureshow.core.offline.release
 import app.pictureshow.core.offline.reserve
@@ -443,6 +444,10 @@ class OfflineVectorsTest {
             }
         }
         "outbox" -> outboxStep(state, event)
+        "resume" -> buildJsonObject {
+            val ticks = offlineResumeTicks(event.decoded<OfflineOutboxEntry>("entry"), event.decoded<OfflineUserData>("lastKnown"))
+            put("ticks", ticks.toString())
+        }
         "download-set" -> json.encodeToJsonElement(
             reduceTemporary(json.decodeFromJsonElement<TemporaryState>(state), json.decodeFromJsonElement<TemporaryEvent>(event))
         )

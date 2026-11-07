@@ -59,19 +59,19 @@ internal class OfflinePlaybackBinding(
  * of source deliberate, and the server's offer (OFF-05) is for a track the viewer picked.
  */
 internal class OfflineNext(
-    private val entries: List<OfflineEntry>,
+    private val entries: () -> List<OfflineEntry>,
     private val current: OfflineEntry,
     private val open: (OfflineEntry) -> Unit,
     private val stop: () -> Unit
 ) {
     fun after(server: ClientResult<MediaItem?>): ClientResult<MediaItem?> {
         val answered = server as? ClientResult.Success
-        val next = offlineNextEpisode(entries, current, answered != null, answered?.value?.id)
+        val next = offlineNextEpisode(entries(), current, answered != null, answered?.value?.id)
         return ClientResult.Success(next?.playerItem())
     }
 
     fun advance(item: MediaItem) {
-        offlineReadyEntry(entries, item.id, current.preset)?.let(open) ?: stop()
+        offlineReadyEntry(entries(), item.id, current.preset)?.let(open) ?: stop()
     }
 }
 

@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Rule
@@ -59,7 +60,7 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchPlaybackHostTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
-    private val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
+    private var account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
     private val episode = MediaItem("episode", "An episode", "Episode", seriesId = "series")
     private val releaseLookup = CompletableDeferred<Unit>()
     private val metadataGate = CompletableDeferred<Unit>()
@@ -133,6 +134,67 @@ class TouchPlaybackHostTest {
         waitUntil { exits > 0 }
         assertEquals(1, exits)
         assertTrue(next.isEmpty())
+    }
+
+    /** The next local viewing starts where the online one stopped: the wiring from the player's session down to the download's store. */
+    @Test fun anOnlineViewingOfADownloadedTitleTeachesTheDownloadItsPlace() {
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(
+            okhttp3.mockwebserver.MockResponse().setHeader("Content-Type", "application/json").setBody(
+                """{"PlaybackPositionTicks":7000,"Played":false,"PlayCount":0}"""
+            )
+        )
+        server.start()
+        account = account.copy(server = account.server.copy(url = server.url("/").toString().trimEnd('/')))
+        val engineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        try {
+            val entry = app.pictureshow.core.offline.OfflineEntry(
+                "episode:original",
+                "episode",
+                app.pictureshow.core.offline.OfflineMediaKind.episode,
+                preset = app.pictureshow.core.offline.OfflinePreset.original,
+                labels = app.pictureshow.core.offline.OfflineLabels("An episode"),
+                job = app.pictureshow.core.offline.OfflineJob(phase = app.pictureshow.core.offline.OfflinePhase.ready)
+            )
+            OfflineFiles(compose.activity.noBackupFilesDir).manifest(account.key).apply {
+                parentFile!!.mkdirs()
+                writeText(
+                    app.pictureshow.core.offline.offlineEncodeManifest(
+                        app.pictureshow.core.offline.OfflineManifest(entries = listOf(entry)),
+                    ),
+                )
+            }
+            val accounts = AccountStore(
+                object : TextPersistence {
+                    private var text: String? = null
+                    override suspend fun read() = text
+                    override suspend fun write(value: String) {
+                        text = value
+                    }
+                }
+            )
+            kotlinx.coroutines.runBlocking { accounts.remember(account) }
+            val engine = OfflineEngine(
+                compose.activity,
+                accounts,
+                { app.pictureshow.core.ClientIdentity("Test", "install-id", "1") },
+                object : OfflineForeground {
+                    override fun update(activeTitles: List<String>) = Unit
+                },
+                networkState = { OfflineNetwork.none },
+                scope = engineScope
+            )
+            kotlinx.coroutines.runBlocking { engine.start().join() }
+            launch(noNext = true, offlineEngine = engine)
+            releaseLookup.complete(Unit)
+            reopenAndEnd()
+            waitUntil { exits == 1 }
+            val store = kotlinx.coroutines.runBlocking { engine.progressStore(account) }
+            compose.waitUntil(10_000) { kotlinx.coroutines.runBlocking { store.resumeTicks("episode") } == 7000L }
+        } finally {
+            engineScope.cancel()
+            server.shutdown()
+        }
     }
 
     @Test fun equalLookupFailureAfterRetryExitsOnceWithoutAnotherAttempt() {
@@ -231,7 +293,13 @@ class TouchPlaybackHostTest {
         assertEquals(2, exits)
     }
 
-    private fun launch(failFirst: Boolean = false, accessible: Boolean = false, noNext: Boolean = false, failAlways: Boolean = false) {
+    private fun launch(
+        failFirst: Boolean = false,
+        accessible: Boolean = false,
+        noNext: Boolean = false,
+        failAlways: Boolean = false,
+        offlineEngine: OfflineEngine? = null,
+    ) {
         val store = object : DataStore<Preferences> {
             override val data = MutableStateFlow(emptyPreferences())
             override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
@@ -285,6 +353,7 @@ class TouchPlaybackHostTest {
                     single { http }
                     single { DeviceIdentityStore(store) }
                     single { PlaybackPreferencesStore(store) }
+                    offlineEngine?.let { engine -> single { engine } }
                 }
             )
         }

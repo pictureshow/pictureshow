@@ -8,6 +8,7 @@ import app.pictureshow.core.offline.OfflineConflict
 import app.pictureshow.core.offline.OfflineOutboxEntry
 import app.pictureshow.core.offline.OfflineOutboxEvent
 import app.pictureshow.core.offline.OfflineUserData
+import app.pictureshow.core.offline.offlineResumeTicks
 import app.pictureshow.core.offline.reduceOfflineOutbox
 import java.io.File
 import java.io.IOException
@@ -105,12 +106,7 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
     /** A viewing resumes from what this device last saw. */
     suspend fun resumeTicks(itemId: String): Long = mutex.withLock {
         val saved = load()
-        val entry = saved.outbox[itemId]
-        when {
-            entry?.played == true -> 0
-            entry?.positionTicks != null -> entry.positionTicks ?: 0
-            else -> saved.lastKnown[itemId]?.takeIf { !it.played }?.positionTicks ?: 0
-        }
+        offlineResumeTicks(saved.outbox[itemId], saved.lastKnown[itemId])
     }
 
     suspend fun watched(itemIds: List<String>): Set<String> = mutex.withLock {
@@ -150,6 +146,18 @@ internal class OfflineProgressStore(private val file: File, account: Account) {
             )
         )
         if (result.ignored == null) save(saved.copy(outbox = saved.outbox.withEntry(itemId, result.entry)))
+    }
+
+    /** What the server holds now that an online viewing here stopped. */
+    suspend fun onlineViewingEnded(itemId: String, data: OfflineUserData) = mutex.withLock {
+        val saved = load()
+        val result = reduceOfflineOutbox(saved.outbox[itemId], OfflineOutboxEvent("online-viewing", current = data))
+        save(
+            saved.copy(
+                lastKnown = saved.lastKnown + (itemId to data),
+                outbox = if (result.ignored == null) saved.outbox.withEntry(itemId, result.entry) else saved.outbox
+            )
+        )
     }
 
     suspend fun dismissConflict(itemId: String) = mutex.withLock {

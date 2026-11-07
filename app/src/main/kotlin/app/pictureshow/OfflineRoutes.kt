@@ -129,7 +129,7 @@ private fun OfflineLocalPlayer(
             OfflineStoreHandoff(gateway, store, entry.itemId, OfflineApiProgressRemote(api))
         ) { start -> onLeave(offlineStreamRoute(entry, start)) }
         val next = OfflineNext(
-            engine.ready()[current.key]?.manifest?.entries.orEmpty(),
+            { engine.libraries.value[current.key]?.manifest?.entries.orEmpty() },
             entry,
             { onLeave(offlinePlayerRoute(it)) },
             onGone

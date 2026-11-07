@@ -1000,6 +1000,81 @@ class OfflineEngineTest {
         override suspend fun write(account: Account, itemId: String, positionTicks: Long?, played: Boolean?): Int? = 200
     }
 
+    private class ServerAt(var data: OfflineUserData) : OfflineProgressRemote {
+        val writes = mutableListOf<Long?>()
+        override suspend fun sameViewer(account: Account) = true
+        override suspend fun read(account: Account, itemId: String) = data
+        override suspend fun write(account: Account, itemId: String, positionTicks: Long?, played: Boolean?): Int? {
+            writes += positionTicks
+            positionTicks?.let { data = data.copy(positionTicks = it) }
+            return 200
+        }
+    }
+
+    @Test
+    fun `online viewing past an undismissed conflict is what the next local viewing starts from`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        val store = engine.progressStore(viewerA)
+        val server = ServerAt(OfflineUserData(positionTicks = 900))
+        store.remember("1", OfflineUserData(positionTicks = 100))
+        store.viewing("1", store.newSequence(), 500)
+        store.sync(server)
+        assertTrue("1" in store.conflicts.value)
+        server.data = OfflineUserData(positionTicks = 30_000)
+        engine.onlineViewingEnded(viewerA, "1") { server.data }.join()
+        assertTrue("the online viewing replaces what the notice was about", store.conflicts.value.isEmpty())
+        assertEquals(30_000, store.resumeTicks("1"))
+        store.viewing("1", store.newSequence(), 30_500)
+        store.sync(server)
+        assertEquals("never the older place", listOf<Long?>(30_500L), server.writes)
+    }
+
+    @Test
+    fun `a record that sync hasn't sent, then online viewing, isn't this device's own conflict`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        val store = engine.progressStore(viewerA)
+        val server = ServerAt(OfflineUserData(positionTicks = 30_000))
+        store.remember("1", OfflineUserData(positionTicks = 100))
+        store.viewing("1", store.newSequence(), 500)
+        engine.onlineViewingEnded(viewerA, "1") { server.data }.join()
+        assertEquals(30_000, store.resumeTicks("1"))
+        store.sync(server)
+        assertTrue(store.conflicts.value.isEmpty())
+        assertTrue(server.writes.isEmpty())
+    }
+
+    @Test
+    fun `online viewing that didn't move the server leaves the unsent place alone`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        val store = engine.progressStore(viewerA)
+        val server = ServerAt(OfflineUserData(positionTicks = 100))
+        store.remember("1", server.data)
+        store.viewing("1", store.newSequence(), 500)
+        engine.onlineViewingEnded(viewerA, "1") { server.data }.join()
+        assertEquals(500, store.resumeTicks("1"))
+        store.sync(server)
+        assertEquals(listOf<Long?>(500L), server.writes)
+    }
+
+    @Test
+    fun `a conflict's next local viewing starts at the place the notice says was kept`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        val store = engine.progressStore(viewerA)
+        val server = ServerAt(OfflineUserData(positionTicks = 900))
+        store.remember("1", OfflineUserData(positionTicks = 100))
+        store.viewing("1", store.newSequence(), 500)
+        store.sync(server)
+        assertEquals(900, store.resumeTicks("1"))
+    }
+
     @Test
     fun `online viewing of a downloaded title moves where the local viewing starts, and other titles read nothing`() = runBlocking<Unit> {
         signIn(viewerA)

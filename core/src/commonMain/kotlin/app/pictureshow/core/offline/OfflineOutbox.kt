@@ -204,12 +204,33 @@ fun reduceOfflineOutbox(entry: OfflineOutboxEntry?, event: OfflineOutboxEvent): 
         else -> readback(entry, requireNotNull(event.current) { "readback needs current" })
     }
     "process-restart" -> if (entry?.phase == WRITING) OfflineOutboxResult(entry, "read") else OfflineOutboxResult(entry)
+    // A viewing online on this device is newer than anything held here. A server that didn't move means it reported nothing, so an unsent
+    // place stays. A conflict goes either way: its notice is about a place the online session has replaced.
+    "online-viewing" -> {
+        val current = requireNotNull(event.current) { "online-viewing needs current" }
+        when {
+            entry == null -> OfflineOutboxResult(null, ignored = "no-entry")
+            entry.phase != CONFLICT && current.positionTicks == entry.base.positionTicks && current.played == entry.base.played ->
+                OfflineOutboxResult(entry)
+            else -> OfflineOutboxResult(null)
+        }
+    }
     "dismiss-conflict" -> when {
         entry == null -> OfflineOutboxResult(null, ignored = "no-entry")
         entry.phase != CONFLICT -> entry.ignore("wrong-phase")
         else -> OfflineOutboxResult(null)
     }
     else -> error("Unknown offline outbox operation: ${event.op}")
+}
+
+/**
+ * Where a local viewing starts. A conflict's place isn't one: the notice says the server's was kept, and the base of the next viewing
+ * is the server's, so resuming from the older place would write it over the newer one.
+ */
+fun offlineResumeTicks(entry: OfflineOutboxEntry?, lastKnown: OfflineUserData?): Long = when {
+    entry != null && entry.phase != CONFLICT && entry.played == true -> 0
+    entry != null && entry.phase != CONFLICT && entry.positionTicks != null -> entry.positionTicks ?: 0
+    else -> lastKnown?.takeIf { !it.played }?.positionTicks ?: 0
 }
 
 /** Stable per server+viewer+installation, with no credential in it: "pictureshow-dl-" + the first 16 bytes of SHA-256 in hex. */
