@@ -1574,6 +1574,22 @@ class CastSenderHostTest {
         assertNotNull(host.state.value.cast!!.owner.candidate)
     }
 
+    // Only a pick still starting ends here: one that has already ended has its own way out, and this mustn't take that away.
+    @Test fun aPickThatHasEndedIsLeftAloneByThePlayerMovingOn() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        host.openChooser(request(local = player))
+        host.pick(ROUTE)
+        runCurrent()
+        host.cancel()
+        runCurrent()
+        val ended = host.state.value.cast
+        assertNotNull(ended, "cancelling leaves the ended viewing for the player to recover from")
+        host.localAdvancing(player)
+        runCurrent()
+        assertEquals(ended, host.state.value.cast)
+    }
+
     @Test fun aPickOnTheReceiverIsNotUndoneByThePlayerMovingOn() = runTest {
         val host = host()
         casting(host)
