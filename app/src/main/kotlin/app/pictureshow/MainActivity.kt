@@ -464,7 +464,7 @@ internal fun Pictureshow(
             }
         }
     }
-    val accessibleNavigation = rememberScreenReaderInUse()
+    val accessibleNavigation = rememberAssistiveServiceInUse()
     NavHost(
         navController = nav,
         startDestination = "waiting",
@@ -1035,7 +1035,7 @@ private fun Message(message: String?) {
 
 @Composable
 internal fun QuickConnectCode(code: String, announce: ((String) -> Unit)? = null) {
-    val accessible = rememberScreenReaderInUse()
+    val accessible = rememberAssistiveServiceInUse()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val host = LocalView.current
     val announcer by rememberUpdatedState(announce)

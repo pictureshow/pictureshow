@@ -113,7 +113,7 @@ internal fun ChapterPanel(account: Account, itemId: String, chapters: List<Chapt
     val entry = remember { PlayerPanelEntryFocus() }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
-    val accessible = rememberScreenReaderInUse()
+    val accessible = rememberAssistiveServiceInUse()
     var initialFocusReady by remember(accessible) { mutableStateOf(!accessible) }
     val initialCurrent = remember(accessible) { current }
     // Keep one arrival target while TalkBack acknowledges it; playback may cross a boundary.
