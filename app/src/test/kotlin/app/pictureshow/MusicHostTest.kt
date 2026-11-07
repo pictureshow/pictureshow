@@ -73,12 +73,17 @@ class MusicHostTest {
     private var remote: String? = null
     private var services = 0
 
+    private val tokens = java.util.Collections.synchronizedList(mutableListOf<String>())
+    private val reportedTo = java.util.Collections.synchronizedList(mutableListOf<String>())
+    private var checks = 0
+    private var checkFails = false
     private var itemsGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private var checkGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     private inner class Gateway : MusicGateway {
         override suspend fun negotiate(account: Account, media: String, ceiling: Int): ClientResult<PlayOutcome> {
             negotiated += media
+            tokens += "${account.accessToken}:$media"
             return ClientResult.Success(
                 PlayOutcome.Play(
                     PlayDecision(
@@ -95,16 +100,20 @@ class MusicHostTest {
 
         override suspend fun start(account: Account, info: PlaybackProgressInfo) {
             log += "start ${info.itemId}"
+            reportedTo += "${account.user.id} start ${info.itemId}"
         }
 
         override suspend fun progress(account: Account, info: PlaybackProgressInfo) = Unit
 
         override suspend fun stopped(account: Account, info: PlaybackStopInfo) {
             log += "stop ${info.itemId}" + if (info.failed) " failed" else ""
+            reportedTo += "${account.user.id} stop ${info.itemId}"
         }
 
         override suspend fun check(account: Account, media: List<String>): ClientResult<List<String>> {
             checkGate?.await()
+            checks += 1
+            if (checkFails) return ClientResult.Failure(app.pictureshow.core.ClientError(app.pictureshow.core.ErrorKind.NETWORK, "offline"))
             return ClientResult.Success(media.filter { it !in gone })
         }
 
@@ -361,14 +370,31 @@ class MusicHostTest {
         assertEquals("b", music.state.value.current!!.track.id)
     }
 
-    @Test fun aRevokedTokenEndsTheAudioAndTheQueue() {
+    /** As with video: the account is marked expired, so a sign-in replaces its token, and the same viewer's queue waits. */
+    @Test fun aRevokedTokenEndsTheAudioAndMarksTheAccountExpired() {
         val music = host()
         ready(music)
         music.request(album("denied", "b"))
-        until("the end") { music.state.value.message?.contains("Sign in again") == true }
+        until("the end") { music.state.value.message?.contains("sign in again") == true }
         assertFalse(music.state.value.outputActive)
-        assertNull(music.state.value.current)
-        assertNull(runBlocking { MusicStore(context).load(account) })
+        until("the account marked expired") { accounts.snapshots.value.currentAccount?.expired == true }
+        assertEquals(account.key, accounts.snapshots.value.currentKey)
+        assertEquals(listOf("denied", "b"), music.state.value.queue!!.entries.map { it.media })
+        assertTrue(music.state.value.queue!!.paused)
+        assertEquals(listOf("denied", "b"), runBlocking { MusicStore(context).load(account) }!!.queue.entries.map { it.media })
+    }
+
+    /** The same viewer signing in again, or a device upgrade, gives a new token: nothing opened with the old one is reused. */
+    @Test fun aNewTokenForTheSameViewerReopensWhatWasPrepared() {
+        val music = host()
+        ready(music)
+        music.setRepeat("all")
+        music.request(album("a", "b"))
+        until("both prepared with the first token") { "token:a" in tokens && "token:b" in tokens }
+        runBlocking { accounts.remember(account.copy(accessToken = "fresh")) }
+        until("both opened again with the new token") { "fresh:a" in tokens && "fresh:b" in tokens }
+        assertEquals(listOf("a", "b"), music.state.value.queue!!.entries.map { it.media })
+        assertTrue(music.state.value.outputActive)
     }
 
     @Test fun addingAheadDoesntTouchWhatsPlaying() {
@@ -515,8 +541,8 @@ class MusicHostTest {
         until("the question") { music.state.value.prompt?.kind == "replace" }
     }
 
-    /** A step asked for under one account, held up behind a slow one, must not run against the account that follows. */
-    @Test fun aStepWaitingBehindASwitchDoesNotTouchTheNextAccount() {
+    /** A saved queue still being checked when the viewer switches again lands nowhere: not on the account that follows. */
+    @Test fun aRestoreStillCheckingWhenTheAccountChangesAgainLandsNowhere() {
         val music = host()
         ready(music)
         music.append(account, tracks("a"))
@@ -525,17 +551,223 @@ class MusicHostTest {
         music.append(other, tracks("x"))
         until("the other queue") { music.state.value.queue?.entries?.size == 1 }
         val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { checkGate = it }
-        // Restoring the first account holds the road; the switch back and a Clear asked for before it wait behind.
         runBlocking { accounts.select(account.key) }
         pump(100)
         runBlocking { accounts.select(other.key) }
-        pump(100)
-        music.clear()
+        until("back on the other account") { music.state.value.account?.key == other.key }
         gate.complete(Unit)
         checkGate = null
-        until("back on the other account") { music.state.value.account?.key == other.key }
         pump(300)
         assertEquals(listOf("x"), music.state.value.queue!!.entries.map { it.media })
+    }
+
+    /** Play for the account the viewer just switched to runs, even when it is asked for before the switch reaches the host. */
+    @Test fun aPlayForTheAccountJustSwitchedToIsNotDropped() {
+        val music = host()
+        ready(music)
+        music.append(account, tracks("a"))
+        until("the saved queue") { music.state.value.queue?.entries?.size == 1 }
+        switchTo(other, music)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { checkGate = it }
+        runBlocking { accounts.select(account.key) }
+        pump(100)
+        runBlocking { accounts.select(other.key) }
+        music.request(MusicPlay(other.key, tracks("x"), null, "album", "Album", false))
+        gate.complete(Unit)
+        checkGate = null
+        until("the other account's play") { music.state.value.account?.key == other.key && "x" in negotiated }
+        assertEquals(listOf("x"), music.state.value.queue!!.entries.map { it.media })
+    }
+
+    /** The server check of a saved queue is off the step road: Play and Stop don't wait on a slow server. */
+    @Test fun aRestoreStillCheckingDoesNotHoldPlay() {
+        val first = host()
+        ready(first)
+        first.append(account, tracks("a"))
+        until("the saved queue") { first.state.value.queue?.entries?.size == 1 }
+        scopes.first().cancel()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { checkGate = it }
+        val second = host()
+        ready(second)
+        second.request(album("b"))
+        until("the new play, while the check still waits") { "b" in negotiated }
+        second.stop()
+        until("the stop") { !second.state.value.outputActive }
+        gate.complete(Unit)
+        checkGate = null
+        pump(300)
+        // What the viewer started meanwhile isn't replaced by the late restore.
+        assertEquals(listOf("b"), second.state.value.queue!!.entries.map { it.media })
+    }
+
+    /** One failed check means every saved track stays, so the rest of a long queue isn't asked about. */
+    @Test fun aRestoreStopsAtTheFirstFailedCheck() {
+        val first = host()
+        ready(first)
+        val many = (1..150).map { "t$it" }.toTypedArray()
+        first.append(account, tracks(*many))
+        until("the saved queue") { first.state.value.queue?.entries?.size == 150 }
+        scopes.first().cancel()
+        checkFails = true
+        checks = 0
+        val second = host()
+        until("the restore") { second.state.value.queue?.entries?.size == 150 }
+        assertEquals(1, checks)
+    }
+
+    /** Removing a viewer who isn't the current one still deletes their saved queue (and a server, all of its viewers'). */
+    @Test fun removingAnotherViewerDeletesTheirSavedQueue() {
+        val music = host()
+        ready(music)
+        music.append(account, tracks("a"))
+        until("the saved queue") { music.state.value.queue?.entries?.size == 1 }
+        switchTo(other, music)
+        music.append(other, tracks("x"))
+        until("the other queue") { music.state.value.queue?.entries?.size == 1 }
+        runBlocking { accounts.removeAccount(account.key) }
+        until("the removed viewer's queue gone") { runBlocking { MusicStore(context).load(account) } == null }
+        assertNotNull(runBlocking { MusicStore(context).load(other) })
+        val elsewhere = Account(Server("s2", "Other", "https://other.example.test/", "12"), User("v", "Viewer"), "t2")
+        runBlocking { MusicStore(context).save(elsewhere, MusicSnapshot(app.pictureshow.core.control.QueueState("s2", "v"))) }
+        runBlocking { accounts.remember(elsewhere) }
+        until("on the other server") { music.state.value.account?.key == elsewhere.key }
+        runBlocking { accounts.select(other.key) }
+        runBlocking { accounts.removeServer(elsewhere.server) }
+        until("the removed server's queue gone") { runBlocking { MusicStore(context).load(elsewhere) } == null }
+        assertNotNull(runBlocking { MusicStore(context).load(other) })
+    }
+
+    /** A switch while playing ends the old viewing on the old account; nothing about it reaches the next one. */
+    @Test fun aSwitchWhilePlayingStopsTheOldViewingOnTheOldAccount() {
+        val music = host()
+        ready(music)
+        music.setRepeat("all")
+        music.request(album("a", "b"))
+        until("playing") { reportedTo.any { it.startsWith("v start") } }
+        switchTo(other, music)
+        until("the audio ends") { !music.state.value.outputActive }
+        pump(200)
+        val starts = reportedTo.count { it.contains(" start ") }
+        val stops = reportedTo.count { it.contains(" stop ") }
+        assertEquals(starts, stops, "Every viewing closed: $reportedTo")
+        assertTrue(reportedTo.all { it.startsWith("v ") }, "Only the old account heard about its viewings: $reportedTo")
+        assertTrue(music.state.value.queue!!.entries.isEmpty())
+        assertNotNull(runBlocking { MusicStore(context).load(account) })
+    }
+
+    /** Reading a phone's long queue goes in batches: 500 ids in one URL is twice the server's request-line limit. */
+    @Test fun aLongReadGoesInBatches() {
+        val asked = mutableListOf<List<String>>()
+        val service = object : app.pictureshow.core.music.MusicService {
+            override suspend fun music(account: Account, request: app.pictureshow.core.music.MusicRequest) =
+                request.parameters.getValue("ids").split(",").also { asked += it }.let { ids ->
+                    if (asked.size == 3 && failThird) {
+                        ClientResult.Failure(app.pictureshow.core.ClientError(app.pictureshow.core.ErrorKind.NETWORK, "offline"))
+                    } else {
+                        ClientResult.Success(app.pictureshow.core.ItemPage(ids.map { MediaItem(id = it, name = it, type = "Audio") }))
+                    }
+                }
+            override suspend fun instantMix(account: Account, item: String) = error("unused")
+            override suspend fun playlistCanEdit(account: Account, playlist: String) = error("unused")
+            override suspend fun createPlaylist(account: Account, name: String, items: List<String>, isPublic: Boolean) = error("unused")
+            override suspend fun renamePlaylist(account: Account, playlist: String, name: String) = error("unused")
+            override suspend fun addToPlaylist(account: Account, playlist: String, items: List<String>) = error("unused")
+            override suspend fun removeFromPlaylist(account: Account, playlist: String, entries: List<String>) = error("unused")
+            override suspend fun movePlaylistEntry(account: Account, playlist: String, entry: String, index: Int) = error("unused")
+        }
+        val gateway = ClientMusicGateway({ error("unused") }, service) { emptySet() }
+        val ids = (1..500).map { it.toString().padStart(32, '0') }
+        val items = runBlocking { gateway.items(account, ids) } as ClientResult.Success
+        assertEquals(ids, items.value.map(MediaItem::id))
+        assertEquals(listOf(100, 100, 100, 100, 100), asked.map { it.size })
+        asked.clear()
+        assertEquals(ids, (runBlocking { gateway.check(account, ids) } as ClientResult.Success).value)
+        asked.clear()
+        failThird = true
+        assertTrue(runBlocking { gateway.items(account, ids) } is ClientResult.Failure)
+        assertEquals(3, asked.size, "The first failure ends the read")
+    }
+
+    private var failThird = false
+
+    private fun sessionPlayer(music: MusicHost): Pair<androidx.media3.common.Player, androidx.media3.session.MediaSession> {
+        var wrapped: androidx.media3.common.Player? = null
+        val service = org.robolectric.Robolectric.buildService(MusicPlaybackService::class.java).get()
+        val session = music.openSession(service) { player ->
+            wrapped = player
+            androidx.media3.session.MediaSession.Builder(context, player).setId("test-${System.nanoTime()}").build()
+        }
+        return wrapped!! to session!!
+    }
+
+    private fun pausedOnThree(): MusicHost {
+        val music = host()
+        ready(music)
+        music.request(album("a", "b", "c"))
+        music.pause()
+        until("the paused output holding the album") {
+            lastPlayer?.mediaItemCount == 3 && music.state.value.queue?.paused == true && music.state.value.outputActive
+        }
+        return music
+    }
+
+    /** A controller picking another row of the output (a watch or car queue list) picks that queue entry, not just audio. */
+    @Test fun aControllersRowPickGoesThroughTheQueue() {
+        val music = pausedOnThree()
+        val (player, session) = sessionPlayer(music)
+        player.seekTo(2, 0)
+        until("the queue on the picked row") { music.state.value.current?.track?.id == "c" }
+        session.release()
+    }
+
+    @Test fun aControllersDefaultPositionPickGoesThroughTheQueue() {
+        val music = pausedOnThree()
+        val (player, session) = sessionPlayer(music)
+        player.seekToDefaultPosition(1)
+        until("the queue on the picked row") { music.state.value.current?.track?.id == "b" }
+        session.release()
+    }
+
+    /** setPlayWhenReady from a controller is Play and Pause, so the queue's own paused state follows it. */
+    @Test fun aControllersPlayWhenReadyGoesThroughTheQueue() {
+        val music = pausedOnThree()
+        val (player, session) = sessionPlayer(music)
+        player.playWhenReady = true
+        until("the queue playing") { music.state.value.queue?.paused == false }
+        player.playWhenReady = false
+        until("the queue paused") { music.state.value.queue?.paused == true }
+        session.release()
+    }
+
+    /** One press acts once, whichever route it arrives by; a release and a press without a key aren't presses. */
+    @Test fun aMediaButtonActsOnce() {
+        val music = pausedOnThree()
+        val (_, session) = sessionPlayer(music)
+        val callback = MusicSessionCallback(music)
+        val controller = androidx.media3.session.MediaSession.ControllerInfo.createTestOnlyControllerInfo(
+            androidx.media3.session.MediaSession.ControllerInfo.LEGACY_CONTROLLER_PACKAGE_NAME,
+            123,
+            2000,
+            androidx.media3.session.MediaSession.ControllerInfo.LEGACY_CONTROLLER_VERSION,
+            0,
+            false,
+            android.os.Bundle.EMPTY,
+            false
+        )
+        fun press(action: Int, down: Long) = callback.onMediaButtonEvent(
+            session,
+            controller,
+            android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON).putExtra(
+                android.content.Intent.EXTRA_KEY_EVENT,
+                android.view.KeyEvent(down, down, action, android.view.KeyEvent.KEYCODE_MEDIA_NEXT, 0)
+            )
+        )
+        assertFalse(press(android.view.KeyEvent.ACTION_DOWN, 5), "The first press goes on to act")
+        assertTrue(press(android.view.KeyEvent.ACTION_DOWN, 5), "The same press again is consumed")
+        assertFalse(press(android.view.KeyEvent.ACTION_UP, 5))
+        assertFalse(press(android.view.KeyEvent.ACTION_DOWN, 9), "A new press acts")
+        assertFalse(callback.onMediaButtonEvent(session, controller, android.content.Intent(android.content.Intent.ACTION_MEDIA_BUTTON)))
+        session.release()
     }
 
     @Test fun aPausedQueueStaysPausedWhenTheListenerSkips() {

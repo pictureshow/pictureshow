@@ -50,6 +50,7 @@ import app.pictureshow.core.music.MusicSessionState
 import app.pictureshow.core.music.musicBitrateCeiling
 import app.pictureshow.core.music.musicDeviceProfile
 import app.pictureshow.core.music.musicEntries
+import app.pictureshow.core.music.musicIdBatches
 import app.pictureshow.core.music.musicOutputFacts
 import app.pictureshow.core.music.musicOutputRepeats
 import app.pictureshow.core.music.musicPermutation
@@ -170,26 +171,31 @@ internal class ClientMusicGateway(
         client(account).reportStopped(account, info)
     }
 
-    override suspend fun check(account: Account, media: List<String>): ClientResult<List<String>> {
-        val parameters = mapOf("ids" to media.joinToString(","), "limit" to media.size.toString())
-        return when (val page = music.music(account, MusicRequest("Items", parameters))) {
-            is ClientResult.Failure -> page
-            is ClientResult.Success -> ClientResult.Success(page.value.items.map(MediaItem::id))
+    override suspend fun check(account: Account, media: List<String>): ClientResult<List<String>> =
+        when (val rows = read(account, media, emptyMap())) {
+            is ClientResult.Failure -> rows
+            is ClientResult.Success -> ClientResult.Success(rows.value.map(MediaItem::id))
         }
-    }
 
-    override suspend fun items(account: Account, media: List<String>): ClientResult<List<MediaItem>> {
-        val parameters = mapOf("ids" to media.joinToString(","), "limit" to media.size.toString(), "fields" to "MediaSources")
-        return when (val page = music.music(account, MusicRequest("Items", parameters))) {
-            is ClientResult.Failure -> page
-            is ClientResult.Success -> ClientResult.Success(page.value.items)
+    override suspend fun items(account: Account, media: List<String>): ClientResult<List<MediaItem>> =
+        read(account, media, mapOf("fields" to "MediaSources"))
+
+    /** Ids go in batches, so a long queue never makes a request line the server refuses; the first failure ends it. */
+    private suspend fun read(account: Account, media: List<String>, extra: Map<String, String>): ClientResult<List<MediaItem>> {
+        val rows = mutableListOf<MediaItem>()
+        for (batch in musicIdBatches(media)) {
+            val parameters = mapOf("ids" to batch.joinToString(","), "limit" to batch.size.toString()) + extra
+            when (val page = music.music(account, MusicRequest("Items", parameters))) {
+                is ClientResult.Failure -> return page
+                is ClientResult.Success -> rows += page.value.items
+            }
         }
+        return ClientResult.Success(rows)
     }
 }
 
 private const val POSITION_SAVE_MS = 5_000L
 private const val PROGRESS_REPORT_MS = 10_000L
-private const val CHECK_BATCH = 100
 
 /**
  * The one music player: the reducer owns the queue, this file owns the output, and every change takes the same road.
@@ -236,6 +242,7 @@ internal class MusicHost(
     private var ceiling = 0
     private var endedHandled = false
     private var binding = 0L
+    private var restoring: Job? = null
 
     /** A step belongs to the account that was bound when it was asked for; once another is bound it no longer runs. */
     private fun enqueue(job: suspend () -> Unit) {
@@ -243,7 +250,27 @@ internal class MusicHost(
         jobs.trySend { if (asked == binding) job() }
     }
 
+    /**
+     * A step a screen asked for on behalf of one account runs for that account or not at all. A screen can be ahead of this
+     * host: it may already show the account the viewer just switched to, so that switch is made here first rather than the
+     * step being dropped for arriving before it.
+     */
+    private fun enqueueFor(owner: String, job: suspend () -> Unit) {
+        jobs.trySend {
+            if (owner != account?.key && accounts.snapshots.value.currentAccount?.key == owner) bindLatest()
+            if (owner == account?.key) job()
+        }
+    }
+
     // Accounts
+
+    /** Always the latest accounts, so a switch a step already made is not undone by an older one still in line. */
+    private suspend fun bindLatest() {
+        val snapshot = accounts.snapshots.value
+        bind(snapshot.currentAccount, snapshot.accounts.map(Account::key).toSet())
+        // Any viewer no longer saved here, current or not, takes their saved queue with them.
+        store.retain(snapshot.accounts)
+    }
 
     private suspend fun bind(next: Account?, known: Set<String>) {
         val previous = account
@@ -254,10 +281,12 @@ internal class MusicHost(
         }
         if (previous?.key == next?.key) {
             account = next
+            if (previous != null && next != null && previous.accessToken != next.accessToken) renewed()
             return
         }
         account = next
         binding++
+        restoring?.cancel()
         reports = MusicReportState()
         session = MusicSessionState()
         playContext = null
@@ -266,16 +295,54 @@ internal class MusicHost(
         tracks = emptyMap()
         queue = QueueStoreState(QueueState(next?.server?.id ?: "", next?.user?.id ?: ""))
         publish { MusicUi(account = next, queue = next?.let { queue.committed }) }
-        if (next != null) restore(next)
+        if (next != null) {
+            val bound = binding
+            val empty = queue
+            // The server check is off the step road, so Play and Stop never wait on it.
+            restoring = scope.launch { restore(next, bound, empty) }
+        }
     }
 
-    /** A saved queue comes back paused, without what the server no longer lets this viewer open (QUE-07, MUS-08). */
-    private suspend fun restore(account: Account) {
+    /**
+     * The same viewer with a new token, after a sign-in again or a device upgrade: nothing opened with the old one is used
+     * again. What's playing is reopened where it is, and what was prepared is asked for again.
+     */
+    private suspend fun renewed() {
+        preparing?.cancel()
+        prepared.clear()
+        val running = player ?: return
+        val at = currentTicks()
+        // Stopped first, so the empty player is idle rather than ended, which would read as the track finishing.
+        running.stop()
+        running.clearMediaItems()
+        if (queue.committed.current != null) {
+            commit { QueueEvent("position", revision = it.revision, generation = it.generation, ticks = at) }
+        }
+        sync()
+    }
+
+    /**
+     * A saved queue comes back paused, without what the server no longer lets this viewer open (QUE-07, MUS-08). It lands
+     * only on the queue it was read for: not after a switch, and not over something the viewer started meanwhile.
+     */
+    private suspend fun restore(account: Account, bound: Long, empty: QueueStoreState) {
         val saved = store.load(account) ?: return
         if (saved.queue.server != account.server.id || saved.queue.viewer != account.user.id) return
         val media = saved.queue.entries.map(QueueEntry::media).distinct()
-        val pages = if (media.isEmpty()) emptyList() else media.chunked(CHECK_BATCH).map { gateway.check(account, it) }
+        val pages = mutableListOf<ClientResult<List<String>>>()
+        for (batch in musicIdBatches(media)) {
+            val page = gateway.check(account, batch)
+            pages += page
+            // One failure already means every saved track stays, so the rest needn't be asked.
+            if (page !is ClientResult.Success) break
+        }
         val accessible = accessibleAfter(media.toSet(), pages)
+        jobs.trySend {
+            if (binding == bound && this.account?.key == account.key && queue === empty) applyRestore(account, saved, accessible)
+        }
+    }
+
+    private suspend fun applyRestore(account: Account, saved: MusicSnapshot, accessible: Set<String>) {
         val ids = saved.queue.entries.filter { it.media in accessible }.map(QueueEntry::id)
         val restored = reduceQueueStore(queue, QueueStoreEvent("restore", saved = saved.queue, accessible = ids))
         if (restored.effect != "persist") return
@@ -295,8 +362,7 @@ internal class MusicHost(
 
     // What the screens and the session call.
 
-    fun request(play: MusicPlay) = enqueue {
-        if (play.owner != account?.key) return@enqueue
+    fun request(play: MusicPlay) = enqueueFor(play.owner) {
         val q = queue.committed
         val decision = musicPlayDecision(
             MusicPlayRequest(
@@ -328,7 +394,7 @@ internal class MusicHost(
     }
 
     /** The chooser's "This device": the question was already answered, so nothing is asked again. */
-    fun playHere(play: MusicPlay) = enqueue { start(play) }
+    fun playHere(play: MusicPlay) = enqueueFor(play.owner) { start(play) }
 
     /**
      * A remote's Play on this device, when what it named is music: true means it's handled here, since the video route
@@ -348,7 +414,7 @@ internal class MusicHost(
                 null,
                 false
             )
-        enqueue { start(play) }
+        enqueueFor(account.key) { start(play) }
         return true
     }
 
@@ -397,12 +463,11 @@ internal class MusicHost(
         if (limited.size < play.tracks.size) publish { it.copy(message = "Playing the first $MUSIC_QUEUE_LIMIT tracks.") }
     }
 
-    private fun add(owner: Account, items: List<MusicTrack>, op: String) = enqueue {
-        if (owner.key != account?.key) return@enqueue
+    private fun add(owner: Account, items: List<MusicTrack>, op: String) = enqueueFor(owner.key) {
         val limited = items.take((MUSIC_QUEUE_LIMIT - queue.committed.entries.size).coerceAtLeast(0))
         if (limited.isEmpty()) {
             if (items.isNotEmpty()) publish { it.copy(message = "The queue is full.") }
-            return@enqueue
+            return@enqueueFor
         }
         val entries = musicEntries(limited.map(MusicTrack::id), sequence)
         sequence += entries.size
@@ -418,7 +483,7 @@ internal class MusicHost(
             commit { QueueEvent(op, revision = it.revision, generation = it.generation, entries = entries) }
         }
         // A refused or unsaved edit has already said so; claiming it was added would hide that.
-        if (!added) return@enqueue
+        if (!added) return@enqueueFor
         val count = limited.size
         publish { it.copy(message = if (count == 1) "Added ${limited[0].title} to the queue." else "Added $count tracks to the queue.") }
     }
@@ -448,9 +513,13 @@ internal class MusicHost(
         contextName = null
     }
 
-    fun jump(entry: String) = enqueue {
+    fun jump(entry: String, positionMs: Long = 0) = enqueue {
         activate()
-        commit { QueueEvent("jump", revision = it.revision, generation = it.generation, entry = entry) }
+        val jumped = commit { QueueEvent("jump", revision = it.revision, generation = it.generation, entry = entry) }
+        if (jumped && positionMs > 0) {
+            val ticks = positionMs * Ticks.PER_MILLISECOND
+            commit { QueueEvent("position", revision = it.revision, generation = it.generation, ticks = ticks) }
+        }
     }
 
     fun play() = enqueue {
@@ -696,12 +765,15 @@ internal class MusicHost(
         commit { QueueEvent("error", revision = it.revision, generation = it.generation, completion = it.completion, music = true) }
     }
 
+    /**
+     * The server refused this account's token. As with video, the account is marked expired, so signing in again replaces the
+     * token rather than adding a second viewer, and the same viewer's saved queue waits for them, paused.
+     */
     private suspend fun revoked() {
         val active = account
         endOutput("revoked")
-        commit { QueueEvent("clear-all", revision = it.revision, generation = it.generation) }
-        if (active != null) store.delete(active)
-        publish { it.copy(message = "This account can't play here any more. Sign in again to keep listening.") }
+        if (active != null && active.accessToken.isNotEmpty()) accounts.expire(active.key, active.accessToken)
+        publish { it.copy(message = "This account needs to sign in again. Your queue is saved for when it does.") }
     }
 
     private fun applyWindow(active: Account, target: List<String>) {
@@ -787,7 +859,7 @@ internal class MusicHost(
             val natural = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
             val track = prepared[entry]
             if (track != null) {
-                report(MusicReportEvent("load", entry, track.media, ticks = if (natural) leaving else lastTicks))
+                report(MusicReportEvent("load", entry, track.media, ticks = lastTicks, natural = natural, durationTicks = leaving))
                 reports.viewing?.let { viewings[it.serial] = track }
                 if (player?.isPlaying == true) report(MusicReportEvent("playing", ticks = 0))
             }
@@ -1059,12 +1131,12 @@ internal class MusicHost(
         }
         scope.launch {
             accounts.load()
-            accounts.snapshots.distinctUntilChangedBy { it.currentAccount?.key to it.currentAccount?.accessToken }.collect { snapshot ->
-                val next = snapshot.currentAccount
-                val known = snapshot.accounts.map(Account::key).toSet()
-                // The one step that always runs: it is what moves the queue to the next account.
-                jobs.trySend { bind(next, known) }
-            }
+            accounts.snapshots
+                .distinctUntilChangedBy { Triple(it.currentAccount?.key, it.currentAccount?.accessToken, it.accounts.map(Account::key)) }
+                .collect {
+                    // The one step that always runs: it is what moves the queue to the next account.
+                    jobs.trySend { bindLatest() }
+                }
         }
     }
 }

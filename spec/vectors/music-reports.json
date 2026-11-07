@@ -380,6 +380,122 @@
           }
         }
       ]
+    },
+    {
+      "id": "music-reports.a-natural-end-reports-the-full-duration",
+      "operation": "report",
+      "state": {},
+      "note": "The output moved on by itself: the track was heard to its end, though the last position seen was up to a second short.",
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing",
+            "ticks": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "load",
+            "entry": "b",
+            "media": "y",
+            "ticks": "1700000",
+            "natural": true,
+            "durationTicks": "1800000"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "1800000",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.a-skip-reports-the-last-position-seen",
+      "operation": "report",
+      "state": {},
+      "note": "Next, a jump or a seek to another track: the stop says where the listener actually left it.",
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing",
+            "ticks": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "load",
+            "entry": "b",
+            "media": "y",
+            "ticks": "400000",
+            "natural": false,
+            "durationTicks": "1800000"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "400000",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

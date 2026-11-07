@@ -24,6 +24,7 @@ import app.pictureshow.core.music.musicBitrateCeiling
 import app.pictureshow.core.music.musicDeviceProfile
 import app.pictureshow.core.music.musicEntries
 import app.pictureshow.core.music.musicGenreTracksRequest
+import app.pictureshow.core.music.musicIdBatches
 import app.pictureshow.core.music.musicListState
 import app.pictureshow.core.music.musicOutputFacts
 import app.pictureshow.core.music.musicOutputRepeats
@@ -47,6 +48,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -198,6 +200,13 @@ class MusicVectorsTest {
                 input.getValue("target").jsonArray.map { it.jsonPrimitive.content }
             )
         )
+        "id-batches" -> musicIdBatches(input.getValue("ids").jsonArray.map { it.jsonPrimitive.content }).let { batches ->
+            buildJsonObject {
+                put("sizes", JsonArray(batches.map { JsonPrimitive(it.size) }))
+                put("firsts", JsonArray(batches.map { JsonPrimitive(it.first()) }))
+                put("maxJoinedLength", JsonPrimitive(batches.maxOfOrNull { it.joinToString(",").length } ?: 0))
+            }
+        }
         "decision" -> JsonPrimitive(musicPlayDecision(json.decodeFromJsonElement<MusicPlayRequest>(input)))
         "create-body" -> createPlaylistBody(
             text(input, "name")!!,

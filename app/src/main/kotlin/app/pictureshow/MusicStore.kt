@@ -114,6 +114,14 @@ internal class MusicStore(context: Context, private val io: CoroutineDispatcher 
             positionFile(account).delete()
         }
     }
+
+    /** Removes the saved queue of every viewer not in [kept], including one removed while this app wasn't running. */
+    suspend fun retain(kept: List<Account>) {
+        withContext(io) {
+            val names = kept.map(::name).toSet()
+            directory.listFiles()?.filter { it.name.substringBefore('.') !in names }?.forEach { it.delete() }
+        }
+    }
 }
 
 /** Failure can't tell us what's gone, so only a real answer removes a saved row. */
