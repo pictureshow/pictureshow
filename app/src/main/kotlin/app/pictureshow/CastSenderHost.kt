@@ -201,6 +201,9 @@ internal class CastSenderHost(
     private var commandTimer: Job? = null
     private var reportJob: Job? = null
     private var loadStarted = false
+
+    /** This handoff stopped a viewing of ours on the session it is using, so that receiver is ours to close if the handoff fails. */
+    private var replacedOnLink = false
     private var generation = 1L
     private var commandId = 0L
     private var reportSequence = 0L
@@ -557,7 +560,9 @@ internal class CastSenderHost(
         mutableCastEnabled.value = value
         if (!value) {
             stopSearch()
-            // Turning it off keeps this app away from Cast devices. What is already playing there is left alone.
+            // Turning it off keeps this app away from Cast devices, a rejoin on its way included. What is already playing there is left alone.
+            val joining = cast?.owner?.phase == "disconnected" && cast?.link == "connecting"
+            if (reconnectJob?.isActive == true || pendingPick != null || joining) dropRejoin()
             if (cast?.owner?.owner?.kind == "cast") disconnect()
         } else if (mutable.value.chooserOpen && request != null) {
             startSearch()
@@ -681,6 +686,8 @@ internal class CastSenderHost(
         viewing = null
         lastStatus = null
         loadStarted = false
+        // Not replace-elsewhere: that one's old viewing is on another device, and this session may be joining someone else's receiver.
+        replacedOnLink = next.effect == "replace-on-link"
         localAlive = playRequest.local != null
         mutable.update {
             it.copy(cast = next, deviceName = route.name, title = item.title, controls = null, chooserOpen = false, pickRefusal = null)
@@ -938,12 +945,15 @@ internal class CastSenderHost(
         loadTimer?.cancel()
         cancelPendingSelect()
         val sent = loadStarted
+        val replaced = replacedOnLink
         loadStarted = false
+        replacedOnLink = false
         environment.mayBeLive = false
         link?.let { current ->
             if (sent) current.stop { }
-            // Selecting a device can join a receiver someone else is using. Only a load, or having started it, makes it this viewing's to stop.
-            if (cast?.link != "lost") current.endSession(stopReceiver = sent || current.launchedReceiver())
+            // Selecting a device can join a receiver someone else is using. Only a load, having started it,
+            // or having just stopped our own viewing on it makes it this viewing's to stop.
+            if (cast?.link != "lost") current.endSession(stopReceiver = sent || replaced || current.launchedReceiver())
         }
         // The receiver may have started a transcode by now, and only this session can ask to stop it.
         val encodings = if (sent) prepared.values.mapNotNull { it.playSessionId }.distinct() else emptyList()

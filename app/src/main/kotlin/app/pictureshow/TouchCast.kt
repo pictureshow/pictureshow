@@ -423,10 +423,6 @@ internal fun TouchCastBar(ui: CastUi, onOpen: () -> Unit) {
     ) { Text(line) }
 }
 
-/**
- * What needs the viewer while a handoff runs or after it ends. It shows over every screen, the player included, because
- * local playback is waiting on this answer.
- */
 /** The next episode is already starting, so a dialog would be in the way. */
 @Composable
 internal fun TouchCastDroppedNotice(ui: CastUi, host: CastSenderHost) {
@@ -438,6 +434,10 @@ internal fun TouchCastDroppedNotice(ui: CastUi, host: CastSenderHost) {
     }
 }
 
+/**
+ * What needs the viewer while a handoff runs or after it ends. It shows over every screen, the player included, because
+ * local playback is waiting on this answer.
+ */
 @Composable
 internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
     val cast = ui.cast ?: return
@@ -446,10 +446,11 @@ internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
         tag: String,
         message: String,
         confirm: Pair<String, () -> Unit>?,
-        dismiss: Pair<String, () -> Unit>?
+        dismiss: Pair<String, () -> Unit>?,
+        back: (() -> Unit)? = dismiss?.second
     ): @Composable () -> Unit = {
         AlertDialog(
-            onDismissRequest = { dismiss?.second?.invoke() },
+            onDismissRequest = { back?.invoke() },
             modifier = Modifier.testTag(tag),
             // These wait on, or ask about, a TV the viewer may not be looking at here. Only Back or a button answers.
             properties = DialogProperties(dismissOnClickOutside = false),
@@ -472,7 +473,9 @@ internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
             "cast:stop-unknown",
             "$device hasn't confirmed it stopped, so it may still be playing.",
             "Try again" to host::retryStop,
-            "Play here anyway" to { host.resumeHere(confirmed = true) }
+            "Play here anyway" to { host.resumeHere(confirmed = true) },
+            // Backing out isn't saying "play here": that revokes the session and starts this device while the TV may still be playing.
+            back = null
         )()
 
         cast.owner.phase == "return-ready" && cast.stopPurpose == "ended" -> dialog(

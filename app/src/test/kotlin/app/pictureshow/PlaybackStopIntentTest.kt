@@ -46,6 +46,51 @@ class PlaybackStopIntentTest {
         }
     }
 
+    // On a real ExoPlayer, because its own stop for an unplugged headset looks like the viewer's pause, so a TV load after it starts paused.
+    @Test fun anUnpluggedHeadsetReadsAsTheViewersPauseOnARealPlayer() {
+        val context = RuntimeEnvironment.getApplication()
+        val output = Media3PlaybackOutput(context, Server("server", "Test", "https://example.test", "12"))
+        val player = androidx.media3.exoplayer.ExoPlayer.Builder(context).build()
+        try {
+            player.setHandleAudioBecomingNoisy(true)
+            player.playWhenReady = true
+            assertFalse(output.viewerPaused(player))
+            context.sendBroadcast(android.content.Intent(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            assertFalse(player.playWhenReady, "the player stopped itself")
+            assertTrue(output.viewerPaused(player))
+        } finally {
+            player.release()
+            output.release()
+        }
+    }
+
+    @Test fun aPauseOnTheRealPlayerItselfSurvivesGoingToTheBackground() {
+        val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("server", "Test", "https://example.test", "12"))
+        try {
+            output.open(decision("first"), 30_000, -1, -1, false)
+            assertFalse(output.viewerPaused())
+            output.player.value!!.pause()
+            assertTrue(output.viewerPaused(), "the player's own button sets no pause intent")
+            output.setForeground(false)
+            assertTrue(output.viewerPaused(), "the viewer's pause stays theirs under the app's")
+        } finally {
+            output.release()
+        }
+    }
+
+    @Test fun theAppsPauseOnTheRealPlayerIsNotTheViewers() {
+        val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("server", "Test", "https://example.test", "12"))
+        try {
+            output.open(decision("first"), 30_000, -1, -1, false)
+            output.setForeground(false)
+            assertFalse(output.player.value!!.playWhenReady, "the app has paused it")
+            assertFalse(output.viewerPaused())
+        } finally {
+            output.release()
+        }
+    }
+
     @Test fun backgroundPlayIsDeniedAndReturnRequiresAnExplicitPlay() {
         val output = Media3PlaybackOutput(RuntimeEnvironment.getApplication(), Server("server", "Test", "https://example.test", "12"))
         try {

@@ -323,20 +323,72 @@ Operation `cast`, with `reduceCast` as the reference. It takes a viewing from th
 
 The start of a handoff, in order:
 
-| Event | Fields | Meaning |
+| `op` | Fields | Meaning |
 | --- | --- | --- |
 | `pick` | `identity`, `intent` | The viewer chose a device. Answers with the `effect` to take or a refusal in `reason`, without starting anything by itself when the device already holds this viewing. |
 | `select` | `identity`, `intent` | Begin: `identity` becomes the candidate, phase `selecting`. |
 | `link-connecting` | none | The device was reached: `link` connecting, phase `connecting`. |
 | `link-connected` | none | Phase `preparing`, effect `pause-local`: the adapter stops the local player, reads it, and answers with `local-paused`. |
 | `local-paused` | `ticks`, `paused` (both optional) | The moment the local player stopped. Phase `awaiting-ready`, effect `request-remote`. |
-| `observe` | `observation`, `nowMs` | What the receiver reports. Ownership commits only on the candidate's generation at the requested position, within `CAST_READY_TOLERANCE_TICKS`. |
+| `observe` | `observation`, `nowMs` | What the receiver reports. Ownership commits only on the candidate's generation, playing or paused, within `CAST_READY_TOLERANCE_TICKS` (150000000 ticks, 15 s) of the requested position. |
 | `load-failed`, `load-timeout`, `cancel` | `recovery` (optional) | The candidate is invalidated, and the viewer gets Resume here. |
 | `link-lost`, `link-failed` | none | The link went or never came up. A candidate fails. A detached viewing stays detached, and `link-failed` sets `notice` to `connect-failed`. |
 
 **`local-paused`.** `ticks` and `paused` describe one moment, and each replaces its value in `owner.intent`. An absent field keeps the value already there: `ticks` from the pick, and `paused` from the pick. Absent is neither false nor an error: it is what an adapter sends when no local player is involved, such as a Cast request from a details page, so `paused` then keeps whatever the viewing asked for. Where a player exists, `paused` means the viewer's own pause, measured before the adapter stops the player. A pause the app made itself (going to the background, a playback failure, this handoff's own stop) doesn't count. The receiver is then loaded with autoplay equal to `!owner.intent.paused`.
 
-The other events are `link-suspended`, `progress` (`ticks`), `command` (`id`, `value`, `entry`, `nowMs`), `command-timeout`, `command-rejected`, `disconnect`, `stop`, `play-here`, `retry-stop`, `stop-timeout`, `cleanup-done`, `resume-here` (`identity`, `confirmed`), `report` (`sequence`), `viewer-switch` and `replace` (`identity`). Field encoding follows the rules above: `ticks` and `generation` are decimal strings. The behaviour is CAST-23 and its neighbours in `spec/features/casting.md`. These vectors are the reference for the reducer only; the hold on the next step, the drop at the end of a file, and what the adapter does with the receiver session live in the host and are specified in CAST-23.
+Two consequences to keep, so the ports don't choose differently. A pause the app made stays the app's after the viewer returns: if the app paused for the background and the viewer comes back and picks a TV without pressing Play, the local player shows paused and the TV loads playing. And a player that stops itself counts as the viewer's: on Android, permanent audio focus loss and an unplugged headset set `playWhenReady` false with no app pause recorded, so the TV then loads paused. Transient focus loss doesn't change `playWhenReady`.
+
+**`pick` answers.** The adapter switches on these. With a candidate, or a phase other than `active`, `failed` or `disconnected`: reason `handoff-busy`. A local owner or a `failed` phase: the same as `select`. Otherwise, comparing `identity.device` with the owner's device and `intent.entry` with the observed entry (the owner's intent entry when nothing is observed):
+
+| State | `effect` | `reason` | Adapter |
+| --- | --- | --- | --- |
+| Detached, other device | none | `detached-elsewhere` | Refuses; the viewer ends or forgets the old one first. |
+| Detached, same device, same entry | `reconnect` | `already-casting` | Rejoins. No load. |
+| Detached, same device, other entry | `reconnect` | `rejoin-to-replace` | Rejoins, keeps the pick, and picks again once the receiver has answered and the viewing is `active`. |
+| Attached, `link` not connected | none | `link-not-ready` | Refuses. |
+| Same device, same entry | `show-controls` | `already-casting` | Shows the controls. No load. |
+| Same device, other entry | `replace-on-link` | null | Ends the old viewing's report and session, then the new one starts on this link: `link` stays connected. |
+| Other device | `replace-elsewhere` | null | The same, then ends the session, joins the new device, and `link` starts idle. |
+
+**`observation`.** Field and default: `mediaSession` -1 (negative means the receiver holds no media), `generation` -1 (what our load carried; negative when the media isn't ours), `playerState` `idle` (`idle`, `playing`, `paused`, or a state such as `buffering` that isn't an answer yet), `idleReason` null (`finished`, `error`, `cancelled`, ...), `ticks` 0, `durationTicks` null (unknown or live length, not zero), `entry` null, `activeTracks` empty, `queue` empty, `commands` `play`, `pause`, `seek`, `stop`. Longs are decimal strings. A reading is rejected with `stale-observation` when the target isn't a Cast identity, `link` isn't connected, the phase isn't `awaiting-ready`, `returning`, `return-uncertain`, `disconnected` or `active`, the generation is older than the target's, or `mediaSession` is lower than the bound one. Exceptions: with a local owner, an idle reading settles a `stop` of `unknown` (`stop` confirmed, effect `cleanup`); a newer `mediaSession` on the same generation is the same viewing, restarted. A newer generation, or a negative one with media, is someone else's media: it is `stale-observation` while `awaiting-ready`, confirms a pending Stop, and otherwise ends the viewing with notice `receiver-taken` (or the idle reason's notice). A reading with no media is `stale-observation` while `awaiting-ready` and confirms a pending Stop. Otherwise, with no `idleReason`, it is answered once with effect `request-status`, reason `unconfirmed-empty`; a second one in a row ends the viewing. `idleReason` maps to a notice: `finished` to `receiver-finished`, `error` to `receiver-error`, anything else to `receiver-stopped`.
+
+The remaining events:
+
+| `op` | Fields | Behaviour |
+| --- | --- | --- |
+| `link-suspended` | none | `link` suspended; forgets the observation, keeps its position in `owner.intent`, marks commands stale. |
+| `progress` | `ticks` | Moves `observed.ticks` between statuses, capped at the duration, only while active, connected and `playing`. Otherwise `stale-observation`, or `position-held` when not playing, `ticks` is zero or less, or a seek is on its way. |
+| `command` | `id`, `value`, `entry`, `nowMs` | Runs `reduceCommand`'s intent; effect `send-command` when it should be sent, its rejection in `reason`. `not-attached` unless active and connected. |
+| `command-timeout` | `id`, `nowMs` | Times out the pending command; effect `request-status` if the receiver should be asked. |
+| `command-rejected` | `id` | Marks that sent command rejected and drops its seek target; any other id is `stale-command`. |
+| `disconnect` | none | Detaches: phase `disconnected`, `link` idle, notice `receiver-continues`, effect `detach`, position kept. The receiver plays on. |
+| `stop` | none | Phase `returning`, `stop` sent, `stopPurpose` `end`, cleanup pending, effect `stop-remote`. Records `returnPaused` and `returnTicks` once. |
+| `play-here` | none | The same with `stopPurpose` `here`, and the local player starts once it is confirmed (effect `resume-here`). |
+| `retry-stop` | none | Only with `stop` `unknown`: `stop` again, keeping the recorded return values. Otherwise `stale-stop`. |
+| `stop-timeout` | none | Only with `stop` `sent`: phase `return-uncertain`, `stop` `unknown`, effect `stop-unknown`, or `require-choice` for `here`. Reason `remote-may-continue`. |
+| `cleanup-done` | none | `cleanup` done, from pending; otherwise `stale-cleanup`. |
+| `resume-here` | `identity`, `confirmed` | From `failed` or `return-ready`, or `return-uncertain` with `confirmed`, otherwise `explicit-choice-required`. A new local owner, effect `play-local`, at `returnTicks` and `returnPaused` when recorded. |
+| `report` | `sequence`, `identity` (optional) | Effect `report` for a higher sequence on the current owner. `stale-report` otherwise; `not-attached` for a Cast owner that isn't connected and observed. |
+| `viewer-switch`, `replace` | `identity`, `intent` | A new local owner on a higher generation (otherwise `stale-generation`), `link` idle, effect `detach`. |
+
+Vocabulary. A port needs these as written, because the vectors assert them.
+
+- `owner.phase`: `active`, `selecting`, `connecting`, `preparing`, `awaiting-ready`, `failed`, `disconnected`, `returning`, `return-ready`, `return-uncertain`.
+- `link`: `idle`, `connecting`, `connected`, `suspended`, `lost`. `stop`: `none`, `sent`, `confirmed`, `unknown`. `stopPurpose`: `end`, `here`, `ended`. `cleanup`: `none`, `pending`, `done`.
+- `effect`, an instruction to the adapter:
+  - Starting: `pause-local` (stop the player, read it, answer `local-paused`), `request-remote` (send the load), `release-local` (the receiver has it, so let the player go).
+  - Picks: `reconnect`, `show-controls`, `replace-on-link`, `replace-elsewhere`.
+  - Attached: `request-status`, `send-command`, `report`, `detach` (end the session, leaving the receiver).
+  - Ending: `stop-remote`, `stop-unknown` and `require-choice` (ask the viewer), `cleanup` (last report, encoder and session), `resume-here` (offer it, or start it for `here`), `play-local`.
+- `reason`:
+  - Picks: `already-casting`, `rejoin-to-replace`, `detached-elsewhere`, `link-not-ready`, `handoff-busy`, `invalid-target`.
+  - Readings: `stale-observation`, `invalid-observation`, `not-ready`, `position-outside-tolerance`, `position-held`, `unconfirmed-empty`.
+  - Late or refused events: `stale-owner`, `stale-target`, `stale-report`, `stale-stop`, `stale-cleanup`, `stale-link`, `stale-command`, `stale-generation`, `not-attached`, `explicit-choice-required`, `remote-may-continue`.
+  - From `reduceCommand`: `refresh-required`, `unsupported`.
+- `recovery`, why a handoff failed: `cancelled`, `connect-failed`, `link-lost`, `receiver-interrupted`, `receiver-load-failed`, `receiver-timeout`, and whatever the adapter passes with `load-failed`, such as `unsupported-media` or `route-gone`.
+- `notice`, what the viewer is told: `receiver-continues`, `connect-failed`, `link-lost`, `receiver-finished`, `receiver-error`, `receiver-stopped`, `receiver-taken`.
+
+A seek confirms within `CAST_SEEK_TOLERANCE_TICKS` (50000000 ticks, 5 s) of its target. Field encoding follows the rules above: `ticks` and `generation` are decimal strings. These vectors are the reference for the reducer only; the hold on the next step, the drop at the end of a file, and what the adapter does with the receiver session live in the host and are specified in CAST-15 and CAST-23.
 
 ## Remote (REM) trace format
 

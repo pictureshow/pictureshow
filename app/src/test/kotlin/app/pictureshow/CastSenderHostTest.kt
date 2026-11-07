@@ -264,7 +264,17 @@ internal fun signedInCastSender() = CastSenderHost(
 internal val CHOOSER_ROUTE = ROUTE
 
 /** A real host, signed in with a fake link, for a screen that needs a pick to go somewhere. It's on the receiver, detached. */
-internal fun detachedCastSender(): CastSenderHost {
+internal fun detachedCastSender(): CastSenderHost = playingOnFakeReceiver().first.also { it.disconnect() }
+
+/** A real host whose Stop went unanswered because the link went with it, so the viewer has to choose. */
+internal fun stopUnknownCastSender(): CastSenderHost {
+    val (host, link) = playingOnFakeReceiver()
+    host.stop()
+    link.sink!!.onEnded()
+    return host
+}
+
+private fun playingOnFakeReceiver(): Pair<CastSenderHost, FakeLink> {
     val environment = FakeEnvironment(mutableListOf())
     val host = CastSenderHost(
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
@@ -289,8 +299,7 @@ internal fun detachedCastSender(): CastSenderHost {
             commands = listOf("play", "pause", "seek", "stop")
         )
     )
-    host.disconnect()
-    return host
+    return host to link
 }
 
 /** A real host with nothing behind it, for screens that only need one to exist. */
@@ -1648,6 +1657,44 @@ class CastSenderHostTest {
         assertTrue("end:true" in log, "it was taken over by then: $log")
     }
 
+    @Test fun aPickThatFailsAfterReplacingOurViewingClosesTheReceiver() = runTest {
+        val host = host()
+        casting(host)
+        link.launched = false
+        host.disconnect()
+        runCurrent()
+        val old = host.generation()
+        host.pickFrom(ROUTE, anotherItem())
+        runCurrent()
+        link.sink!!.onConnecting()
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        log.clear()
+        link.sink!!.onStatus(status("playing", generation = old))
+        host.cancel()
+        runCurrent()
+        assertTrue("stop" in log, "our old viewing was stopped: $log")
+        assertFalse("load" in log, "the new one never started: $log")
+        assertTrue("end:true" in log, "nothing of ours is left on it, and it would sit there idle: $log")
+    }
+
+    @Test fun aPickThatFailsOnAnotherDeviceLeavesThatReceiverAlone() = runTest {
+        link.routes.value = listOf(ROUTE, den)
+        val host = host()
+        casting(host)
+        host.pickFrom(den, anotherItem())
+        runCurrent()
+        link.sink!!.onEnded()
+        link.launched = false
+        link.sink!!.onConnecting()
+        runCurrent()
+        log.clear()
+        host.cancel()
+        runCurrent()
+        assertTrue("end:false" in log, "it replaced nothing on this one, which may be someone else's: $log")
+        assertFalse("end:true" in log, log.toString())
+    }
+
     @Test fun aFailedPickLeavesAReceiverItOnlyJoined() = runTest {
         val host = host()
         link.launched = false
@@ -1687,6 +1734,61 @@ class CastSenderHostTest {
         assertEquals("services-update-required", host.state.value.capability.state, "still needs the update")
         host.setEnabled(false)
         assertEquals(false, host.castEnabled.value)
+    }
+
+    @Test fun turningCastOffStopsAReconnectStillSearching() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        link.routes.value = emptyList()
+        host.reconnect()
+        runCurrent()
+        log.clear()
+        host.setEnabled(false)
+        link.routes.value = listOf(ROUTE)
+        advanceTimeBy(CAST_SEARCH_MS + 1)
+        runCurrent()
+        assertFalse("select" in log, "off keeps this app away from Cast devices: $log")
+        assertNull(host.state.value.cast!!.notice?.takeIf { it == "connect-failed" }, "the viewer didn't try and fail")
+        assertFalse(link.discovering, log.toString())
+    }
+
+    @Test fun turningCastOffDropsAPickWaitingOnARejoin() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        waitingOnARejoin(host, player)
+        val old = host.generation()
+        host.closeChooser()
+        host.setEnabled(false)
+        runCurrent()
+        assertFalse(host.holdsNextStep(player), log.toString())
+        log.clear()
+        link.sink!!.onConnecting()
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        link.sink!!.onStatus(status("playing", generation = old))
+        runCurrent()
+        assertFalse("load" in log, log.toString())
+        assertTrue("end:false" in log, "a connect arriving late is let go: $log")
+    }
+
+    @Test fun turningCastOffLetsGoOfAReconnectStillConnecting() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        host.reconnect()
+        runCurrent()
+        link.sink!!.onConnecting()
+        runCurrent()
+        host.setEnabled(false)
+        runCurrent()
+        log.clear()
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        assertTrue("end:false" in log, "off holds even after it found the device: $log")
+        assertFalse("status" in log, log.toString())
     }
 
     @Test fun reconnectDoesNothingWhileGoogleCastIsOff() = runTest {
@@ -1738,11 +1840,14 @@ class CastSenderHostTest {
         assertFalse(host.holdsNextStep(player), "nothing holds the countdown out of sight")
         link.sink!!.onConnected("Living room")
         runCurrent()
+        link.sink!!.onStatus(status("playing", generation = old))
+        runCurrent()
         assertFalse("load" in log, "the viewer's later choice stands: $log")
         assertEquals(old, host.generation())
     }
 
     // Otherwise the old viewing comes back on the bar while the viewer plays here.
+    // The late connect after an end is this fake's ordering. The real SDK is expected to say it ended first, which clears the drop.
     @Test fun thisDeviceDropsTheRejoinOnceItHasSelected() = runTest {
         val host = host()
         val again = waitingOnARejoin(host, FakeOutput(log))

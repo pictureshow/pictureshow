@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import app.pictureshow.core.control.CastState
 import app.pictureshow.core.control.OwnerState
 import app.pictureshow.core.control.ViewingIdentity
@@ -82,6 +83,23 @@ class TouchCastScreenTest {
     }
 
     // Recheck D4: the viewer is looking at the player while this waits, and a stray tap there would throw the pick away.
+    @Test fun backOnAStopNobodyConfirmedDoesNotPlayHere() {
+        val host = stopUnknownCastSender()
+        compose.setContent {
+            val ui by host.state.collectAsState()
+            MaterialTheme { TouchCastAttention(ui, host) }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { org.robolectric.shadows.ShadowDialog.getLatestDialog().onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("cast:stop-unknown").assertExists()
+        assertEquals("return-uncertain", host.state.value.cast?.owner?.phase)
+        assertNull(host.state.value.localStart, "the TV may still be playing, and Back didn't say play here")
+        compose.onNodeWithText("Play here anyway").performClick()
+        compose.waitForIdle()
+        assertNotNull(host.state.value.localStart, "the button still does")
+    }
+
     @Test fun aStrayTapLeavesAPickStartingAndBackCancelsIt() {
         val host = signedInCastSender()
         host.openChooser(CastPlayRequest(listOf(CastPlayItem("0123456789abcdef0123456789abcde1", "A film"))))
