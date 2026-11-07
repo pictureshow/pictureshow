@@ -10,8 +10,12 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -24,6 +28,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowAccessibilityManager
+import org.robolectric.util.ReflectionHelpers
 
 /**
  * Most tests only need "a reader is on" and were written with Compose's own accessibility dispatch off, which an
@@ -37,7 +42,7 @@ internal fun ShadowAccessibilityManager.setScreenReader(on: Boolean) {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 @LooperMode(LooperMode.Mode.PAUSED)
-class ScreenReaderDetectionTest {
+class AssistiveServiceDetectionTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val manager get() = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
@@ -47,11 +52,24 @@ class ScreenReaderDetectionTest {
     private val braille = AccessibilityServiceInfo.FEEDBACK_BRAILLE
     private val haptic = AccessibilityServiceInfo.FEEDBACK_HAPTIC
 
-    private fun services(vararg feedback: Int) = feedback.map { AccessibilityServiceInfo().apply { feedbackType = it } }
+    private val gestures = AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES
+    private val keyEvents = AccessibilityServiceInfo.CAPABILITY_CAN_REQUEST_FILTER_KEY_EVENTS
+    private val windowContent = AccessibilityServiceInfo.CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT
+
+    private fun service(feedback: Int, capabilities: Int = 0) = AccessibilityServiceInfo().apply {
+        feedbackType = feedback
+        ReflectionHelpers.callInstanceMethod<Unit>(
+            this,
+            "setCapabilities",
+            ReflectionHelpers.ClassParameter.from(Int::class.java, capabilities)
+        )
+    }
+
+    private fun services(vararg feedback: Int) = feedback.map { service(it) }
 
     private fun composed(): () -> Boolean {
         var seen: Boolean? = null
-        compose.setContent { seen = rememberScreenReaderInUse() }
+        compose.setContent { seen = rememberAssistiveServiceInUse() }
         compose.waitForIdle()
         return {
             compose.waitForIdle()
@@ -64,17 +82,61 @@ class ScreenReaderDetectionTest {
     }
 
     @Test fun decisionCountsSpokenBrailleAndTouchExplorationOnly() {
-        assertFalse(screenReaderInUse(true, false, emptyList()))
-        assertFalse(screenReaderInUse(true, false, listOf(generic)))
-        assertFalse(screenReaderInUse(true, false, listOf(generic, haptic, AccessibilityServiceInfo.FEEDBACK_VISUAL)))
-        assertTrue(screenReaderInUse(true, false, listOf(spoken)))
-        assertTrue(screenReaderInUse(true, false, listOf(braille)))
-        assertTrue(screenReaderInUse(true, false, listOf(generic, spoken or haptic or AccessibilityServiceInfo.FEEDBACK_AUDIBLE)))
-        assertTrue(screenReaderInUse(true, true, emptyList()))
+        assertFalse(assistiveServiceInUse(true, false, emptyList()))
+        assertFalse(assistiveServiceInUse(true, false, services(generic)))
+        assertFalse(assistiveServiceInUse(true, false, services(generic, haptic, AccessibilityServiceInfo.FEEDBACK_VISUAL)))
+        assertTrue(assistiveServiceInUse(true, false, services(spoken)))
+        assertTrue(assistiveServiceInUse(true, false, services(braille)))
+        assertTrue(assistiveServiceInUse(true, false, services(generic, spoken or haptic or AccessibilityServiceInfo.FEEDBACK_AUDIBLE)))
+        assertTrue(assistiveServiceInUse(true, true, emptyList()))
     }
 
     @Test fun decisionIsFalseWhileAccessibilityIsOff() {
-        assertFalse(screenReaderInUse(false, true, listOf(spoken)))
+        assertFalse(assistiveServiceInUse(false, true, services(spoken)))
+        assertFalse(assistiveServiceInUse(false, false, listOf(service(generic, gestures or keyEvents or windowContent))))
+    }
+
+    @Test fun switchAndVoiceAccessCountThroughTheirGestures() {
+        assertTrue(assistiveServiceInUse(true, false, listOf(service(generic, windowContent or keyEvents or gestures))))
+    }
+
+    @Test fun whatPasswordManagersDeclareDoesNotCount() {
+        assertFalse(assistiveServiceInUse(true, false, listOf(service(generic, windowContent))))
+        assertFalse(assistiveServiceInUse(true, false, listOf(service(generic))))
+    }
+
+    @Test fun whatADumpsServiceDeclaresDoesNotCountEvenIfItWereListed() {
+        val enhancedWeb = AccessibilityServiceInfo.CAPABILITY_CAN_REQUEST_ENHANCED_WEB_ACCESSIBILITY
+        val touch = AccessibilityServiceInfo.CAPABILITY_CAN_REQUEST_TOUCH_EXPLORATION
+        assertFalse(assistiveServiceInUse(true, false, listOf(service(generic, windowContent or touch or enhancedWeb or keyEvents))))
+    }
+
+    @Test fun aSwitchServiceBindingAfterComposeIsLive() {
+        val seen = composed()
+        assertFalse(seen())
+        shadow.setEnabled(true)
+        shadow.setEnabledAccessibilityServiceList(listOf(service(generic, windowContent or keyEvents or gestures)))
+        idleFor(500)
+        assertTrue(seen())
+    }
+
+    @Test fun aChangeBetweenCompositionAndTheListenersIsCaughtWithoutAResume() {
+        val owner = object : LifecycleOwner {
+            override val lifecycle = LifecycleRegistry(this).apply { currentState = Lifecycle.State.STARTED }
+        }
+        var seen: Boolean? = null
+        var changed = false
+        compose.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                seen = rememberAssistiveServiceInUse()
+                if (!changed) {
+                    changed = true
+                    shadow.setScreenReader(true)
+                }
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(true, seen)
     }
 
     @Test fun aPasswordManagerAloneIsNotAReader() {

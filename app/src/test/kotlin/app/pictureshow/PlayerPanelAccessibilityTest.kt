@@ -320,7 +320,7 @@ class PlayerPanelAccessibilityTest {
         var enabledSeen = false
         compose.setContent {
             compositionManager = LocalContext.current.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-            enabledSeen = rememberScreenReaderInUse()
+            enabledSeen = rememberAssistiveServiceInUse()
             val parent = LocalWindowInfo.current
             val window = object : WindowInfo by parent {
                 override val isWindowFocused: Boolean get() = true

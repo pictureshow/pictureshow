@@ -161,7 +161,7 @@ class AccessibilityPlayerTest {
         )
         Shadows.shadowOf(manager).setEnabled(true)
         var enabled = false
-        compose.setContent { enabled = rememberScreenReaderInUse() }
+        compose.setContent { enabled = rememberAssistiveServiceInUse() }
         compose.runOnIdle { assertTrue(enabled) }
         assertEquals(false, manager.isTouchExplorationEnabled)
     }

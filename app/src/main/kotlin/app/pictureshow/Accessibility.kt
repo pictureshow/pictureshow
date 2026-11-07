@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.annotation.SuppressLint
 import android.content.Context
 import android.database.ContentObserver
 import android.os.Build
@@ -73,19 +74,26 @@ internal fun Modifier.readableFocus(): Modifier {
 }
 
 /**
- * Whether a person is following the screen through a reader. AccessibilityManager.isEnabled answers something else:
- * it is true for any service, such as a password manager, and for a `uiautomator dump`, whose feedback is generic.
+ * Whether a person reads or operates the screen through an assistive service. AccessibilityManager.isEnabled answers
+ * something else: it is true for any service, such as a password manager, and for a `uiautomator dump`.
  * TV TalkBack is driven by direction keys and may leave touch exploration off, so its spoken feedback has to count.
+ * Switch Access and Voice Access declare generic feedback, like the password managers, and differ by acting on the
+ * screen through gestures. No password manager we read declares that, and a dump's service is not in the list at all.
+ * A non-assistive app that declares gestures counts too: its viewer gets pinned controls, which is the safer mistake.
+ * The capability is a compile-time constant from API 24; on API 23 no service can have it, so that check is just false.
  */
-internal fun screenReaderInUse(enabled: Boolean, touchExploration: Boolean, feedbackTypes: List<Int>): Boolean {
+@SuppressLint("InlinedApi")
+internal fun assistiveServiceInUse(enabled: Boolean, touchExploration: Boolean, services: List<AccessibilityServiceInfo>): Boolean {
     val readerFeedback = AccessibilityServiceInfo.FEEDBACK_SPOKEN or AccessibilityServiceInfo.FEEDBACK_BRAILLE
-    return enabled && (touchExploration || feedbackTypes.any { it and readerFeedback != 0 })
+    val actsOnTheScreen = AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES
+    return enabled &&
+        (touchExploration || services.any { it.feedbackType and readerFeedback != 0 || it.capabilities and actsOnTheScreen != 0 })
 }
 
-private fun AccessibilityManager.screenReaderInUse(): Boolean = screenReaderInUse(
+private fun AccessibilityManager.assistiveServiceInUse(): Boolean = assistiveServiceInUse(
     isEnabled,
     isTouchExplorationEnabled,
-    getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).orEmpty().map { it.feedbackType }
+    getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).orEmpty()
 )
 
 /**
@@ -93,12 +101,12 @@ private fun AccessibilityManager.screenReaderInUse(): Boolean = screenReaderInUs
  * manager, and it turns true while a first service is still binding, before that service is in the list. So follow
  * the setting that names the enabled services, then read again while the service binds.
  */
-private val SCREEN_READER_SETTLE_MILLIS = longArrayOf(500, 2_000, 5_000)
+private val ASSISTIVE_SERVICE_SETTLE_MILLIS = longArrayOf(500, 2_000, 5_000)
 
 private fun watchAccessibilityServices(context: Context, manager: AccessibilityManager, handler: Handler, read: Runnable): () -> Unit {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return watchServicesFromApi33(manager, read)
     val observer = object : ContentObserver(handler) {
-        override fun onChange(selfChange: Boolean) = settleScreenReaderRead(handler, read)
+        override fun onChange(selfChange: Boolean) = settleAssistiveServiceRead(handler, read)
     }
     val setting = Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
     context.contentResolver.registerContentObserver(setting, false, observer)
@@ -112,27 +120,27 @@ private fun watchServicesFromApi33(manager: AccessibilityManager, read: Runnable
     return { manager.removeAccessibilityServicesStateChangeListener(listener) }
 }
 
-private fun settleScreenReaderRead(handler: Handler, read: Runnable) {
+private fun settleAssistiveServiceRead(handler: Handler, read: Runnable) {
     read.run()
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
     handler.removeCallbacks(read)
-    SCREEN_READER_SETTLE_MILLIS.forEach { handler.postDelayed(read, it) }
+    ASSISTIVE_SERVICE_SETTLE_MILLIS.forEach { handler.postDelayed(read, it) }
 }
 
 /** Live: follows a reader turned on or off during playback, on phone and TV. */
 @androidx.compose.runtime.Composable
-internal fun rememberScreenReaderInUse(): Boolean {
+internal fun rememberAssistiveServiceInUse(): Boolean {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val manager = androidx.compose.runtime.remember(context) {
         context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
     }
-    var inUse by androidx.compose.runtime.remember(manager) { androidx.compose.runtime.mutableStateOf(manager.screenReaderInUse()) }
+    var inUse by androidx.compose.runtime.remember(manager) { androidx.compose.runtime.mutableStateOf(manager.assistiveServiceInUse()) }
     androidx.compose.runtime.DisposableEffect(context, manager, lifecycle) {
         val handler = Handler(Looper.getMainLooper())
-        val read = Runnable { inUse = manager.screenReaderInUse() }
-        val enabledListener = AccessibilityManager.AccessibilityStateChangeListener { settleScreenReaderRead(handler, read) }
-        val touchListener = AccessibilityManager.TouchExplorationStateChangeListener { settleScreenReaderRead(handler, read) }
+        val read = Runnable { inUse = manager.assistiveServiceInUse() }
+        val enabledListener = AccessibilityManager.AccessibilityStateChangeListener { settleAssistiveServiceRead(handler, read) }
+        val touchListener = AccessibilityManager.TouchExplorationStateChangeListener { settleAssistiveServiceRead(handler, read) }
         // The viewer may come back from the system's accessibility settings after the settle reads ran out.
         val resumeObserver = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) read.run() }
         manager.addAccessibilityStateChangeListener(enabledListener)
