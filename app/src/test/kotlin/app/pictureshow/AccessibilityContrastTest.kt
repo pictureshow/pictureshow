@@ -114,13 +114,16 @@ class AccessibilityContrastTest {
 
     /** A music row's artist line and track number follow the row, so they stay readable when focus turns it light. */
     private fun assertMusicRowSecondaryText(focused: Boolean) {
+        // Read from composition: a color-only change redraws text without a new layout, so a layout result can be stale.
+        var muted = Color.Unspecified
         compose.setContent {
             PictureshowTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(40.dp)) {
-                    androidx.tv.material3.Surface(onClick = {}, modifier = Modifier.testTag("row")) {
+                    androidx.tv.material3.Surface(onClick = {}, scale = musicRowScale, modifier = Modifier.testTag("row")) {
                         androidx.compose.foundation.layout.Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                             androidx.tv.material3.Text("Slow Current")
-                            androidx.tv.material3.Text("Marta Oren", color = musicMutedOnRow)
+                            muted = musicMutedOnRow
+                            androidx.tv.material3.Text("Marta Oren", color = muted)
                         }
                     }
                 }
@@ -130,9 +133,8 @@ class AccessibilityContrastTest {
         if (focused) row.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         compose.mainClock.advanceTimeBy(1000)
         compose.waitForIdle()
-        val node = compose.onNodeWithText("Marta Oren")
-        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        // The row merges its texts, so the text's own bounds come from the unmerged tree.
+        val node = compose.onNodeWithText("Marta Oren", useUnmergedTree = true)
         val text = node.getUnclippedBoundsInRoot()
         val density = compose.activity.resources.displayMetrics.density
         val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
@@ -141,9 +143,19 @@ class AccessibilityContrastTest {
             // Just left of the text, inside the row's padding: the row's own fill, focused or not.
             val background =
                 Color(bitmap.getPixel(((text.left.value - 4f) * density).roundToInt(), ((text.top.value + 4f) * density).roundToInt()))
-            val foreground = layouts.single().layoutInput.style.color.compositeOver(background)
+            val foreground = muted.compositeOver(background)
             val contrast = ratio(foreground, background)
-            assertTrue(contrast >= 4.5f, "music row secondary text contrast $contrast (focused=$focused)")
+            val colors = "${Integer.toHexString(muted.toArgb())} on ${Integer.toHexString(background.toArgb())}"
+            assertTrue(contrast >= 4.5f, "music row secondary text contrast $contrast (focused=$focused): $colors")
+            // A full-width row sits 12 dp from its More button, so focus mustn't grow it past its own bounds.
+            val box = row.getUnclippedBoundsInRoot()
+            val middle = (box.top.value + box.bottom.value) / 2
+            val beside = bitmap.getPixel(((box.right.value + 4f) * density).roundToInt(), (middle * density).roundToInt())
+            val page = Color(0xFF10131C).toArgb()
+            assertTrue(
+                listOf(16, 8, 0).all { shift -> abs(((beside shr shift) and 255) - ((page shr shift) and 255)) <= 8 },
+                "focused music row grew past its bounds: ${Integer.toHexString(beside)}"
+            )
         } finally {
             bitmap.recycle()
         }

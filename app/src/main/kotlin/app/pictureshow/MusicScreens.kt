@@ -67,6 +67,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Button
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ClickableSurfaceScale
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -95,6 +97,13 @@ private val MusicMuted = Color(0xFFC3C9D8)
  */
 internal val musicMutedOnRow: Color
     @Composable get() = LocalContentColor.current.copy(alpha = 0.78f)
+
+/**
+ * A row as wide as the page doesn't grow on focus: it would cover its own More button and leave the safe area. Its fill
+ * shows focus.
+ */
+internal val musicRowScale: ClickableSurfaceScale
+    @Composable get() = ClickableSurfaceDefaults.scale(focusedScale = 1f)
 private val MusicError = Color(0xFFFFCCB8)
 
 @Composable
@@ -117,6 +126,7 @@ internal fun TvMusicBar(host: MusicHost, onOpen: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Surface(
+            scale = musicRowScale,
             onClick = onOpen,
             modifier = Modifier.weight(1f).testTag("music:bar:open").semantics {
                 contentDescription =
@@ -272,6 +282,7 @@ private fun TvMusicTrackRow(
     val track = remember(item) { account.musicTrack(item) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
+            scale = musicRowScale,
             onClick = onPlay,
             enabled = available,
             modifier = Modifier.weight(1f).testTag("music:track:${item.playlistItemId ?: item.id}").semantics {
@@ -730,6 +741,7 @@ internal fun TvMusicNow(host: MusicHost, onBack: () -> Unit) {
                     formatMusicTime(position)
                 }
                 Surface(
+                    scale = musicRowScale,
                     onClick = {},
                     modifier = Modifier.fillMaxWidth().testTag("music:seek").semantics {
                         contentDescription = "Seek. $line"
@@ -835,7 +847,7 @@ internal fun TvMusicNow(host: MusicHost, onBack: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(onClick = {
                         host.jump(upcoming.entry)
-                    }, modifier = Modifier.weight(1f).testTag("music:queue:${upcoming.entry}")) {
+                    }, scale = musicRowScale, modifier = Modifier.weight(1f).testTag("music:queue:${upcoming.entry}")) {
                         Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                             Text(upcoming.track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             upcoming.track.artist?.takeIf(String::isNotBlank)?.let {

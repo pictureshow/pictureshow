@@ -114,7 +114,10 @@ internal fun TouchSearchScreen(
                     val term = normalizeSearch(state.query)
                     if (!state.loading && !state.allFailed && state.completed && state.rows.isEmpty()) Text("No results for “$term”.")
                     if (term.length < 2) {
-                        Text("Search by title, artist or person. Enter at least 2 characters.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Search by title, artist or person. Enter at least 2 characters.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         if (state.recent.isNotEmpty()) {
                             TouchCatalogHeading("Recent searches", section = true)
                             state.recent.forEach { recent ->
