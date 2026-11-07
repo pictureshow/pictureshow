@@ -145,6 +145,8 @@ class SignInAccountsTest {
             modules(
                 module {
                     single { inertRemoteTarget() }
+                    single { inertMusicHost(get()) }
+                    single { inertRemoteController() }
                     single { inertPlaybackPreferences() }
                     single { accounts }
                     single<JellyfinService> { service }

@@ -42,6 +42,15 @@ class RemoteTargetHostTest {
 
     private class Player : RemotePlayerBridge {
         val calls = mutableListOf<String>()
+        var ownQueue = false
+        override fun enqueue(items: List<String>, next: Boolean): Boolean {
+            if (ownQueue) calls += "enqueue:$items:$next"
+            return ownQueue
+        }
+        override fun previous(): Boolean {
+            if (ownQueue) calls += "previous"
+            return ownQueue
+        }
         override fun pause() {
             calls += "pause"
         }
@@ -430,6 +439,18 @@ class RemoteTargetHostTest {
         rig.watching(film)
         rig.message(this, play("add", listOf(film), "PlayLast"))
         assertNull(rig.host.upcoming, "a copy next to itself could never advance: a target only sees media IDs")
+    }
+
+    @Test fun aPlayerWithItsOwnQueueTakesAdditionsAndPreviousInstead() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        rig.watching(film)
+        rig.player.ownQueue = true
+        rig.message(this, play("a", listOf(second), "PlayNext"))
+        rig.message(this, play("b", listOf(third), "PlayLast"))
+        rig.message(this, state("c", "PreviousTrack"))
+        assertEquals(listOf("enqueue:[$second]:true", "enqueue:[$third]:false", "previous"), rig.player.calls.takeLast(3))
+        assertEquals(null, rig.host.upcoming, "the target's own queue stays out of it")
     }
 
     @Test fun anAdditionRightAfterPreviousKeepsTheQueue() = runTest {

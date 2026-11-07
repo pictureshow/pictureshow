@@ -27,6 +27,7 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
 import app.pictureshow.core.TextPersistence
 import app.pictureshow.core.User
+import app.pictureshow.core.music.ArtistRole
 import app.pictureshow.core.playback.PlaybackPreferences
 import app.pictureshow.core.playback.PlaybackProgressInfo
 import app.pictureshow.core.playback.PlaybackStopInfo
@@ -99,7 +100,6 @@ class MusicScreensTest {
             Silent,
             preferences = { PlaybackPreferences() },
             remoteAttached = { null },
-            castAttached = { null },
             remoteTarget = { null },
             startService = {},
             metered = { false }
@@ -174,6 +174,52 @@ class MusicScreensTest {
         assertEquals(listOf("Move down", "Remove"), again.map { it.label }, "The first row can't move up")
         again.first { it.label == "Remove" }.action()
         waitFor(listOf("b", "d"))
+    }
+
+    private fun editablePlaylist(music: MusicModelsTest.FakeMusic): MusicDetailViewModel {
+        music.playlist = mutableListOf(
+            MediaItem(id = "a", name = "Title a", type = "Audio", playlistItemId = "e1", indexNumber = 7),
+            MediaItem(id = "b", name = "Title b", type = "Audio", playlistItemId = "e2", indexNumber = 7)
+        )
+        val store = AccountStore(Memory())
+        runBlocking { store.remember(account) }
+        return MusicDetailViewModel(
+            account,
+            MediaItem(id = "p", name = "Mix", type = "Playlist", mediaType = "Audio"),
+            ArtistRole.ALBUM_ARTIST,
+            null,
+            music,
+            store,
+            CatalogSession(CatalogModelsTest.FakeCatalog(), store)
+        )
+    }
+
+    private fun editShowsTheRowsChanges(music: MusicModelsTest.FakeMusic, vm: MusicDetailViewModel) {
+        until { vm.state.value.tracks.size == 2 && vm.state.value.canEdit }
+        compose.waitForIdle()
+        compose.onNodeWithTag("music:detail").performScrollToNode(hasTestTag("music:edit"))
+        compose.onNodeWithTag("music:edit").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        compose.onNodeWithTag("music:detail").performScrollToNode(hasTestTag("music:edit:Move down:e1"))
+        compose.onNodeWithText("1").assertExists()
+        compose.onNodeWithText("2").assertExists()
+        compose.onNodeWithText("7").assertDoesNotExist()
+        compose.onNodeWithTag("music:edit:Move down:e1").performSemanticsAction(SemanticsActions.OnClick)
+        until { music.writes == listOf("move e1 1") }
+    }
+
+    @Test fun touchPlaylistEditShowsEachRowsChanges() {
+        val music = MusicModelsTest.FakeMusic()
+        val vm = editablePlaylist(music)
+        compose.setContent { TouchTheme { TouchMusicDetail(vm, host, { _, _ -> }, {}) } }
+        editShowsTheRowsChanges(music, vm)
+    }
+
+    @Test fun tvPlaylistEditShowsEachRowsChanges() {
+        val music = MusicModelsTest.FakeMusic()
+        val vm = editablePlaylist(music)
+        compose.setContent { TvTheme { TvMusicDetail(vm, host) { _, _ -> } } }
+        editShowsTheRowsChanges(music, vm)
     }
 
     @Test fun theBarShowsOnlyWithAQueueAndOpensNowPlaying() {

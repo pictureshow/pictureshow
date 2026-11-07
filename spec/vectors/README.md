@@ -413,7 +413,7 @@ reconnect, and PlayPause resolves against the viewing's observed state.
 
 Frozen by the Android reference for MUS-01 to MUS-09, run on Kotlin by `MusicVectorsTest`, and owed by the web and Apple
 runners as visible todos. `music-catalog` freezes each browse request's route and scope, disc-then-track order with its
-fallbacks, page merging, and the empty, inaccessible and failed states. `music-queue` adds `entry` and `permutation` to
+fallbacks, page merging, a genre's tracks loaded only on Play, and the empty, inaccessible and failed states. `music-queue` adds `entry` and `permutation` to
 `play-now`, so a selected track starts inside its context and Shuffle plays a whole order, and freezes the output window,
 the smallest edit to it, the replace-queue decision and the seeded shuffle. `music-session` keeps the listener's intent
 apart from what the OS did. `music-reports` gives one viewing per time a track is heard. `music-quality` freezes the

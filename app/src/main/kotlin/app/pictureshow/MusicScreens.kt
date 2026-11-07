@@ -255,7 +255,8 @@ private fun TvMusicTrackRow(
     onPlay: () -> Unit,
     onOpen: (MediaItem, ArtistRole?) -> Unit,
     onFavorite: (() -> Unit)?,
-    extra: List<Pair<String, () -> Unit>> = emptyList()
+    extra: List<Pair<String, () -> Unit>> = emptyList(),
+    number: String = item.indexNumber?.toString().orEmpty()
 ) {
     val available = trackIsAvailable(item)
     var menu by remember { mutableStateOf(false) }
@@ -274,7 +275,7 @@ private fun TvMusicTrackRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(item.indexNumber?.toString().orEmpty(), Modifier.widthIn(min = 32.dp), color = MusicMuted)
+                Text(number, Modifier.widthIn(min = 32.dp), color = MusicMuted)
                 Column(Modifier.weight(1f)) {
                     Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val line = listOfNotNull(
@@ -628,8 +629,17 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
                         { start(false, row) },
                         onOpen,
                         { vm.favorite(row.id) },
-                        edits
+                        edits,
+                        musicRowNumber(state.item, index)
                     )
+                    // Edit shows the row's changes where they're used, as well as in its More list.
+                    if (edits.isNotEmpty()) {
+                        Row(Modifier.fillMaxWidth().padding(start = 56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            edits.forEach { (name, run) ->
+                                Button(onClick = run, modifier = Modifier.testTag("music:edit:$name:$entry")) { Text(name) }
+                            }
+                        }
+                    }
                 }
             }
         }

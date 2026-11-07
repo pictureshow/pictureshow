@@ -144,9 +144,6 @@ class PictureshowApplication : Application() {
                             ),
                             preferences = playbackPreferences::read,
                             remoteAttached = { controller.state.value.controller?.target?.name },
-                            castAttached = {
-                                if (usesTvInterface(application)) null else get<CastSenderHost>().state.value.deviceName
-                            },
                             remoteTarget = { get<RemoteTargetHost>() }
                         )
                     }

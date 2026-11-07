@@ -149,6 +149,7 @@ class TouchNavigationTest {
                 module {
                     single { inertRemoteController() }
                     single { inertCastSender() }
+                    single { inertMusicHost(get()).also { it.castAttached = { "never replaced" } } }
                     single { accounts }
                     single<JellyfinService> { service }
                     single<CatalogService> { catalog }
@@ -253,6 +254,14 @@ class TouchNavigationTest {
         compose.onNodeWithTag("touch:server-address").performTextReplacement(server.url)
         compose.onNodeWithText("Connect").performClick()
         waitFor("Sign in to Test server")
+    }
+
+    /** Music asks whether to send a list to the Cast device, and a TV must not load the sender, so the touch app supplies it. */
+    @Test
+    fun theTouchAppTellsMusicWhichCastDeviceIsInUse() {
+        launch()
+        val music = org.koin.java.KoinJavaComponent.getKoin().get<MusicHost>()
+        compose.waitUntil(5_000) { music.castAttached() == null }
     }
 
     @Test

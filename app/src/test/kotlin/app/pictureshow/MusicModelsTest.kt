@@ -44,7 +44,7 @@ class MusicModelsTest {
         }
     }
 
-    private class FakeMusic : MusicService {
+    internal class FakeMusic : MusicService {
         val requests = mutableListOf<MusicRequest>()
         val writes = mutableListOf<String>()
         var pages: (MusicRequest) -> ClientResult<ItemPage> = { ClientResult.Success(ItemPage(emptyList())) }
@@ -114,6 +114,12 @@ class MusicModelsTest {
 
     private fun track(id: String, entry: String? = null, location: String? = null) =
         MediaItem(id = id, name = id, type = "Audio", playlistItemId = entry, locationType = location)
+
+    @Test fun aPlaylistNumbersItsOwnOrderAndAnArtistsSongsShowNoAlbumNumber() {
+        val playlist = MediaItem(id = "p", name = "Mix", type = "Playlist", mediaType = "Audio")
+        assertEquals(listOf("1", "2", "3"), (0..2).map { musicRowNumber(playlist, it) })
+        assertEquals("", musicRowNumber(MediaItem(id = "m", name = "Artist", type = "MusicArtist"), 4))
+    }
 
     @Test fun musicRoutesOnlyWhatIsMusic() {
         assertTrue(MediaItem(id = "l", name = "Music", type = "CollectionFolder", collectionType = "music").isMusic())

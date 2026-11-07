@@ -118,6 +118,8 @@ class MusicHostTest {
         }
     }
 
+    private var lastPlayer: ExoPlayer? = null
+
     private fun player(context: Context): ExoPlayer {
         val clock = FakeClock(true)
         return TestExoPlayerBuilder(context)
@@ -126,6 +128,7 @@ class MusicHostTest {
                 arrayOf(FakeAudioRenderer(clock.createHandler(handler.looper, null), audio))
             }
             .build()
+            .also { lastPlayer = it }
     }
 
     private fun host(): MusicHost {
@@ -139,7 +142,6 @@ class MusicHostTest {
             Gateway(),
             preferences = { PlaybackPreferences() },
             remoteAttached = { remote },
-            castAttached = { null },
             remoteTarget = { null },
             newPlayer = ::player,
             startService = { services += 1 },
@@ -401,6 +403,56 @@ class MusicHostTest {
         until("the chosen track") { "start b" in log }
         assertFalse("start a" in log, "Index 1 starts at the second track")
         assertEquals(listOf("a", "b"), music.state.value.queue!!.entries.map { it.media })
+    }
+
+    /** A phone's Play next and Add to queue reach the queue that's playing, and its Previous goes back through it. */
+    @Test fun aRemotesQueueCommandsActOnTheMusicQueue() {
+        val music = host()
+        ready(music)
+        music.request(album("a", "b"))
+        music.pause()
+        until("the paused queue") { music.state.value.current?.track?.id == "a" && lastPlayer?.playWhenReady == false }
+        assertTrue(music.remoteBridge.enqueue(listOf("c"), next = true))
+        until("play next") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b") }
+        assertTrue(music.remoteBridge.enqueue(listOf("d", "v1"), next = false))
+        until("add to queue, tracks only") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b", "d") }
+        music.next()
+        until("the next row") { music.state.value.current?.track?.id == "c" }
+        assertTrue(music.remoteBridge.previous())
+        until("back a row") { music.state.value.current?.track?.id == "a" }
+        music.stop()
+        until("the stop") { !music.state.value.outputActive }
+    }
+
+    /** The real player holds a window ahead, so a track put next has to reach it before the one it already prepared. */
+    @Test fun aTrackPutNextIsHeardNextEvenWhenTheFollowingOneWasPrepared() {
+        val music = host()
+        ready(music)
+        music.request(album("a", "b"))
+        music.pause()
+        until("the next track prepared") { lastPlayer?.mediaItemCount == 2 }
+        music.playNext(listOf(MusicTrack("c", "Title c")))
+        until("the row") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b") }
+        music.play()
+        until("all three") { "stop b" in log }
+        assertEquals(listOf("start a", "stop a", "start c", "stop c", "start b", "stop b"), log)
+    }
+
+    @Test fun aPausedQueueStaysPausedWhenTheListenerSkips() {
+        val music = host()
+        ready(music)
+        music.setRepeat("one")
+        music.request(album("a", "b", "c"))
+        until("playing") { "start a" in log }
+        music.pause()
+        until("the pause") { lastPlayer?.playWhenReady == false }
+        music.next()
+        until("the next row") { music.state.value.current?.track?.id == "b" }
+        pump(300)
+        assertFalse(lastPlayer!!.playWhenReady, "Skipping while paused cues the next track and doesn't start it")
+        assertFalse("start b" in log, "Nothing was heard, so nothing was reported")
+        music.stop()
+        until("the stop") { !music.state.value.outputActive }
     }
 
     @Test fun addingToAnEmptyQueueWaitsForPlay() {
