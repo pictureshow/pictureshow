@@ -79,9 +79,11 @@ class MusicHostTest {
     private var checkFails = false
     private var itemsGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private var checkGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    private var negotiateGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     private inner class Gateway : MusicGateway {
         override suspend fun negotiate(account: Account, media: String, ceiling: Int): ClientResult<PlayOutcome> {
+            negotiateGate?.await()
             negotiated += media
             tokens += "${account.accessToken}:$media"
             return ClientResult.Success(
@@ -576,6 +578,46 @@ class MusicHostTest {
         gate.complete(Unit)
         checkGate = null
         until("the other account's play") { music.state.value.account?.key == other.key && "x" in negotiated }
+        assertEquals(listOf("x"), music.state.value.queue!!.entries.map { it.media })
+    }
+
+    /**
+     * A check that finishes while a switch is already waiting behind a slow step still lands nowhere: the switch runs first,
+     * and the late restore finds a new account with an empty queue, which isn't the queue it was read for.
+     */
+    @Test fun aRestoreThatFinishesBehindASwitchLandsNowhere() {
+        val music = host()
+        ready(music)
+        music.append(account, tracks("a"))
+        until("the saved queue") { music.state.value.queue?.entries?.size == 1 }
+        switchTo(other, music)
+        val check = kotlinx.coroutines.CompletableDeferred<Unit>().also { checkGate = it }
+        runBlocking { accounts.select(account.key) }
+        until("back on the first account") { music.state.value.account?.key == account.key }
+        val slow = kotlinx.coroutines.CompletableDeferred<Unit>().also { negotiateGate = it }
+        music.playHere(MusicPlay(account.key, tracks("b"), null, "album", "Album", false))
+        pump(100)
+        val third = Account(account.server, User("z", "Third viewer"), "third-token")
+        runBlocking { accounts.remember(third) }
+        pump(100)
+        check.complete(Unit)
+        checkGate = null
+        pump(100)
+        slow.complete(Unit)
+        negotiateGate = null
+        until("the third account") { music.state.value.account?.key == third.key }
+        pump(300)
+        assertEquals(emptyList(), music.state.value.queue!!.entries.map { it.media })
+    }
+
+    /** A screen already showing the new account can ask before the host has seen the switch; the play isn't dropped. */
+    @Test fun aPlayAskedBeforeTheHostSeesTheSwitchRunsForTheNewAccount() {
+        val music = host()
+        ready(music)
+        // Off the main thread, as a stored switch lands, so the host's own collector hasn't run when the screen asks.
+        runBlocking(Dispatchers.IO) { accounts.remember(other) }
+        music.playHere(MusicPlay(other.key, tracks("x"), null, "album", "Album", false))
+        until("the play, for the new account") { music.state.value.account?.key == other.key && "x" in negotiated }
         assertEquals(listOf("x"), music.state.value.queue!!.entries.map { it.media })
     }
 
