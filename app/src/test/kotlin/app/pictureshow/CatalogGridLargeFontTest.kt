@@ -583,22 +583,55 @@ class CatalogGridLargeFontTest {
         assertTrue(whole || gone, "$context: $title cut by the list's edge: $bounds in $list, card $card")
     }
 
-    private fun walkSearchRowsCheckingTitles(scale: Float) {
+    /** Where the focused card and its row's title fit on screen together, the title shows whole above it. */
+    private fun assertSectionTitleShown(title: String, context: String) {
+        val list = compose.onNodeWithTag("search:results").getBoundsInRoot()
+        val bounds = compose.onNode(hasText(title)).getUnclippedBoundsInRoot()
+        val card = compose.onNodeWithTag(focusedTag()).getUnclippedBoundsInRoot()
+        val shown = bounds.top >= list.top && bounds.bottom <= card.top
+        assertTrue(shown, "$context: $title not shown with its card: $bounds in $list, card $card")
+    }
+
+    private fun walkSearchRowsCheckingTitles(scale: Float, titleFitsWithCard: Boolean = false) {
+        fun focusedRow(title: String, context: String) {
+            assertSectionTitleWholeOrGone(title, context)
+            if (titleFitsWithCard) assertSectionTitleShown(title, context)
+        }
         showSearch(scale = scale, rows = longRows)
         assertSectionTitleWholeOrGone("Movies", "arrival at $scale")
         press(Key.DirectionDown)
-        assertSectionTitleWholeOrGone("Shows", "second row at $scale")
+        focusedRow("Shows", "second row at $scale")
         assertSectionTitleWholeOrGone("Movies", "second row at $scale")
         press(Key.DirectionDown)
-        assertSectionTitleWholeOrGone("More", "third row at $scale")
+        focusedRow("More", "third row at $scale")
         press(Key.DirectionUp)
-        assertSectionTitleWholeOrGone("Shows", "back up at $scale")
+        focusedRow("Shows", "back up at $scale")
         assertSectionTitleWholeOrGone("Movies", "back up at $scale")
     }
 
-    @Test fun searchSectionTitlesAreNeverHalfHiddenAtDefaultFont() = walkSearchRowsCheckingTitles(1f)
+    /** The card's request is at offset 600; its row's title takes the 59 above the card's top, the last 28 of it a gap. */
+    private fun titleDistance(distance: Float, size: Float) = sectionTitleScrollDistance(distance, 600f, size, 460f, 27f, 59f, 28f)
 
-    @Test fun searchSectionTitlesAreNeverHalfHiddenAtTheCollapseSize() = walkSearchRowsCheckingTitles(1.15f)
+    @Test fun aTitleCutByTheListsTopComesIntoViewWhenItFitsWithTheCard() {
+        // Card top at 40 would cut the title; 59 + 300 + its 15 overhang + 27 fits in 460, so the title shows whole.
+        assertEquals(541f, titleDistance(560f, 300f))
+    }
+
+    @Test fun aTitleThatDoesNotFitWithTheCardGoesWhollyUnderTheList() {
+        // 59 + 393 + 19.65 + 27 is past 460: the title's bottom goes to the list's top, the card's top 28 below it.
+        assertEquals(572f, titleDistance(560f, 393f))
+        // A card whose focus overhang passes the gap keeps the overhang whole instead.
+        assertEquals(565f, titleDistance(560f, 700f))
+    }
+
+    @Test fun aTitleAlreadyWholeOrGoneLeavesTheScrollAlone() {
+        assertEquals(530f, titleDistance(530f, 300f))
+        assertEquals(580f, titleDistance(580f, 300f))
+    }
+
+    @Test fun searchSectionTitlesAreNeverHalfHiddenAtDefaultFont() = walkSearchRowsCheckingTitles(1f, titleFitsWithCard = true)
+
+    @Test fun searchSectionTitlesAreNeverHalfHiddenAtTheCollapseSize() = walkSearchRowsCheckingTitles(1.15f, titleFitsWithCard = true)
 
     @Test fun searchSectionTitlesAreNeverHalfHiddenAtLargestFont() = walkSearchRowsCheckingTitles(1.3f)
 
