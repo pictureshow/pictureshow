@@ -534,6 +534,8 @@ class TouchPlayerControlsTest {
         noticeFitsAtALargerFont("phone-landscape-780x360-font1.3", waitsForControls = true)
 
     // TalkBack keeps the controls up, so a notice that waited for them would never be heard: it shows at once there.
+    // Native graphics, so text measures as it does on a phone (the legacy shadow makes the notice tiny and it fits).
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
     @Test
     fun aScreenReaderHearsTheNoticeOnAShortPhoneAtALargerFont() {
