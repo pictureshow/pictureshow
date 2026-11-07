@@ -52,7 +52,7 @@ class GridNavigationVectorsTest {
     }
 
     @Test fun vectors() {
-        val text = requireNotNull(javaClass.classLoader.getResourceAsStream("parity-vectors/grid-navigation.json"))
+        val text = requireNotNull(javaClass.classLoader.getResourceAsStream("grid-vectors/grid-navigation.json"))
             .bufferedReader().use { it.readText() }
         val cases = Json.parseToJsonElement(text).jsonObject.getValue("cases").jsonArray
         assertTrue(cases.isNotEmpty())
