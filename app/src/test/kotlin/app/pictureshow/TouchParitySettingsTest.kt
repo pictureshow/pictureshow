@@ -115,7 +115,7 @@ class TouchParitySettingsTest {
     @Test fun conversionNoticeDefaultsOnAndTogglesTheStoredPreference() {
         val state = settings()
         val toggle = compose.onNodeWithTag("touch:settings:conversion-notice").performScrollTo().assertIsOn()
-        compose.onNodeWithText("Shows a short note when the server has to convert a video for this phone.").assertExists()
+        compose.onNodeWithText("Shows a short note when the server has to convert a video or a song for this phone.").assertExists()
         toggle.performClick()
         compose.waitForIdle()
         toggle.assertIsOff().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Off"))
@@ -159,7 +159,7 @@ class TouchParitySettingsTest {
     fun aTabletSaysTablet() {
         settings()
         compose.onNodeWithText("This tablet").performScrollTo()
-        compose.onNodeWithText("Shows a short note when the server has to convert a video for this tablet.").assertExists()
+        compose.onNodeWithText("Shows a short note when the server has to convert a video or a song for this tablet.").assertExists()
     }
 
     @Test fun thisDeviceShowsTheCapturedReportWithoutSayingTv() {

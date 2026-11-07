@@ -105,7 +105,7 @@ internal fun TouchSettings(
             ) { checked -> onLocal { it.copy(passthrough = checked) } }
             TouchSwitchRow(
                 "Conversion notice",
-                "Shows a short note when the server has to convert a video for ${device.replaceFirstChar(Char::lowercase)}.",
+                "Shows a short note when the server has to convert a video or a song for ${device.replaceFirstChar(Char::lowercase)}.",
                 local.conversionNotice,
                 "touch:settings:conversion-notice"
             ) { checked -> onLocal { it.copy(conversionNotice = checked) } }

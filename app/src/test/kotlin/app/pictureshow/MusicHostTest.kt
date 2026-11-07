@@ -498,6 +498,23 @@ class MusicHostTest {
         assertEquals(null, music.state.value.queue!!.entries.firstOrNull()?.media)
     }
 
+    /** Play on a screen read for the old account asks the next account nothing, even when its queue would need a Replace. */
+    @Test fun anOldAccountsPlayDoesNotAskTheNextAccountToReplaceItsQueue() {
+        val music = host()
+        ready(music)
+        val stale = album("a")
+        switchTo(other, music)
+        music.append(other, tracks("x"))
+        until("the other queue") { music.state.value.queue?.entries?.size == 1 }
+        music.request(stale)
+        pump(300)
+        assertEquals(null, music.state.value.prompt)
+        assertEquals(listOf("x"), music.state.value.queue!!.entries.map { it.media })
+        // The same request made for this account does ask, so the check above isn't passing for want of a question.
+        music.request(MusicPlay(other.key, tracks("a"), null, "album", "Album", false))
+        until("the question") { music.state.value.prompt?.kind == "replace" }
+    }
+
     /** A step asked for under one account, held up behind a slow one, must not run against the account that follows. */
     @Test fun aStepWaitingBehindASwitchDoesNotTouchTheNextAccount() {
         val music = host()

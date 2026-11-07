@@ -616,7 +616,7 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                             onOpen,
                             { vm.favorite(row.id) },
                             edits,
-                            musicRowNumber(state.item, index)
+                            musicRowNumber(state.item, row, index)
                         )
                         // Edit shows the row's changes where they're used, as well as in its menu and to a screen reader.
                         if (edits.isNotEmpty()) {
