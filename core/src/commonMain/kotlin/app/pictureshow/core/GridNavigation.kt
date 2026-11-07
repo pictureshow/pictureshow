@@ -26,7 +26,14 @@ sealed interface GridVerticalMove {
  * column it holds while [loadingMore]; otherwise a row below that doesn't reach this column lands on its last item, and
  * the last row stays, or goes on to the Retry when [pageFailed].
  */
-fun gridVerticalMove(index: Int, columns: Int, count: Int, down: Boolean, loadingMore: Boolean, pageFailed: Boolean = false): GridVerticalMove {
+fun gridVerticalMove(
+    index: Int,
+    columns: Int,
+    count: Int,
+    down: Boolean,
+    loadingMore: Boolean,
+    pageFailed: Boolean = false
+): GridVerticalMove {
     if (columns <= 0 || index !in 0 until count) return GridVerticalMove.Stay
     if (!down) return if (index >= columns) GridVerticalMove.Card(index - columns) else GridVerticalMove.Above
     val last = count - 1

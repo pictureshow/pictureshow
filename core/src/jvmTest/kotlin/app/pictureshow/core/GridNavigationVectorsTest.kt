@@ -53,7 +53,11 @@ class GridNavigationVectorsTest {
 
             "fixed-head-collapses" ->
                 JsonPrimitive(
-                    fixedHeadCollapses(input.getValue("fontScale").jsonPrimitive.float, bool("contentFocused"), bool("assistiveServiceInUse"))
+                    fixedHeadCollapses(
+                        input.getValue("fontScale").jsonPrimitive.float,
+                        bool("contentFocused"),
+                        bool("assistiveServiceInUse")
+                    )
                 )
 
             "fixed-head-in-list" ->
