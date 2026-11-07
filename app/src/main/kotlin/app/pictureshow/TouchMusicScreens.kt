@@ -35,6 +35,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -61,7 +63,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -157,7 +163,7 @@ internal fun TouchMusicPrompts(host: MusicHost, onDestination: (MusicPlay) -> Un
         "replace" -> AlertDialog(
             onDismissRequest = host::dismissPrompt,
             title = { Text("Replace the queue?") },
-            text = { Text("${prompt.play.contextName ?: "This"} replaces what's in the queue now.") },
+            text = { Text("Playing ${prompt.play.contextName ?: "this"} clears your current queue.") },
             confirmButton = { TextButton(onClick = host::confirm, modifier = Modifier.testTag("music:replace")) { Text("Replace queue") } },
             dismissButton = { TextButton(onClick = host::dismissPrompt) { Text("Keep queue") } }
         )
@@ -358,7 +364,12 @@ private fun TouchMusicTrackRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(number, Modifier.widthIn(min = 28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // A mixed list has no numbers; its slot shows the track's art, which also tells songs from different albums apart.
+        if (number.isBlank()) {
+            MusicTrackArt(item, account, 40.dp)
+        } else {
+            Text(number, Modifier.widthIn(min = 28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 item.name,
@@ -466,6 +477,7 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
     var renaming by rememberSaveable { mutableStateOf(false) }
     var picking by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }
     fun play(shuffle: Boolean, start: MediaItem? = null) {
         vm.allTracks { tracks ->
             account.musicPlay(tracks, start, state.context, state.item.name, shuffle)?.let(host::request)
@@ -484,7 +496,15 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     TouchCatalogArtwork(state.item, account, false, Modifier.size(120.dp).clip(MaterialTheme.shapes.medium))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TouchCatalogHeading(state.item.name, section = true)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TouchCatalogHeading(state.item.name, Modifier.weight(1f), section = true)
+                            if (state.isPlaylist && state.canEdit) {
+                                TextButton(
+                                    onClick = { editing = !editing },
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("music:edit")
+                                ) { Text(if (editing) "Done" else "Edit") }
+                            }
+                        }
                         albumArtistLine(state.item).takeIf(String::isNotBlank)?.let { Text(it) }
                         val facts = listOfNotNull(
                             state.item.productionYear?.toString(),
@@ -501,7 +521,12 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                 }
                 state.item.overview?.takeIf(String::isNotBlank)?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
                 val canPlay = state.isGenre || state.tracks.any(::trackIsAvailable)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Play, Shuffle and Favorite on one line; the rest wait behind More.
+                FlowRow(
+                    Modifier.testTag("music:actions"),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Button(onClick = {
                         play(false)
                     }, enabled = canPlay && !state.busy, modifier = Modifier.heightIn(min = 48.dp).testTag("music:play")) { Text("Play") }
@@ -510,47 +535,40 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                     }, enabled = canPlay && !state.busy, modifier = Modifier.heightIn(min = 48.dp).testTag("music:shuffle")) {
                         Text("Shuffle")
                     }
-                    OutlinedButton(
-                        onClick = { vm.allTracks { tracks -> host.playNext(account, playableMusic(account, tracks)) } },
-                        enabled = canPlay && !state.busy,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("music:play-next")
-                    ) { Text("Play next") }
-                    OutlinedButton(
-                        onClick = { vm.allTracks { tracks -> host.append(account, playableMusic(account, tracks)) } },
-                        enabled = canPlay && !state.busy,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("music:add-queue")
-                    ) { Text("Add to queue") }
                     if (!state.isGenre) {
-                        OutlinedButton(onClick = { vm.favorite() }, modifier = Modifier.heightIn(min = 48.dp).testTag("music:favorite")) {
-                            Text(if (state.item.userData.isFavorite) "Favorited" else "Favorite")
+                        val favorite = state.item.userData.isFavorite
+                        IconButton(onClick = { vm.favorite() }, modifier = Modifier.testTag("music:favorite")) {
+                            Icon(
+                                touchActionIcon(if (favorite) "heart" else "heart-outline"),
+                                contentDescription = if (favorite) "Remove from favorites" else "Add to favorites"
+                            )
                         }
                     }
-                    if (state.tracks.isNotEmpty() && state.tracksComplete) {
-                        OutlinedButton(onClick = {
-                            picking = true
-                        }, modifier = Modifier.heightIn(min = 48.dp).testTag("music:add-playlist")) { Text("Add to playlist") }
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            vm.instantMix(state.item.id) { mix ->
-                                account.musicPlay(
-                                    mix,
-                                    null,
-                                    "mix:${state.item.id}",
-                                    "Instant mix of ${state.item.name}"
-                                )?.let(host::request)
+                    Box {
+                        OutlinedButton(onClick = { more = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("music:more")) {
+                            Text("More")
+                        }
+                        DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                            musicPageActions(
+                                state,
+                                canPlay,
+                                playNext = { vm.allTracks { tracks -> host.playNext(account, playableMusic(account, tracks)) } },
+                                addToQueue = { vm.allTracks { tracks -> host.append(account, playableMusic(account, tracks)) } },
+                                addToPlaylist = { picking = true },
+                                instantMix = {
+                                    vm.instantMix(state.item.id) { mix ->
+                                        account.musicPlay(mix, null, "mix:${state.item.id}", "Instant mix of ${state.item.name}")
+                                            ?.let(host::request)
+                                    }
+                                },
+                                rename = { renaming = true }
+                            ).forEach { action ->
+                                DropdownMenuItem(text = { Text(action.label) }, enabled = action.enabled, onClick = {
+                                    more = false
+                                    action.run()
+                                }, modifier = Modifier.testTag(action.tag))
                             }
-                        },
-                        enabled = !state.busy,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("music:mix")
-                    ) { Text("Instant mix") }
-                    if (state.isPlaylist && state.canEdit) {
-                        OutlinedButton(onClick = {
-                            renaming = true
-                        }, modifier = Modifier.heightIn(min = 48.dp).testTag("music:rename")) { Text("Rename") }
-                        OutlinedButton(onClick = {
-                            editing = !editing
-                        }, modifier = Modifier.heightIn(min = 48.dp).testTag("music:edit")) { Text(if (editing) "Done" else "Edit") }
+                        }
                     }
                 }
                 if (state.isPlaylist && state.edit.phase == "unknown") {
@@ -561,7 +579,7 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                     MusicListState.INACCESSIBLE -> Text("This account can't open this music.")
                     MusicListState.EXPIRED -> Text("Your session has expired. Sign in again.")
                     MusicListState.FAILED -> TouchCatalogError(state.error?.message ?: "Couldn't load this.", vm::reload)
-                    MusicListState.EMPTY -> if (!state.isGenre) Text("Nothing here yet.")
+                    MusicListState.EMPTY -> if (!state.isGenre) Text(musicEmptyDetail(state.isAlbum))
                     else -> if (state.error != null) TouchCatalogError(state.error?.message, vm::reload)
                 }
             }
@@ -656,6 +674,25 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
 
 internal fun playableMusic(account: Account, tracks: List<MediaItem>): List<MusicTrack> =
     tracks.filter(::trackIsAvailable).map(account::musicTrack)
+
+/** Three short bars: the drag handle on a queue row (no icon library on the classpath, so it's drawn here). */
+private val MusicDragHandle: ImageVector = ImageVector.Builder(
+    name = "drag-handle",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f
+).apply {
+    path(fill = SolidColor(Color.White)) {
+        listOf(8f, 11f, 14f).forEach { top ->
+            moveTo(4f, top)
+            lineTo(20f, top)
+            lineTo(20f, top + 2f)
+            lineTo(4f, top + 2f)
+            close()
+        }
+    }
+}.build()
 
 /** Now playing, with its queue under it on a phone and beside it on a tablet. */
 @Composable
@@ -807,10 +844,10 @@ internal fun TouchMusicNow(host: MusicHost, onBack: () -> Unit) {
                         enabled = ui.upNext.isNotEmpty(),
                         modifier = Modifier.heightIn(min = 48.dp).testTag("music:clear-upcoming")
                     ) {
-                        Text("Clear")
+                        Text("Clear up next")
                     }
                     TextButton(onClick = host::clear, modifier = Modifier.heightIn(min = 48.dp).testTag("music:clear")) {
-                        Text("End queue")
+                        Text("Stop and clear")
                     }
                 }
                 if (ui.upNext.isEmpty()) Text("Nothing after this one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -881,11 +918,8 @@ internal fun TouchMusicNow(host: MusicHost, onBack: () -> Unit) {
                         }
                     }
                     // Holding the handle lifts the row; where it lands is worked out from how far it moved.
-                    Text(
-                        "Move",
-                        Modifier.heightIn(
-                            min = 48.dp
-                        ).padding(horizontal = 12.dp, vertical = 14.dp).testTag("music:queue:handle:${upcoming.entry}")
+                    Box(
+                        Modifier.size(48.dp).testTag("music:queue:handle:${upcoming.entry}")
                             .pointerInput(upcoming.entry, index, base) {
                                 val rowHeight = 64.dp.toPx()
                                 detectDragGesturesAfterLongPress(
@@ -910,9 +944,11 @@ internal fun TouchMusicNow(host: MusicHost, onBack: () -> Unit) {
                                     }
                                 )
                             },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // The row's Move up and Move down actions speak for the handle, so the icon says nothing itself.
+                        Icon(MusicDragHandle, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
