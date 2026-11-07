@@ -314,7 +314,8 @@ private fun TouchMusicTrackRow(
     onPlay: () -> Unit,
     onOpen: (MediaItem, ArtistRole?) -> Unit,
     onFavorite: (() -> Unit)?,
-    extra: List<Pair<String, () -> Unit>> = emptyList()
+    extra: List<Pair<String, () -> Unit>> = emptyList(),
+    number: String = item.indexNumber?.toString().orEmpty()
 ) {
     val available = trackIsAvailable(item)
     var menu by remember { mutableStateOf(false) }
@@ -357,7 +358,7 @@ private fun TouchMusicTrackRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(item.indexNumber?.toString().orEmpty(), Modifier.widthIn(min = 28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(number, Modifier.widthIn(min = 28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.weight(1f)) {
             Text(
                 item.name,
@@ -613,8 +614,20 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                         { play(false, row) },
                         onOpen,
                         { vm.favorite(row.id) },
-                        edits
+                        edits,
+                        musicRowNumber(state.item, index)
                     )
+                    // Edit shows the row's changes where they're used, as well as in its menu and to a screen reader.
+                    if (edits.isNotEmpty()) {
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            edits.forEach { (name, run) ->
+                                TextButton(
+                                    onClick = run,
+                                    modifier = Modifier.testTag("music:edit:$name:$entry")
+                                ) { Text(name) }
+                            }
+                        }
+                    }
                 }
             }
         }

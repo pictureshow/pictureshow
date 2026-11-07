@@ -201,7 +201,6 @@ internal class MusicHost(
     private val gateway: MusicGateway,
     private val preferences: suspend () -> PlaybackPreferences,
     private val remoteAttached: () -> String?,
-    private val castAttached: () -> String?,
     private val remoteTarget: () -> RemoteTargetHost?,
     private val newPlayer: (Context) -> ExoPlayer = ::createMusicPlayer,
     private val startService: (MusicHost) -> Unit = ::connectMusicService,
@@ -210,6 +209,9 @@ internal class MusicHost(
         (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).isActiveNetworkMetered
     }
 ) {
+    /** The Cast device in use. The touch interface sets this, because a TV must never load the sender. */
+    var castAttached: () -> String? = { null }
+
     private val mutable = MutableStateFlow(MusicUi())
     val state = mutable.asStateFlow()
 
@@ -977,7 +979,7 @@ internal class MusicHost(
         q.current != null && (musicUpcoming(q).isNotEmpty() || q.repeat == "all")
     }
 
-    private val remoteBridge = object : RemotePlayerBridge {
+    internal val remoteBridge = object : RemotePlayerBridge {
         override fun pause() = this@MusicHost.pause()
 
         override fun unpause() = this@MusicHost.play()
@@ -1003,6 +1005,22 @@ internal class MusicHost(
         override fun stop() = this@MusicHost.stop()
 
         override fun next(item: String?) = this@MusicHost.next()
+
+        override fun previous(): Boolean {
+            this@MusicHost.previous()
+            return true
+        }
+
+        override fun enqueue(items: List<String>, next: Boolean): Boolean {
+            val active = account ?: return false
+            scope.launch {
+                // Only tracks join a music queue; the reply to the phone is the queue it reads back.
+                val rows = (gateway.items(active, items) as? ClientResult.Success)?.value?.associateBy(MediaItem::id) ?: return@launch
+                val tracks = items.mapNotNull(rows::get).filter { it.type == "Audio" }.map(active::musicTrack)
+                if (next) playNext(tracks) else append(tracks)
+            }
+            return true
+        }
 
         override fun audio(index: Int) = Unit
 

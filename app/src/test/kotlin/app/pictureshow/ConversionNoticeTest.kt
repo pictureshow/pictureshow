@@ -284,7 +284,7 @@ class ConversionNoticeTest {
         assertTrue(PlaybackPreferences.decode().conversionNotice, "a missing stored value is on")
         assertEquals(false, PlaybackPreferences.decode(conversionNotice = false).conversionNotice)
         compose.onNodeWithText("Conversion notice: On").assertExists()
-        compose.onNodeWithText("Shows a short note when the server has to convert a video for this TV.").assertExists()
+        compose.onNodeWithText("Shows a short note when the server has to convert a video or a song for this TV.").assertExists()
         val toggle = compose.onNodeWithTag("settings:conversion-notice").fetchSemanticsNode()
         assertEquals("On", toggle.config.getOrNull(SemanticsProperties.StateDescription))
         compose.onNodeWithTag("settings:passthrough").requestFocusNow()

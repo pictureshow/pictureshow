@@ -123,6 +123,7 @@ internal fun TouchPictureshow(
         )
     }
     val music: MusicHost = koinInject()
+    LaunchedEffect(music, cast) { music.castAttached = { cast.state.value.deviceName } }
     TouchMusicPrompts(music) { play ->
         val tracks = play.tracks.drop(play.start ?: 0)
         if (remoteState.controller?.phase == "attached") {

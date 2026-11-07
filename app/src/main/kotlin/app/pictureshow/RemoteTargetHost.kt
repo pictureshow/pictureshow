@@ -98,6 +98,12 @@ internal interface RemotePlayerBridge {
     fun next(item: String?)
     fun audio(index: Int)
     fun subtitle(index: Int)
+
+    /** True when this player keeps its own queue and has taken the items; a video leaves them to the target's queue. */
+    fun enqueue(items: List<String>, next: Boolean): Boolean = false
+
+    /** True when this player steps back through its own queue; a video goes back through the target's queue. */
+    fun previous(): Boolean = false
 }
 
 /** The target's queue lives in memory for this signed-in process; a restart forgets it with the viewing. */
@@ -353,6 +359,7 @@ internal class RemoteTargetHost(
                 mutableOpens.tryEmit(effect)
             }
             "queue-next", "queue-add" -> {
+                if (bridge?.enqueue(effect.items, effect.op == "queue-next") == true) return
                 // The reducer also accepts these during preparation; the title on its way is the current entry then,
                 // even while the title being replaced is still reporting.
                 val watching = arriving ?: viewing?.item ?: queue?.current ?: return
@@ -365,7 +372,7 @@ internal class RemoteTargetHost(
             "seek" -> bridge?.seekTo(requireNotNull(effect.ticks) / 10_000)
             "stop" -> bridge?.stop()
             "next" -> bridge?.next(queue?.upcoming)
-            "previous" -> if (bridge != null) previous(bridge)
+            "previous" -> if (bridge != null && !bridge.previous()) previous(bridge)
             "audio" -> bridge?.audio(requireNotNull(effect.index))
             "subtitle" -> bridge?.subtitle(requireNotNull(effect.index))
             "nav" -> mutableNavigation.tryEmit(requireNotNull(effect.name))
