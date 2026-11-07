@@ -57,3 +57,13 @@ fun gridStripDetail(sortBy: String, descending: Boolean): String {
     val title = GridSorts.firstOrNull { it.first == sortBy }?.second ?: GridSorts.first().second
     return "$title, ${if (descending) "descending" else "ascending"}"
 }
+
+/** Above this system font size a card's title has no line limit, so a card can be taller than the room under a fixed head. */
+const val UNBOUNDED_TITLE_FONT_SCALE = 1.15f
+
+/**
+ * Whether a fixed head (Search, Person) goes off screen so the card under it fits. Not with a screen reader on: a TV reader
+ * moves by what's on screen, so it could never get back up to the field or the Back button.
+ */
+fun fixedHeadCollapses(fontScale: Float, contentFocused: Boolean, screenReaderOn: Boolean): Boolean =
+    contentFocused && !screenReaderOn && fontScale > UNBOUNDED_TITLE_FONT_SCALE

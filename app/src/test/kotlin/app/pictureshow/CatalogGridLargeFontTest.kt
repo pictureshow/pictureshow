@@ -4,7 +4,9 @@
 package app.pictureshow
 
 import android.app.Application
+import android.content.Context
 import android.content.pm.PackageManager
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -17,6 +19,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
@@ -526,6 +529,40 @@ class CatalogGridLargeFontTest {
         compose.onNodeWithTag("search:strip").assertDoesNotExist()
         press(Key.DirectionDown)
         assertEquals("Results for \"film\"", stripText("search:strip"))
+    }
+
+    private fun screenReaderOn() {
+        val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        shadowOf(manager).setEnabled(true)
+    }
+
+    @Test fun searchKeepsItsHeadOnScreenForAScreenReader() {
+        screenReaderOn()
+        showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
+        press(Key.DirectionDown)
+        assertTrue(compose.onNodeWithTag("search:field").getUnclippedBoundsInRoot().top.value >= 0f, "the field left the screen")
+        compose.onNodeWithTag("search:strip").assertDoesNotExist()
+    }
+
+    @Test fun personKeepsItsHeadOnScreenForAScreenReader() {
+        screenReaderOn()
+        showLarge {
+            val person = MediaItem("person", "A Person", "Person")
+            PersonScreen(PersonState(CatalogGridState(account, person, longTitles, longTitles.size), person), {}, {}, {}, {})
+        }
+        press(Key.DirectionDown)
+        assertTrue(compose.onNodeWithTag("person:back").getUnclippedBoundsInRoot().top.value >= 0f, "Back left the screen")
+        compose.onNodeWithTag("person:name").assertIsDisplayed()
+    }
+
+    @Test fun aReaderTurnedOnWhileTheHeadIsGoneBringsItBack() {
+        showLarge { SearchScreen(SearchState("film", longRows.take(1), completed = true), account, false, {}, {}, {}, {}, {}, {}) }
+        assertEquals("Results for \"film\"", stripText("search:strip"))
+        val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        shadowOf(manager).setEnabled(true)
+        settle()
+        compose.onNodeWithTag("search:strip").assertDoesNotExist()
+        assertTrue(compose.onNodeWithTag("search:field").getUnclippedBoundsInRoot().top.value >= 0f, "the field stayed off screen")
     }
 
     @Test fun searchKeepsItsHeadAndNoStripBelowTheCollapseSize() {

@@ -196,7 +196,7 @@ if it is on a later row, and null from the last row. Null when `columns` is not 
 Owed: web runs these. Apple has no vector runner on main, so `grid-vertical-move` is owed there with the rest of the
 application suite.
 
-## `grid-navigation.json`: `grid-vertical-outcome`, `grid-hold-release`, `grid-strip-detail`
+## `grid-navigation.json`: `grid-vertical-outcome`, `grid-hold-release`, `grid-strip-detail`, `fixed-head-collapses`
 
 `grid-vertical-outcome` has the input of `grid-vertical-move`, with `loadingMore` required. Expected is one of
 `{"outcome":"card","index":n}`, `{"outcome":"hold"}` (the press waits for the page), `{"outcome":"stay"}` (the press is
@@ -211,6 +211,10 @@ landing. A newer key also replaces a move still waiting on a card to compose, an
 
 `grid-strip-detail`: input `sortBy`, boolean `descending`; expected the pinned strip's words for the sort in force, in the
 sort chips' own titles. An unknown `sortBy` reads as the first sort.
+
+`fixed-head-collapses`: input number `fontScale`, booleans `contentFocused`, `screenReaderOn`; expected a boolean, whether
+the Search or Person head goes off screen. Above font scale 1.15, while the results or grid below it hold focus, and never
+with a screen reader on: a TV reader moves by what's on screen and couldn't get back up to the field or Back.
 
 Owed: Android runs these. Web lists the suite in `pendingPortSuites`, and it shows as todo there until ported. Apple has no
 vector runner on main, so it owes the suite with the rest.

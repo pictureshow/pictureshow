@@ -328,6 +328,61 @@
       },
       "expected": "Name, descending",
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.collapses-with-focus-below-it-above-the-size",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 1.3,
+        "contentFocused": true,
+        "screenReaderOn": false
+      },
+      "expected": true,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.stays-at-the-size-itself",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 1.15,
+        "contentFocused": true,
+        "screenReaderOn": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.stays-without-focus-below-it",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 1.3,
+        "contentFocused": false,
+        "screenReaderOn": false
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.stays-for-a-screen-reader",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 1.3,
+        "contentFocused": true,
+        "screenReaderOn": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "fixed-head-collapses.stays-for-a-screen-reader-at-the-largest",
+      "operation": "fixed-head-collapses",
+      "input": {
+        "fontScale": 2.0,
+        "contentFocused": true,
+        "screenReaderOn": true
+      },
+      "expected": false,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     }
   ]
 }

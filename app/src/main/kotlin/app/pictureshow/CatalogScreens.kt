@@ -130,6 +130,7 @@ import app.pictureshow.core.GRID_HOLD_CAP_MILLIS
 import app.pictureshow.core.GridSorts
 import app.pictureshow.core.GridVerticalMove
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.UNBOUNDED_TITLE_FONT_SCALE
 import app.pictureshow.core.episodeLabel
 import app.pictureshow.core.gridHoldRelease
 import app.pictureshow.core.gridStripDetail
@@ -923,7 +924,8 @@ internal val ContextStripHeight = 40.dp
 
 /**
  * One line saying what a scrolled grid or a collapsed head took off the screen. The name gives way to the [detail] when
- * there's no room for both. Not read out: the viewer can hear where they are from the card and go back up to the source.
+ * there's no room for both. Marked as not for a screen reader, since the viewer hears where they are from the card, but TV
+ * TalkBack still stops on it when nothing is above it. So a fixed head doesn't collapse under a reader (fixedHeadCollapses).
  */
 @Composable
 internal fun ContextStrip(title: String, detail: String?, modifier: Modifier = Modifier) {
@@ -1019,9 +1021,6 @@ internal fun Modifier.revealFocusAfterFontChange(scroller: ScrollableState, topI
     }
     Modifier.onGloballyPositioned { tracked.viewport = it }.onFocusedBoundsChanged { tracked.focused = it }
 }
-
-/** The size above which a card's title lines are unbounded. */
-internal const val UNBOUNDED_TITLE_FONT_SCALE = 1.15f
 
 /** tv-material draws a focused card at 1.1x about its centre, so 5% of its height lies past each layout edge. */
 private const val FOCUS_SCALE_OVERHANG = .05f

@@ -73,6 +73,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.fixedHeadCollapses
 import app.pictureshow.core.normalizeSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -222,7 +223,7 @@ fun SearchScreen(
     ) {
         var resultsFocused by remember { mutableStateOf(false) }
         // A long title at the largest sizes is taller than the space under the field: it goes while results hold focus.
-        val headCollapsed = resultsFocused && LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE
+        val headCollapsed = fixedHeadCollapses(LocalDensity.current.fontScale, resultsFocused, rememberAccessibilityEnabled())
         Box {
             Column(Modifier.collapsedOffScreen(headCollapsed), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
@@ -573,7 +574,7 @@ fun PersonScreen(state: PersonState, onOpen: (MediaItem) -> Unit, onNearEnd: (In
         if (!state.grid.loading && state.grid.items.isEmpty() && state.grid.error == null) back.requestFocus()
     }
     var gridFocused by remember { mutableStateOf(false) }
-    val headCollapsed = gridFocused && LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE
+    val headCollapsed = fixedHeadCollapses(LocalDensity.current.fontScale, gridFocused, rememberAccessibilityEnabled())
     Column(Modifier.fillMaxSize().background(Color(0xFF10131C))) {
         Row(
             Modifier.collapsedOffScreen(headCollapsed)
