@@ -295,7 +295,7 @@ class ConversionNoticeTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test
     fun theLongestNoticeStaysInTheTopHalfAtALargerFont() {
-        val notice = tvNotice("VideoFramerateNotSupported")
+        val notice = tvNotice("VideoProfileNotSupported")
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
@@ -307,7 +307,7 @@ class ConversionNoticeTest {
             }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("a 30 fps copy on the server plays directly", substring = true).assertExists()
+        compose.onNodeWithText("an 8-bit 1080p H.264 copy on the server plays directly", substring = true).assertExists()
         val card = compose.onNodeWithTag("player:conversion-notice").getBoundsInRoot()
         val root = compose.onRoot().getBoundsInRoot()
         assertTrue(card.bottom <= root.bottom / 2, "card $card stays in the top half of $root")

@@ -487,7 +487,7 @@ class TouchPlayerControlsTest {
     // The notice says why and how to fix it; at 1.3 font its longest line still clears the controls on the smallest phone.
     private fun noticeFitsAtALargerFont(render: String, waitsForControls: Boolean) {
         launch(fontScale = 1.3f)
-        decided(PlayMethod.Transcode, reason = "VideoFramerateNotSupported")
+        decided(PlayMethod.Transcode, reason = "VideoProfileNotSupported")
         settled()
         compose.onNodeWithTag("touch:panel").assertIsDisplayed()
         if (waitsForControls) {
@@ -499,7 +499,7 @@ class TouchPlayerControlsTest {
             settled()
             compose.onNodeWithTag("touch:panel").assertDoesNotExist()
         }
-        compose.onNodeWithText("a 30 fps copy on the server plays directly", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("an 8-bit 1080p H.264 copy on the server plays directly", substring = true).assertIsDisplayed()
         val notice = bounds("touch:conversion-notice")
         val root = compose.onRoot().getBoundsInRoot()
         assertTrue(notice.left >= root.left && notice.right <= root.right && notice.bottom <= root.bottom, "inside: $notice in $root")
@@ -545,7 +545,7 @@ class TouchPlayerControlsTest {
             org.robolectric.Shadows.shadowOf(manager).setScreenReader(true)
         }
         compose.mainClock.advanceTimeBy(400)
-        decided(PlayMethod.Transcode, reason = "VideoFramerateNotSupported")
+        decided(PlayMethod.Transcode, reason = "VideoProfileNotSupported")
         settled()
         compose.onNodeWithTag("touch:panel").assertIsDisplayed()
         compose.onNodeWithTag("touch:conversion-notice").assertIsDisplayed()
