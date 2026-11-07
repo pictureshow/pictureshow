@@ -29,7 +29,7 @@ class RemotePlayRequestLineTest {
             engine {
                 addHandler { request ->
                     line = "POST ${request.url.encodedPathAndQuery} HTTP/1.1".length
-                    ids = request.url.parameters.getValue("itemIds").split(",").size
+                    ids = requireNotNull(request.url.parameters["itemIds"]).split(",").size
                     respond("", HttpStatusCode.NoContent)
                 }
             }

@@ -267,7 +267,11 @@ class ConversionNoticeTest {
         )
         val burnIn = PlayDecision(
             "film",
-            MediaSourceInfo(mediaStreams = listOf(MediaStream(MediaStreamType.Subtitle, 3, codec = "pgssub", deliveryMethod = SubtitleDeliveryMethod.Encode))),
+            MediaSourceInfo(
+                mediaStreams = listOf(
+                    MediaStream(MediaStreamType.Subtitle, 3, codec = "pgssub", deliveryMethod = SubtitleDeliveryMethod.Encode)
+                )
+            ),
             PlayMethod.Transcode,
             "https://server.example/videos/film/master.m3u8?VideoCodec=h264&AudioCodec=aac",
             emptyMap(),
@@ -289,7 +293,8 @@ class ConversionNoticeTest {
     // At 1.3 font the longest why-and-fix line still stays in the top half of a 960x540 TV frame, clear of bottom
     // subtitles and the controls, placed as the player places it.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun theLongestNoticeStaysInTheTopHalfAtALargerFont() {
+    @Test
+    fun theLongestNoticeStaysInTheTopHalfAtALargerFont() {
         val notice = tvNotice("VideoFramerateNotSupported")
         compose.setContent {
             val density = LocalDensity.current

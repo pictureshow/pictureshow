@@ -22,6 +22,7 @@ import kotlinx.serialization.json.putJsonObject
 
 const val REMOTE_TEXT_LIMIT = 256
 private const val REMOTE_MESSAGE_LIMIT = 65_536
+
 /** Most ids a Play message from the server may carry; it arrives over the socket, inside [REMOTE_MESSAGE_LIMIT]. */
 private const val REMOTE_ITEM_LIMIT = 1_000
 
@@ -71,8 +72,7 @@ data class RemoteCap(val sent: Int, val total: Int)
 data class RemoteWire(val request: RemoteRequest? = null, val rejection: String? = null, val capped: RemoteCap? = null)
 
 /** What the controller says when a list was cut to fit one request. */
-fun remoteCapNote(cap: RemoteCap): String =
-    "The TV gets the first ${groupedCount(cap.sent)} of ${groupedCount(cap.total)}, as many as one send can carry."
+fun remoteCapNote(cap: RemoteCap): String = "Sent the first ${groupedCount(cap.sent)} of ${groupedCount(cap.total)}."
 
 private fun groupedCount(value: Int): String = value.toString().reversed().chunked(3).joinToString(",").reversed()
 

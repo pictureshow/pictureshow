@@ -39,6 +39,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -85,6 +86,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
@@ -320,11 +322,33 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         }
         val noticeRoom = maxWidth - safeSides - TOUCH_PLAYER_EDGE * 2 - TOUCH_ACTIONS_WIDTH - 12.dp
         val noticeCap = noticeRoom.takeIf { it >= TOUCH_NOTICE_MIN_BESIDE }
+        val conversionNotice = host.state.decision?.takeIf { host.localPreferences.conversionNotice }?.let {
+            ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice)
+        }
+        // A short window at a large font has no room for the notice above the controls, so it waits for them to hide
+        // rather than covering them. Measured as the card lays out: its width, the title and the line at this font.
+        val noticeMeasurer = rememberTextMeasurer()
+        val titleStyle = MaterialTheme.typography.titleMedium
+        val lineStyle = LocalTextStyle.current.copy(fontSize = 16.sp)
+        val noticeBottom = conversionNotice?.let { notice ->
+            val cardWidth = minOf(480.dp, noticeCap ?: (maxWidth - safeSides - TOUCH_PLAYER_EDGE * 2))
+            val text = Constraints(maxWidth = with(density) { (cardWidth - 24.dp).roundToPx() }.coerceAtLeast(0))
+            val title = noticeMeasurer.measure(notice.title, titleStyle, constraints = text).size.height
+            val line = noticeMeasurer.measure(touchConversionNoticeLine(notice), lineStyle, constraints = text).size.height
+            val top = WindowInsets.safeDrawing.getTop(density) + with(density) { TOUCH_PLAYER_EDGE.roundToPx() }
+            top + title + line + with(density) { 28.dp.roundToPx() }
+        }
+        val noticeClearsControls = !controlsVisible ||
+            noticeBottom == null ||
+            controlsTop?.let { noticeBottom <= it - playerTop } == true
         ConversionNoticeHost(
-            host.state.decision?.takeIf { host.localPreferences.conversionNotice }?.let {
-                ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice)
-            },
-            allowed = !topCues && host.player != null && foreground && !host.state.preparing && actionsVisible,
+            conversionNotice,
+            allowed = !topCues &&
+                host.player != null &&
+                foreground &&
+                !host.state.preparing &&
+                actionsVisible &&
+                noticeClearsControls,
             modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(TOUCH_PLAYER_EDGE),
             card = { notice, placement, announce, details ->
                 DisposableEffect(Unit) { onDispose { noticeBounds = null } }
@@ -858,6 +882,8 @@ internal fun TouchNextEpisodeCard(
     }
 }
 
+internal fun touchConversionNoticeLine(notice: ConversionNotice) = "${notice.reason} ${notice.fix} $TOUCH_CONVERSION_NOTICE_ACTION"
+
 /** Never blocks the video: a passing tap anywhere else still reaches the player, and playback continues underneath. */
 @Composable
 internal fun TouchConversionNoticeCard(
@@ -881,7 +907,7 @@ internal fun TouchConversionNoticeCard(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(notice.title, style = MaterialTheme.typography.titleMedium)
-            Text("${notice.reason} ${notice.fix} $TOUCH_CONVERSION_NOTICE_ACTION", fontSize = 16.sp)
+            Text(touchConversionNoticeLine(notice), fontSize = 16.sp)
         }
     }
 }

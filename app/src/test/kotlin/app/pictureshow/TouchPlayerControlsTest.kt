@@ -42,6 +42,9 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -482,19 +485,34 @@ class TouchPlayerControlsTest {
     }
 
     // The notice says why and how to fix it; at 1.3 font its longest line still clears the controls on the smallest phone.
-    private fun noticeFitsAtALargerFont(render: String) {
+    private fun noticeFitsAtALargerFont(render: String, waitsForControls: Boolean) {
         launch(fontScale = 1.3f)
         decided(PlayMethod.Transcode, reason = "VideoFramerateNotSupported")
         settled()
+        compose.onNodeWithTag("touch:panel").assertIsDisplayed()
+        if (waitsForControls) {
+            // No room above the controls: the notice waits rather than covering them, and comes when they hide.
+            compose.onNodeWithTag("touch:conversion-notice").assertDoesNotExist()
+            // A tap above the controls, which cover the middle of a short window, hides them.
+            compose.onNodeWithTag("touch:gestures").performTouchInput { click(Offset(centerX, 24f)) }
+            compose.mainClock.advanceTimeBy(400)
+            settled()
+            compose.onNodeWithTag("touch:panel").assertDoesNotExist()
+        }
         compose.onNodeWithText("a 30 fps copy on the server would play directly", substring = true).assertIsDisplayed()
         val notice = bounds("touch:conversion-notice")
         val root = compose.onRoot().getBoundsInRoot()
         assertTrue(notice.left >= root.left && notice.right <= root.right && notice.bottom <= root.bottom, "inside: $notice in $root")
-        val panel = bounds("touch:panel")
-        assertTrue(notice.bottom <= panel.top, "notice $notice clears the controls $panel")
-        val actions = bounds("touch:actions")
-        val beside = notice.right <= actions.left + 16.dp
-        assertTrue(beside || notice.bottom <= actions.top + 16.dp, "notice $notice clears the action column $actions")
+        val density = compose.onRoot().fetchSemanticsNode().layoutInfo.density.density
+        compose.onAllNodesWithTag("touch:panel").fetchSemanticsNodes().forEach {
+            assertTrue(notice.bottom <= (it.boundsInRoot.top / density).dp, "notice $notice clears the controls")
+        }
+        // Each action sits beside the notice or below it (the column's own top is padding, not a control).
+        compose.onAllNodes(hasAnyAncestor(hasTestTag("touch:actions")) and hasClickAction()).fetchSemanticsNodes().forEach {
+            val action = it.boundsInRoot
+            val clear = (action.left / density).dp >= notice.right || (action.top / density).dp >= notice.bottom
+            assertTrue(clear, "notice $notice clears $action")
+        }
         saveRender(render)
     }
 
@@ -507,12 +525,13 @@ class TouchPlayerControlsTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w360dp-h780dp-port-xxhdpi")
     @Test
-    fun theNoticeFitsANarrowPhoneAtALargerFont() = noticeFitsAtALargerFont("phone-portrait-360x780-font1.3")
+    fun theNoticeFitsANarrowPhoneAtALargerFont() = noticeFitsAtALargerFont("phone-portrait-360x780-font1.3", waitsForControls = false)
 
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
     @Test
-    fun theNoticeFitsAShortLandscapePhoneAtALargerFont() = noticeFitsAtALargerFont("phone-landscape-780x360-font1.3")
+    fun theNoticeFitsAShortLandscapePhoneAtALargerFont() =
+        noticeFitsAtALargerFont("phone-landscape-780x360-font1.3", waitsForControls = true)
 
     @Test
     @Config(qualifiers = "sw800dp-w800dp-h1280dp-xhdpi")

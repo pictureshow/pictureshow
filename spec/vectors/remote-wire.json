@@ -2476,7 +2476,7 @@
             "total": 1200
           },
           "expected": {
-            "text": "The TV gets the first 175 of 1,200, as many as one send can carry."
+            "text": "Sent the first 175 of 1,200."
           }
         },
         {
@@ -2485,7 +2485,7 @@
             "total": 180
           },
           "expected": {
-            "text": "The TV gets the first 175 of 180, as many as one send can carry."
+            "text": "Sent the first 175 of 180."
           }
         }
       ]
