@@ -95,6 +95,7 @@ class StartPositionRecoveryTest {
         session.ready()
         runCurrent()
         assertNotNull(session.state.value.error)
+        assertEquals(1, output.appPauses, "The error's pause is the app's, not the viewer's")
         assertTrue(gateway.starts.isEmpty())
         assertEquals(2, gateway.requests.size)
         assertTrue(gateway.stops.single().failed)
@@ -209,6 +210,10 @@ class StartPositionRecoveryTest {
         }
         override fun select(type: MediaStreamType, index: Int) = false
         override fun pause() = Unit
+        var appPauses = 0
+        override fun pauseForApp() {
+            appPauses++
+        }
         override fun release() = Unit
     }
 

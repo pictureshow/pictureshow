@@ -166,6 +166,19 @@ class AudioRecoverySessionTest {
         runCurrent()
     }
 
+    @Test fun aFailureWithNoRetryLeftIsTheAppsPause() = runTest {
+        val output = Output()
+        val session = PlaybackSession(Gateway(), output, backgroundScope, "en")
+        session.start(30_000)
+        runCurrent()
+        session.failed(canRetryWithTranscode = false)
+        runCurrent()
+        assertNotNull(session.state.value.error)
+        assertEquals(1, output.appPauses, "The TV may play what this device can't, so the viewer hasn't paused")
+        session.close()
+        runCurrent()
+    }
+
     @Test fun directTrackSwitchToRefusedDtsPreservesChosenTrackPositionAndPause() = runTest {
         for (paused in listOf(false, true)) {
             val gateway = Gateway()

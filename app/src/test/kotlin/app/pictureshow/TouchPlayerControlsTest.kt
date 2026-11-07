@@ -1204,6 +1204,22 @@ class TouchPlayerControlsTest {
         assertEquals(true, readPaused(local))
     }
 
+    // Pressing play, here or from a controller, makes whatever the app remembered from earlier out of date.
+    @Test
+    fun aViewersPlayEndsTheirEarlierPause() {
+        val local = chooserLocal()
+        compose.runOnIdle {
+            output.pause()
+            output.setForeground(false)
+            output.setForeground(true)
+            output.playIntent(true)
+            output.setForeground(false)
+            output.setForeground(true)
+        }
+        settled()
+        assertEquals(false, readPaused(local))
+    }
+
     @Test
     fun leavingThePlayerIsNotTheViewersPause() {
         val local = chooserLocal()

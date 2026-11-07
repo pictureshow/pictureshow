@@ -93,7 +93,7 @@ internal class Media3PlaybackOutput(
         PlaybackDiagnostics.write("lifecycle foreground=$value paused=${snapshot.paused} positionMs=${snapshot.milliseconds}")
     }
 
-    private fun playIntent(requested: Boolean): Boolean {
+    internal fun playIntent(requested: Boolean): Boolean {
         if (requested && !mutableForeground.value) return false
         if (requested) {
             mutablePauseIntent.value = false
