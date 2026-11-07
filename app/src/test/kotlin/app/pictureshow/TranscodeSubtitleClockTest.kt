@@ -21,6 +21,7 @@ import androidx.media3.extractor.text.CueEncoder
 import androidx.media3.test.utils.FakeClock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -28,6 +29,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 class TranscodeSubtitleClockTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun fullFileCuesAtRestartTargetRenderOnTheLocalVideoClockForBothParsePaths() {
         for (legacy in listOf(false, true)) {

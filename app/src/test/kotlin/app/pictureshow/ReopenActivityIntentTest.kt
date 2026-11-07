@@ -31,6 +31,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -42,6 +43,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class, shadows = [ActivityMediaKeysTest.ControllerBridge::class])
 class ReopenActivityIntentTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test fun subtitleReopenUsesRemoteIntentAndReportsPause() = negotiate(Route.Subtitle)
 
     @Test fun audioReopenUsesRemoteIntentAndReportsPause() = negotiate(Route.Audio)

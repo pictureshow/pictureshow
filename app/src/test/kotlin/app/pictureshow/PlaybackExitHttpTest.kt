@@ -37,9 +37,13 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.Rule
 
 /** Delayed wire acknowledgements reproduce the details read that used to overtake natural completion. */
 class PlaybackExitHttpTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private class Output : PlaybackOutput {
         var snapshot = PlaybackPosition(60_000, false)
         override fun position() = snapshot

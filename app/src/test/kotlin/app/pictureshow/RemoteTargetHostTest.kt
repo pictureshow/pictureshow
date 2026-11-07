@@ -21,8 +21,12 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class RemoteTargetHostTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val viewer = "a".repeat(32)
     private val other = "b".repeat(32)
     private val film = "c".repeat(32)

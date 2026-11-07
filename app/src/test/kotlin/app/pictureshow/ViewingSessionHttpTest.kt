@@ -40,9 +40,13 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import org.junit.Rule
 
 /** Exercise the real gateway and wire reports; every identifier and response is fictional. */
 class ViewingSessionHttpTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private class Output : PlaybackOutput {
         var snapshot = PlaybackPosition(0, false)
         val opened = mutableListOf<Long>()

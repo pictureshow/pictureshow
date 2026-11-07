@@ -25,6 +25,7 @@ import app.pictureshow.core.playback.PlayMethod
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -35,6 +36,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class PlaybackReopenStateTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test fun pausedTrackReopenKeepsBufferingAndPauseIntent() = reopen(paused = true)
 
     @Test fun playingTrackReopenKeepsBufferingAndPlayIntent() = reopen(paused = false)

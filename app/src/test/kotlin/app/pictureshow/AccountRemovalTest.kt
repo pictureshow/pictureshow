@@ -32,10 +32,14 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.Rule
 
 /** Real HTTP logout plus persisted account state; failures must not erase a different viewer. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountRemovalTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val dispatcher = StandardTestDispatcher()
     private val models = ViewModelStore()
     private val server = Server("server", "Cinema", "https://media.example.test/base", "12.0.0")

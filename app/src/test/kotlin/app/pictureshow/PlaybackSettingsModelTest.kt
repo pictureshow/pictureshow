@@ -32,8 +32,12 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import org.junit.Rule
 
 class PlaybackSettingsModelTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun serverChangesAreSerializedPreserveOtherPreferencesAndFailuresLeaveLastSavedValues() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))

@@ -22,6 +22,7 @@ import kotlin.test.assertFalse
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,6 +37,9 @@ import org.robolectric.shadows.ShadowPausedAsyncTask
 @Config(sdk = [23, 30, 36], application = NoExternalStorageApplication::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class DeviceProfileExportTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val pipeWriter = PausedExecutorService()
 
     @Before

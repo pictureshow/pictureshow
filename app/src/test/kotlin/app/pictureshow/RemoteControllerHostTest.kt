@@ -21,10 +21,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteControllerHostTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private class Gateway : RemoteControllerGateway {
         var lists = 0
         var targets: ClientResult<List<RemoteTarget>> = ClientResult.Success(emptyList())
