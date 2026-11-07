@@ -68,6 +68,9 @@ import org.robolectric.shadows.ShadowLooper
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h1080dp-xhdpi")
 class MusicScreensTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val account = Account(Server("s", "Test", "http://server", "12"), User("v", "Viewer"), "token")

@@ -17,6 +17,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -26,6 +27,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class MusicStoreTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     private val context: Context get() = RuntimeEnvironment.getApplication()
     private val account = Account(Server("s", "Test", "https://media.example.test/", "12"), User("v", "Viewer"), "token")
     private val store get() = MusicStore(context)
