@@ -7,37 +7,45 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.control.CastCapability
 import app.pictureshow.core.control.RemoteTarget
 import app.pictureshow.core.imageUrl
 
@@ -59,8 +67,8 @@ internal fun castRouteLabel(route: CastRoute, all: List<CastRoute>): String =
 internal fun castCapabilityMessage(state: String): String? = when (state) {
     "os-too-old" -> "Google Cast needs a newer version of Android on this device."
     "browser-unsupported" -> "Google Cast doesn't work in this browser."
-    "services-missing" -> "Google Cast needs Google Play services, which this device doesn't have. Jellyfin devices still work."
-    "services-update-required" -> "Google Cast needs Google Play services to be updated. Jellyfin devices still work."
+    "services-missing" -> "Google Cast needs Google Play services, which this device doesn't have. Pictureshow TVs still work."
+    "services-update-required" -> "Google Cast needs Google Play services to be updated. Pictureshow TVs still work."
     "viewer-disabled" -> "Google Cast is turned off."
     "permission-denied" -> "Pictureshow needs permission to find devices on your local network."
     "searching" -> "Looking for Cast devices…"
@@ -146,12 +154,13 @@ internal fun castStatusLine(ui: CastUi): String? {
     }
 }
 
-/** The mark fills only for this: a viewing on the Cast device, connected, with nothing starting or stopping it. */
+/** The mark fills only for this: a viewing on the Cast device, connected and answering, with nothing starting or stopping it. */
 internal fun castIsCasting(ui: CastUi): Boolean {
     val cast = ui.cast ?: return false
     return cast.owner.candidate == null &&
         cast.owner.owner.kind == "cast" &&
         cast.owner.phase == "active" &&
+        cast.observed != null &&
         cast.link != "suspended" &&
         cast.link != "lost"
 }
@@ -173,7 +182,59 @@ internal fun Context.openPlayServicesListing() {
     }
 }
 
-/** One list of everywhere this can play: this device, Jellyfin sessions and Cast devices. Picking is the only way to start. */
+/**
+ * The chooser as the app shows it: what each answer does to the sender, the Remote host and navigation. The dialog keeps
+ * the request it composed with, which is what [CastSenderHost.pickJellyfin] checks a late tap against.
+ */
+@Composable
+internal fun TouchPlayOnDialog(
+    remoteState: RemoteControllerUi,
+    castState: CastUi,
+    cast: CastSenderHost,
+    attachRemote: (RemoteTarget) -> Unit,
+    pendingRemote: () -> (() -> Unit)?,
+    forgetPending: () -> Unit,
+    openRemote: () -> Unit,
+    openCast: () -> Unit
+) {
+    val castRequest = cast.chooserRequest
+    fun close() {
+        forgetPending()
+        cast.closeChooser()
+    }
+    TouchCastChooser(
+        remoteState,
+        castState,
+        showCast = castRequest != null,
+        onThisDevice = castRequest?.let { request ->
+            {
+                cast.chooseThisDevice(request)
+                close()
+            }
+        },
+        onPickRemote = { target ->
+            val picked = cast.pickJellyfin(castRequest) {
+                attachRemote(target)
+                pendingRemote()?.invoke()
+            }
+            if (picked) {
+                close()
+                openRemote()
+            }
+        },
+        onPickCast = { target ->
+            cast.pick(target)
+            if (cast.state.value.blockedReach == null && cast.state.value.pickRefusal == null) {
+                forgetPending()
+                if (castRequest?.local == null) openCast()
+            }
+        },
+        onSetCastEnabled = cast::setEnabled,
+        onDismiss = ::close
+    )
+}
+
+/** One list of everywhere this can play: this device, Pictureshow TVs and Cast devices. Picking is the only way to start. */
 @Composable
 internal fun TouchCastChooser(
     remote: RemoteControllerUi,
@@ -185,96 +246,117 @@ internal fun TouchCastChooser(
     onSetCastEnabled: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
+    val castSection = showCast && ui.capability.visible
+    // A short window can't stack the sections: the TVs and devices fall below the fold, where nothing says they are (CAST-01).
+    val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() >= 600.dp }
+    val columns = castSection && isShortTouchWindow() && wide
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = if (columns) Modifier.widthIn(max = 560.dp).fillMaxWidth() else Modifier,
+        properties = DialogProperties(usePlatformDefaultWidth = !columns),
         title = { Text("Play on", modifier = Modifier.semantics { heading() }) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                if (onThisDevice != null) {
-                    OutlinedButton(
-                        onClick = onThisDevice,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:this-device"),
-                        colors = chooserDestinationColors()
-                    ) { Text("This device", modifier = Modifier.fillMaxWidth()) }
-                }
-                ChooserHeading("Pictureshow TVs", first = onThisDevice == null)
-                when {
-                    remote.listing -> Text("Looking for TVs…")
-
-                    remote.listFailed && remote.targets.isEmpty() -> Text("Couldn't reach the server. Check your connection and try again.")
-
-                    remote.targets.isEmpty() -> Text("None found. Open Pictureshow on your TV and sign in.")
-                }
-                remote.targets.forEach { target ->
-                    OutlinedButton(
-                        onClick = { onPickRemote(target) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:target:${target.session}"),
-                        colors = chooserDestinationColors()
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(remoteTargetLabel(target))
-                            Text(remoteTargetDetail(target), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                if (showCast && ui.capability.visible) {
-                    ChooserHeading("Google Cast")
-                    castCapabilityMessage(ui.capability.state)?.let {
-                        Text(it, modifier = Modifier.testTag("cast:capability").semantics { liveRegion = LiveRegionMode.Polite })
-                    }
-                    ui.blockedReach?.let {
-                        Text(
-                            castReachMessage(it.category),
-                            modifier = Modifier.testTag("cast:reach").semantics {
-                                liveRegion =
-                                    LiveRegionMode.Polite
-                            }
-                        )
-                    }
-                    ui.pickRefusal?.let {
-                        Text(
-                            castPickRefusalMessage(it, ui.deviceName ?: "the Cast device"),
-                            modifier = Modifier.testTag("cast:pick-refused").semantics { liveRegion = LiveRegionMode.Polite }
-                        )
-                    }
-                    ui.routes.forEach { route ->
+            val scroll = rememberScrollState()
+            Box {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(scroll)) {
+                    if (onThisDevice != null) {
                         OutlinedButton(
-                            onClick = { onPickCast(route) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:route:${route.id.takeLast(4)}"),
+                            onClick = onThisDevice,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:this-device"),
                             colors = chooserDestinationColors()
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(castRouteLabel(route, ui.routes))
-                                route.detail?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                            }
-                        }
+                        ) { Text("This device", modifier = Modifier.fillMaxWidth()) }
                     }
-                    when (ui.capability.state) {
-                        "services-update-required" -> ChooserSetting("Update Google Play services", context::openPlayServicesListing)
-
-                        "permission-denied" -> ChooserSetting("Open app settings", context::openAppSettings)
-
-                        "viewer-disabled" -> ChooserSetting(
-                            "Turn on Google Cast",
-                            { onSetCastEnabled(true) },
-                            Modifier.testTag("cast:enable")
-                        )
-
-                        "os-too-old", "browser-unsupported", "services-missing" -> Unit
-
-                        else -> ChooserSetting(
-                            "Turn off Google Cast",
-                            { onSetCastEnabled(false) },
-                            Modifier.testTag("cast:disable"),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    val first = onThisDevice == null
+                    if (columns) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.Top) {
+                            Column(Modifier.weight(1f), Arrangement.spacedBy(8.dp)) { ChooserTvs(remote, first, onPickRemote) }
+                            Column(Modifier.weight(1f), Arrangement.spacedBy(8.dp)) { ChooserCast(ui, first, onPickCast, onSetCastEnabled) }
+                        }
+                    } else {
+                        ChooserTvs(remote, first, onPickRemote)
+                        if (castSection) ChooserCast(ui, first = false, onPickCast, onSetCastEnabled)
                     }
                 }
+                // The edge says there's more, and only at an edge that can still scroll.
+                if (scroll.canScrollBackward) ChooserEdge(Modifier.align(Alignment.TopCenter).testTag("cast:more-above"))
+                if (scroll.canScrollForward) ChooserEdge(Modifier.align(Alignment.BottomCenter).testTag("cast:more-below"))
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+@Composable
+private fun ChooserEdge(modifier: Modifier) {
+    HorizontalDivider(modifier, thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+@Composable
+private fun ChooserTvs(remote: RemoteControllerUi, first: Boolean, onPickRemote: (RemoteTarget) -> Unit) {
+    ChooserHeading("Pictureshow TVs", first)
+    when {
+        remote.listing -> Text("Looking for TVs…")
+
+        // The list asks again by itself while this is open, so there's nothing to press.
+        remote.listFailed && remote.targets.isEmpty() -> Text("Couldn't reach the server. Check your connection.")
+
+        remote.targets.isEmpty() -> Text("None found. Open Pictureshow on your TV and sign in.")
+    }
+    remote.targets.forEach { target ->
+        OutlinedButton(
+            onClick = { onPickRemote(target) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:target:${target.session}"),
+            colors = chooserDestinationColors()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(remoteTargetLabel(target))
+                Text(remoteTargetDetail(target), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChooserCast(ui: CastUi, first: Boolean, onPickCast: (CastRoute) -> Unit, onSetCastEnabled: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    ChooserHeading("Google Cast", first)
+    castCapabilityMessage(ui.capability.state)?.let {
+        Text(it, modifier = Modifier.testTag("cast:capability").semantics { liveRegion = LiveRegionMode.Polite })
+    }
+    ui.blockedReach?.let {
+        Text(
+            castReachMessage(it.category),
+            modifier = Modifier.testTag("cast:reach").semantics {
+                liveRegion =
+                    LiveRegionMode.Polite
+            }
+        )
+    }
+    ui.pickRefusal?.let {
+        Text(
+            castPickRefusalMessage(it, ui.deviceName ?: "the Cast device"),
+            modifier = Modifier.testTag("cast:pick-refused").semantics { liveRegion = LiveRegionMode.Polite }
+        )
+    }
+    ui.routes.forEach { route ->
+        OutlinedButton(
+            onClick = { onPickCast(route) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("cast:route:${route.id.takeLast(4)}"),
+            colors = chooserDestinationColors()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(castRouteLabel(route, ui.routes))
+                castRouteDetail(route)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+    }
+    when (ui.capability.state) {
+        "services-update-required" -> ChooserRecovery("Update Google Play services", context::openPlayServicesListing)
+
+        "permission-denied" -> ChooserRecovery("Open app settings", context::openAppSettings)
+
+        "viewer-disabled" -> ChooserRecovery("Turn on Google Cast", { onSetCastEnabled(true) }, Modifier.testTag("cast:enable"))
+    }
 }
 
 /** 8 dp between lines inside a section, and this makes it 16 before a new one. */
@@ -291,20 +373,25 @@ private fun ChooserHeading(text: String, first: Boolean = false) {
 @Composable
 private fun chooserDestinationColors() = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
 
-/** Not a place to play: on the body's left edge, with its text where the rest of the body's is. */
+/** The way back to being able to cast, so it reads as an action too: on the body's left edge, with its text where the rest of the body's is. */
 @Composable
-private fun ChooserSetting(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    contentColor: Color = MaterialTheme.colorScheme.primary
-) {
+private fun ChooserRecovery(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     TextButton(
         onClick,
         modifier.heightIn(min = 48.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary),
         contentPadding = PaddingValues(start = 0.dp, end = 12.dp)
     ) { Text(label) }
+}
+
+/** Some routes describe themselves with their own name, which says nothing twice. */
+internal fun castRouteDetail(route: CastRoute): String? = route.detail?.takeIf { it.isNotBlank() && it != route.name }
+
+/** What the Settings switch shows: null where Cast can't be used here, so there is nothing to switch. */
+internal fun castSwitchState(capability: CastCapability): Boolean? = when {
+    !capability.visible -> null
+    capability.state in listOf("os-too-old", "browser-unsupported", "services-missing") -> null
+    else -> capability.state != "viewer-disabled"
 }
 
 /** Stays in reach while browsing. It shows what the receiver reports and opens the controls. */

@@ -79,7 +79,9 @@ data class CastEvent(
     val sequence: Long = 0,
     val ticks: Long? = null,
     val confirmed: Boolean = false,
-    val recovery: String? = null
+    val recovery: String? = null,
+    /** With local-paused: whether the local player was already paused at that same moment. */
+    val paused: Boolean? = null
 )
 
 /**
@@ -114,8 +116,10 @@ fun reduceCast(state: CastState, event: CastEvent): CastState {
         "link-failed" -> linkFailed(s)
 
         "local-paused" -> viaOwner(s, OwnerEvent("local-paused", identity = s.owner.candidate)) {
-            // The start position is where local output actually paused, not where the viewer first opened the chooser.
-            it.copy(owner = it.owner.copy(intent = it.owner.intent.copy(ticks = event.ticks ?: it.owner.intent.ticks)))
+            // The start is where local output actually paused and whether it was already paused then, both from that one moment.
+            val intent = it.owner.intent
+            val moment = intent.copy(ticks = event.ticks ?: intent.ticks, paused = event.paused ?: intent.paused)
+            it.copy(owner = it.owner.copy(intent = moment))
         }
 
         "load-failed", "load-timeout", "cancel" -> {

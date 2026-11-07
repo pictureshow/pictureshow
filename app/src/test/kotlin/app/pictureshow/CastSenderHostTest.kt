@@ -231,13 +231,14 @@ private fun decision(itemId: String) = PlayDecision(
 
 private class FakeOutput(private val log: MutableList<String>) : CastLocalOutput {
     val position = CompletableDeferred<Long>()
+    var paused = false
     var released = 0
     var resumed = 0
-    override suspend fun pauseAndReadPositionMs(): Long {
+    override suspend fun pauseAndRead(): CastLocalMoment {
         log += "pause-local"
         val value = position.await()
         log += "paused-local"
-        return value
+        return CastLocalMoment(value, paused)
     }
 
     override fun release() {
@@ -248,6 +249,45 @@ private class FakeOutput(private val log: MutableList<String>) : CastLocalOutput
     override fun resume() {
         resumed += 1
     }
+}
+
+/** A real host, signed in with a fake link, for a screen that needs a pick to go somewhere. */
+internal fun signedInCastSender() = CastSenderHost(
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+    FakeEnvironment(mutableListOf()),
+    FakeGateway(mutableListOf())
+) { 0L }.also { it.bind(ACCOUNT) }
+
+internal val CHOOSER_ROUTE = ROUTE
+
+/** A real host, signed in with a fake link, for a screen that needs a pick to go somewhere. It's on the receiver, detached. */
+internal fun detachedCastSender(): CastSenderHost {
+    val environment = FakeEnvironment(mutableListOf())
+    val host = CastSenderHost(
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+        environment,
+        FakeGateway(mutableListOf())
+    ) { 0L }.also { it.bind(ACCOUNT) }
+    host.openChooser(CastPlayRequest(listOf(CastPlayItem(ITEM, "A film"))))
+    host.pick(ROUTE)
+    val link = environment.built
+    link.sink!!.onConnecting()
+    link.sink!!.onConnected("Living room")
+    val generation = host.state.value.cast!!.owner.candidate!!.generation
+    val nonce = link.request!!.items.first().customData.getValue("nonce")
+    link.sink!!.onStatus(
+        CastStatus(
+            mediaSession = 7,
+            playerState = "playing",
+            idleReason = null,
+            positionMs = 5_000,
+            durationMs = 600_000,
+            customData = mapOf("generation" to generation.toString(), "nonce" to nonce, "entry" to ENTRY),
+            commands = listOf("play", "pause", "seek", "stop")
+        )
+    )
+    host.disconnect()
+    return host
 }
 
 /** A real host with nothing behind it, for screens that only need one to exist. */
@@ -1473,13 +1513,145 @@ class CastSenderHostTest {
         assertFalse(host.holdsNextStep(player), "nothing can stay held by a player that's gone")
     }
 
-    @Test fun aPickReadsWhetherThePlayerIsPausedThen() = runTest {
+    // The link can take up to the load timeout to come up, and the player keeps playing all that time.
+    @Test fun aPickInFlightHoldsItsPlayersNextStepUntilItResolves() = runTest {
         val host = host()
-        var paused = false
-        host.openChooser(CastPlayRequest(listOf(CastPlayItem(ITEM, "A film")), pausedAtPick = { paused }, local = output))
-        paused = true
+        val player = FakeOutput(log)
+        host.openChooser(request(local = player))
         host.pick(ROUTE)
-        assertEquals(true, host.state.value.cast!!.owner.intent.paused)
+        runCurrent()
+        assertTrue(host.holdsNextStep(player), "still connecting")
+        assertFalse(host.holdsNextStep(FakeOutput(log)), "another player's next step is its own")
+        link.sink!!.onConnecting()
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        assertTrue(host.holdsNextStep(player), "pausing")
+        player.position.complete(5_000)
+        runCurrent()
+        assertTrue(host.holdsNextStep(player), "loading")
+        link.sink!!.onStatus(status("playing", generation = host.generation()))
+        runCurrent()
+        assertEquals(1, player.released)
+        assertFalse(host.holdsNextStep(player), "it's on the receiver")
+    }
+
+    @Test fun aPickThatFailsStopsHoldingItsPlayersNextStep() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        host.openChooser(request(local = player))
+        host.pick(ROUTE)
+        runCurrent()
+        host.cancel()
+        runCurrent()
+        assertFalse(host.holdsNextStep(player))
+    }
+
+    @Test fun aPlayerMovingOnDropsThePickInFlight() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        host.openChooser(request(local = player))
+        host.pick(ROUTE)
+        runCurrent()
+        link.sink!!.onConnecting()
+        host.localAdvancing(player)
+        runCurrent()
+        assertNull(host.state.value.cast, "no \"Starting on\" or failure over the next episode")
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        assertFalse("pause-local" in log, "the finished episode's last moment isn't read: $log")
+        assertFalse("load" in log, log.toString())
+        assertEquals(0, player.released)
+        assertFalse(host.holdsNextStep(player))
+    }
+
+    @Test fun anotherPlayerMovingOnLeavesThePickInFlight() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        host.openChooser(request(local = player))
+        host.pick(ROUTE)
+        runCurrent()
+        host.localAdvancing(FakeOutput(log))
+        assertNotNull(host.state.value.cast!!.owner.candidate)
+    }
+
+    @Test fun aPickOnTheReceiverIsNotUndoneByThePlayerMovingOn() = runTest {
+        val host = host()
+        casting(host)
+        val generation = host.generation()
+        host.localAdvancing(output)
+        assertEquals(generation, host.generation())
+        assertEquals("cast", host.state.value.cast!!.owner.owner.kind)
+    }
+
+    // Each host's exit is the route's one back-stack pop, so a late release from the old episode would close the new one.
+    @Test fun aReceiverStartingAfterThePlayerWentDoesNotReleaseIt() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        handoff(host, player)
+        host.localClosed(player)
+        player.position.complete(5_000)
+        runCurrent()
+        link.sink!!.onStatus(status("playing", generation = host.generation()))
+        runCurrent()
+        assertEquals(0, player.released, "whatever is on screen now isn't this player")
+    }
+
+    @Test fun thisDeviceCancelsAPickWaitingOnARejoin() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        val old = host.generation()
+        val player = FakeOutput(log)
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player))
+        host.pick(ROUTE)
+        runCurrent()
+        assertTrue(host.holdsNextStep(player))
+        log.clear()
+        val again = CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player)
+        host.openChooser(again)
+        host.chooseThisDevice(again)
+        host.closeChooser()
+        assertFalse(host.holdsNextStep(player), "nothing holds the countdown out of sight")
+        link.sink!!.onConnected("Living room")
+        link.sink!!.onStatus(status("playing", generation = old))
+        runCurrent()
+        assertFalse("load" in log, "the viewer's later choice stands: $log")
+        assertEquals(old, host.generation())
+    }
+
+    @Test fun theMarkAndTheLineAgreeWhileChecking() = runTest {
+        val host = host()
+        casting(host)
+        link.sink!!.onSuspended()
+        runCurrent()
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        val ui = host.state.value
+        assertEquals("Living room: checking…", castStatusLine(ui))
+        assertFalse(castIsCasting(ui), "it isn't known yet")
+        link.sink!!.onStatus(status("playing", generation = host.generation()))
+        runCurrent()
+        assertTrue(castIsCasting(host.state.value))
+    }
+
+    // The link takes seconds to come up, and the viewer can pause, or play again, while it does.
+    @Test fun theReceiverStartsAsThePlayerWasWhenItStopped() = runTest {
+        val host = host()
+        handoff(host, output, startMs = 1_000, paused = false)
+        output.paused = true
+        output.position.complete(62_000)
+        runCurrent()
+        assertEquals(62_000, link.request!!.startMs)
+        assertEquals(false, link.request!!.autoplay, "paused by then")
+    }
+
+    @Test fun theReceiverPlaysIfThePlayerWasPlayingWhenItStopped() = runTest {
+        val host = host()
+        handoff(host, output, paused = true)
+        output.position.complete(62_000)
+        runCurrent()
+        assertEquals(true, link.request!!.autoplay, "playing again by then")
     }
 
     // The dialog holds the request it composed with, for a frame after the player has gone.

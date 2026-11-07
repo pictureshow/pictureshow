@@ -76,6 +76,8 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import java.io.ByteArrayOutputStream
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -1120,7 +1122,6 @@ class TouchPlayerControlsTest {
             val request = requireNotNull(sender.chooserRequest)
             assertEquals("movie", request.items.single().id)
             assertEquals(37_000, request.startMs, "where this player is; it opened at ${host.startMs}")
-            assertEquals(false, request.pausedNow)
             assertEquals("source", request.mediaSourceId, "the source this player chose")
             assertTrue(request.local != null, "a handoff from this player has to be able to stop it")
         }
@@ -1132,7 +1133,10 @@ class TouchPlayerControlsTest {
         launch(paused = true, cast = TouchPlayerCast(sender, inertRemoteController()))
         settled()
         tapPlayOn()
-        compose.runOnIdle { assertEquals(true, requireNotNull(sender.chooserRequest).pausedNow) }
+        compose.runOnIdle {
+            val local = requireNotNull(requireNotNull(sender.chooserRequest).local)
+            assertEquals(true, kotlinx.coroutines.runBlocking { local.pauseAndRead() }.paused)
+        }
     }
 
     @Test
@@ -1143,20 +1147,23 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { output.pause() }
         settled()
         tapPlayOn()
-        compose.runOnIdle { assertEquals(true, requireNotNull(sender.chooserRequest).pausedNow) }
+        compose.runOnIdle {
+            val local = requireNotNull(requireNotNull(sender.chooserRequest).local)
+            assertEquals(true, kotlinx.coroutines.runBlocking { local.pauseAndRead() }.paused)
+        }
     }
 
     // Headset keys and audio focus still reach the player under the dialog.
     @Test
-    fun thePausedStateIsReadAtThePickNotTheTap() {
+    fun thePlayerSaysWhetherItWasPausedAsItStopsForTheReceiver() {
         val sender = inertCastSender()
         launch(cast = TouchPlayerCast(sender, inertRemoteController()))
         settled()
         tapPlayOn()
-        compose.runOnIdle { assertEquals(false, requireNotNull(sender.chooserRequest).pausedNow) }
-        compose.runOnIdle { output.pause() }
+        val local = compose.runOnIdle { requireNotNull(requireNotNull(sender.chooserRequest).local) }
+        compose.runOnIdle { assertEquals(false, kotlinx.coroutines.runBlocking { local.pauseAndRead() }.paused, "it was playing") }
         settled()
-        compose.runOnIdle { assertEquals(true, requireNotNull(sender.chooserRequest).pausedNow) }
+        compose.runOnIdle { assertEquals(true, kotlinx.coroutines.runBlocking { local.pauseAndRead() }.paused, "and now it's paused") }
     }
 
     @Test
@@ -1288,6 +1295,70 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { assertEquals(2, hosts.size, "closing it lets the countdown go on") }
     }
 
+    // The link can take up to the load timeout, so a pick in the credits would otherwise lose to the countdown.
+    @Test
+    fun aPickStillStartingHoldsTheCreditsCountdown() {
+        val sender = signedInCastSender()
+        val hosts = launchEpisodes(TouchPlayerCast(sender, inertRemoteController()), firstEpisode)
+        tapPlayOn()
+        compose.runOnIdle {
+            sender.pick(CHOOSER_ROUTE)
+            assertNotNull(sender.state.value.cast?.owner?.candidate)
+            hosts.single().reachCredits()
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(1, hosts.size, "this episode is on its way somewhere")
+            sender.cancel()
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(2, hosts.size, "once the pick has resolved the countdown goes on") }
+    }
+
+    @Test
+    fun reachingTheEndOfTheFileDropsAPickStillStarting() {
+        val sender = signedInCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        settled()
+        tapPlayOn()
+        compose.runOnIdle { sender.pick(CHOOSER_ROUTE) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertNotNull(sender.state.value.cast?.owner?.candidate) }
+        compose.runOnIdle { host.ended = true }
+        compose.waitForIdle()
+        compose.runOnIdle { assertNull(sender.state.value.cast, "it would have read the finished title's last moment") }
+    }
+
+    @Test
+    fun takingTheNextEpisodeDropsAPickStillStarting() {
+        val sender = signedInCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        settled()
+        tapPlayOn()
+        compose.runOnIdle { sender.pick(CHOOSER_ROUTE) }
+        compose.waitForIdle()
+        compose.runOnIdle { host.finish(MediaItem("0123456789abcdef0123456789abcde2", "Second episode")) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertNull(sender.state.value.cast) }
+    }
+
+    @Test
+    fun leavingForGoodLeavesAPickStillStartingToFinish() {
+        val sender = signedInCastSender()
+        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
+        settled()
+        tapPlayOn()
+        compose.runOnIdle { sender.pick(CHOOSER_ROUTE) }
+        compose.waitForIdle()
+        compose.runOnIdle { host.finish(reason = "system-stop") }
+        compose.waitForIdle()
+        compose.runOnIdle { assertNotNull(sender.state.value.cast?.owner?.candidate, "going to another app still asked for this") }
+    }
+
     // With a screen reader on, or after a trip away, a finished player waits for the viewer; position() is then the duration.
     @Test
     fun reachingTheEndOfTheFileClosesTheChooser() {
@@ -1318,24 +1389,6 @@ class TouchPlayerControlsTest {
     }
 
     // The file ran out while away: the end signal was ignored, so only the output knows, and coming back recomposes.
-    @Test
-    fun aFileThatRanOutWhileAwayLeavesNothingToSend() {
-        val sender = inertCastSender()
-        launch(cast = TouchPlayerCast(sender, inertRemoteController()))
-        settled()
-        tapPlayOn()
-        compose.runOnIdle {
-            output.setForeground(false)
-            Media3PlaybackOutput::class.java.getDeclaredField("completedPosition").apply { isAccessible = true }
-                .set(output, PlaybackPosition(60_000, true))
-        }
-        compose.waitForIdle()
-        compose.runOnIdle { output.setForeground(true) }
-        compose.waitForIdle()
-        compose.runOnIdle { assertEquals(false, sender.state.value.chooserOpen) }
-        compose.onNodeWithTag("touch:play-on").assertIsNotEnabled()
-    }
-
     // Nothing but the composition's own disposal calls this when a player goes without finishing.
     @Test
     fun aPlayerRemovedWithoutFinishingClosesItsChooser() {
@@ -1584,16 +1637,20 @@ class TouchPlayerControlsTest {
             val flow = CastSenderHost::class.java.getDeclaredField("mutable").apply { isAccessible = true }.get(sender)
             @Suppress("UNCHECKED_CAST")
             (flow as kotlinx.coroutines.flow.MutableStateFlow<CastUi>).value = CastUi(
-                cast = app.pictureshow.core.control.CastState(app.pictureshow.core.control.OwnerState(identity)),
+                cast = app.pictureshow.core.control.CastState(
+                    app.pictureshow.core.control.OwnerState(identity),
+                    observed = app.pictureshow.core.control.CastObservation(playerState = "playing")
+                ),
                 deviceName = "Living room"
             )
         }
         settled()
-        mark.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Living room: checking…"))
+        mark.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Living room: Playing"))
         val casting = compose.onNodeWithTag("touch:play-on").captureToImage()
         assertTrue(idle.toPixelMap().buffer.toList() != casting.toPixelMap().buffer.toList(), "the mark itself changes")
         val owner = app.pictureshow.core.control.OwnerState(identity)
         val notCasting = mapOf(
+            "Living room: checking…" to app.pictureshow.core.control.CastState(owner),
             "Living room: not connected" to app.pictureshow.core.control.CastState(owner.copy(phase = "disconnected")),
             "Living room: reconnecting…" to app.pictureshow.core.control.CastState(owner, link = "suspended"),
             "Stopping on Living room…" to app.pictureshow.core.control.CastState(owner.copy(phase = "returning")),

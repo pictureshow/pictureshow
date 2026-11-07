@@ -175,10 +175,11 @@ internal val LocalTouchPlayerCast = staticCompositionLocalOf<TouchPlayerCast?> {
 
 /** This player during a Cast handoff. */
 private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalOutput {
-    override suspend fun pauseAndReadPositionMs(): Long {
+    override suspend fun pauseAndRead(): CastLocalMoment {
+        val paused = host.output.pauseIntent.value || host.player?.playWhenReady == false
         host.output.pause()
         withTimeoutOrNull(1_000) { while (host.player?.isPlaying == true) delay(20) }
-        return host.output.position().milliseconds
+        return CastLocalMoment(host.output.position().milliseconds, paused)
     }
 
     override fun release() = host.finish(reason = "cast")
@@ -196,13 +197,13 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     // Null without a sender, so a player that has none reads nothing from it.
     val castUi = entry?.let { it.cast.state.collectAsState().value }
     val castStatus = castUi?.let(::castStatusLine)
-    // A chooser left open, or a pick waiting on a rejoin, is holding this viewing's next step, as a sheet does (CAST-23).
+    // A chooser left open, or a pick on its way, is holding this viewing's next step, as a sheet does (CAST-23).
     val choosing = entry?.cast?.holdsNextStep(castOutput) == true
     val atEnd = host.atEnd
     if (entry != null) {
         DisposableEffect(castOutput) { onDispose { entry.cast.localClosed(castOutput) } }
-        // position() is now the last moment, so a pick here would start the TV at the end of a finished title.
-        LaunchedEffect(atEnd) { if (atEnd) entry.cast.localLeaving(castOutput) }
+        // position() is now the last moment, so a pick here, or one still starting, would send the TV the end of a finished title.
+        LaunchedEffect(atEnd) { if (atEnd) entry.cast.localAdvancing(castOutput) }
         LaunchedEffect(host) { if (entry.cast.consumeStartPaused(host.item.id)) host.output.pause() }
     }
     val accessible = rememberAccessibilityEnabled()
@@ -220,7 +221,6 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val foreground by host.output.foreground.collectAsState()
     val speed by host.output.speed.collectAsState()
     val paused = playback.paused || pauseIntent
-    val pausedNow by rememberUpdatedState(paused)
     var topCues by remember { mutableStateOf(false) }
     SideEffect {
         host.onFinishing = {
@@ -229,6 +229,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
             // From the moment this player starts to leave, a pick has nothing left to act on (CAST-23).
             entry?.cast?.localLeaving(castOutput)
         }
+        host.onAdvancing = { entry?.cast?.localAdvancing(castOutput) }
         host.onSeekShown = {
             ui.visible = true
             ui.interact()
@@ -472,7 +473,6 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                     CastPlayRequest(
                                         listOf(castPlayItem(account.server, host.item)),
                                         startMs = host.output.position().milliseconds,
-                                        pausedAtPick = { pausedNow },
                                         mediaSourceId = host.state.decision?.mediaSourceId,
                                         local = castOutput,
                                         onJellyfinPick = {

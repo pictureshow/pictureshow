@@ -43,7 +43,11 @@ import org.robolectric.annotation.LooperMode
 class TouchParitySettingsTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private fun settings(onThisDevice: () -> Unit = {}): () -> PlaybackSettingsState {
+    private fun settings(
+        onThisDevice: () -> Unit = {},
+        castEnabled: Boolean? = null,
+        onCastEnabled: (Boolean) -> Unit = {}
+    ): () -> PlaybackSettingsState {
         var state by mutableStateOf(PlaybackSettingsState())
         compose.setContent {
             MaterialTheme {
@@ -56,11 +60,35 @@ class TouchParitySettingsTest {
                     {},
                     {},
                     {},
-                    onThisDevice = onThisDevice
+                    onThisDevice = onThisDevice,
+                    castEnabled = castEnabled,
+                    onCastEnabled = onCastEnabled
                 )
             }
         }
         return { state }
+    }
+
+    @Test fun theCastSwitchSaysWhichWayItIsAndAsksToChange() {
+        val asked = mutableListOf<Boolean>()
+        settings(castEnabled = true, onCastEnabled = { asked += it })
+        compose.onNodeWithTag("touch:settings:google-cast").performScrollTo().assertIsOn().performClick()
+        compose.runOnIdle { assertEquals(listOf(false), asked) }
+    }
+
+    @Test fun whereCastCantBeUsedThereIsNoSwitch() {
+        settings(castEnabled = null)
+        compose.onNodeWithTag("touch:settings:google-cast").assertDoesNotExist()
+    }
+
+    @Test fun theCastSwitchFollowsWhatTheDeviceCanDo() {
+        fun cap(state: String, visible: Boolean = true) = app.pictureshow.core.control.CastCapability(state, visible, false)
+        assertEquals(false, castSwitchState(cap("viewer-disabled")))
+        listOf("ready", "searching", "no-targets", "idle", "permission-denied", "services-update-required").forEach {
+            assertEquals(true, castSwitchState(cap(it)), it)
+        }
+        listOf("os-too-old", "browser-unsupported", "services-missing").forEach { assertEquals(null, castSwitchState(cap(it)), it) }
+        assertEquals(null, castSwitchState(cap("tv-interface", visible = false)))
     }
 
     @Test fun conversionNoticeDefaultsOnAndTogglesTheStoredPreference() {

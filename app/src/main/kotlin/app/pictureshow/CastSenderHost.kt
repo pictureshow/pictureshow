@@ -79,19 +79,15 @@ internal class CastPlayRequest(
     /** Where to start when there is no local player to ask. */
     val startMs: Long = 0,
     val paused: Boolean = false,
-    /** Whether a player showing under the chooser is paused now; it can change between the tap and the pick. */
-    val pausedAtPick: (() -> Boolean)? = null,
     val mediaSourceId: String? = null,
     val audioStreamIndex: Int? = null,
     val subtitleStreamIndex: Int? = null,
     val local: CastLocalOutput? = null,
     /** What "This device" does in the chooser; null when this device is already playing it. */
     val onThisDevice: (() -> Unit)? = null,
-    /** Runs after a Jellyfin device is attached from this same chooser. */
+    /** Runs after a Pictureshow TV is attached from this same chooser. */
     val onJellyfinPick: (() -> Unit)? = null
-) {
-    val pausedNow get() = pausedAtPick?.invoke() ?: paused
-}
+)
 
 internal data class CastPlayItem(
     val id: String,
@@ -634,7 +630,7 @@ internal class CastSenderHost(
         val intent = ControlIntent(
             entry = entryId(playRequest.startIndex, item.id),
             ticks = playRequest.startMs * MS_TO_TICKS,
-            paused = playRequest.pausedNow,
+            paused = playRequest.paused,
             queue = playRequest.items.mapIndexed { index, it -> entryId(index, it.id) }
         )
         val before = cast
@@ -814,8 +810,8 @@ internal class CastSenderHost(
             return
         }
         scope.launch {
-            val position = output.pauseAndReadPositionMs()
-            dispatch(CastEvent("local-paused", ticks = position * MS_TO_TICKS))
+            val moment = output.pauseAndRead()
+            dispatch(CastEvent("local-paused", ticks = moment.positionMs * MS_TO_TICKS, paused = moment.paused))
         }
     }
 
@@ -941,7 +937,8 @@ internal class CastSenderHost(
 
     private fun released() {
         loadTimer?.cancel()
-        handoff?.local?.release()
+        // A player that has gone may have left another on this same route, and releasing is what exits the route.
+        handoff?.local?.takeIf { localAlive }?.release()
         localAlive = false
         handoff = null
         val active = session
@@ -1111,9 +1108,28 @@ internal class CastSenderHost(
         if (pendingPick?.second?.local === output) pendingPick = null
     }
 
-    /** The viewer is choosing where this player's viewing goes, or has chosen and is waiting on a rejoin: what's next waits too. */
-    fun holdsNextStep(output: CastLocalOutput) =
-        (state.value.chooserOpen && request?.local === output) || pendingPick?.second?.local === output
+    /**
+     * This player is out of title, or going on to the next one. A handoff still starting from it would read its last moment
+     * and send the finished title, so it ends here, with nothing to resume: the next step is already under way.
+     */
+    fun localAdvancing(output: CastLocalOutput) {
+        localLeaving(output)
+        if (handoff?.local !== output || cast?.owner?.candidate == null) return
+        localAlive = false
+        dispatch(CastEvent("cancel"))
+        dismiss()
+    }
+
+    /** The viewer's later choice stands over one still waiting on a rejoin. */
+    fun chooseThisDevice(shown: CastPlayRequest) {
+        pendingPick = null
+        shown.onThisDevice?.invoke()
+    }
+
+    /** The viewer is choosing where this player's viewing goes, or has chosen and it hasn't got there yet: what's next waits too. */
+    fun holdsNextStep(output: CastLocalOutput) = (state.value.chooserOpen && request?.local === output) ||
+        pendingPick?.second?.local === output ||
+        (handoff?.local === output && state.value.cast?.owner?.candidate != null)
 
     /**
      * A Jellyfin pick from the dialog on screen. The dialog holds the request it composed with, so a tap that lands after the

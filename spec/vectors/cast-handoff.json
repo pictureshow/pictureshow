@@ -10438,6 +10438,272 @@
           }
         }
       ]
+    },
+    {
+      "id": "cast-handoff.local-pause-carries-whether-it-was-already-paused",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": false
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": false
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1200000000",
+            "paused": true
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready",
+              "intent": {
+                "ticks": "1200000000",
+                "paused": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.local-pause-carries-whether-it-was-still-playing",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": true
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": true
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1200000000",
+            "paused": false
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready",
+              "intent": {
+                "ticks": "1200000000",
+                "paused": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cast-handoff.local-pause-with-no-player-keeps-the-picks-paused-state",
+      "operation": "cast",
+      "state": {
+        "owner": {
+          "owner": {
+            "server": "s",
+            "viewer": "v",
+            "device": "phone",
+            "session": "p",
+            "generation": "1",
+            "kind": "local"
+          },
+          "intent": {
+            "entry": "0:i",
+            "ticks": "1000000000",
+            "paused": true
+          }
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "select",
+            "identity": {
+              "server": "s",
+              "viewer": "v",
+              "device": "rcv",
+              "session": "c",
+              "generation": "2",
+              "kind": "cast"
+            },
+            "intent": {
+              "entry": "0:i",
+              "ticks": "1000000000",
+              "paused": true
+            }
+          },
+          "expected": {
+            "effect": "none",
+            "owner": {
+              "phase": "selecting",
+              "generation": "2"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connecting"
+          },
+          "expected": {
+            "link": "connecting",
+            "owner": {
+              "phase": "connecting"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "link-connected"
+          },
+          "expected": {
+            "link": "connected",
+            "effect": "pause-local",
+            "owner": {
+              "phase": "preparing",
+              "effect": "pause-local"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "local-paused",
+            "ticks": "1200000000"
+          },
+          "expected": {
+            "effect": "request-remote",
+            "owner": {
+              "phase": "awaiting-ready",
+              "intent": {
+                "ticks": "1200000000",
+                "paused": true
+              }
+            }
+          }
+        }
+      ]
     }
   ]
 }

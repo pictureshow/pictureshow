@@ -111,40 +111,15 @@ internal fun TouchPictureshow(
     }
     LaunchedEffect(castState.chooserOpen) { remote.setPicker(castState.chooserOpen) }
     if (castState.chooserOpen) {
-        val castRequest = cast.chooserRequest
-        fun close() {
-            remotePending = null
-            cast.closeChooser()
-        }
-        TouchCastChooser(
+        TouchPlayOnDialog(
             remoteState,
             castState,
-            showCast = castRequest != null,
-            onThisDevice = castRequest?.let { request ->
-                {
-                    request.onThisDevice?.invoke()
-                    close()
-                }
-            },
-            onPickRemote = { target ->
-                val picked = cast.pickJellyfin(castRequest) {
-                    remote.attach(target)
-                    remotePending?.invoke()
-                }
-                if (picked) {
-                    close()
-                    if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote")
-                }
-            },
-            onPickCast = { target ->
-                cast.pick(target)
-                if (cast.state.value.blockedReach == null && cast.state.value.pickRefusal == null) {
-                    remotePending = null
-                    if (castRequest?.local == null) nav.navigate("cast") { launchSingleTop = true }
-                }
-            },
-            onSetCastEnabled = cast::setEnabled,
-            onDismiss = ::close
+            cast,
+            attachRemote = remote::attach,
+            pendingRemote = { remotePending },
+            forgetPending = { remotePending = null },
+            openRemote = { if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote") },
+            openCast = { nav.navigate("cast") { launchSingleTop = true } }
         )
     }
     TouchCastAttention(castState, cast)
@@ -489,6 +464,7 @@ internal fun TouchPictureshow(
                         probe.start(::update)
                         onDispose { probe.close() }
                     }
+                    LaunchedEffect(cast) { cast.refreshCapability() }
                     TouchSettings(
                         screen,
                         accepted,
@@ -499,7 +475,9 @@ internal fun TouchPictureshow(
                         { nav.navigate("about") },
                         { nav.navigate("supporter") },
                         onRemote = { nav.navigate("remote") },
-                        onThisDevice = { nav.navigate("this-device") }
+                        onThisDevice = { nav.navigate("this-device") },
+                        castEnabled = castSwitchState(castState.capability),
+                        onCastEnabled = cast::setEnabled
                     )
                 }
             }

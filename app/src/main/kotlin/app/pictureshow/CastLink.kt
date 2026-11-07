@@ -118,10 +118,13 @@ internal object CastReceiverConfig {
     val applicationId: String? = null
 }
 
+/** Where the local player stopped for the receiver, and whether it was already paused: one moment, so the two can't disagree. */
+internal data class CastLocalMoment(val positionMs: Long, val paused: Boolean)
+
 /** The local player during a handoff. Absent when the viewer casts from a detail screen with nothing playing. */
 internal interface CastLocalOutput {
-    /** Pauses and returns where it really stopped, in milliseconds. It returns only once the pause has taken effect. */
-    suspend fun pauseAndReadPositionMs(): Long
+    /** Pauses and returns the moment it stopped at. It returns only once the pause has taken effect. */
+    suspend fun pauseAndRead(): CastLocalMoment
 
     /** The receiver has it: end local playback and its server report. */
     fun release()
