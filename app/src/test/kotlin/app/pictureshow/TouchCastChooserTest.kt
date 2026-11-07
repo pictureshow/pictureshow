@@ -140,7 +140,7 @@ class TouchCastChooserTest {
     @Test
     fun capabilityLinesAndTheFailedListUseOneNameAndAskForNothing() {
         assertEquals(
-            "Google Cast needs Google Play services to be updated. Pictureshow TVs still work.",
+            "Google Cast needs a newer version of Google Play services.",
             castCapabilityMessage("services-update-required")
         )
         assertTrue(castCapabilityMessage("services-missing")!!.endsWith("Pictureshow TVs still work."))

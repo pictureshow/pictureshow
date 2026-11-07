@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +17,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -35,6 +38,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -71,7 +76,7 @@ internal fun castCapabilityMessage(state: String): String? = when (state) {
     "os-too-old" -> "Google Cast needs a newer version of Android on this device."
     "browser-unsupported" -> "Google Cast doesn't work in this browser."
     "services-missing" -> "Google Cast needs Google Play services, which this device doesn't have. Pictureshow TVs still work."
-    "services-update-required" -> "Google Cast needs Google Play services to be updated. Pictureshow TVs still work."
+    "services-update-required" -> "Google Cast needs a newer version of Google Play services."
     "viewer-disabled" -> "Google Cast is turned off."
     "permission-denied" -> "Pictureshow needs permission to find devices on your local network."
     "searching" -> "Looking for Cast devices…"
@@ -281,8 +286,8 @@ internal fun TouchCastChooser(
                     }
                 }
                 // The edge says there's more, and only at an edge that can still scroll.
-                if (scroll.canScrollBackward) ChooserEdge(Modifier.align(Alignment.TopCenter).testTag("cast:more-above"))
-                if (scroll.canScrollForward) ChooserEdge(Modifier.align(Alignment.BottomCenter).testTag("cast:more-below"))
+                if (scroll.canScrollBackward) ChooserEdge(Modifier.align(Alignment.TopCenter).testTag("cast:more-above"), top = true)
+                if (scroll.canScrollForward) ChooserEdge(Modifier.align(Alignment.BottomCenter).testTag("cast:more-below"), top = false)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
@@ -290,8 +295,16 @@ internal fun TouchCastChooser(
 }
 
 @Composable
-private fun ChooserEdge(modifier: Modifier) {
-    HorizontalDivider(modifier, thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+private fun ChooserEdge(modifier: Modifier, top: Boolean) {
+    val fade = listOf(Color.Transparent, AlertDialogDefaults.containerColor)
+    // No pointer input, so a tap goes through to the row under it.
+    Box(modifier.fillMaxWidth().height(16.dp).background(Brush.verticalGradient(if (top) fade.reversed() else fade))) {
+        HorizontalDivider(
+            Modifier.align(if (top) Alignment.TopCenter else Alignment.BottomCenter),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+    }
 }
 
 @Composable
@@ -397,6 +410,9 @@ internal fun castSwitchState(capability: CastCapability, stored: Boolean): Boole
     else -> stored
 }
 
+/** Only a Pictureshow TV takes a queue today, so Cast holding this viewing leaves nothing to send one to unless a TV is attached. */
+internal fun offersTvQueue(ui: CastUi, tvAttached: Boolean): Boolean = tvAttached || ui.cast?.owner?.owner?.kind != "cast"
+
 /** Stays in reach while browsing. It shows what the receiver reports and opens the controls. */
 @Composable
 internal fun TouchCastBar(ui: CastUi, onOpen: () -> Unit) {
@@ -435,6 +451,8 @@ internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
         AlertDialog(
             onDismissRequest = { dismiss?.second?.invoke() },
             modifier = Modifier.testTag(tag),
+            // These wait on, or ask about, a TV the viewer may not be looking at here. Only Back or a button answers.
+            properties = DialogProperties(dismissOnClickOutside = false),
             text = { Text(message, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
             confirmButton = { confirm?.let { (label, action) -> TextButton(onClick = action) { Text(label) } } },
             dismissButton = dismiss?.let { (label, action) -> { TextButton(onClick = action) { Text(label) } } }

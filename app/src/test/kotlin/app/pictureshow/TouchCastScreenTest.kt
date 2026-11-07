@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
@@ -16,6 +17,8 @@ import app.pictureshow.core.control.OwnerState
 import app.pictureshow.core.control.ViewingIdentity
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -65,6 +68,45 @@ class TouchCastScreenTest {
         ui = CastUi()
         compose.waitForIdle()
         assertEquals(1, org.robolectric.shadows.ShadowToast.shownToastCount())
+    }
+
+    // A real press and release that land off the dialog's window, as a tap on the player behind it does.
+    private fun tapOutside() {
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        listOf(android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_UP).forEach { action ->
+            val event = android.view.MotionEvent.obtain(0, 0, action, -50f, -50f, 0)
+            compose.runOnIdle { dialog.dispatchTouchEvent(event) }
+            event.recycle()
+        }
+        compose.waitForIdle()
+    }
+
+    // Recheck D4: the viewer is looking at the player while this waits, and a stray tap there would throw the pick away.
+    @Test fun aStrayTapLeavesAPickStartingAndBackCancelsIt() {
+        val host = signedInCastSender()
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem("0123456789abcdef0123456789abcde1", "A film"))))
+        host.pick(CHOOSER_ROUTE)
+        compose.setContent {
+            val ui by host.state.collectAsState()
+            MaterialTheme { TouchCastAttention(ui, host) }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("cast:starting").assertExists()
+        tapOutside()
+        compose.onNodeWithTag("cast:starting").assertExists()
+        assertNotNull(host.state.value.cast?.owner?.candidate)
+        compose.runOnIdle { org.robolectric.shadows.ShadowDialog.getLatestDialog().onBackPressed() }
+        compose.waitForIdle()
+        assertNull(host.state.value.cast?.owner?.candidate)
+    }
+
+    // Recheck D3: only a Pictureshow TV can take a queue today, so with Cast playing the chooser could only say "None found".
+    @Test fun theTvQueueIsOfferedUnlessCastHoldsTheViewingAndNoTvIsAttached() {
+        assertEquals(true, offersTvQueue(CastUi(), tvAttached = false))
+        assertEquals(false, offersTvQueue(CastUi(cast = viewing), tvAttached = false))
+        assertEquals(true, offersTvQueue(CastUi(cast = viewing), tvAttached = true))
+        val local = viewing.copy(owner = viewing.owner.copy(owner = viewing.owner.local))
+        assertEquals(true, offersTvQueue(CastUi(cast = local), tvAttached = false))
     }
 
     @Test fun aRefusedPickSaysWhyInTheChooser() {

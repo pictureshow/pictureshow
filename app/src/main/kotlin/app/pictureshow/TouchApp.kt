@@ -433,7 +433,8 @@ internal fun TouchPictureshow(
                             },
                             onBack = { nav.popBackStack() },
                             origin = item,
-                            onPlayedRequest = vm::playedRequested
+                            onPlayedRequest = vm::playedRequested,
+                            offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached")
                         )
                     }
                 }

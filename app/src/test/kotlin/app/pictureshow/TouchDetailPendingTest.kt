@@ -55,7 +55,7 @@ class TouchDetailPendingTest {
     private val film = MediaItem("film", "Invented film", "Movie")
     private val resumable = film.copy(userData = ItemUserData(playbackPositionTicks = 300_000_000))
 
-    private inner class Page(initial: CatalogDetailState, origin: MediaItem? = film) {
+    private inner class Page(initial: CatalogDetailState, origin: MediaItem? = film, offerTvQueue: Boolean = true) {
         var state by mutableStateOf(initial)
         var shown by mutableStateOf(true)
         val plays = mutableListOf<Pair<MediaItem, Boolean>>()
@@ -90,7 +90,8 @@ class TouchDetailPendingTest {
                             onPlayNext = { remote += "next:${it.id}" },
                             onAddToQueue = { remote += "queue:${it.id}" },
                             origin = origin,
-                            onPlayedRequest = { requests++ }
+                            onPlayedRequest = { requests++ },
+                            offerTvQueue = offerTvQueue
                         )
                     }
                 }
@@ -309,6 +310,15 @@ class TouchDetailPendingTest {
         page.state = page.state.copy(busy = false)
         page.settle()
         assertEquals(1, page.favorites)
+    }
+
+    @Test fun aTvQueueThatCanDoNothingIsNotOffered() {
+        val page = Page(fresh(), offerTvQueue = false)
+        compose.onNodeWithTag("touch:detail:tv").performScrollTo().performClick()
+        page.settle(400)
+        compose.onNodeWithTag("touch:detail:on-tv").assertExists()
+        compose.onNodeWithTag("touch:detail:play-next").assertDoesNotExist()
+        compose.onNodeWithTag("touch:detail:add-to-queue").assertDoesNotExist()
     }
 
     @Test fun remoteActionsAreCapturedToo() {

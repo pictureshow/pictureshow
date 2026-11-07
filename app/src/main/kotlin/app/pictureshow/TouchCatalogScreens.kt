@@ -357,7 +357,8 @@ internal fun TouchCatalogDetail(
     onPlayNext: (MediaItem) -> Unit = {},
     onAddToQueue: (MediaItem) -> Unit = {},
     origin: MediaItem? = null,
-    onPlayedRequest: () -> Unit = {}
+    onPlayedRequest: () -> Unit = {},
+    offerTvQueue: Boolean = true
 ) {
     val page = rememberTouchDetailPresentation(
         state,
@@ -369,7 +370,8 @@ internal fun TouchCatalogDetail(
         onPlayOnTv,
         onPlayNext,
         onAddToQueue,
-        onPlayedRequest
+        onPlayedRequest,
+        offerTvQueue
     )
     // Back abandons at once, before the navigation transition has released this composition.
     val leave = {

@@ -121,6 +121,35 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
     }
 
+    // Recheck D5: hidden controls aren't composed, so nothing of them is left for a reader. The surface keeps its seek actions.
+    @Test fun hiddenControlsLeaveTheAccessibilityTree() {
+        launch()
+        compose.onNodeWithContentDescription("Back 10 seconds").assertExists()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithContentDescription("Back 10 seconds", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Forward 10 seconds", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("touch:panel", useUnmergedTree = true).assertDoesNotExist()
+        val actions = compose.onNodeWithTag("touch:gestures").fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        assertEquals(listOf("Back 10 seconds", "Forward 10 seconds"), actions.map { it.label })
+    }
+
+    // Why a tree dump can list them: any accessibility client coming up, uiautomator too, brings the controls back on purpose.
+    @Test fun anAccessibilityClientArrivingBringsHiddenControlsBack() {
+        launch()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithContentDescription("Back 10 seconds", useUnmergedTree = true).assertDoesNotExist()
+        compose.runOnIdle {
+            val manager = compose.activity.getSystemService(
+                android.content.Context.ACCESSIBILITY_SERVICE
+            ) as android.view.accessibility.AccessibilityManager
+            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+        }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithContentDescription("Back 10 seconds").assertExists()
+    }
+
     // PLAY-04: the shared 10 s, not a shorter touch one.
     @Test fun playingHidesAfterTenSecondsAndPausePinsControls() {
         compose.mainClock.autoAdvance = false
@@ -1401,6 +1430,8 @@ class TouchPlayerControlsTest {
         compose.runOnIdle { host.ended = true }
         compose.waitForIdle()
         compose.runOnIdle { assertNull(sender.state.value.cast, "it would have read the finished title's last moment") }
+        // Recheck D1: this is the order that reaches the message, the file running out before the link is up.
+        compose.runOnIdle { assertEquals(CHOOSER_ROUTE.name, sender.state.value.droppedFrom) }
     }
 
     @Test
