@@ -165,7 +165,7 @@ internal fun TouchReservedLabel(label: String, reserve: String, alignment: Align
 @Composable
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
-    val accessible = rememberAccessibilityEnabled()
+    val accessible = rememberScreenReaderInUse()
     // Prepared with the player, as on TV: a sheet that prepared its own would measure its waiting line, then grow.
     val trackMenus = rememberPlayerTrackMenus(
         host.state.decision?.mediaSourceId,

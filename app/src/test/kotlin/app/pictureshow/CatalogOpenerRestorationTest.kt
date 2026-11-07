@@ -166,7 +166,7 @@ class CatalogOpenerRestorationTest {
             android.content.Context.ACCESSIBILITY_SERVICE
         ) as android.view.accessibility.AccessibilityManager
         val shadow = org.robolectric.Shadows.shadowOf(manager)
-        shadow.setEnabled(true)
+        shadow.setScreenReader(true)
         try {
             start(search = true)
             open("search:PEOPLE:person-1")
@@ -348,7 +348,7 @@ class CatalogOpenerRestorationTest {
             android.content.Context.ACCESSIBILITY_SERVICE
         ) as android.view.accessibility.AccessibilityManager
         val shadow = org.robolectric.Shadows.shadowOf(manager)
-        shadow.setEnabled(true)
+        shadow.setScreenReader(true)
         try {
             start()
             open("home:films:film-1")

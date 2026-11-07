@@ -94,7 +94,7 @@ class SignInSpeechTest {
         val manager = compose.activity.getSystemService(
             android.content.Context.ACCESSIBILITY_SERVICE
         ) as android.view.accessibility.AccessibilityManager
-        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+        org.robolectric.Shadows.shadowOf(manager).setScreenReader(true)
         val code = mutableStateOf<String?>(null)
         val announcements = mutableListOf<String>()
         compose.setContent {

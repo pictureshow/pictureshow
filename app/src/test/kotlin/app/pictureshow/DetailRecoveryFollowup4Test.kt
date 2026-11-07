@@ -98,7 +98,6 @@ class DetailRecoveryFollowup4Test {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         compose.runOnUiThread {
-            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
             org.robolectric.Shadows.shadowOf(manager).setEnabledAccessibilityServiceList(
                 listOf(
                     android.accessibilityservice.AccessibilityServiceInfo().apply {
@@ -106,6 +105,7 @@ class DetailRecoveryFollowup4Test {
                     }
                 )
             )
+            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
         }
         val state = mutableStateOf(CatalogDetailState(account, film, loading = true, playbackPending = true))
         var readerOnSelected = true
@@ -294,7 +294,7 @@ class DetailRecoveryFollowup4Test {
     @Test fun aFastRequestWaitsForItsOwnReaderTargetAndEmitsAcceptanceOnlyOnce() {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
-        compose.runOnUiThread { org.robolectric.Shadows.shadowOf(manager).setEnabled(true) }
+        compose.runOnUiThread { org.robolectric.Shadows.shadowOf(manager).setScreenReader(true) }
         var readerId = 1
         var readerInputFocused = true
         lateinit var host: View

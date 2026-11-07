@@ -90,7 +90,7 @@ internal fun ControlsAutoHide(
 
 /** Keep player pills inside TalkBack's native outline; remote-only focus retains TV enlargement. */
 @Composable
-internal fun playerButtonScale() = ButtonDefaults.scale(focusedScale = if (rememberAccessibilityEnabled()) 1f else 1.1f)
+internal fun playerButtonScale() = ButtonDefaults.scale(focusedScale = if (rememberScreenReaderInUse()) 1f else 1.1f)
 
 internal fun playbackToggleState(paused: Boolean, showPlayButton: Boolean): String = if (paused) {
     "Paused"

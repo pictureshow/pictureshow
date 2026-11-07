@@ -368,7 +368,7 @@ internal fun TrackChoices(
     val speedRowHeight = if (windowWidth >= 600.dp) 40.dp else 48.dp
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val host = LocalView.current
-    val accessible = rememberAccessibilityEnabled()
+    val accessible = rememberScreenReaderInUse()
     var initialFocusReady by remember(accessible) { mutableStateOf(!accessible) }
     val initialOffset = choices.indexOfFirst { it.first == selectedIndex }.coerceAtLeast(0)
     val initialIndex = choices.getOrNull(initialOffset)?.first

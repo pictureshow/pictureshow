@@ -371,7 +371,7 @@ class TouchPlayerControlsTest {
             val manager = compose.activity.getSystemService(
                 android.content.Context.ACCESSIBILITY_SERVICE
             ) as android.view.accessibility.AccessibilityManager
-            org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+            org.robolectric.Shadows.shadowOf(manager).setScreenReader(true)
         }
         launch()
         compose.mainClock.advanceTimeBy(12_000)

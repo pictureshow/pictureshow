@@ -294,7 +294,7 @@ class TouchPlaybackHostTest {
         })
         val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {
                 androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalConfiguration provides configuration) {
@@ -344,7 +344,7 @@ class TouchPlaybackHostTest {
     private fun reopenAndEnd(enableAccessibilityAtEnd: Boolean = false) {
         if (enableAccessibilityAtEnd) {
             compose.runOnIdle {
-                shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(true)
+                shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(true)
             }
             compose.waitForIdle()
         }
