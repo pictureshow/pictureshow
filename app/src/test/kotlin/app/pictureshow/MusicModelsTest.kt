@@ -115,10 +115,12 @@ class MusicModelsTest {
     private fun track(id: String, entry: String? = null, location: String? = null) =
         MediaItem(id = id, name = id, type = "Audio", playlistItemId = entry, locationType = location)
 
-    @Test fun aPlaylistNumbersItsOwnOrderAndAnArtistsSongsShowNoAlbumNumber() {
+    @Test fun aRowsNumberComesFromWhatItIsListedIn() {
+        val track = MediaItem(id = "t", name = "Track", type = "Audio", indexNumber = 7)
         val playlist = MediaItem(id = "p", name = "Mix", type = "Playlist", mediaType = "Audio")
-        assertEquals(listOf("1", "2", "3"), (0..2).map { musicRowNumber(playlist, it) })
-        assertEquals("", musicRowNumber(MediaItem(id = "m", name = "Artist", type = "MusicArtist"), 4))
+        assertEquals(listOf("1", "2", "3"), (0..2).map { musicRowNumber(playlist, track, it) })
+        assertEquals("7", musicRowNumber(MediaItem(id = "a", name = "Album", type = "MusicAlbum"), track, 0))
+        assertEquals("", musicRowNumber(MediaItem(id = "m", name = "Artist", type = "MusicArtist"), track, 4))
     }
 
     @Test fun musicRoutesOnlyWhatIsMusic() {

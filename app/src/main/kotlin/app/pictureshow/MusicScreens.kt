@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Button
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -87,6 +88,13 @@ import org.koin.core.parameter.parametersOf
 
 private val MusicBackground = Color(0xFF10131C)
 private val MusicMuted = Color(0xFFC3C9D8)
+
+/**
+ * Secondary text inside a focusable row or card. It follows the row's own content color, so it stays readable when focus
+ * turns the row light; the fixed [MusicMuted] is for text on the page's dark background only.
+ */
+internal val musicMutedOnRow: Color
+    @Composable get() = LocalContentColor.current.copy(alpha = 0.78f)
 private val MusicError = Color(0xFFFFCCB8)
 
 @Composable
@@ -133,7 +141,7 @@ internal fun TvMusicBar(host: MusicHost, onOpen: () -> Unit) {
                             it,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = MusicMuted,
+                            color = musicMutedOnRow,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -236,7 +244,7 @@ private fun TvMusicCard(item: MediaItem, account: Account, onClick: () -> Unit) 
                         line,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = MusicMuted,
+                        color = musicMutedOnRow,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -275,7 +283,7 @@ private fun TvMusicTrackRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(number, Modifier.widthIn(min = 32.dp), color = MusicMuted)
+                Text(number, Modifier.widthIn(min = 32.dp), color = musicMutedOnRow)
                 Column(Modifier.weight(1f)) {
                     Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val line = listOfNotNull(
@@ -287,12 +295,12 @@ private fun TvMusicTrackRow(
                             line,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = MusicMuted,
+                            color = musicMutedOnRow,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
-                item.runTimeTicks?.takeIf { it > 0 }?.let { Text(formatMusicTime(it / 10_000), color = MusicMuted) }
+                item.runTimeTicks?.takeIf { it > 0 }?.let { Text(formatMusicTime(it / 10_000), color = musicMutedOnRow) }
             }
         }
         Button(onClick = {
@@ -631,7 +639,7 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
                             onOpen,
                             { vm.favorite(row.id) },
                             edits,
-                            musicRowNumber(state.item, index)
+                            musicRowNumber(state.item, row, index)
                         )
                         // Edit shows the row's changes where they're used, as well as in its More list.
                         if (edits.isNotEmpty()) {
@@ -835,7 +843,7 @@ internal fun TvMusicNow(host: MusicHost, onBack: () -> Unit) {
                                     it,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    color = MusicMuted,
+                                    color = musicMutedOnRow,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }

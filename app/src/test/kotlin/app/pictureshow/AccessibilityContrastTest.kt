@@ -112,6 +112,49 @@ class AccessibilityContrastTest {
     @Test
     fun selectedCardOutlineHasKnownDarkPixelsOnItsArtworkSide() = assertArtworkKeyline(false)
 
+    /** A music row's artist line and track number follow the row, so they stay readable when focus turns it light. */
+    private fun assertMusicRowSecondaryText(focused: Boolean) {
+        compose.setContent {
+            PictureshowTheme {
+                Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(40.dp)) {
+                    androidx.tv.material3.Surface(onClick = {}, modifier = Modifier.testTag("row")) {
+                        androidx.compose.foundation.layout.Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            androidx.tv.material3.Text("Slow Current")
+                            androidx.tv.material3.Text("Marta Oren", color = musicMutedOnRow)
+                        }
+                    }
+                }
+            }
+        }
+        val row = compose.onNodeWithTag("row")
+        if (focused) row.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.mainClock.advanceTimeBy(1000)
+        compose.waitForIdle()
+        val node = compose.onNodeWithText("Marta Oren")
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val text = node.getUnclippedBoundsInRoot()
+        val density = compose.activity.resources.displayMetrics.density
+        val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
+        try {
+            // Just left of the text, inside the row's padding: the row's own fill, focused or not.
+            val background =
+                Color(bitmap.getPixel(((text.left.value - 4f) * density).roundToInt(), ((text.top.value + 4f) * density).roundToInt()))
+            val foreground = layouts.single().layoutInput.style.color.compositeOver(background)
+            val contrast = ratio(foreground, background)
+            assertTrue(contrast >= 4.5f, "music row secondary text contrast $contrast (focused=$focused)")
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    @Test
+    fun musicRowSecondaryTextStaysReadableWhenFocused() = assertMusicRowSecondaryText(true)
+
+    @Test
+    fun musicRowSecondaryTextIsReadableUnfocused() = assertMusicRowSecondaryText(false)
+
     @Test
     fun preparingStatusKeepsContrastOverAWhiteDecodedFrame() {
         compose.setContent {

@@ -53,8 +53,12 @@ private val MUSIC_ITEM_TYPES = setOf("MusicAlbum", "MusicArtist", "MusicGenre", 
 internal fun MediaItem.isMusic(): Boolean =
     collectionType == "music" || type in MUSIC_ITEM_TYPES || (type == "Playlist" && mediaType == "Audio")
 
-/** A playlist numbers its own order, and an artist's songs come from many albums, so neither shows a track number from its album. */
-internal fun musicRowNumber(parent: MediaItem, index: Int): String = if (parent.type == "Playlist") (index + 1).toString() else ""
+/** An album's rows show their track numbers, a playlist numbers its own order, and an artist's songs come from many albums. */
+internal fun musicRowNumber(parent: MediaItem, row: MediaItem, index: Int): String = when (parent.type) {
+    "Playlist" -> (index + 1).toString()
+    "MusicAlbum" -> row.indexNumber?.toString().orEmpty()
+    else -> ""
+}
 
 internal fun musicRoute(item: MediaItem, role: ArtistRole? = null, library: String? = null): String =
     "music?item=${Uri.encode(Json.encodeToString(item))}&role=${role?.name.orEmpty()}&library=${library.orEmpty()}"
