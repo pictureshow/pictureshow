@@ -79,6 +79,11 @@ class AudioRecoverySessionTest {
         override fun pause() {
             snapshot = snapshot.copy(paused = true)
         }
+        var appPauses = 0
+        override fun pauseForApp() {
+            appPauses++
+            pause()
+        }
         override fun release() = Unit
     }
 
@@ -135,6 +140,7 @@ class AudioRecoverySessionTest {
         session.audioFailed()
         runCurrent()
         assertNotNull(session.state.value.error)
+        assertEquals(1, output.appPauses, "The error's pause is the app's, not the viewer's")
         assertEquals(3, gateway.requests.size, "No full-video fallback or retry loop after audio recovery fails")
         session.close()
         runCurrent()

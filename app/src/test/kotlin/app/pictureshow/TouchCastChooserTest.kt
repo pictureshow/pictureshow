@@ -26,6 +26,7 @@ import app.pictureshow.core.control.CastCapability
 import app.pictureshow.core.control.RemoteTarget
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -193,6 +194,57 @@ class TouchCastChooserTest {
     fun aWideWindowWithHeightStaysOneColumn() {
         chooser(RemoteControllerUi(targets = listOf(tv)), CastUi(chooserOpen = true, routes = listOf(route)))
         assertTrue(text("Google Cast").top > text("Pictureshow TVs").bottom)
+    }
+
+    // The rule is about the window the app is in. Compose gives a dialog's content its own window info, so the
+    // decision has to be taken outside the dialog: faking the outer window must change it, whatever the real one is.
+    private class FixedWindow(width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp, density: Float) :
+        androidx.compose.ui.platform.WindowInfo {
+        override val isWindowFocused = true
+        override val containerSize = androidx.compose.ui.unit.IntSize((width.value * density).toInt(), (height.value * density).toInt())
+    }
+
+    private fun chooserInWindow(width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+        compose.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current.density
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalWindowInfo provides FixedWindow(width, height, density)
+            ) {
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    val ui = CastUi(chooserOpen = true, routes = listOf(route))
+                    TouchCastChooser(RemoteControllerUi(targets = listOf(tv)), ui, true, {}, {}, {}, {}, {})
+                }
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    @Config(qualifiers = "w400dp-h800dp-port-xhdpi")
+    @Test
+    fun theColumnsFollowTheAppsWindowEvenInsideANarrowRealOne() {
+        chooserInWindow(780.dp, 360.dp)
+        assertEquals(text("Pictureshow TVs").top.value, text("Google Cast").top.value, 1f)
+    }
+
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun theColumnsDontFollowTheDialogsOwnWindow() {
+        chooserInWindow(400.dp, 800.dp)
+        assertTrue(text("Google Cast").top > text("Pictureshow TVs").bottom)
+    }
+
+    @Test
+    fun aDialogsContentHasItsOwnWindowInfo() {
+        val outer = FixedWindow(780.dp, 360.dp, 1f)
+        var inner: androidx.compose.ui.platform.WindowInfo? = null
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalWindowInfo provides outer) {
+                androidx.compose.ui.window.Dialog(onDismissRequest = {}) { inner = androidx.compose.ui.platform.LocalWindowInfo.current }
+            }
+        }
+        compose.waitForIdle()
+        assertNotNull(inner)
+        assertTrue(inner !== outer, "if this ever fails, the reason the decision sits outside the dialog has gone")
     }
 
     @Test

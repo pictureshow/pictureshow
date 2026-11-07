@@ -46,7 +46,8 @@ class TouchParitySettingsTest {
     private fun settings(
         onThisDevice: () -> Unit = {},
         castEnabled: Boolean? = null,
-        onCastEnabled: (Boolean) -> Unit = {}
+        onCastEnabled: (Boolean) -> Unit = {},
+        onUpdateServices: (() -> Unit)? = null
     ): () -> PlaybackSettingsState {
         var state by mutableStateOf(PlaybackSettingsState())
         compose.setContent {
@@ -62,7 +63,8 @@ class TouchParitySettingsTest {
                     {},
                     onThisDevice = onThisDevice,
                     castEnabled = castEnabled,
-                    onCastEnabled = onCastEnabled
+                    onCastEnabled = onCastEnabled,
+                    onUpdateServices = onUpdateServices
                 )
             }
         }
@@ -81,14 +83,30 @@ class TouchParitySettingsTest {
         compose.onNodeWithTag("touch:settings:google-cast").assertDoesNotExist()
     }
 
-    @Test fun theCastSwitchFollowsWhatTheDeviceCanDo() {
+    @Test fun theCastSwitchShowsWhatIsStored() {
         fun cap(state: String, visible: Boolean = true) = app.pictureshow.core.control.CastCapability(state, visible, false)
-        assertEquals(false, castSwitchState(cap("viewer-disabled")))
-        listOf("ready", "searching", "no-targets", "idle", "permission-denied", "services-update-required").forEach {
-            assertEquals(true, castSwitchState(cap(it)), it)
+        listOf("viewer-disabled", "ready", "searching", "no-targets", "idle", "permission-denied", "services-update-required").forEach {
+            assertEquals(true, castSwitchState(cap(it), stored = true), it)
+            assertEquals(false, castSwitchState(cap(it), stored = false), it)
         }
-        listOf("os-too-old", "browser-unsupported", "services-missing").forEach { assertEquals(null, castSwitchState(cap(it)), it) }
-        assertEquals(null, castSwitchState(cap("tv-interface", visible = false)))
+        listOf("os-too-old", "browser-unsupported", "services-missing").forEach {
+            assertEquals(null, castSwitchState(cap(it), stored = true), it)
+        }
+        assertEquals(null, castSwitchState(cap("tv-interface", visible = false), stored = true))
+    }
+
+    @Test fun servicesThatNeedUpdatingAreSaidAndOfferedTheWayToFixThem() {
+        var updates = 0
+        settings(castEnabled = false, onUpdateServices = { updates++ })
+        compose.onNodeWithTag("touch:settings:google-cast").performScrollTo().assertIsOff()
+        compose.onNodeWithText("Google Cast can't run until Google Play services is updated.", substring = true).assertExists()
+        compose.onNodeWithTag("touch:settings:update-play-services").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(1, updates) }
+    }
+
+    @Test fun withServicesUpToDateThereIsNothingToUpdate() {
+        settings(castEnabled = true)
+        compose.onNodeWithTag("touch:settings:update-play-services").assertDoesNotExist()
     }
 
     @Test fun conversionNoticeDefaultsOnAndTogglesTheStoredPreference() {

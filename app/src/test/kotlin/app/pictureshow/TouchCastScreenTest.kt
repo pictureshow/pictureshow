@@ -5,6 +5,8 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -39,6 +41,30 @@ class TouchCastScreenTest {
         ui.value = CastUi()
         compose.waitForIdle()
         assertEquals(1, backs)
+    }
+
+    // SET-12: off stops this device reaching for Cast devices, so there's nothing the button could do.
+    @Test fun reconnectIsOfferedOnlyWhileGoogleCastIsOn() {
+        val host = inertCastSender()
+        compose.setContent { MaterialTheme { TouchCastScreen(CastUi(cast = viewing, deviceName = "Den"), host, onBack = {}) } }
+        compose.onNodeWithTag("cast:reconnect").assertExists()
+        host.setEnabled(false)
+        compose.waitForIdle()
+        compose.onNodeWithTag("cast:reconnect").assertDoesNotExist()
+        compose.onNodeWithText("Turn Google Cast on in Settings to reconnect.", substring = true).assertExists()
+        compose.onNodeWithText("Forget it").assertExists()
+    }
+
+    @Test fun aDroppedPickIsToldOnce() {
+        val host = detachedCastSender()
+        var ui by androidx.compose.runtime.mutableStateOf(CastUi(droppedFrom = "Den"))
+        compose.setContent { MaterialTheme { TouchCastDroppedNotice(ui, host) } }
+        compose.waitForIdle()
+        assertEquals("Didn't start on Den, because this title finished first.", org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        assertEquals(1, org.robolectric.shadows.ShadowToast.shownToastCount())
+        ui = CastUi()
+        compose.waitForIdle()
+        assertEquals(1, org.robolectric.shadows.ShadowToast.shownToastCount())
     }
 
     @Test fun aRefusedPickSaysWhyInTheChooser() {

@@ -276,6 +276,8 @@ internal class GmsCastLink(private val context: Context, private val mainExecuto
         return true
     }
 
+    override fun launchedReceiver() = castContext?.sessionManager?.currentCastSession?.applicationConnectionResult?.wasLaunched == true
+
     override fun endSession(stopReceiver: Boolean) {
         castContext?.sessionManager?.endCurrentSession(stopReceiver)
     }

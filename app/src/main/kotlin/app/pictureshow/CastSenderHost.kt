@@ -110,7 +110,9 @@ internal data class CastUi(
     val controls: CastControls? = null,
     val localStart: CastLocalStart? = null,
     /** Why the last pick didn't start anything, as a fixed category. */
-    val pickRefusal: String? = null
+    val pickRefusal: String? = null,
+    /** The device a pick still starting was dropped from, until the viewer has been told. */
+    val droppedFrom: String? = null
 )
 
 private data class IssuedCastSession(val account: Account, val binding: TemporarySession)
@@ -238,6 +240,10 @@ internal class CastSenderHost(
     private var loadedUrls: Map<String, String> = emptyMap()
     private var reported: CastReport? = null
     private var localAlive = false
+    private var reconnectJob: Job? = null
+
+    /** The viewer chose this device over a rejoin the device may still answer. */
+    private var rejoinDropped = false
     private var lastStatus: CastStatus? = null
     private var awaitingReattach = false
 
@@ -539,8 +545,16 @@ internal class CastSenderHost(
         mutable.update { it.copy(chooserOpen = false, blockedReach = null, pickRefusal = null) }
     }
 
+    private val mutableCastEnabled = kotlinx.coroutines.flow.MutableStateFlow(environment.enabled)
+
+    /** The viewer's setting. The capability can't say: a device that needs a Play services update reads the same either way. */
+    val castEnabled = mutableCastEnabled.asStateFlow()
+
+    fun droppedHandled() = mutable.update { it.copy(droppedFrom = null) }
+
     fun setEnabled(value: Boolean) {
         environment.enabled = value
+        mutableCastEnabled.value = value
         if (!value) {
             stopSearch()
             // Turning it off keeps this app away from Cast devices. What is already playing there is left alone.
@@ -928,7 +942,8 @@ internal class CastSenderHost(
         environment.mayBeLive = false
         link?.let { current ->
             if (sent) current.stop { }
-            if (cast?.link != "lost") current.endSession(stopReceiver = true)
+            // Selecting a device can join a receiver someone else is using. Only a load, or having started it, makes it this viewing's to stop.
+            if (cast?.link != "lost") current.endSession(stopReceiver = sent || current.launchedReceiver())
         }
         // The receiver may have started a transcode by now, and only this session can ask to stop it.
         val encodings = if (sent) prepared.values.mapNotNull { it.playSessionId }.distinct() else emptyList()
@@ -1116,14 +1131,27 @@ internal class CastSenderHost(
         localLeaving(output)
         if (handoff?.local !== output || cast?.owner?.candidate == null) return
         localAlive = false
+        val device = state.value.deviceName
         dispatch(CastEvent("cancel"))
         dismiss()
+        mutable.update { it.copy(droppedFrom = device) }
     }
 
     /** The viewer's later choice stands over one still waiting on a rejoin. */
     fun chooseThisDevice(shown: CastPlayRequest) {
-        pendingPick = null
+        if (pendingPick != null) dropRejoin()
         shown.onThisDevice?.invoke()
+    }
+
+    /** The rejoin was only for the pick. What's playing on the device is left alone, and the viewing stays detached and offered. */
+    private fun dropRejoin() {
+        pendingPick = null
+        rejoinDropped = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        link?.stopDiscovery()
+        link?.endSession(stopReceiver = false)
+        dispatch(CastEvent("link-lost"))
     }
 
     /** The viewer is choosing where this player's viewing goes, or has chosen and it hasn't got there yet: what's next waits too. */
@@ -1149,6 +1177,8 @@ internal class CastSenderHost(
         reportJob?.cancel()
         cancelPendingSelect()
         pendingPick = null
+        reconnectJob?.cancel()
+        rejoinDropped = false
         request = null
         handoff = null
         prepared = emptyMap()
@@ -1199,10 +1229,12 @@ internal class CastSenderHost(
     /** Back to a receiver the viewer left playing. This is the viewer's ask, so a short search is fine here. */
     fun reconnect() {
         val device = cast?.owner?.owner?.device ?: return
-        if (cast?.owner?.phase != "disconnected") return
+        if (cast?.owner?.phase != "disconnected" || !environment.enabled) return
+        rejoinDropped = false
         val current = ensureLink()
         current.startDiscovery()
-        scope.launch {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
             val found = withTimeoutOrNull(CAST_SEARCH_MS) { current.routes.first { routes -> routes.any { it.id == device } } }
             val selected = found != null && current.select(device)
             current.stopDiscovery()
@@ -1226,12 +1258,19 @@ internal class CastSenderHost(
         clear()
     }
 
-    override fun onConnecting() = dispatch(CastEvent("link-connecting"))
+    override fun onConnecting() {
+        if (!rejoinDropped) dispatch(CastEvent("link-connecting"))
+    }
 
     override fun onConnected(deviceName: String?) {
         restoreJob?.cancel()
         reattachEmptySeen = false
         oldEndOwed = false
+        if (rejoinDropped) {
+            rejoinDropped = false
+            link?.endSession(stopReceiver = false)
+            return
+        }
         if (retiring != null) {
             link?.requestStatus()
             return
@@ -1251,6 +1290,7 @@ internal class CastSenderHost(
 
     override fun onEnded() {
         awaitingReattach = false
+        rejoinDropped = false
         stopRetiring()
         // The old device's session, which a move to another device was waiting for. It isn't the new one's failure.
         if (pendingSelect != null) return selectPending()
@@ -1272,6 +1312,10 @@ internal class CastSenderHost(
     override fun onConnectFailed() {
         awaitingReattach = false
         pendingPick = null
+        if (rejoinDropped) {
+            rejoinDropped = false
+            return
+        }
         if (retiring != null) return stopRetiring()
         dispatch(CastEvent("link-failed"))
     }

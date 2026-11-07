@@ -6,6 +6,7 @@ package app.pictureshow
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -55,7 +56,9 @@ internal fun TouchSettings(
     onThisDevice: () -> Unit = {},
     /** Null where Cast can't be used on this device. */
     castEnabled: Boolean? = null,
-    onCastEnabled: (Boolean) -> Unit = {}
+    onCastEnabled: (Boolean) -> Unit = {},
+    /** Set while Google Play services need updating before Cast can run. */
+    onUpdateServices: (() -> Unit)? = null
 ) {
     val local = state.local
     val device = touchDeviceName(LocalConfiguration.current.smallestScreenWidthDp)
@@ -68,11 +71,20 @@ internal fun TouchSettings(
             castEnabled?.let {
                 TouchSwitchRow(
                     "Google Cast",
-                    "Lists Cast devices in Play on. Turning it off leaves anything already playing on one alone.",
+                    if (onUpdateServices != null) {
+                        "Google Cast can't run until Google Play services is updated. This setting applies after that."
+                    } else {
+                        "Lists Cast devices in Play on. Turning it off leaves anything already playing on one alone."
+                    },
                     it,
                     "touch:settings:google-cast",
                     onCastEnabled
                 )
+                onUpdateServices?.let { update ->
+                    Box(Modifier.testTag("touch:settings:update-play-services")) {
+                        TouchNavRow("Update Google Play services", onClick = update)
+                    }
+                }
             }
         }
         TouchSection(

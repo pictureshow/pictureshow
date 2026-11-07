@@ -317,6 +317,27 @@ retains group. leave requests leave-group; only a subsequent confirmed left ackn
 No external-route SyncPlay clock is started. OS delivery, browser suspension and actual platform playback
 continuation require platform qualification; these vectors decide routing only.
 
+### cast-handoff
+
+Operation `cast`, with `reduceCast` as the reference. It takes a viewing from this device to a Cast receiver, and back. State requires `owner`, an `owner` suite state whose `local` is the sender and whose `owner` kind becomes `cast` once the receiver has proved it started. Defaults: `link` idle, `stop` none, `cleanup` none, `mediaSession`, `observed`, `commands`, `stopPurpose`, `returnPaused`, `returnTicks`, `recovery`, `notice` null or absent, `emptyStatus` false. Each returned state resets `effect` to none and `reason` to null unless the event sets them, and the vectors compare `effect` and `owner.effect`, which are instructions to the adapter.
+
+The start of a handoff, in order:
+
+| Event | Fields | Meaning |
+| --- | --- | --- |
+| `pick` | `identity`, `intent` | The viewer chose a device. Answers with the `effect` to take or a refusal in `reason`, without starting anything by itself when the device already holds this viewing. |
+| `select` | `identity`, `intent` | Begin: `identity` becomes the candidate, phase `selecting`. |
+| `link-connecting` | none | The device was reached: `link` connecting, phase `connecting`. |
+| `link-connected` | none | Phase `preparing`, effect `pause-local`: the adapter stops the local player, reads it, and answers with `local-paused`. |
+| `local-paused` | `ticks`, `paused` (both optional) | The moment the local player stopped. Phase `awaiting-ready`, effect `request-remote`. |
+| `observe` | `observation`, `nowMs` | What the receiver reports. Ownership commits only on the candidate's generation at the requested position, within `CAST_READY_TOLERANCE_TICKS`. |
+| `load-failed`, `load-timeout`, `cancel` | `recovery` (optional) | The candidate is invalidated, and the viewer gets Resume here. |
+| `link-lost`, `link-failed` | none | The link went or never came up. A candidate fails. A detached viewing stays detached, and `link-failed` sets `notice` to `connect-failed`. |
+
+**`local-paused`.** `ticks` and `paused` describe one moment, and each replaces its value in `owner.intent`. An absent field keeps the value already there: `ticks` from the pick, and `paused` from the pick. Absent is neither false nor an error: it is what an adapter sends when no local player is involved, such as a Cast request from a details page, so `paused` then keeps whatever the viewing asked for. Where a player exists, `paused` means the viewer's own pause, measured before the adapter stops the player. A pause the app made itself (going to the background, a playback failure, this handoff's own stop) doesn't count. The receiver is then loaded with autoplay equal to `!owner.intent.paused`.
+
+The other events are `link-suspended`, `progress` (`ticks`), `command` (`id`, `value`, `entry`, `nowMs`), `command-timeout`, `command-rejected`, `disconnect`, `stop`, `play-here`, `retry-stop`, `stop-timeout`, `cleanup-done`, `resume-here` (`identity`, `confirmed`), `report` (`sequence`), `viewer-switch` and `replace` (`identity`). Field encoding follows the rules above: `ticks` and `generation` are decimal strings. The behaviour is CAST-23 and its neighbours in `spec/features/casting.md`. These vectors are the reference for the reducer only; the hold on the next step, the drop at the end of a file, and what the adapter does with the receiver session live in the host and are specified in CAST-23.
+
 ## Remote (REM) trace format
 
 `remote-targets`, `remote-wire`, `remote-receive`, `remote-reconnect` and `remote-queue` use the shared trace format and encoding

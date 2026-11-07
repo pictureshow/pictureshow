@@ -176,8 +176,8 @@ internal val LocalTouchPlayerCast = staticCompositionLocalOf<TouchPlayerCast?> {
 /** This player during a Cast handoff. */
 private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalOutput {
     override suspend fun pauseAndRead(): CastLocalMoment {
-        val paused = host.output.pauseIntent.value || host.player?.playWhenReady == false
-        host.output.pause()
+        val paused = host.output.viewerPaused(host.player)
+        host.output.pauseForApp()
         withTimeoutOrNull(1_000) { while (host.player?.isPlaying == true) delay(20) }
         return CastLocalMoment(host.output.position().milliseconds, paused)
     }

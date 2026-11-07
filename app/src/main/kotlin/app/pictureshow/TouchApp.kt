@@ -123,6 +123,7 @@ internal fun TouchPictureshow(
         )
     }
     TouchCastAttention(castState, cast)
+    TouchCastDroppedNotice(castState, cast)
     // Play here, or Resume here with no player left open: the receiver's position, in a new local player.
     LaunchedEffect(castState.localStart?.serial) {
         val start = castState.localStart ?: return@LaunchedEffect
@@ -464,7 +465,13 @@ internal fun TouchPictureshow(
                         probe.start(::update)
                         onDispose { probe.close() }
                     }
-                    LaunchedEffect(cast) { cast.refreshCapability() }
+                    // Coming back from the Play Store is how an update gets here.
+                    LifecycleResumeEffect(cast) {
+                        cast.refreshCapability()
+                        onPauseOrDispose { }
+                    }
+                    val castStored by cast.castEnabled.collectAsStateWithLifecycle()
+                    val settingsContext = LocalContext.current
                     TouchSettings(
                         screen,
                         accepted,
@@ -476,8 +483,11 @@ internal fun TouchPictureshow(
                         { nav.navigate("supporter") },
                         onRemote = { nav.navigate("remote") },
                         onThisDevice = { nav.navigate("this-device") },
-                        castEnabled = castSwitchState(castState.capability),
-                        onCastEnabled = cast::setEnabled
+                        castEnabled = castSwitchState(castState.capability, castStored),
+                        onCastEnabled = cast::setEnabled,
+                        onUpdateServices = settingsContext::openPlayServicesListing.takeIf {
+                            castState.capability.state == "services-update-required"
+                        }
                     )
                 }
             }

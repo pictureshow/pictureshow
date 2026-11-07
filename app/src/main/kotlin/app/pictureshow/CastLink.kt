@@ -100,6 +100,9 @@ internal interface CastLink {
     /** The route currently joined, from this side of the link: a receiver's status can't say this. */
     fun joinedRoute(): String?
     fun endSession(stopReceiver: Boolean)
+
+    /** Whether this session started the receiver app, rather than joining one already running there. */
+    fun launchedReceiver(): Boolean
     fun load(request: CastLoadRequest, onResult: (Boolean) -> Unit)
     fun play(onResult: (Boolean) -> Unit)
     fun pause(onResult: (Boolean) -> Unit)

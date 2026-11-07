@@ -1156,14 +1156,68 @@ class TouchPlayerControlsTest {
     // Headset keys and audio focus still reach the player under the dialog.
     @Test
     fun thePlayerSaysWhetherItWasPausedAsItStopsForTheReceiver() {
+        val local = chooserLocal()
+        assertEquals(false, readPaused(local), "it was playing")
+        settled()
+        assertEquals(false, readPaused(local), "the handoff's own stop isn't the viewer's pause, or a second try would load paused")
+        compose.runOnIdle { output.pause() }
+        settled()
+        assertEquals(true, readPaused(local), "and now the viewer has paused")
+    }
+
+    private fun chooserLocal(): CastLocalOutput {
         val sender = inertCastSender()
         launch(cast = TouchPlayerCast(sender, inertRemoteController()))
         settled()
         tapPlayOn()
-        val local = compose.runOnIdle { requireNotNull(requireNotNull(sender.chooserRequest).local) }
-        compose.runOnIdle { assertEquals(false, kotlinx.coroutines.runBlocking { local.pauseAndRead() }.paused, "it was playing") }
+        return compose.runOnIdle { requireNotNull(requireNotNull(sender.chooserRequest).local) }
+    }
+
+    private fun readPaused(local: CastLocalOutput) = compose.runOnIdle { kotlinx.coroutines.runBlocking { local.pauseAndRead() }.paused }
+
+    // The link takes seconds, and the viewer can lock the phone while it comes up: the TV should still play.
+    @Test
+    fun goingToTheBackgroundIsNotTheViewersPause() {
+        val local = chooserLocal()
+        compose.runOnIdle { output.setForeground(false) }
         settled()
-        compose.runOnIdle { assertEquals(true, kotlinx.coroutines.runBlocking { local.pauseAndRead() }.paused, "and now it's paused") }
+        assertEquals(true, compose.runOnIdle { output.pauseIntent.value }, "the app has paused it")
+        assertEquals(false, readPaused(local))
+    }
+
+    @Test
+    fun comingBackDoesNotMakeTheAppsPauseTheViewers() {
+        val local = chooserLocal()
+        compose.runOnIdle { output.setForeground(false) }
+        compose.runOnIdle { output.setForeground(true) }
+        settled()
+        assertEquals(false, readPaused(local))
+    }
+
+    @Test
+    fun aViewersPauseSurvivesGoingToTheBackground() {
+        val local = chooserLocal()
+        compose.runOnIdle { output.pause() }
+        compose.runOnIdle { output.setForeground(false) }
+        compose.runOnIdle { output.setForeground(false) }
+        settled()
+        assertEquals(true, readPaused(local))
+    }
+
+    @Test
+    fun leavingThePlayerIsNotTheViewersPause() {
+        val local = chooserLocal()
+        compose.runOnIdle { host.finish(reason = "back") }
+        settled()
+        assertEquals(false, readPaused(local))
+    }
+
+    @Test
+    fun aPlaybackErrorsPauseIsNotTheViewers() {
+        val local = chooserLocal()
+        compose.runOnIdle { output.pauseForApp() }
+        settled()
+        assertEquals(false, readPaused(local), "the TV may play what this device can't")
     }
 
     @Test
@@ -1388,7 +1442,6 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:play-on").assertIsNotEnabled()
     }
 
-    // The file ran out while away: the end signal was ignored, so only the output knows, and coming back recomposes.
     // Nothing but the composition's own disposal calls this when a player goes without finishing.
     @Test
     fun aPlayerRemovedWithoutFinishingClosesItsChooser() {

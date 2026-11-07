@@ -74,6 +74,13 @@ internal class Media3PlaybackOutput(
     private val mutablePauseIntent = MutableStateFlow(false)
     val pauseIntent = mutablePauseIntent.asStateFlow()
 
+    /** Whether the viewer had paused when the app last stopped this itself. The player's own state can't tell the two apart. */
+    private var pausedBeforeApp: Boolean? = null
+
+    /** The viewer's own pause, which the app going away or stopping for a failure or a handoff isn't. */
+    fun viewerPaused(player: Player? = mutablePlayer.value): Boolean =
+        pausedBeforeApp ?: (mutablePauseIntent.value || player?.playWhenReady == false)
+
     var stopGeneration: Long = 0
         private set
 
@@ -81,14 +88,17 @@ internal class Media3PlaybackOutput(
     fun setForeground(value: Boolean) {
         if (!value && mutableForeground.value) stopGeneration++
         mutableForeground.value = value
-        if (!value) pause()
+        if (!value) pauseForApp()
         val snapshot = position()
         PlaybackDiagnostics.write("lifecycle foreground=$value paused=${snapshot.paused} positionMs=${snapshot.milliseconds}")
     }
 
     private fun playIntent(requested: Boolean): Boolean {
         if (requested && !mutableForeground.value) return false
-        if (requested) mutablePauseIntent.value = false
+        if (requested) {
+            mutablePauseIntent.value = false
+            pausedBeforeApp = null
+        }
         return requested
     }
     private var completedPosition: PlaybackPosition? = null
@@ -551,7 +561,14 @@ internal class Media3PlaybackOutput(
         )
     }
 
+    override fun pauseForApp() {
+        val viewer = viewerPaused()
+        pause()
+        pausedBeforeApp = viewer
+    }
+
     override fun pause() {
+        pausedBeforeApp = null
         mutablePauseIntent.value = true
         saved = saved.copy(paused = true)
         completedPosition = completedPosition?.copy(paused = true)

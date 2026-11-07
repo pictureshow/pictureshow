@@ -6,6 +6,7 @@ package app.pictureshow
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -387,11 +390,11 @@ private fun ChooserRecovery(label: String, onClick: () -> Unit, modifier: Modifi
 /** Some routes describe themselves with their own name, which says nothing twice. */
 internal fun castRouteDetail(route: CastRoute): String? = route.detail?.takeIf { it.isNotBlank() && it != route.name }
 
-/** What the Settings switch shows: null where Cast can't be used here, so there is nothing to switch. */
-internal fun castSwitchState(capability: CastCapability): Boolean? = when {
+/** What the Settings switch shows: the stored choice, or null where Cast can't be used here, so there is nothing to switch. */
+internal fun castSwitchState(capability: CastCapability, stored: Boolean): Boolean? = when {
     !capability.visible -> null
     capability.state in listOf("os-too-old", "browser-unsupported", "services-missing") -> null
-    else -> capability.state != "viewer-disabled"
+    else -> stored
 }
 
 /** Stays in reach while browsing. It shows what the receiver reports and opens the controls. */
@@ -408,6 +411,17 @@ internal fun TouchCastBar(ui: CastUi, onOpen: () -> Unit) {
  * What needs the viewer while a handoff runs or after it ends. It shows over every screen, the player included, because
  * local playback is waiting on this answer.
  */
+/** The next episode is already starting, so a dialog would be in the way. */
+@Composable
+internal fun TouchCastDroppedNotice(ui: CastUi, host: CastSenderHost) {
+    val context = LocalContext.current
+    LaunchedEffect(ui.droppedFrom) {
+        val device = ui.droppedFrom ?: return@LaunchedEffect
+        Toast.makeText(context, "Didn't start on $device, because this title finished first.", Toast.LENGTH_LONG).show()
+        host.droppedHandled()
+    }
+}
+
 @Composable
 internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
     val cast = ui.cast ?: return
@@ -456,6 +470,7 @@ internal fun TouchCastAttention(ui: CastUi, host: CastSenderHost) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Unit) {
+    val castOn by host.castEnabled.collectAsState()
     val cast = ui.cast
     val observed = cast?.observed
     val controls = ui.controls
@@ -477,7 +492,14 @@ internal fun TouchCastScreen(ui: CastUi, host: CastSenderHost, onBack: () -> Uni
 
             cast.owner.phase == "disconnected" -> {
                 Text(castNoticeMessage(cast.notice, device) ?: "This device isn't connected to $device.")
-                Button(onClick = host::reconnect, modifier = Modifier.heightIn(min = 48.dp).testTag("cast:reconnect")) { Text("Reconnect") }
+                if (castOn) {
+                    Button(
+                        onClick = host::reconnect,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("cast:reconnect")
+                    ) { Text("Reconnect") }
+                } else {
+                    Text("Turn Google Cast on in Settings to reconnect.")
+                }
                 TextButton(onClick = host::dismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Forget it") }
             }
 

@@ -79,6 +79,9 @@ private class FakeLink(private val log: MutableList<String>) : CastLink {
         log += "end:$stopReceiver"
     }
 
+    var launched = true
+    override fun launchedReceiver() = launched
+
     override fun load(request: CastLoadRequest, onResult: (Boolean) -> Unit) {
         this.request = request
         log += "load"
@@ -1590,13 +1593,112 @@ class CastSenderHostTest {
         assertEquals(ended, host.state.value.cast)
     }
 
-    @Test fun aPickOnTheReceiverIsNotUndoneByThePlayerMovingOn() = runTest {
+    // A player that handed off has its release to run; it mustn't undo what it handed to.
+    @Test fun aPickThatLandedIsNotUndoneByItsPlayerMovingOn() = runTest {
         val host = host()
-        casting(host)
+        handoff(host, output)
+        output.position.complete(5_000)
+        runCurrent()
+        link.sink!!.onStatus(status("playing", generation = host.generation()))
+        runCurrent()
+        assertEquals(1, output.released, "it landed")
         val generation = host.generation()
+        log.clear()
         host.localAdvancing(output)
+        runCurrent()
         assertEquals(generation, host.generation())
         assertEquals("cast", host.state.value.cast!!.owner.owner.kind)
+        assertEquals("active", host.state.value.cast!!.owner.phase)
+        assertFalse(log.any { it.startsWith("end:") }, log.toString())
+    }
+
+    // Selecting a device can join a receiver another phone is using, and stopping that app ends their viewing.
+    @Test fun aDroppedPickLeavesAReceiverItOnlyJoined() = runTest {
+        val host = host()
+        link.launched = false
+        handoff(host, output)
+        log.clear()
+        host.localAdvancing(output)
+        runCurrent()
+        assertTrue("end:false" in log, log.toString())
+        assertFalse("end:true" in log, log.toString())
+    }
+
+    @Test fun aDroppedPickClosesTheReceiverItStarted() = runTest {
+        val host = host()
+        link.launched = true
+        handoff(host, output)
+        log.clear()
+        host.localAdvancing(output)
+        runCurrent()
+        assertTrue("end:true" in log, "nothing else is on it, and it would sit there idle: $log")
+    }
+
+    @Test fun aDroppedPickStopsAReceiverItHadAlreadyLoaded() = runTest {
+        val host = host()
+        link.launched = false
+        link.loadResult = null
+        handoff(host, output)
+        output.position.complete(5_000)
+        runCurrent()
+        assertTrue("load" in log, log.toString())
+        log.clear()
+        host.localAdvancing(output)
+        runCurrent()
+        assertTrue("end:true" in log, "it was taken over by then: $log")
+    }
+
+    @Test fun aFailedPickLeavesAReceiverItOnlyJoined() = runTest {
+        val host = host()
+        link.launched = false
+        handoff(host, output)
+        log.clear()
+        host.cancel()
+        runCurrent()
+        assertTrue("end:false" in log, log.toString())
+    }
+
+    @Test fun aDroppedPickSaysWhereItWasGoingUntilToldOnce() = runTest {
+        val host = host()
+        handoff(host, output)
+        host.localAdvancing(output)
+        runCurrent()
+        assertEquals("Living room", host.state.value.droppedFrom)
+        host.droppedHandled()
+        assertNull(host.state.value.droppedFrom)
+    }
+
+    @Test fun aCancelledPickHasNothingToSayAboutBeingDropped() = runTest {
+        val host = host()
+        handoff(host, output)
+        host.cancel()
+        runCurrent()
+        assertNull(host.state.value.droppedFrom)
+    }
+
+    @Test fun whatIsStoredIsWhatTheSwitchIsGivenWhateverTheServices() = runTest {
+        environment.enabled = false
+        environment.servicesState = "update-required"
+        val host = host()
+        assertEquals(false, host.castEnabled.value)
+        host.setEnabled(true)
+        assertEquals(true, host.castEnabled.value)
+        assertEquals(true, environment.enabled)
+        assertEquals("services-update-required", host.state.value.capability.state, "still needs the update")
+        host.setEnabled(false)
+        assertEquals(false, host.castEnabled.value)
+    }
+
+    @Test fun reconnectDoesNothingWhileGoogleCastIsOff() = runTest {
+        val host = host()
+        casting(host)
+        host.setEnabled(false)
+        runCurrent()
+        assertEquals("disconnected", host.state.value.cast!!.owner.phase)
+        log.clear()
+        host.reconnect()
+        runCurrent()
+        assertFalse("discover" in log || "select" in log, log.toString())
     }
 
     // Each host's exit is the route's one back-stack pop, so a late release from the old episode would close the new one.
@@ -1612,13 +1714,10 @@ class CastSenderHostTest {
         assertEquals(0, player.released, "whatever is on screen now isn't this player")
     }
 
-    @Test fun thisDeviceCancelsAPickWaitingOnARejoin() = runTest {
-        val host = host()
+    private fun TestScope.waitingOnARejoin(host: CastSenderHost, player: CastLocalOutput): CastPlayRequest {
         casting(host)
         host.disconnect()
         runCurrent()
-        val old = host.generation()
-        val player = FakeOutput(log)
         host.openChooser(CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player))
         host.pick(ROUTE)
         runCurrent()
@@ -1626,14 +1725,86 @@ class CastSenderHostTest {
         log.clear()
         val again = CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player)
         host.openChooser(again)
+        return again
+    }
+
+    @Test fun thisDeviceCancelsAPickWaitingOnARejoin() = runTest {
+        val host = host()
+        val player = FakeOutput(log)
+        val again = waitingOnARejoin(host, player)
+        val old = host.generation()
         host.chooseThisDevice(again)
         host.closeChooser()
         assertFalse(host.holdsNextStep(player), "nothing holds the countdown out of sight")
         link.sink!!.onConnected("Living room")
-        link.sink!!.onStatus(status("playing", generation = old))
         runCurrent()
         assertFalse("load" in log, "the viewer's later choice stands: $log")
         assertEquals(old, host.generation())
+    }
+
+    // Otherwise the old viewing comes back on the bar while the viewer plays here.
+    @Test fun thisDeviceDropsTheRejoinOnceItHasSelected() = runTest {
+        val host = host()
+        val again = waitingOnARejoin(host, FakeOutput(log))
+        val notice = host.state.value.cast!!.notice
+        host.chooseThisDevice(again)
+        runCurrent()
+        assertTrue("end:false" in log, "what's playing there is left alone: $log")
+        assertFalse("end:true" in log, log.toString())
+        log.clear()
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        assertFalse("status" in log, log.toString())
+        assertTrue("end:false" in log, "a connect arriving late goes the same way: $log")
+        assertEquals("disconnected", host.state.value.cast!!.owner.phase)
+        assertEquals(notice, host.state.value.cast!!.notice)
+    }
+
+    @Test fun thisDeviceDropsARejoinStillSearching() = runTest {
+        val host = host()
+        casting(host)
+        host.disconnect()
+        runCurrent()
+        link.routes.value = emptyList()
+        val player = FakeOutput(log)
+        host.openChooser(CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player))
+        link.routes.value = listOf(ROUTE)
+        host.pick(ROUTE)
+        link.routes.value = emptyList()
+        runCurrent()
+        val again = CastPlayRequest(listOf(CastPlayItem("another", "Another film")), local = player)
+        host.openChooser(again)
+        host.chooseThisDevice(again)
+        host.closeChooser()
+        runCurrent()
+        log.clear()
+        link.routes.value = listOf(ROUTE)
+        runCurrent()
+        assertFalse("select" in log, log.toString())
+    }
+
+    @Test fun aConnectFailureAfterDroppingTheRejoinSaysNothing() = runTest {
+        val host = host()
+        val again = waitingOnARejoin(host, FakeOutput(log))
+        val notice = host.state.value.cast!!.notice
+        host.chooseThisDevice(again)
+        link.sink!!.onConnectFailed()
+        runCurrent()
+        assertEquals(notice, host.state.value.cast!!.notice)
+    }
+
+    @Test fun reconnectingLaterWorksAfterDroppingTheRejoin() = runTest {
+        val host = host()
+        val again = waitingOnARejoin(host, FakeOutput(log))
+        host.chooseThisDevice(again)
+        host.closeChooser()
+        runCurrent()
+        log.clear()
+        host.reconnect()
+        runCurrent()
+        link.sink!!.onConnected("Living room")
+        runCurrent()
+        assertTrue("status" in log, log.toString())
     }
 
     @Test fun theMarkAndTheLineAgreeWhileChecking() = runTest {
