@@ -55,8 +55,13 @@ class PlaybackStopIntentTest {
             player.setHandleAudioBecomingNoisy(true)
             player.playWhenReady = true
             assertFalse(output.viewerPaused(player))
-            context.sendBroadcast(android.content.Intent(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY))
-            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            // The player registers and answers on its own thread, so the first broadcast can arrive before it listens.
+            val deadline = System.currentTimeMillis() + 10_000
+            while (player.playWhenReady && System.currentTimeMillis() < deadline) {
+                context.sendBroadcast(android.content.Intent(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                Thread.sleep(20)
+            }
             assertFalse(player.playWhenReady, "the player stopped itself")
             assertTrue(output.viewerPaused(player))
         } finally {

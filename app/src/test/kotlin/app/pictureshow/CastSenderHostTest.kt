@@ -1678,6 +1678,24 @@ class CastSenderHostTest {
         assertTrue("end:true" in log, "nothing of ours is left on it, and it would sit there idle: $log")
     }
 
+    @Test fun aReplaceThatFailedDoesNotMakeTheNextPicksReceiverOurs() = runTest {
+        val host = host()
+        casting(host)
+        link.launched = false
+        host.pickFrom(ROUTE, anotherItem())
+        host.cancel()
+        runCurrent()
+        assertTrue("end:true" in log, log.toString())
+        log.clear()
+        host.pickFrom(ROUTE, anotherItem())
+        link.sink!!.onConnecting()
+        runCurrent()
+        host.cancel()
+        runCurrent()
+        assertTrue("end:false" in log, "nothing was sent or replaced this time: $log")
+        assertFalse("end:true" in log, log.toString())
+    }
+
     @Test fun aPickThatFailsOnAnotherDeviceLeavesThatReceiverAlone() = runTest {
         link.routes.value = listOf(ROUTE, den)
         val host = host()
