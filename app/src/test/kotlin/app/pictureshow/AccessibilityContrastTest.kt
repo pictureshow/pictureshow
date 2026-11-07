@@ -164,6 +164,38 @@ class AccessibilityContrastTest {
         }
     }
 
+    /** A selected tab and a page's Play keep a #B8C4FF ring at rest, so they read as selected or primary with focus elsewhere. */
+    @Test
+    fun musicSelectedButtonCarriesTheSelectedRingAtRest() {
+        compose.setContent {
+            PictureshowTheme {
+                Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(40.dp)) {
+                    androidx.tv.material3.Button(onClick = {}, border = musicSelectedBorder, modifier = Modifier.testTag("selected")) {
+                        androidx.tv.material3.Text("Songs")
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1000)
+        compose.waitForIdle()
+        val box = compose.onNodeWithTag("selected").getUnclippedBoundsInRoot()
+        val density = compose.activity.resources.displayMetrics.density
+        val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
+        try {
+            // One dp inside the left edge, halfway down: the ring, not the fill.
+            val middle = (box.top.value + box.bottom.value) / 2
+            val edge = bitmap.getPixel(((box.left.value + 1f) * density).roundToInt(), (middle * density).roundToInt())
+            val ring = SelectedSeasonOutline.toArgb()
+            assertTrue(
+                listOf(16, 8, 0).all { shift -> abs(((edge shr shift) and 255) - ((ring shr shift) and 255)) <= 24 },
+                "selected button edge is ${Integer.toHexString(edge)}, not the selected ring"
+            )
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
     @Test
     fun musicRowSecondaryTextStaysReadableWhenFocused() = assertMusicRowSecondaryText(true)
 

@@ -3,6 +3,7 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,8 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +57,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -63,10 +67,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonBorder
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ClickableSurfaceScale
 import androidx.tv.material3.LocalContentColor
@@ -75,6 +83,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.imageUrl
 import app.pictureshow.core.music.ArtistRole
 import app.pictureshow.core.music.MusicListState
 import app.pictureshow.core.music.MusicSection
@@ -105,6 +114,13 @@ internal val musicMutedOnRow: Color
 internal val musicRowScale: ClickableSurfaceScale
     @Composable get() = ClickableSurfaceDefaults.scale(focusedScale = 1f)
 private val MusicError = Color(0xFFFFCCB8)
+
+/** Play/Pause keeps one width, so toggling it never moves the controls beside it. It fits "Pause" at 1.3 text scale. */
+internal val MusicToggleWidth = 112.dp
+
+/** The resting ring of a selected tab or a page's primary action: the app's selected-season outline. */
+internal val musicSelectedBorder: ButtonBorder
+    @Composable get() = ButtonDefaults.border(border = Border(BorderStroke(2.dp, SelectedSeasonOutline), shape = CircleShape))
 
 @Composable
 private fun TvHeading(title: String, modifier: Modifier = Modifier, large: Boolean = false) {
@@ -158,7 +174,9 @@ internal fun TvMusicBar(host: MusicHost, onOpen: () -> Unit) {
                 }
             }
         }
-        Button(onClick = host::toggle, modifier = Modifier.testTag("music:bar:toggle")) { Text(if (ui.isPlaying) "Pause" else "Play") }
+        Button(onClick = host::toggle, modifier = Modifier.width(MusicToggleWidth).testTag("music:bar:toggle")) {
+            Text(if (ui.isPlaying) "Pause" else "Play")
+        }
         Button(onClick = host::next, enabled = host.hasNext(), modifier = Modifier.testTag("music:bar:next")) { Text("Next") }
     }
 }
@@ -193,7 +211,7 @@ internal fun TvMusicPrompts(host: MusicHost, onDestination: (MusicPlay) -> Unit)
     val prompt = ui.prompt ?: return
     if (prompt.kind == "replace") {
         TvDialog("Replace the queue?", host::dismissPrompt) {
-            Text("${prompt.play.contextName ?: "This"} replaces what's in the queue now.")
+            Text("Playing ${prompt.play.contextName ?: "this"} clears your current queue.")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = host::dismissPrompt, modifier = Modifier.focusRequester(first)) { Text("Keep queue") }
                 Button(onClick = host::confirm, modifier = Modifier.testTag("music:replace")) { Text("Replace queue") }
@@ -294,7 +312,12 @@ private fun TvMusicTrackRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(number, Modifier.widthIn(min = 32.dp), color = musicMutedOnRow)
+                // A mixed list has no numbers; its slot shows the track's art, which also tells songs from different albums apart.
+                if (number.isBlank()) {
+                    MusicTrackArt(item, account, 48.dp)
+                } else {
+                    Text(number, Modifier.widthIn(min = 32.dp), color = musicMutedOnRow)
+                }
                 Column(Modifier.weight(1f)) {
                     Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val line = listOfNotNull(
@@ -351,6 +374,18 @@ private fun TvMusicTrackRow(
         }
     }
     if (picking) TvPlaylistPicker(account, listOf(item.id)) { picking = false }
+}
+
+/** A track's album art at row size, on the app's artwork placeholder while it loads or when there is none. */
+@Composable
+internal fun MusicTrackArt(item: MediaItem, account: Account, size: Dp) {
+    val pixels = with(LocalDensity.current) { size.roundToPx() }
+    AsyncImage(
+        imageUrl(account.server, item, pixels),
+        null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.size(size).clip(RoundedCornerShape(4.dp)).background(Color(0xFF262D3D)).testTag("music:art:${item.id}")
+    )
 }
 
 @Composable
@@ -431,41 +466,37 @@ internal fun TvMusicLibrary(vm: MusicLibraryViewModel, host: MusicHost, onOpen: 
     ) {
         item(span = { GridItemSpan(maxLineSpan) }, key = "header") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TvHeading(state.library.name, large = true)
+                // Shuffle all is an action, not a section, so it sits with the heading rather than among the tabs.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TvHeading(state.library.name, Modifier.weight(1f), large = true)
+                    Button(
+                        onClick = {
+                            vm.shuffleAll { tracks ->
+                                account.musicPlay(
+                                    tracks,
+                                    null,
+                                    "shuffle:${state.library.id}",
+                                    "Shuffle all",
+                                    shuffle = true
+                                )?.let(host::request)
+                            }
+                        },
+                        enabled = !state.shuffling,
+                        modifier = Modifier.testTag("music:shuffle-all")
+                    ) { Text("Shuffle all") }
+                }
                 TvNote(state.message, vm::dismissMessage)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(Modifier.testTag("music:tabs"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(MusicSection.entries) { index, entry ->
+                        val selected = entry == state.section
                         Button(
                             onClick = { vm.select(entry) },
-                            modifier = (
-                                if (index ==
-                                    0
-                                ) {
-                                    Modifier.focusRequester(firstTab)
-                                } else {
-                                    Modifier
-                                }
-                                ).testTag("music:tab:${entry.name}").semantics {
-                                stateDescription = if (entry == state.section) "Selected" else ""
-                            }
-                        ) { Text(if (entry == state.section) "${entry.title} ·" else entry.title) }
-                    }
-                    item {
-                        Button(
-                            onClick = {
-                                vm.shuffleAll { tracks ->
-                                    account.musicPlay(
-                                        tracks,
-                                        null,
-                                        "shuffle:${state.library.id}",
-                                        "Shuffle all",
-                                        shuffle = true
-                                    )?.let(host::request)
-                                }
-                            },
-                            enabled = !state.shuffling,
-                            modifier = Modifier.testTag("music:shuffle-all")
-                        ) { Text("Shuffle all") }
+                            // The selected tab keeps a ring at rest, so it reads as selected once focus has moved on.
+                            border = if (selected) musicSelectedBorder else ButtonDefaults.border(),
+                            modifier = (if (index == 0) Modifier.focusRequester(firstTab) else Modifier)
+                                .testTag("music:tab:${entry.name}")
+                                .semantics { stateDescription = if (selected) "Selected" else "" }
+                        ) { Text(entry.title) }
                     }
                 }
                 when (musicListState(section.loading, section.items.size, section.error)) {
@@ -512,6 +543,7 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
     var renaming by rememberSaveable { mutableStateOf(false) }
     var picking by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
+    var more by rememberSaveable { mutableStateOf(false) }
     val play = remember { FocusRequester() }
     LaunchedEffect(state.loading) { if (!state.loading) runCatching { play.requestFocus() } }
     fun start(shuffle: Boolean, from: MediaItem? = null) {
@@ -528,7 +560,14 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 CatalogArtwork(state.item, account, false, Modifier.size(180.dp).clip(MaterialTheme.shapes.medium))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TvHeading(state.item.name, large = true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TvHeading(state.item.name, Modifier.weight(1f), large = true)
+                        if (state.isPlaylist && state.canEdit) {
+                            Button(onClick = {
+                                editing = !editing
+                            }, modifier = Modifier.testTag("music:edit")) { Text(if (editing) "Done" else "Edit") }
+                        }
+                    }
                     val facts = listOfNotNull(
                         albumArtistLine(state.item).takeIf(String::isNotBlank),
                         state.item.productionYear?.toString(),
@@ -540,61 +579,31 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
                     }
                     TvNote(state.message, vm::dismissMessage)
                     val canPlay = state.isGenre || state.tracks.any(::trackIsAvailable)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            start(false)
-                        }, enabled = canPlay && !state.busy, modifier = Modifier.focusRequester(play).testTag("music:play")) {
-                            Text("Play")
-                        }
+                    // Play is the page's primary action: first, focused on entry, ringed at rest. The rest wait behind More.
+                    Row(Modifier.testTag("music:actions"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = { start(false) },
+                            enabled = canPlay && !state.busy,
+                            border = musicSelectedBorder,
+                            modifier = Modifier.focusRequester(play).testTag("music:play")
+                        ) { Text("Play") }
                         Button(onClick = {
                             start(true)
                         }, enabled = canPlay && !state.busy, modifier = Modifier.testTag("music:shuffle")) { Text("Shuffle") }
-                        Button(onClick = {
-                            vm.allTracks { host.playNext(account, playableMusic(account, it)) }
-                        }, enabled = canPlay && !state.busy, modifier = Modifier.testTag("music:play-next")) { Text("Play next") }
-                        Button(onClick = {
-                            vm.allTracks { host.append(account, playableMusic(account, it)) }
-                        }, enabled = canPlay && !state.busy, modifier = Modifier.testTag("music:add-queue")) { Text("Add to queue") }
                         if (!state.isGenre) {
-                            Button(onClick = {
-                                vm.favorite()
-                            }, modifier = Modifier.testTag("music:favorite")) {
-                                Text(if (state.item.userData.isFavorite) "Favorited" else "Favorite")
+                            Button(onClick = { vm.favorite() }, modifier = Modifier.testTag("music:favorite")) {
+                                Text(if (state.item.userData.isFavorite) "Remove from favorites" else "Add to favorites")
                             }
                         }
-                        if (state.tracks.isNotEmpty() && state.tracksComplete) {
-                            Button(onClick = {
-                                picking = true
-                            }, modifier = Modifier.testTag("music:add-playlist")) { Text("Add to playlist") }
-                        }
-                        Button(
-                            onClick = {
-                                vm.instantMix(state.item.id) { mix ->
-                                    account.musicPlay(
-                                        mix,
-                                        null,
-                                        "mix:${state.item.id}",
-                                        "Instant mix of ${state.item.name}"
-                                    )?.let(host::request)
-                                }
-                            },
-                            enabled = !state.busy,
-                            modifier = Modifier.testTag("music:mix")
-                        ) { Text("Instant mix") }
-                        if (state.isPlaylist && state.canEdit) {
-                            Button(onClick = { renaming = true }, modifier = Modifier.testTag("music:rename")) { Text("Rename") }
-                            Button(onClick = {
-                                editing = !editing
-                            }, modifier = Modifier.testTag("music:edit")) { Text(if (editing) "Done" else "Edit") }
-                        }
-                        if (state.isPlaylist && state.edit.phase == "unknown") Button(onClick = vm::reload) { Text("Check the playlist") }
+                        Button(onClick = { more = true }, modifier = Modifier.testTag("music:more")) { Text("More") }
                     }
+                    if (state.isPlaylist && state.edit.phase == "unknown") Button(onClick = vm::reload) { Text("Check the playlist") }
                     if (state.loading) Text("Loading…")
                     when (musicListState(state.loading, state.tracks.size + state.albums.size, state.error)) {
                         MusicListState.INACCESSIBLE -> Text("This account can't open this music.")
                         MusicListState.EXPIRED -> Text("Your session has expired. Sign in again.")
                         MusicListState.FAILED -> TvRetry(state.error?.message ?: "Couldn't load this.", vm::reload)
-                        MusicListState.EMPTY -> if (!state.isGenre) Text("Nothing here yet.")
+                        MusicListState.EMPTY -> if (!state.isGenre) Text(musicEmptyDetail(state.isAlbum))
                         else -> TvRetry(state.error?.message, vm::reload)
                     }
                 }
@@ -678,7 +687,83 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
             }
         }
     }
+    if (more) {
+        val first = remember { FocusRequester() }
+        val canPlay = state.isGenre || state.tracks.any(::trackIsAvailable)
+        val actions = musicPageActions(
+            state,
+            canPlay,
+            playNext = { vm.allTracks { host.playNext(account, playableMusic(account, it)) } },
+            addToQueue = { vm.allTracks { host.append(account, playableMusic(account, it)) } },
+            addToPlaylist = { picking = true },
+            instantMix = {
+                vm.instantMix(state.item.id) { mix ->
+                    account.musicPlay(mix, null, "mix:${state.item.id}", "Instant mix of ${state.item.name}")?.let(host::request)
+                }
+            },
+            rename = { renaming = true }
+        )
+        TvDialog(state.item.name, { more = false }) {
+            LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                itemsIndexed(actions) { index, action ->
+                    Button(
+                        onClick = {
+                            more = false
+                            action.run()
+                        },
+                        enabled = action.enabled,
+                        modifier = (if (index == 0) Modifier.focusRequester(first) else Modifier).testTag(action.tag)
+                    ) { Text(action.label) }
+                }
+            }
+            LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+        }
+    }
     if (picking) TvPlaylistPicker(account, state.tracks.filter(::trackIsAvailable).map(MediaItem::id)) { picking = false }
+}
+
+/** One of a music page's secondary actions, behind its More button on TV and phone alike. */
+internal class MusicPageAction(val label: String, val tag: String, val enabled: Boolean, val run: () -> Unit)
+
+/** What a music page's More holds, in order: the same list on every platform, so TV and phone never drift. */
+internal fun musicPageActions(
+    state: MusicDetailState,
+    canPlay: Boolean,
+    playNext: () -> Unit,
+    addToQueue: () -> Unit,
+    addToPlaylist: () -> Unit,
+    instantMix: () -> Unit,
+    rename: () -> Unit
+): List<MusicPageAction> = buildList {
+    add(MusicPageAction("Play next", "music:play-next", canPlay && !state.busy, playNext))
+    add(MusicPageAction("Add to queue", "music:add-queue", canPlay && !state.busy, addToQueue))
+    if (state.tracks.isNotEmpty() && state.tracksComplete) {
+        add(MusicPageAction("Add to playlist", "music:add-playlist", true, addToPlaylist))
+    }
+    add(MusicPageAction("Instant mix", "music:mix", !state.busy, instantMix))
+    if (state.isPlaylist && state.canEdit) add(MusicPageAction("Rename", "music:rename", true, rename))
+}
+
+/** An album page with nothing playable says so; other pages are simply empty. */
+internal fun musicEmptyDetail(album: Boolean): String = if (album) "No playable tracks in this album." else "Nothing here yet."
+
+@Composable
+internal fun TvTransport(host: MusicHost, playing: Boolean, outputActive: Boolean, toggle: FocusRequester) {
+    Button(onClick = host::previous, modifier = Modifier.testTag("music:previous")) { Text("Previous") }
+    Button(onClick = host::toggle, modifier = Modifier.width(MusicToggleWidth).focusRequester(toggle).testTag("music:toggle")) {
+        Text(if (playing) "Pause" else "Play")
+    }
+    Button(onClick = host::next, enabled = host.hasNext(), modifier = Modifier.testTag("music:next")) { Text("Next") }
+    Button(onClick = host::stop, enabled = outputActive, modifier = Modifier.testTag("music:stop")) { Text("Stop") }
+}
+
+@Composable
+private fun TvModes(host: MusicHost, repeat: String, shuffled: Boolean, onPlaylist: () -> Unit) {
+    Button(onClick = host::cycleRepeat, modifier = Modifier.testTag("music:repeat")) { Text(musicRepeatLabel(repeat)) }
+    Button(onClick = host::toggleShuffle, modifier = Modifier.testTag("music:shuffle-mode")) {
+        Text(if (shuffled) "Shuffle: on" else "Shuffle: off")
+    }
+    Button(onClick = onPlaylist, modifier = Modifier.testTag("music:now:playlist")) { Text("Add to playlist") }
 }
 
 /** Art and controls on the left, the queue on the right. Left and Right on the seek button move in ten-second steps. */
@@ -775,32 +860,14 @@ internal fun TvMusicNow(host: MusicHost, onBack: () -> Unit) {
                 }
             }
             item {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = host::previous, modifier = Modifier.testTag("music:previous")) { Text("Previous") }
-                    Button(onClick = host::toggle, modifier = Modifier.focusRequester(toggle).testTag("music:toggle")) {
-                        Text(if (ui.isPlaying) "Pause" else "Play")
+                // Two fixed rows: the transport, then the modes. Nothing reflows when a label changes.
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.testTag("music:transport"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TvTransport(host, ui.isPlaying, ui.outputActive, toggle)
                     }
-                    Button(onClick = host::next, enabled = host.hasNext(), modifier = Modifier.testTag("music:next")) { Text("Next") }
-                    Button(onClick = host::stop, enabled = ui.outputActive, modifier = Modifier.testTag("music:stop")) { Text("Stop") }
-                    Button(onClick = host::cycleRepeat, modifier = Modifier.testTag("music:repeat")) {
-                        Text(
-                            musicRepeatLabel(
-                                q?.repeat ?: "off"
-                            )
-                        )
+                    Row(Modifier.testTag("music:modes"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TvModes(host, q?.repeat ?: "off", q?.shuffled == true) { picking = true }
                     }
-                    Button(onClick = host::toggleShuffle, modifier = Modifier.testTag("music:shuffle-mode")) {
-                        Text(
-                            if (q?.shuffled ==
-                                true
-                            ) {
-                                "Shuffle: on"
-                            } else {
-                                "Shuffle: off"
-                            }
-                        )
-                    }
-                    Button(onClick = { picking = true }, modifier = Modifier.testTag("music:now:playlist")) { Text("Add to playlist") }
                 }
             }
             ui.output?.let { output ->
@@ -836,9 +903,9 @@ internal fun TvMusicNow(host: MusicHost, onBack: () -> Unit) {
                         enabled = ui.upNext.isNotEmpty(),
                         modifier = Modifier.testTag("music:clear-upcoming")
                     ) {
-                        Text("Clear")
+                        Text("Clear up next")
                     }
-                    Button(onClick = host::clear, modifier = Modifier.testTag("music:clear")) { Text("End queue") }
+                    Button(onClick = host::clear, modifier = Modifier.testTag("music:clear")) { Text("Stop and clear") }
                 }
             }
             if (ui.upNext.isEmpty()) item { Text("Nothing after this one.", color = MusicMuted) }
