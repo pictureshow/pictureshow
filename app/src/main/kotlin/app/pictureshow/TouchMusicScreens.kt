@@ -499,9 +499,10 @@ internal fun TouchMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen:
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TouchCatalogHeading(state.item.name, Modifier.weight(1f), section = true)
                             if (state.isPlaylist && state.canEdit) {
-                                TextButton(onClick = { editing = !editing }, modifier = Modifier.heightIn(min = 48.dp).testTag("music:edit")) {
-                                    Text(if (editing) "Done" else "Edit")
-                                }
+                                TextButton(
+                                    onClick = { editing = !editing },
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("music:edit")
+                                ) { Text(if (editing) "Done" else "Edit") }
                             }
                         }
                         albumArtistLine(state.item).takeIf(String::isNotBlank)?.let { Text(it) }
