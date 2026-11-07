@@ -35,9 +35,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
-import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -1108,19 +1108,19 @@ private class FocusedInScroller {
  *
  * onFocusedBoundsChanged is deprecated with a note that it will become a no-op. Its replacement is on
  * FocusTargetModifierNode, which would add a focus level to every scroller. If it does go, the inPlaceFontChange tests fail.
- * A change of [layoutKey] reveals the same way: the caller's way of saying a head moved in or out of the scroller.
+ * A change of [key] reveals the same way: the caller's way of saying a head moved in or out of the scroller.
  */
 @Suppress("DEPRECATION")
 @OptIn(ExperimentalFoundationApi::class)
-internal fun Modifier.revealFocusAfterFontChange(scroller: ScrollableState, topInset: Dp = 0.dp, layoutKey: Any? = null): Modifier = composed {
+internal fun Modifier.revealFocusAfterFontChange(scroller: ScrollableState, topInset: Dp = 0.dp, key: Any? = null): Modifier = composed {
     val density = LocalDensity.current
     val margin = with(density) { FocusedCardMargin.toPx() }
     val inset = with(density) { topInset.toPx() }
     val tracked = remember { FocusedInScroller() }
-    var revealedFor by remember { mutableStateOf(density.fontScale to layoutKey) }
-    LaunchedEffect(density.fontScale, layoutKey) {
-        if ((density.fontScale to layoutKey) == revealedFor) return@LaunchedEffect
-        revealedFor = density.fontScale to layoutKey
+    var revealedFor by remember { mutableStateOf(density.fontScale to key) }
+    LaunchedEffect(density.fontScale, key) {
+        if ((density.fontScale to key) == revealedFor) return@LaunchedEffect
+        revealedFor = density.fontScale to key
         // The grown layout is in place after the frame this composition belongs to.
         repeat(2) { withFrameNanos { } }
         val viewport = tracked.viewport?.takeIf { it.isAttached } ?: return@LaunchedEffect

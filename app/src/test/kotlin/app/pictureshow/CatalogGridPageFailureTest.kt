@@ -67,8 +67,7 @@ class CatalogGridPageFailureTest {
     private fun film(index: Int) = MediaItem("film-$index", "Film", "Movie")
 
     /** 30 cards of 60: the page after them is what fails. */
-    private inner class Pages :
-        CatalogService by CatalogModelsTest.FakeCatalog() {
+    private inner class Pages : CatalogService by CatalogModelsTest.FakeCatalog() {
         val asked = mutableListOf<Int>()
         var next: suspend () -> ClientResult<ItemPage> = { failure }
         override suspend fun items(account: Account, query: BrowseQuery): ClientResult<ItemPage> {
@@ -177,7 +176,8 @@ class CatalogGridPageFailureTest {
         pages.next = { answer.await() }
         press(Key.DirectionCenter)
         assertEquals("grid:page-retry", focusedTag())
-        assertEquals("Loading…", compose.onNodeWithTag("grid:page-failure").fetchSemanticsNode().config[SemanticsProperties.Text].joinToString(""))
+        val line = compose.onNodeWithTag("grid:page-failure").fetchSemanticsNode().config[SemanticsProperties.Text]
+        assertEquals("Loading…", line.joinToString(""))
         press(Key.DirectionCenter)
         assertEquals(listOf(0, 30, 30), pages.asked, "A second press while one is in flight asks for nothing")
         answer.complete(secondPage)
@@ -198,6 +198,8 @@ class CatalogGridPageFailureTest {
 
     @Test fun upFromRetryReturnsToTheCardItCameFrom() {
         show()
+        // A column away from Retry, so a nearest-thing search would land somewhere else.
+        repeat(3) { press(Key.DirectionRight) }
         walkToLastRow()
         val from = focusedTag()
         press(Key.DirectionDown)
@@ -205,6 +207,22 @@ class CatalogGridPageFailureTest {
         assertEquals(from, focusedTag())
         press(Key.DirectionDown)
         assertEquals("grid:page-retry", focusedTag())
+    }
+
+    @Test fun upFromTheFirstRowStillReachesTheSelectedSortWithAPageFailed() {
+        show()
+        repeat(3) { press(Key.DirectionRight) }
+        walkToLastRow()
+        press(Key.DirectionDown)
+        assertEquals("grid:page-retry", focusedTag())
+        press(Key.DirectionUp)
+        var guard = 0
+        while (focusedTag().substringAfter("film-").toInt() > 4) {
+            press(Key.DirectionUp)
+            assertTrue(guard++ < 20, "Never reached the first row")
+        }
+        press(Key.DirectionUp)
+        assertEquals("grid:sort:SortName", focusedTag())
     }
 
     @Test fun downOnRetryStaysThere() {
@@ -247,7 +265,7 @@ class CatalogGridPageFailureTest {
         assertEquals("grid:page-retry", focusedTag())
     }
 
-    @Test fun theFooterReachesThroughAtTheLargestScrollWithoutClippingRetry() {
+    @Test fun retryIsWholeOnScreen() {
         show()
         walkToLastRow()
         press(Key.DirectionDown)

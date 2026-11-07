@@ -83,6 +83,7 @@ class CatalogGridLargeFontTest {
             "Movie"
         )
     }
+    private val hugeFont = 2.4f
     private var fontScale by mutableFloatStateOf(1f)
 
     private fun show(items: List<MediaItem> = films, scale: Float = 1f) {
@@ -552,7 +553,10 @@ class CatalogGridLargeFontTest {
     private fun showSearch(scale: Float = 1.3f, rows: List<HomeRow> = longRows.take(1)) =
         showLarge(scale) { SearchScreen(SearchState("film", rows, completed = true), account, false, {}, {}, {}, {}, {}, {}) }
 
-    private fun showPerson(items: List<MediaItem> = longTitles) = showLarge {
+    private val threeRowsOfLongTitles =
+        longTitles + longTitles.map { it.copy(id = it.id + "-more") } + longTitles.map { it.copy(id = it.id + "-last") }
+
+    private fun showPerson(items: List<MediaItem> = longTitles, scale: Float = 1.3f) = showLarge(scale) {
         val person = MediaItem("person", "A Person", "Person")
         PersonScreen(PersonState(CatalogGridState(account, person, items, items.size), person), {}, {}, {}, {})
     }
@@ -589,6 +593,59 @@ class CatalogGridLargeFontTest {
         assertFocusedCardWhole("the first row", clippedBy = "search:results")
         press(Key.DirectionUp)
         assertFocus("search:field")
+    }
+
+    // Past the largest setting a row outgrows the screen: the row after it isn't composed, and the head scrolls right off.
+    @Test fun aScreenReaderCrossesRowsTallerThanTheScreenToTheField() {
+        accessibility.setScreenReader(true)
+        showSearch(scale = hugeFont, rows = longRows)
+        val first = focusedTag()
+        press(Key.DirectionDown)
+        val second = focusedTag()
+        assertTrue(second != first, "Down left the first row")
+        press(Key.DirectionDown)
+        assertTrue(focusedTag() != second, "Down reached the third row")
+        press(Key.DirectionUp)
+        assertFocus(second)
+        press(Key.DirectionUp)
+        assertFocus(first)
+        press(Key.DirectionUp)
+        assertFocus("search:field")
+    }
+
+    @Test fun backFromADeepRowReachesTheFieldAfterTheHeadHasScrolledAway() {
+        accessibility.setScreenReader(true)
+        showSearch(scale = hugeFont, rows = longRows)
+        repeat(2) { press(Key.DirectionDown) }
+        compose.onNodeWithTag("search:field").assertDoesNotExist()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        settle()
+        assertFocus("search:field")
+    }
+
+    @Test fun aScreenReaderReachesBackFromADeepPersonRowAtAHugeFont() {
+        accessibility.setScreenReader(true)
+        showPerson(threeRowsOfLongTitles, hugeFont)
+        val first = focusedTag()
+        var guard = 0
+        while (compose.onAllNodes(hasTestTag("person:back")).fetchSemanticsNodes().isNotEmpty()) {
+            press(Key.DirectionDown)
+            assertTrue(guard++ < 8, "The head never left")
+        }
+        while (focusedTag() != first) {
+            press(Key.DirectionUp)
+            assertTrue(guard++ < 16, "Never got back to the first card")
+        }
+        press(Key.DirectionUp)
+        assertFocus("person:back")
+    }
+
+    @Test fun aScreenReaderReachesBackFromACardThatPushedTheHeadOffAtAHugeFont() {
+        accessibility.setScreenReader(true)
+        showPerson(scale = hugeFont)
+        press(Key.DirectionUp)
+        assertFocus("person:back")
+        compose.onNodeWithTag("person:name").assertIsDisplayed()
     }
 
     @Test fun personHasItsHeadInTheGridForAScreenReader() {
@@ -660,7 +717,7 @@ class CatalogGridLargeFontTest {
     }
 
     @Test fun aReaderTurnedOnAndOffKeepsTheCardOnPerson() {
-        showPerson(longTitles + longTitles.map { it.copy(id = it.id + "-more") } + longTitles.map { it.copy(id = it.id + "-last") })
+        showPerson(threeRowsOfLongTitles)
         press(Key.DirectionDown)
         flipReaderBothWays(null)
     }
@@ -687,6 +744,16 @@ class CatalogGridLargeFontTest {
         accessibility.setScreenReader(false)
         settle()
         assertEquals("person:back", focusedTag(), "reader turned off")
+    }
+
+    @Test fun aReaderTurnedOnKeepsPersonsBackInViewAtAHugeFont() {
+        showPerson(scale = hugeFont)
+        press(Key.DirectionUp)
+        assertFocus("person:back")
+        accessibility.setScreenReader(true)
+        settle()
+        assertEquals("person:back", focusedTag(), "reader turned on")
+        compose.onNodeWithTag("person:name").assertIsDisplayed()
     }
 
     @Test fun aReaderTurnedOnKeepsWhatTheFieldHolds() {
