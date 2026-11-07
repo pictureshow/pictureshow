@@ -39,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -72,6 +73,9 @@ class MusicHostTest {
     private var remote: String? = null
     private var services = 0
 
+    private var itemsGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    private var checkGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
     private inner class Gateway : MusicGateway {
         override suspend fun negotiate(account: Account, media: String, ceiling: Int): ClientResult<PlayOutcome> {
             negotiated += media
@@ -99,13 +103,19 @@ class MusicHostTest {
             log += "stop ${info.itemId}" + if (info.failed) " failed" else ""
         }
 
-        override suspend fun check(account: Account, media: List<String>) = ClientResult.Success(media.filter { it !in gone })
+        override suspend fun check(account: Account, media: List<String>): ClientResult<List<String>> {
+            checkGate?.await()
+            return ClientResult.Success(media.filter { it !in gone })
+        }
 
-        override suspend fun items(account: Account, media: List<String>) = ClientResult.Success(
-            media.map {
-                MediaItem(id = it, name = "Title $it", type = if (it.startsWith("v")) "Movie" else "Audio", runTimeTicks = 1_000_000)
-            }
-        )
+        override suspend fun items(account: Account, media: List<String>): ClientResult<List<MediaItem>> {
+            itemsGate?.await()
+            return ClientResult.Success(
+                media.map {
+                    MediaItem(id = it, name = "Title $it", type = if (it.startsWith("v")) "Movie" else "Audio", runTimeTicks = 1_000_000)
+                }
+            )
+        }
     }
 
     private class Memory : TextPersistence {
@@ -220,7 +230,7 @@ class MusicHostTest {
     private fun tracks(vararg ids: String) = ids.map { MusicTrack(it, "Title $it", durationTicks = 1_000_000) }
 
     private fun album(vararg ids: String, start: Int? = null, context: String = "album", shuffle: Boolean = false) =
-        MusicPlay(tracks(*ids), start, context, "Album", shuffle)
+        MusicPlay(account.key, tracks(*ids), start, context, "Album", shuffle)
 
     private fun ready(host: MusicHost) = until("the host to know the account") { host.state.value.account != null }
 
@@ -368,7 +378,7 @@ class MusicHostTest {
         music.request(album("a"))
         until("playing") { "start a" in log }
         val heard = log.count { it == "start a" }
-        music.append(tracks("z"))
+        music.append(account, tracks("z"))
         until("the row") { music.state.value.queue!!.entries.size == 2 }
         assertEquals("a", music.state.value.current!!.track.id)
         assertTrue(log.count { it == "start a" } >= heard)
@@ -383,7 +393,7 @@ class MusicHostTest {
         blocked.writeText("a file where the folder should be")
         val music = host()
         ready(music)
-        music.append(tracks("a"))
+        music.append(account, tracks("a"))
         until("the failure") { music.state.value.canRetrySave }
         assertEquals("Couldn't save the queue on this device, so that change didn't apply.", music.state.value.message)
         assertNull(music.state.value.current)
@@ -431,11 +441,84 @@ class MusicHostTest {
         music.request(album("a", "b"))
         music.pause()
         until("the next track prepared") { lastPlayer?.mediaItemCount == 2 }
-        music.playNext(listOf(MusicTrack("c", "Title c")))
+        music.playNext(account, listOf(MusicTrack("c", "Title c")))
         until("the row") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b") }
         music.play()
         until("all three") { "stop b" in log }
         assertEquals(listOf("start a", "stop a", "start c", "stop c", "start b", "stop b"), log)
+    }
+
+    private val other get() = Account(account.server, User("w", "Other viewer"), "other-token")
+
+    private fun switchTo(next: Account, music: MusicHost) {
+        runBlocking { accounts.remember(next) }
+        until("the switch") { music.state.value.account?.key == next.key }
+    }
+
+    @Test fun aPhonesAdditionStillBeingReadWhenTheAccountChangesStaysOutOfTheNextQueue() {
+        val music = host()
+        ready(music)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { itemsGate = it }
+        assertTrue(music.remoteBridge.enqueue(listOf("a"), next = false))
+        pump(50)
+        switchTo(other, music)
+        gate.complete(Unit)
+        pump(300)
+        assertEquals(null, music.state.value.queue!!.entries.firstOrNull()?.media)
+        assertTrue(music.state.value.message == null, "Nothing claims it was added")
+    }
+
+    @Test fun aPhonesPlayStillBeingReadWhenTheAccountChangesStaysOutOfTheNextQueue() {
+        val music = host()
+        ready(music)
+        val first = account
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { itemsGate = it }
+        val opening = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate).launch { music.openFromRemote(first, listOf("a"), 0) }
+        pump(50)
+        switchTo(other, music)
+        gate.complete(Unit)
+        until("the read") { opening.isCompleted }
+        pump(300)
+        assertTrue(negotiated.isEmpty(), "Nothing of the old account's was opened")
+        assertEquals(null, music.state.value.queue!!.entries.firstOrNull()?.media)
+    }
+
+    @Test fun whatAScreenReadForTheOldAccountStaysOutOfTheNextQueue() {
+        val music = host()
+        ready(music)
+        val stale = album("a")
+        switchTo(other, music)
+        music.request(stale)
+        music.playHere(stale)
+        music.playNext(account, tracks("b"))
+        music.append(account, tracks("c"))
+        pump(300)
+        assertTrue(negotiated.isEmpty())
+        assertEquals(null, music.state.value.prompt)
+        assertEquals(null, music.state.value.queue!!.entries.firstOrNull()?.media)
+    }
+
+    /** A step asked for under one account, held up behind a slow one, must not run against the account that follows. */
+    @Test fun aStepWaitingBehindASwitchDoesNotTouchTheNextAccount() {
+        val music = host()
+        ready(music)
+        music.append(account, tracks("a"))
+        until("the saved queue") { music.state.value.queue?.entries?.size == 1 }
+        switchTo(other, music)
+        music.append(other, tracks("x"))
+        until("the other queue") { music.state.value.queue?.entries?.size == 1 }
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>().also { checkGate = it }
+        // Restoring the first account holds the road; the switch back and a Clear asked for before it wait behind.
+        runBlocking { accounts.select(account.key) }
+        pump(100)
+        runBlocking { accounts.select(other.key) }
+        pump(100)
+        music.clear()
+        gate.complete(Unit)
+        checkGate = null
+        until("back on the other account") { music.state.value.account?.key == other.key }
+        pump(300)
+        assertEquals(listOf("x"), music.state.value.queue!!.entries.map { it.media })
     }
 
     @Test fun aPausedQueueStaysPausedWhenTheListenerSkips() {
@@ -458,7 +541,7 @@ class MusicHostTest {
     @Test fun addingToAnEmptyQueueWaitsForPlay() {
         val music = host()
         ready(music)
-        music.append(tracks("a"))
+        music.append(account, tracks("a"))
         until("the row") { music.state.value.current != null }
         pump(100)
         assertTrue(music.state.value.queue!!.paused)

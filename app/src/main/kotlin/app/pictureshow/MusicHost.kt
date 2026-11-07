@@ -88,6 +88,8 @@ internal data class MusicRow(val entry: String, val track: MusicTrack)
 internal data class MusicPrompt(val kind: String, val play: MusicPlay, val destination: String? = null)
 
 internal data class MusicPlay(
+    /** The account these tracks were read for. A play that outlives its account is dropped, not put in the next one's queue. */
+    val owner: String,
     val tracks: List<MusicTrack>,
     val start: Int?,
     val context: String?,
@@ -233,9 +235,12 @@ internal class MusicHost(
     private var ticker: Job? = null
     private var ceiling = 0
     private var endedHandled = false
+    private var binding = 0L
 
+    /** A step belongs to the account that was bound when it was asked for; once another is bound it no longer runs. */
     private fun enqueue(job: suspend () -> Unit) {
-        jobs.trySend(job)
+        val asked = binding
+        jobs.trySend { if (asked == binding) job() }
     }
 
     // Accounts
@@ -252,6 +257,7 @@ internal class MusicHost(
             return
         }
         account = next
+        binding++
         reports = MusicReportState()
         session = MusicSessionState()
         playContext = null
@@ -290,6 +296,7 @@ internal class MusicHost(
     // What the screens and the session call.
 
     fun request(play: MusicPlay) = enqueue {
+        if (play.owner != account?.key) return@enqueue
         val q = queue.committed
         val decision = musicPlayDecision(
             MusicPlayRequest(
@@ -333,7 +340,14 @@ internal class MusicHost(
         if (chosen?.type != "Audio") return false
         val tracks = ids.mapNotNull(rows::get).filter { it.type == "Audio" }
         val play =
-            MusicPlay(tracks.map(account::musicTrack), tracks.indexOf(chosen), "remote:${ids.joinToString(",").hashCode()}", null, false)
+            MusicPlay(
+                account.key,
+                tracks.map(account::musicTrack),
+                tracks.indexOf(chosen),
+                "remote:${ids.joinToString(",").hashCode()}",
+                null,
+                false
+            )
         enqueue { start(play) }
         return true
     }
@@ -352,6 +366,7 @@ internal class MusicHost(
     }
 
     private suspend fun start(play: MusicPlay) {
+        if (play.owner != account?.key) return
         val limited = play.tracks.take(MUSIC_QUEUE_LIMIT)
         if (limited.isEmpty()) return
         val entries = musicEntries(limited.map(MusicTrack::id), sequence)
@@ -382,7 +397,8 @@ internal class MusicHost(
         if (limited.size < play.tracks.size) publish { it.copy(message = "Playing the first $MUSIC_QUEUE_LIMIT tracks.") }
     }
 
-    private fun add(items: List<MusicTrack>, op: String) = enqueue {
+    private fun add(owner: Account, items: List<MusicTrack>, op: String) = enqueue {
+        if (owner.key != account?.key) return@enqueue
         val limited = items.take((MUSIC_QUEUE_LIMIT - queue.committed.entries.size).coerceAtLeast(0))
         if (limited.isEmpty()) {
             if (items.isNotEmpty()) publish { it.copy(message = "The queue is full.") }
@@ -407,9 +423,9 @@ internal class MusicHost(
         publish { it.copy(message = if (count == 1) "Added ${limited[0].title} to the queue." else "Added $count tracks to the queue.") }
     }
 
-    fun playNext(items: List<MusicTrack>) = add(items, "play-next")
+    fun playNext(owner: Account, items: List<MusicTrack>) = add(owner, items, "play-next")
 
-    fun append(items: List<MusicTrack>) = add(items, "append")
+    fun append(owner: Account, items: List<MusicTrack>) = add(owner, items, "append")
 
     fun remove(entry: String) = enqueue {
         commit { QueueEvent("remove", revision = it.revision, generation = it.generation, entry = entry) }
@@ -1017,7 +1033,7 @@ internal class MusicHost(
                 // Only tracks join a music queue; the reply to the phone is the queue it reads back.
                 val rows = (gateway.items(active, items) as? ClientResult.Success)?.value?.associateBy(MediaItem::id) ?: return@launch
                 val tracks = items.mapNotNull(rows::get).filter { it.type == "Audio" }.map(active::musicTrack)
-                if (next) playNext(tracks) else append(tracks)
+                if (next) playNext(active, tracks) else append(active, tracks)
             }
             return true
         }
@@ -1046,7 +1062,8 @@ internal class MusicHost(
             accounts.snapshots.distinctUntilChangedBy { it.currentAccount?.key to it.currentAccount?.accessToken }.collect { snapshot ->
                 val next = snapshot.currentAccount
                 val known = snapshot.accounts.map(Account::key).toSet()
-                enqueue { bind(next, known) }
+                // The one step that always runs: it is what moves the queue to the next account.
+                jobs.trySend { bind(next, known) }
             }
         }
     }

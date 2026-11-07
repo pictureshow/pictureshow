@@ -303,8 +303,8 @@ private fun TvMusicTrackRow(
         val first = remember { FocusRequester() }
         TvDialog(item.name, { menu = false }) {
             val actions = buildList {
-                add("Play next" to { host.playNext(listOf(track)) })
-                add("Add to queue" to { host.append(listOf(track)) })
+                add("Play next" to { host.playNext(account, listOf(track)) })
+                add("Add to queue" to { host.append(account, listOf(track)) })
                 add("Add to playlist" to { picking = true })
                 onFavorite?.let { add((if (item.userData.isFavorite) "Remove from favorites" else "Add to favorites") to it) }
                 item.albumId?.let { album ->
@@ -463,7 +463,7 @@ internal fun TvMusicLibrary(vm: MusicLibraryViewModel, host: MusicHost, onOpen: 
             if (item.type == "Audio") GridItemSpan(maxLineSpan) else GridItemSpan(1)
         }) { _, item ->
             if (item.type == "Audio") {
-                TvMusicTrackRow(item, null, account, host, onPlay = {
+                TvMusicTrackRow(item, null, account, host, number = "", onPlay = {
                     val tracks = section.items.filter { it.type == "Audio" }
                     account.musicPlay(tracks, item, "${state.section.name}:${state.library.id}", state.section.title)?.let(host::request)
                 }, onOpen = onOpen, onFavorite = null)
@@ -531,10 +531,10 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
                             start(true)
                         }, enabled = canPlay && !state.busy, modifier = Modifier.testTag("music:shuffle")) { Text("Shuffle") }
                         Button(onClick = {
-                            vm.allTracks { host.playNext(playableMusic(account, it)) }
+                            vm.allTracks { host.playNext(account, playableMusic(account, it)) }
                         }, enabled = canPlay && !state.busy, modifier = Modifier.testTag("music:play-next")) { Text("Play next") }
                         Button(onClick = {
-                            vm.allTracks { host.append(playableMusic(account, it)) }
+                            vm.allTracks { host.append(account, playableMusic(account, it)) }
                         }, enabled = canPlay && !state.busy, modifier = Modifier.testTag("music:add-queue")) { Text("Add to queue") }
                         if (!state.isGenre) {
                             Button(onClick = {
@@ -619,24 +619,26 @@ internal fun TvMusicDetail(vm: MusicDetailViewModel, host: MusicHost, onOpen: (M
                     } else {
                         emptyList()
                     }
-                    TvMusicTrackRow(
-                        row,
-                        albumArtistLine(state.item).ifBlank {
-                            null
-                        },
-                        account,
-                        host,
-                        { start(false, row) },
-                        onOpen,
-                        { vm.favorite(row.id) },
-                        edits,
-                        musicRowNumber(state.item, index)
-                    )
-                    // Edit shows the row's changes where they're used, as well as in its More list.
-                    if (edits.isNotEmpty()) {
-                        Row(Modifier.fillMaxWidth().padding(start = 56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            edits.forEach { (name, run) ->
-                                Button(onClick = run, modifier = Modifier.testTag("music:edit:$name:$entry")) { Text(name) }
+                    Column {
+                        TvMusicTrackRow(
+                            row,
+                            albumArtistLine(state.item).ifBlank {
+                                null
+                            },
+                            account,
+                            host,
+                            { start(false, row) },
+                            onOpen,
+                            { vm.favorite(row.id) },
+                            edits,
+                            musicRowNumber(state.item, index)
+                        )
+                        // Edit shows the row's changes where they're used, as well as in its More list.
+                        if (edits.isNotEmpty()) {
+                            Row(Modifier.fillMaxWidth().padding(start = 56.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                edits.forEach { (name, run) ->
+                                    Button(onClick = run, modifier = Modifier.testTag("music:edit:$name:$entry")) { Text(name) }
+                                }
                             }
                         }
                     }

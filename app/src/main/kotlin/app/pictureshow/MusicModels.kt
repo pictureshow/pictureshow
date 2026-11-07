@@ -555,7 +555,7 @@ internal fun Account.musicPlay(
         it >=
             0
     }
-    return MusicPlay(playable.map(::musicTrack), index, context, contextName, shuffle)
+    return MusicPlay(key, playable.map(::musicTrack), index, context, contextName, shuffle)
 }
 
 internal fun formatMusicTime(ms: Long): String {
