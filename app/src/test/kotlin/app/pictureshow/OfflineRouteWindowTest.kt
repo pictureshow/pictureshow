@@ -121,8 +121,10 @@ class OfflineRouteWindowTest {
     @Test fun theTvDownloadedPlayersRouteEndsMusic() =
         endsMusicBeforeThePlayerExists("offline-player?entry=${Uri.encode("e2:original")}", tv = true)
 
-    @Test fun theTvStreamRouteEndsMusic() =
-        endsMusicBeforeThePlayerExists("online-player?entry=${Uri.encode("e1:original")}&start=0", tv = true)
+    @Test fun theTvStreamRouteEndsMusic() = endsMusicBeforeThePlayerExists(
+        "online-player?entry=${Uri.encode("e1:original")}&start=0",
+        tv = true
+    )
 
     @Test fun theDownloadedPlayersRouteHoldsTheRotationBeforeItsPlayerExists() =
         holdsThroughTheGap("offline-player?entry=${Uri.encode("e2:original")}")
