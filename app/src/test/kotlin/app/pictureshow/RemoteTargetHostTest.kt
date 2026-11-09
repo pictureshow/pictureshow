@@ -120,7 +120,7 @@ class RemoteTargetHostTest {
         }
         fun watching(item: String = film, paused: Boolean = false) {
             host.setPlayer(token, player)
-            host.report(RemoteViewing(item, true, 10_000_000, 1_000, paused, true))
+            host.report(token, RemoteViewing(item, true, 10_000_000, 1_000, paused, true))
         }
     }
 
@@ -396,9 +396,9 @@ class RemoteTargetHostTest {
         assertTrue(rig.host.queueRevision > before)
         rig.message(this, state("n", "NextTrack"))
         assertEquals("next:$second", rig.player.calls.last())
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 0, false, true))
         assertEquals(third, rig.host.upcoming)
-        rig.host.report(RemoteViewing(film, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(film, true, 10_000_000, 0, false, true))
         assertNull(rig.host.upcoming, "a title opened by hand ends the queue")
     }
 
@@ -414,12 +414,44 @@ class RemoteTargetHostTest {
         assertEquals(third, rig.host.upcoming)
         rig.message(this, state("n", "NextTrack"))
         assertEquals("next:$third", rig.player.calls.last())
-        rig.host.report(RemoteViewing(third, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(third, true, 10_000_000, 0, false, true))
         assertEquals(second, rig.host.upcoming)
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 0, false, true))
         assertEquals(fourth, rig.host.upcoming, "the added episode played once, at the added place")
-        rig.host.report(RemoteViewing(fourth, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(fourth, true, 10_000_000, 0, false, true))
         assertNull(rig.host.upcoming)
+    }
+
+    /**
+     * rc33 projector, queue sequence 3: Play on e1 while e2 still played, Add a movie, Play next e5. The player being
+     * replaced reported once more after e1's player took over; that read as the queue moving to e2 and then away from it,
+     * which cleared the queue, so e1 was adopted without its series and the play-next tail came after the movie.
+     */
+    @Test fun theTitleBeingReplacedCannotMoveOrEndTheQueueOfItsSuccessor() = runTest {
+        val rig = Rig(this)
+        rig.online(this)
+        val (e1, e2, e5, e6, e7) = listOf("1", "2", "5", "6", "7").map { it.repeat(32) }
+        rig.watching(e2)
+        rig.message(this, play("open", listOf(e1, e2, e5, e6, e7)))
+        val incoming = Any()
+        rig.host.setPlayer(incoming, Player())
+        rig.host.report(incoming, RemoteViewing(e1, false, 0, 0, false, false))
+        // The outgoing player's last reports, after its successor mounted: paused, then not ready as it is disposed.
+        rig.host.report(rig.token, RemoteViewing(e2, true, 10_000_000, 2_000, true, true))
+        rig.host.report(rig.token, RemoteViewing(e2, false, 10_000_000, 2_000, true, true))
+        rig.host.clearPlayer(rig.token)
+        rig.host.report(incoming, RemoteViewing(e1, true, 10_000_000, 0, false, true))
+        assertEquals(e2, rig.host.upcoming, "e1 keeps the series the server expanded it onto")
+        rig.message(this, play("add", listOf(film), "PlayLast"))
+        rig.message(this, play("next", listOf(e5, e6, e7), "PlayNext"))
+        val order = mutableListOf<String>()
+        while (true) {
+            val next = rig.host.upcoming ?: break
+            order += next
+            rig.host.report(incoming, RemoteViewing(next, true, 10_000_000, 0, false, true))
+            if (order.size > 8) break
+        }
+        assertEquals(listOf(e5, film, e2, e6, e7), order)
     }
 
     @Test fun anAdditionWhileTheNextTitleOpensJoinsItsQueueNotTheTitleBeingReplaced() = runTest {
@@ -430,9 +462,9 @@ class RemoteTargetHostTest {
         rig.message(this, play("open", listOf(second, third)))
         rig.message(this, play("add", listOf(fourth), "PlayLast"))
         assertEquals(fourth, rig.host.upcoming)
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 0, false, true))
         assertEquals(fourth, rig.host.upcoming)
-        rig.host.report(RemoteViewing(fourth, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(fourth, true, 10_000_000, 0, false, true))
         assertEquals(third, rig.host.upcoming)
     }
 
@@ -462,14 +494,14 @@ class RemoteTargetHostTest {
         rig.online(this)
         rig.watching(film)
         rig.message(this, play("a", listOf(second), "PlayNext"))
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 0, false, true))
         rig.message(this, state("b", "PreviousTrack"))
         assertEquals("next:$film", rig.player.calls.last())
         rig.message(this, play("c", listOf(third), "PlayLast"))
         assertEquals(second, rig.host.upcoming, "the player is still on the later title; the queue must not adopt it")
-        rig.host.report(RemoteViewing(film, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(film, true, 10_000_000, 0, false, true))
         assertEquals(second, rig.host.upcoming)
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 0, false, true))
         assertEquals(third, rig.host.upcoming)
     }
 
@@ -478,11 +510,11 @@ class RemoteTargetHostTest {
         rig.online(this)
         rig.watching(film)
         rig.message(this, play("a", listOf(second), "PlayNext"))
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 0, false, true))
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 40_000_000, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 0, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 40_000_000, false, true))
         rig.message(this, state("b", "PreviousTrack"))
         assertEquals("seek:0", rig.player.calls.last())
-        rig.host.report(RemoteViewing(second, true, 10_000_000, 10_000_000, false, true))
+        rig.host.report(rig.token, RemoteViewing(second, true, 10_000_000, 10_000_000, false, true))
         rig.message(this, state("c", "PreviousTrack"))
         assertEquals("next:$film", rig.player.calls.last())
     }

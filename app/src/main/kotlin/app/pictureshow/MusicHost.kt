@@ -1028,7 +1028,6 @@ internal class MusicHost(
         report(MusicReportEvent("stop", ticks = currentTicks()))
         player = null
         remoteTarget()?.clearPlayer(this)
-        remoteTarget()?.report(null)
         running.removeListener(listener)
         running.stop()
         running.clearMediaItems()
@@ -1077,6 +1076,7 @@ internal class MusicHost(
             val q = queue.committed
             val media = q.entries.firstOrNull { it.id == q.current }?.media ?: return
             remoteTarget()?.report(
+                this@MusicHost,
                 app.pictureshow.core.control.RemoteViewing(
                     media,
                     ready = running.playbackState == Player.STATE_READY,
