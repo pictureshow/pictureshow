@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -323,12 +322,16 @@ private fun RemoteTargetBinding(
             }
         }
     }
-    SideEffect { remote.setPlayer(remotePlayer, remoteBridge) }
-    DisposableEffect(Unit) { onDispose { remote.clearPlayer(remotePlayer) } }
+    // Once per mount: a title being replaced may still recompose, and must not take the target back from its successor.
+    DisposableEffect(remote, remoteBridge) {
+        remote.setPlayer(remotePlayer, remoteBridge)
+        onDispose { remote.clearPlayer(remotePlayer) }
+    }
     with(host) {
         val remoteReady = !exitRequested && !switching && state.decision != null && !state.preparing && player != null && duration > 0
         LaunchedEffect(item.id, remoteReady, paused, duration, position) {
             remote.report(
+                remotePlayer,
                 app.pictureshow.core.control.RemoteViewing(
                     item = item.id,
                     ready = remoteReady,
