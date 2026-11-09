@@ -46,7 +46,7 @@ class OfflineRouteWindowTest {
     private var musicEnded = 0
 
     /** An engine that never finishes its first load, so its routes stay in the gap before a player exists. */
-    private fun inTheGap() {
+    private fun inTheGap(tv: Boolean = false) {
         if (GlobalContext.getOrNull() != null) stopKoin()
         val accounts = AccountStore(
             object : TextPersistence {
@@ -80,7 +80,11 @@ class OfflineRouteWindowTest {
             nav = rememberNavController()
             NavHost(nav, startDestination = "start") {
                 composable("start") {}
-                offlineTouchScreens(nav, { account }, { error("no player in the gap") }, { musicEnded++ })
+                if (tv) {
+                    offlineTvScreens(nav, { account }, { error("no player in the gap") }, { musicEnded++ })
+                } else {
+                    offlineTouchScreens(nav, { account }, { error("no player in the gap") }, { musicEnded++ })
+                }
             }
         }
         compose.waitForIdle()
@@ -102,8 +106,8 @@ class OfflineRouteWindowTest {
     }
 
     /** Video and music never share the speakers (MUS-11), and the gap before the player is already video's. */
-    private fun endsMusicBeforeThePlayerExists(route: String) {
-        inTheGap()
+    private fun endsMusicBeforeThePlayerExists(route: String, tv: Boolean = false) {
+        inTheGap(tv)
         assertEquals(0, musicEnded)
         compose.runOnIdle { nav.navigate(route) }
         compose.waitForIdle()
@@ -113,6 +117,12 @@ class OfflineRouteWindowTest {
     @Test fun theDownloadedPlayersRouteEndsMusic() = endsMusicBeforeThePlayerExists("offline-player?entry=${Uri.encode("e2:original")}")
 
     @Test fun theStreamRouteEndsMusic() = endsMusicBeforeThePlayerExists("online-player?entry=${Uri.encode("e1:original")}&start=0")
+
+    @Test fun theTvDownloadedPlayersRouteEndsMusic() =
+        endsMusicBeforeThePlayerExists("offline-player?entry=${Uri.encode("e2:original")}", tv = true)
+
+    @Test fun theTvStreamRouteEndsMusic() =
+        endsMusicBeforeThePlayerExists("online-player?entry=${Uri.encode("e1:original")}&start=0", tv = true)
 
     @Test fun theDownloadedPlayersRouteHoldsTheRotationBeforeItsPlayerExists() =
         holdsThroughTheGap("offline-player?entry=${Uri.encode("e2:original")}")
