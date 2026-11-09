@@ -2562,7 +2562,11 @@ fun CatalogDetail(
             }
             return@LaunchedEffect
         }
-        if (state.loading && selectedSection != "header") {
+        // A season chosen in the Seasons row reloads only the Episodes shelf under it: the focused season card stays, so
+        // the page isn't an arrival. Hiding it from TalkBack for the read dropped the reader's focus from the card, and
+        // TalkBack put it on Next up; the viewer's next Right then left the row (rc33, fast walks across 32 seasons).
+        val seasonSwitchInPlace = selectedSection == "seasons" && restored && semanticsRevealed
+        if (state.loading && selectedSection != "header" && !seasonSwitchInPlace) {
             restored = false
             semanticsRevealed = false
         }

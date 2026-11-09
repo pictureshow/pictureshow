@@ -336,6 +336,45 @@ class DetailHeaderTest {
     }
 
     @Test
+    fun seasonChosenInTheRowKeepsTheCardInTheReadersTreeWhileEpisodesLoad() {
+        val second = season.copy(id = "season-2", name = "Season 2")
+        val episodes = (1..3).map { episode.copy(id = "episode-$it", name = "Episode $it") }
+        var state by mutableStateOf(
+            CatalogDetailState(
+                account,
+                series,
+                loading = false,
+                nextUp = emptyList(),
+                seasons = listOf(season, second),
+                selectedSeasonId = season.id,
+                episodes = episodes
+            )
+        )
+        val chosen = mutableListOf<String>()
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        compose.setContent {
+            PictureshowTheme {
+                CatalogDetail(state, {}, { picked ->
+                    chosen += picked.id
+                    state = state.copy(selectedSeasonId = picked.id, loading = true, episodes = emptyList())
+                }, {}, {}, {})
+            }
+        }
+        // No Next up, so the first Down from Play lands on the first season.
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("detail:seasons:season").assertIsFocused()
+        key(Key.DirectionRight)
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(listOf("season-2"), chosen) }
+        // While the episodes read, the season card is still there for TalkBack, with input focus on it.
+        compose.onNodeWithTag("detail:seasons:season-2").assertIsFocused()
+        compose.runOnIdle { state = state.copy(loading = false, episodes = episodes) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("detail:seasons:season-2").assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
     fun allWatchedSeasonOffersRewatchFromFirstEpisode() {
         var target: String? = null
         var resumed = true
