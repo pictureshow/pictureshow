@@ -224,6 +224,39 @@ class RemoteControllerHostTest {
         assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped))
     }
 
+    // rc33: a picker start read "didn't confirm" while the TV was already starting the title, which takes it seconds.
+    @Test
+    fun aTitleTheTvStartsAfterSevenSecondsIsConfirmedNotDoubted() = runTest {
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        host.playNow(listOf("i2"))
+        runCurrent()
+        advanceTimeBy(6_000)
+        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime))
+        gateway.targets = ClientResult.Success(listOf(tv.copy(now = tv.now!!.copy(item = "i2", positionTicks = 0, paused = false))))
+        advanceTimeBy(1_500)
+        assertEquals("confirmed", host.state.value.controller!!.command!!.pending!!.result)
+        assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
+    @Test
+    fun aTitleTheTvNeverStartsIsDoubtedOnceItsWindowCloses() = runTest {
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        host.playNow(listOf("i2"))
+        runCurrent()
+        advanceTimeBy(12_500)
+        assertEquals("The TV didn't confirm that.", remoteCommandStatus(host.state.value.controller, currentTime))
+        advanceTimeBy(10_000)
+        assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
     @Test
     fun aConfirmedCommandShowsNothingAfterTheLockScreen() = runTest {
         val gateway = Gateway()
