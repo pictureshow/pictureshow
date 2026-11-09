@@ -105,7 +105,8 @@ internal fun rememberTouchDetailPresentation(
     onPlayOnTv: (MediaItem, Boolean) -> Unit,
     onPlayNext: (MediaItem) -> Unit,
     onAddToQueue: (MediaItem) -> Unit,
-    onPlayedRequest: () -> Unit
+    onPlayedRequest: () -> Unit,
+    offerTvQueue: Boolean = true
 ): TouchDetailPresentation {
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val resumed = lifecycle == Lifecycle.State.RESUMED
@@ -535,16 +536,18 @@ internal fun rememberTouchDetailPresentation(
             )
         )
         add(remote("on-tv", "Play on TV", playQueued == "on-tv", inPlaySlot = true, fromStart = false) { onPlayOnTv(it, false) })
-        add(
-            remote("play-next", "Play next on TV", "play-next" in pendingQueued, inPlaySlot = false, fromStart = false) {
-                latestOnPlayNext(it)
-            }
-        )
-        add(
-            remote("add-to-queue", "Add to TV queue", "add-to-queue" in pendingQueued, inPlaySlot = false, fromStart = false) {
-                latestOnAddToQueue(it)
-            }
-        )
+        if (offerTvQueue) {
+            add(
+                remote("play-next", "Play next on TV", "play-next" in pendingQueued, inPlaySlot = false, fromStart = false) {
+                    latestOnPlayNext(it)
+                }
+            )
+            add(
+                remote("add-to-queue", "Add to TV queue", "add-to-queue" in pendingQueued, inPlaySlot = false, fromStart = false) {
+                    latestOnAddToQueue(it)
+                }
+            )
+        }
         // Last in the grid: its arrival with fresh resume data moves no other action.
         if (position > 0 || playQueued == "on-tv-start") {
             add(

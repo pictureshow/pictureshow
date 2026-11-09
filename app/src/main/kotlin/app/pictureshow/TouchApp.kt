@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import app.pictureshow.core.AccountStore
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.Server
+import app.pictureshow.core.serverLabel
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 import org.koin.androidx.compose.koinViewModel
@@ -42,7 +44,7 @@ internal fun touchShowsNavigation(route: String?, signedIn: Boolean): Boolean = 
     route !in listOf("waiting", "servers") &&
     route?.startsWith("login?") != true &&
     route?.startsWith("quick?") != true &&
-    !isTouchPlayerRoute(route)
+    !isPlayerRoute(route)
 
 @Composable
 internal fun TouchPictureshow(
@@ -90,7 +92,7 @@ internal fun TouchPictureshow(
     var installedToken by remember { mutableStateOf(state.snapshot.currentAccount?.accessToken) }
     val route = backStackEntry?.destination?.route
     val signedIn = state.snapshot.currentAccount?.expired == false
-    val inPlayer = isTouchPlayerRoute(route)
+    val inPlayer = isPlayerRoute(route)
     val showNavigation = touchShowsNavigation(route, signedIn)
     val remote: RemoteControllerHost = koinInject()
     val remoteState by remote.state.collectAsStateWithLifecycle()
@@ -99,30 +101,62 @@ internal fun TouchPictureshow(
         remote.setForeground(true)
         onPauseOrDispose { remote.setForeground(false) }
     }
-    // What the viewer asked to play while choosing a TV. Picking runs it once; closing the picker forgets it.
-    var remotePicking by rememberSaveable { mutableStateOf(false) }
-    var remotePending by remember { mutableStateOf<(() -> Unit)?>(null) }
-    fun chooseRemote(then: (() -> Unit)?) {
-        remotePending = then
-        remotePicking = true
-        remote.setPicker(true)
+    val cast: CastSenderHost = koinInject()
+    val castState by cast.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state.snapshot.currentAccount) { cast.bind(state.snapshot.currentAccount) }
+    LifecycleResumeEffect(cast) {
+        cast.setForeground(true)
+        onPauseOrDispose { cast.setForeground(false) }
     }
-    if (remotePicking) {
-        fun close() {
-            remotePicking = false
-            remotePending = null
-            remote.setPicker(false)
+    // What the viewer asked to play while choosing. Picking runs it once; closing the chooser forgets it.
+    var remotePending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun chooseRemote(castRequest: CastPlayRequest? = null, then: (() -> Unit)?) {
+        remotePending = then
+        cast.openChooser(castRequest)
+    }
+    LaunchedEffect(castState.chooserOpen) { remote.setPicker(castState.chooserOpen) }
+    if (castState.chooserOpen) {
+        TouchPlayOnDialog(
+            remoteState,
+            castState,
+            cast,
+            attachRemote = remote::attach,
+            pendingRemote = { remotePending },
+            forgetPending = { remotePending = null },
+            openRemote = { if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote") },
+            openCast = { nav.navigate("cast") { launchSingleTop = true } }
+        )
+    }
+    val music: MusicHost = koinInject()
+    LaunchedEffect(music, cast) { music.castAttached = { cast.state.value.deviceName } }
+    TouchMusicPrompts(music) { play ->
+        val tracks = play.tracks.drop(play.start ?: 0)
+        if (remoteState.controller?.phase == "attached") {
+            remote.playNow(tracks.map(MusicTrack::id))
+        } else {
+            cast.openChooser(
+                CastPlayRequest(
+                    tracks.map { CastPlayItem(it.id, it.title, it.artUrl, it.durationTicks?.let { ticks -> ticks / 10_000 }) },
+                    onThisDevice = { music.playHere(play) }
+                )
+            )
         }
-        TouchRemotePicker(remoteState, onPick = { target ->
-            remote.attach(target)
-            remotePending?.invoke()
-            close()
-            if (nav.currentBackStackEntry?.destination?.route != "remote") nav.navigate("remote")
-        }, onDismiss = ::close)
+    }
+    TouchCastAttention(castState, cast)
+    TouchCastDroppedNotice(castState, cast)
+    // Play here, or Resume here with no player left open: the receiver's position, in a new local player.
+    LaunchedEffect(castState.localStart?.serial) {
+        val start = castState.localStart ?: return@LaunchedEffect
+        val account = state.snapshot.currentAccount
+        val item = account?.let { catalogService.item(it, start.itemId) } as? app.pictureshow.core.ClientResult.Success
+        cast.localStartHandled(start.serial)
+        item?.let { nav.navigate(playerRoute(it.value, start.positionMs)) }
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
     TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer, above = {
+        if (!inPlayer && route != MUSIC_NOW_ROUTE) TouchMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
         if (!inPlayer && route != "remote") TouchRemoteBar(remoteState, remote.now()) { nav.navigate("remote") { launchSingleTop = true } }
+        if (!inPlayer && route != "cast") TouchCastBar(castState) { nav.navigate("cast") { launchSingleTop = true } }
     }) {
         LaunchedEffect(state.snapshot.currentKey, state.snapshot.currentAccount?.expired, state.snapshot.currentAccount?.accessToken) {
             val key = state.snapshot.currentKey
@@ -173,7 +207,7 @@ internal fun TouchPictureshow(
             consumeSearchEntry()
         }
         NavHost(navController = nav, startDestination = "waiting") {
-            offlineTouchScreens(nav, { state.snapshot.currentAccount }, { catalog })
+            offlineTouchScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
             composable("waiting") { TouchPage("Pictureshow") { Text("Loading…") } }
             composable("servers") {
                 val vm: ServerViewModel = koinViewModel()
@@ -265,7 +299,8 @@ internal fun TouchPictureshow(
                     vm::password,
                     vm::signIn,
                     { nav.navigate(serverRoute("quick", server)) },
-                    { leaveLogin(nav) }
+                    { leaveLogin(nav) },
+                    state.snapshot.serverLabel(server)
                 )
             }
             composable("quick?server={server}", arguments = listOf(navArgument("server") { type = NavType.StringType })) { entry ->
@@ -278,7 +313,7 @@ internal fun TouchPictureshow(
                 val screen by vm.state.collectAsStateWithLifecycle()
                 LaunchedEffect(vm) { vm.start() }
                 SignInCompletion(screen.signedIn, entry.id, nav, state.snapshot, installedKey, installedExpired, accounts)
-                TouchQuickConnect(screen, server, vm::start) { nav.popBackStack() }
+                TouchQuickConnect(screen, server, vm::start, { nav.popBackStack() }, state.snapshot.serverLabel(server))
             }
             listOf("home", "libraries").forEach { destination ->
                 composable(destination) {
@@ -347,20 +382,54 @@ internal fun TouchPictureshow(
             ) { entry ->
                 state.snapshot.currentAccount?.let { account ->
                     val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                    // Video and music never share the speakers: the queue stays saved for a deliberate return (MUS-11).
+                    LaunchedEffect(entry) { music.beforeVideo() }
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
-                        TouchPlayerScreen(
-                            account,
-                            item,
-                            entry.arguments?.getLong("start") ?: 0,
-                            catalog,
-                            onCurrentItem,
-                            onExit = exitPlayback
-                        )
+                        CompositionLocalProvider(LocalTouchPlayerCast provides TouchPlayerCast(cast, remote)) {
+                            TouchPlayerScreen(
+                                account,
+                                item,
+                                entry.arguments?.getLong("start") ?: 0,
+                                catalog,
+                                onCurrentItem,
+                                onExit = exitPlayback
+                            )
+                        }
                     }
                 }
             }
+            composable(
+                MUSIC_ROUTE_PATTERN,
+                arguments = listOf(
+                    navArgument("item") { type = NavType.StringType },
+                    navArgument("role") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                    navArgument("library") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    }
+                )
+            ) { entry ->
+                state.snapshot.currentAccount?.let { account ->
+                    val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
+                    val library = entry.arguments?.getString("library").orEmpty()
+                    if (item.collectionType == "music") {
+                        val vm: MusicLibraryViewModel = koinViewModel(parameters = { parametersOf(account, item) })
+                        TouchMusicLibrary(vm, music, { next, role -> nav.navigate(musicRoute(next, role, item.id)) }) { nav.popBackStack() }
+                    } else {
+                        val role = entry.arguments?.getString("role").orEmpty()
+                        val vm: MusicDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, role, library, catalog) })
+                        TouchMusicDetail(vm, music, { next, nextRole ->
+                            nav.navigate(musicRoute(next, nextRole, library))
+                        }) { nav.popBackStack() }
+                    }
+                }
+            }
+            composable(MUSIC_NOW_ROUTE) { TouchMusicNow(music) { nav.popBackStack() } }
             composable("item?item={item}", arguments = listOf(navArgument("item") { type = NavType.StringType })) { entry ->
                 state.snapshot.currentAccount?.let { account ->
                     val item = remember(entry) { Json.decodeFromString<MediaItem>(requireNotNull(entry.arguments?.getString("item"))) }
@@ -395,20 +464,27 @@ internal fun TouchPictureshow(
                             onPlay = { playable, resume -> nav.navigate(playerRoute(playable, resume)) },
                             // Without a position the TV applies this viewer's own resume, which is newer than this screen.
                             onPlayOnTv = { playable, fromStart ->
-                                chooseRemote { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
+                                val startMs = if (fromStart) 0 else playable.userData.playbackPositionTicks.coerceAtLeast(0) / 10_000
+                                chooseRemote(
+                                    CastPlayRequest(
+                                        listOf(castPlayItem(account.server, playable)),
+                                        startMs = startMs,
+                                        onThisDevice = { nav.navigate(playerRoute(playable, startMs)) }
+                                    )
+                                ) { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },
                             onPlayNext = { playable ->
                                 if (remoteState.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = true)
                                 } else {
-                                    chooseRemote { remote.queue(listOf(playable.id), next = true) }
+                                    chooseRemote(then = { remote.queue(listOf(playable.id), next = true) })
                                 }
                             },
                             onAddToQueue = { playable ->
                                 if (remoteState.controller?.phase == "attached") {
                                     remote.queue(listOf(playable.id), next = false)
                                 } else {
-                                    chooseRemote { remote.queue(listOf(playable.id), next = false) }
+                                    chooseRemote(then = { remote.queue(listOf(playable.id), next = false) })
                                 }
                             },
                             onBack = { nav.popBackStack() },
@@ -416,13 +492,24 @@ internal fun TouchPictureshow(
                             onPlayedRequest = vm::playedRequested,
                             onDownload = { shown, season, seasonName ->
                                 offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
-                            }
+                            },
+                            offerTvQueue = offersTvQueue(castState, remoteState.controller?.phase == "attached")
                         )
                     }
                 }
             }
             composable("remote") {
-                TouchRemoteScreen(remoteState, remote, onChoose = { chooseRemote(null) }, onBack = { nav.popBackStack() })
+                TouchRemoteScreen(remoteState, remote, onChoose = { chooseRemote(then = null) }, onBack = { nav.popBackStack() })
+            }
+            composable("cast") {
+                // Only from this screen: Play here may already have opened a player above it.
+                TouchCastScreen(castState, cast, onBack = {
+                    if (nav.currentBackStackEntry?.destination?.route ==
+                        "cast"
+                    ) {
+                        nav.popBackStack()
+                    }
+                })
             }
             composable("settings") {
                 state.snapshot.currentAccount?.let { account ->
@@ -438,6 +525,13 @@ internal fun TouchPictureshow(
                         probe.start(::update)
                         onDispose { probe.close() }
                     }
+                    // Coming back from the Play Store is how an update gets here.
+                    LifecycleResumeEffect(cast) {
+                        cast.refreshCapability()
+                        onPauseOrDispose { }
+                    }
+                    val castStored by cast.castEnabled.collectAsStateWithLifecycle()
+                    val settingsContext = LocalContext.current
                     TouchSettings(
                         screen,
                         accepted,
@@ -449,7 +543,12 @@ internal fun TouchPictureshow(
                         { nav.navigate("supporter") },
                         onRemote = { nav.navigate("remote") },
                         onThisDevice = { nav.navigate("this-device") },
-                        onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
+                        onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                        castEnabled = castSwitchState(castState.capability, castStored),
+                        onCastEnabled = cast::setEnabled,
+                        onUpdateServices = settingsContext::openPlayServicesListing.takeIf {
+                            castState.capability.state == "services-update-required"
+                        }
                     )
                 }
             }

@@ -32,7 +32,9 @@ data class PlaybackRequest(
     val allowVideoStreamCopy: Boolean = true,
     val allowAudioStreamCopy: Boolean = true,
     /** Audio recovery after this video already played directly; require copy in the stream URL too. */
-    val requireVideoStreamCopy: Boolean = false
+    val requireVideoStreamCopy: Boolean = false,
+    /** A track: its file is opened from the audio route. */
+    val audio: Boolean = false
 )
 
 /** Jellyfin ticks are 100 ns. */
@@ -64,8 +66,43 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
         itemId: String,
         capabilities: DeviceCapabilities,
         playback: PlaybackRequest = PlaybackRequest()
+    ): ClientResult<PlayOutcome> = negotiate(account, itemId, playbackInfoRequest(account, capabilities, playback), playback)
+
+    /**
+     * The same negotiation for an output that isn't this device, such as a Cast receiver: [profile] is that output's
+     * own, and this device's decoders play no part in it.
+     */
+    suspend fun prepareFor(
+        account: Account,
+        itemId: String,
+        profile: DeviceProfile,
+        maxStreamingBitrate: Int,
+        playback: PlaybackRequest = PlaybackRequest()
+    ): ClientResult<PlayOutcome> = negotiate(
+        account,
+        itemId,
+        PlaybackInfoRequest(
+            userId = account.user.id,
+            maxStreamingBitrate = maxStreamingBitrate,
+            startTimeTicks = Ticks.of(playback.startPosition),
+            audioStreamIndex = playback.audioStreamIndex,
+            subtitleStreamIndex = playback.subtitleStreamIndex,
+            mediaSourceId = playback.mediaSourceId,
+            deviceProfile = profile,
+            enableDirectPlay = playback.enableDirectPlay,
+            enableDirectStream = playback.enableDirectStream,
+            allowVideoStreamCopy = playback.allowVideoStreamCopy,
+            allowAudioStreamCopy = playback.allowAudioStreamCopy
+        ),
+        playback
+    )
+
+    private suspend fun negotiate(
+        account: Account,
+        itemId: String,
+        body: PlaybackInfoRequest,
+        playback: PlaybackRequest
     ): ClientResult<PlayOutcome> {
-        val body = playbackInfoRequest(account, capabilities, playback)
         var info = playbackInfo(account, itemId, body)
         var boundSourceId = playback.mediaSourceId
         // Jellyfin 12 applies explicit track indices only to a bound MediaSourceId. The first
@@ -94,7 +131,8 @@ class PlaybackClient(private val client: HttpClient, private val identity: Clien
                     result.value,
                     identity.forAccount(account),
                     account.accessToken,
-                    boundSourceId
+                    boundSourceId,
+                    playback.audio
                 ).let { outcome ->
                     if (playback.requireVideoStreamCopy && outcome is PlayOutcome.Play) {
                         AudioOnlyRecovery.preserveVideo(outcome.decision, playback.subtitleStreamIndex)

@@ -34,9 +34,12 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SettingsOrderTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val viewerSettings = listOf("settings:bitrate", "settings:passthrough", "settings:conversion-notice") +
-        listOf("settings:phone-remote", "settings:size", "settings:background") +
+        listOf("settings:music-quality", "settings:phone-remote", "settings:size", "settings:background") +
         SegmentType.entries.filter { it != SegmentType.Unknown }.map { "settings:segment:$it" } +
         listOf("settings:audio-language", "settings:subtitle-language", "settings:subtitle-mode")
 

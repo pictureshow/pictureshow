@@ -49,6 +49,9 @@ import org.robolectric.shadows.ShadowAccessibilityRecord
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class DetailRetryAwayFeedbackTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
@@ -219,7 +222,7 @@ class DetailRetryAwayFeedbackTest {
         fixture.state.value = fixture.state.value.copy(loading = false, error = failure, readFailed = true)
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(100)
-        Shadows.shadowOf(manager).setEnabled(true)
+        Shadows.shadowOf(manager).setScreenReader(true)
         unrelatedFailureOnHeading(fixture)
         assertTrue(retryAwayCues(fixture).isEmpty(), "Enabling accessibility cannot revive an old Retry cue")
     }
@@ -312,7 +315,7 @@ class DetailRetryAwayFeedbackTest {
             val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
                 as android.view.accessibility.AccessibilityManager
             Shadows.shadowOf(manager).apply {
-                setEnabled(true)
+                setScreenReader(true)
             }
 
             compose.setContent {

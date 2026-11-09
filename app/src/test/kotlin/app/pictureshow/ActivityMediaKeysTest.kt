@@ -21,6 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -34,6 +35,9 @@ import org.robolectric.annotation.Implements
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class, shadows = [ActivityMediaKeysTest.ControllerBridge::class])
 class ActivityMediaKeysTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun toggleInsideTheGracePausesOnceAndStaysPausedAfterReplacement() = withViewing { old, reopening, handle, activity ->
         reopening.beginReopen()

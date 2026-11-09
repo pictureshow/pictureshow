@@ -4,6 +4,7 @@
 package app.pictureshow.core
 
 import app.pictureshow.core.control.QueueState
+import app.pictureshow.core.control.RemoteCap
 import app.pictureshow.core.control.RemoteCommand
 import app.pictureshow.core.control.RemoteControllerEvent
 import app.pictureshow.core.control.RemoteControllerState
@@ -17,6 +18,7 @@ import app.pictureshow.core.control.reduceRemoteController
 import app.pictureshow.core.control.reduceRemoteQueue
 import app.pictureshow.core.control.reduceRemoteReceive
 import app.pictureshow.core.control.remoteAdvertisedCommands
+import app.pictureshow.core.control.remoteCapNote
 import app.pictureshow.core.control.remoteCapabilitiesBody
 import app.pictureshow.core.control.remoteRelayEnforcesRights
 import app.pictureshow.core.control.remoteRequest
@@ -138,6 +140,9 @@ class RemoteVectorsTest {
             put("url", remoteSocketUrl(event.getValue("server").jsonPrimitive.content))
         }
         "targets-path" -> buildJsonObject { put("path", remoteTargetsPath(event.getValue("viewer").jsonPrimitive.content)) }
+        "cap-note" -> buildJsonObject {
+            put("text", remoteCapNote(RemoteCap(event.getValue("sent").jsonPrimitive.int, event.getValue("total").jsonPrimitive.int)))
+        }
         "receive" -> json.encodeToJsonElement(
             reduceRemoteReceive(
                 json.decodeFromJsonElement<RemoteReceiveState>(state),

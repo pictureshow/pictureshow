@@ -52,6 +52,9 @@ private class TestOwner : LifecycleOwner {
 @LooperMode(LooperMode.Mode.PAUSED)
 @Suppress("DEPRECATION")
 class DetailPendingCueTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("s", "Test", "https://example.test", "12"), User("u", "Viewer"), "fake")
     private val film = MediaItem("film", "Invented film", "Movie")
@@ -91,7 +94,7 @@ class DetailPendingCueTest {
         init {
             owner.registry.currentState = Lifecycle.State.RESUMED
             compose.mainClock.autoAdvance = false
-            Shadows.shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(true)
+            Shadows.shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(true)
             ViewCompat.setAccessibilityDelegate(
                 host,
                 object : AccessibilityDelegateCompat() {

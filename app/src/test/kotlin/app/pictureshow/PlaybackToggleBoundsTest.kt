@@ -45,11 +45,14 @@ import org.robolectric.annotation.LooperMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlaybackToggleBoundsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun pillFitsTheAccessibilityBounds(fontScale: Float, seekBack: Boolean = false) {
         val manager = compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        shadowOf(manager).setEnabled(true)
+        shadowOf(manager).setScreenReader(true)
         lateinit var host: View
         compose.setContent {
             host = LocalView.current

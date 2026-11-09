@@ -37,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -49,6 +50,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class CopiedAudioOutputTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun copiedAudioProductionOutputRendersVideoAtTargetAndNeverSendsPrerollToTheSink() {
         checkOutput(copy = true, residualMs = 0)

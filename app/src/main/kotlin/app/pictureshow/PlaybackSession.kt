@@ -105,6 +105,9 @@ internal interface PlaybackOutput {
     fun reselect(type: MediaStreamType, index: Int) = Unit
     fun beginSeek() = Unit
     fun pause()
+
+    /** The app stopped it for its own reasons, not the viewer: a failure, or leaving. */
+    fun pauseForApp() = pause()
     fun release()
 }
 
@@ -463,7 +466,7 @@ internal class PlaybackSession(
                 paused
             )
         } else {
-            output.pause()
+            output.pauseForApp()
             trace("failure", "reason=$reason requestedMs=$target")
             mutable.value = mutable.value.copy(
                 preparing = false,
@@ -515,7 +518,7 @@ internal class PlaybackSession(
                     )
                 } else {
                     trace("failure", "reason=$reason audioOnly=true targetMs=${lastPosition.milliseconds}")
-                    output.pause()
+                    output.pauseForApp()
                     mutable.value =
                         mutable.value.copy(preparing = false, error = "Playback failed. The server could not provide a playable stream.")
                     finishDecision(failed = true)
@@ -540,7 +543,7 @@ internal class PlaybackSession(
                     lastPosition.paused
                 )
             } else {
-                output.pause()
+                output.pauseForApp()
                 mutable.value =
                     mutable.value.copy(preparing = false, error = "Playback failed. The server could not provide a playable stream.")
             }

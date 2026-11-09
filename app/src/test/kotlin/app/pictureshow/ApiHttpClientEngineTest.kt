@@ -24,6 +24,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -31,6 +32,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class ApiHttpClientEngineTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val identity = ClientIdentity("Test TV", "transport-test")
     private val auth = """{"ServerId":"s","AccessToken":"test-token","User":{"Id":"u","Name":"Viewer"}}"""
 

@@ -46,18 +46,28 @@ class SearchClientTest {
             val http = HttpClient(
                 engine { request ->
                     assertEquals(HttpMethod.Get, request.method)
-                    assertEquals("/base/jellyfin/" + if (kind == SearchKind.PEOPLE) "Persons" else "Items", request.url.encodedPath)
+                    val path = when (kind) {
+                        SearchKind.PEOPLE -> "Persons"
+                        // Artists aren't library items: the search reads them where the browse tabs do.
+                        SearchKind.ARTISTS -> "Artists"
+                        else -> "Items"
+                    }
+                    assertEquals("/base/jellyfin/$path", request.url.encodedPath)
                     val expected = mutableMapOf("userId" to "viewer", "searchTerm" to term, "limit" to "24")
-                    if (kind !=
-                        SearchKind.PEOPLE
-                    ) {
-                        expected +=
-                            mapOf(
-                                "recursive" to "true",
-                                "includeItemTypes" to kind.itemType,
-                                "enableTotalRecordCount" to "true",
-                                "fields" to "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
-                            )
+                    val cardFields = "PrimaryImageAspectRatio,ProductionYear,Overview,Genres,ChildCount,RecursiveItemCount"
+                    when (kind) {
+                        SearchKind.PEOPLE -> Unit
+                        SearchKind.ARTISTS -> expected += mapOf("enableTotalRecordCount" to "true", "fields" to cardFields)
+                        else -> {
+                            expected +=
+                                mapOf(
+                                    "recursive" to "true",
+                                    "includeItemTypes" to kind.itemType,
+                                    "enableTotalRecordCount" to "true",
+                                    "fields" to if (kind == SearchKind.SONGS) "$cardFields,SortName,ParentId" else cardFields
+                                )
+                            if (kind == SearchKind.PLAYLISTS) expected += "mediaTypes" to "Audio"
+                        }
                     }
                     assertEquals(expected, request.url.parameters.entries().associate { it.key to it.value.single() })
                     assertTrue(!request.url.encodedQuery.contains(" "))
@@ -162,6 +172,7 @@ class SearchClientTest {
                         assertTrue(item.imageTags.isEmpty())
                         assertEquals(null, item.overview)
                     }
+                    else -> error("No fixture for $kind")
                 }
             } finally {
                 http.close()

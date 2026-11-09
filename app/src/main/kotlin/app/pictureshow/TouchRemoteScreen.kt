@@ -15,9 +15,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -74,42 +71,12 @@ internal fun remoteClock(ticks: Long): String {
     return if (hours > 0) "$hours:${two(minutes)}:${two(seconds)}" else "$minutes:${two(seconds)}"
 }
 
-/** Chooses a TV. It lists what the server says now; picking one does not start anything by itself. */
-@Composable
-internal fun TouchRemotePicker(state: RemoteControllerUi, onPick: (RemoteTarget) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Play on", modifier = Modifier.semantics { heading() }) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                when {
-                    state.listing -> Text("Looking for TVs…")
-                    state.listFailed && state.targets.isEmpty() -> Text("Couldn't reach the server. Check your connection and try again.")
-                    state.targets.isEmpty() -> Text("No TVs are available. Open Pictureshow on your TV and sign in, then try again.")
-                }
-                state.targets.forEach { target ->
-                    OutlinedButton(
-                        onClick = { onPick(target) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remote:target:${target.session}")
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(remoteTargetLabel(target))
-                            Text(remoteTargetDetail(target), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
 /** Stays in reach while browsing. It shows what the TV reports and opens the remote; it sends nothing itself. */
 @Composable
 internal fun TouchRemoteBar(state: RemoteControllerUi, nowMs: Long, onOpen: () -> Unit) {
     val target = state.controller?.target ?: return
     val line = remoteProblem(state.controller.phase)?.let { "Needs attention" }
-        ?: remoteCommandStatus(state.controller, nowMs)
+        ?: remoteCommandStatus(state.controller, nowMs, state.capped)
         ?: target.now?.let { now -> "${now.title ?: "Playing"}${if (now.paused) ", paused" else ""}" }
         ?: "Nothing playing"
     TextButton(
@@ -133,7 +100,7 @@ internal fun TouchRemoteScreen(state: RemoteControllerUi, host: RemoteController
     val ready = attached && controller?.command?.fresh == true
     val now = target?.now?.takeIf { attached }
     val problem = remoteProblem(controller?.phase)
-    val status = remoteCommandStatus(controller, host.now())
+    val status = remoteCommandStatus(controller, host.now(), state.capped)
     TouchPage(target?.let(::remoteTargetLabel) ?: "Remote", onBack) {
         Column(
             modifier = Modifier.fillMaxWidth().testTag("touch:remote"),

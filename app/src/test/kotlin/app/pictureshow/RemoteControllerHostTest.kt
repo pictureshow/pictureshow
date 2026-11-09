@@ -21,10 +21,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteControllerHostTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private class Gateway : RemoteControllerGateway {
         var lists = 0
         var targets: ClientResult<List<RemoteTarget>> = ClientResult.Success(emptyList())
@@ -193,6 +197,31 @@ class RemoteControllerHostTest {
         )
         advanceTimeBy(10_000)
         assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
+    // REM-03: a long list starts on the TV with what fits in one request line, and the phone says how many went.
+    @Test
+    fun aLongListSendsWhatFitsAndSaysHowMany() = runTest {
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        val tracks = (1..1_200).map { "%032x".format(it) }
+        host.playNow(tracks)
+        runCurrent()
+        val request = gateway.sent.single()
+        val ids = request.query.getValue("itemIds").split(",")
+        assertEquals(tracks.take(175), ids)
+        assertEquals(
+            "Sending 175 of 1,200 to the TV…",
+            remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped)
+        )
+        // A short list afterwards says nothing about a cut.
+        host.playNow(tracks.take(3))
+        runCurrent()
+        assertEquals(3, gateway.sent.last().query.getValue("itemIds").split(",").size)
+        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped))
     }
 
     @Test

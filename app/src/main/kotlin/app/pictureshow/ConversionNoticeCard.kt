@@ -121,6 +121,6 @@ internal fun ConversionNoticeCard(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(notice.title, style = MaterialTheme.typography.titleMedium)
-        Text("${notice.reason} $CONVERSION_NOTICE_ACTION", style = MaterialTheme.typography.bodyLarge)
+        Text("${notice.reason} ${notice.fix} $CONVERSION_NOTICE_ACTION", style = MaterialTheme.typography.bodyLarge)
     }
 }

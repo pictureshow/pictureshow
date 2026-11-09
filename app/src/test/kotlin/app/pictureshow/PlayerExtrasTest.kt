@@ -51,6 +51,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlayerExtrasTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = kotlinx.coroutines.test.StandardTestDispatcher())
     private val account = Account(Server("s", "Demo", "http://localhost/base", "12"), User("u", "Demo"), "token")
     private val intro = MediaSegment("intro", SegmentType.Intro, 100_000_000, 200_000_000)

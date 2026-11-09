@@ -27,8 +27,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class LocalVideoOwnerAdapterTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val identity = ViewingIdentity("server", "viewer", "install", "viewing", 1)
     private val decision =
         PlayDecision("film", MediaSourceInfo(id = "source"), PlayMethod.DirectPlay, "https://example.invalid/movie", emptyMap(), "encode")

@@ -75,7 +75,7 @@ private fun validQueue(q: QueueState): Boolean {
 fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
     val known = listOf(
         "play-now", "play-next", "append", "remove", "move", "clear-upcoming", "clear-all", "repeat", "shuffle", "unshuffle",
-        "end", "next", "previous", "error", "retry", "play", "pause", "position"
+        "end", "next", "previous", "error", "retry", "play", "pause", "position", "jump"
     )
     if (event.op !in known) error("Unknown queue operation: ${event.op}")
     if (!validQueue(q)) return QueueReduction(q, "invalid-queue")
@@ -83,7 +83,7 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
     if (event.operationId.isNotEmpty() && event.operationId in q.operations) return QueueReduction(q, "duplicate")
     if (event.revision != q.revision) return QueueReduction(q, "refresh-required")
     if (q.revision == Long.MAX_VALUE) return QueueReduction(q, "revision-exhausted")
-    if (q.completion == Long.MAX_VALUE && event.op in listOf("play-now", "remove", "clear-all", "previous", "play", "retry")) {
+    if (q.completion == Long.MAX_VALUE && event.op in listOf("play-now", "remove", "clear-all", "previous", "play", "retry", "jump")) {
         return QueueReduction(q, "completion-exhausted")
     }
     fun changed(next: QueueState, outcome: String = "changed"): QueueReduction = QueueReduction(
@@ -107,17 +107,26 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
                 return invalid("invalid-entries")
             }
             if (event.op == "play-now") {
+                // A chosen track starts that entry inside its whole context; a permutation is Shuffle's whole audible order.
+                val shuffled = event.permutation.isNotEmpty()
+                if (shuffled && (event.permutation.size != added.size || event.permutation.toSet() != added.toSet())) {
+                    return invalid("invalid-permutation")
+                }
+                val order = if (shuffled) event.permutation else added
+                val start = event.entry ?: order.first()
+                if (start !in added) return invalid("missing-entry")
+                val before = order.take(order.indexOf(start))
                 return changed(
                     q.copy(
                         entries = event.entries + event.automatic,
-                        order = added,
-                        current = block.first(),
+                        order = order,
+                        current = start,
                         history = emptyList(),
-                        visited = emptyList(),
+                        visited = before,
                         automatic = continuation,
                         positionTicks = 0,
                         paused = false,
-                        shuffled = false,
+                        shuffled = shuffled,
                         completion = q.completion + 1,
                         failed = emptyList()
                     )
@@ -239,6 +248,23 @@ fun reduceQueue(q: QueueState, event: QueueEvent): QueueReduction {
             invalid("no-current")
         } else {
             changed(q.copy(paused = false, failed = emptyList(), completion = q.completion + 1))
+        }
+        // The listener picked a row of the queue: it plays from there, and what it passed over counts as visited.
+        "jump" -> {
+            val entry = event.entry ?: return invalid("missing-entry")
+            if (entry !in q.order) return invalid("missing-entry")
+            val before = q.order.take(q.order.indexOf(entry))
+            changed(
+                q.copy(
+                    current = entry,
+                    history = (q.history + listOfNotNull(q.current?.takeIf { it != entry })).filter { it != entry },
+                    visited = before,
+                    positionTicks = 0,
+                    paused = false,
+                    completion = q.completion + 1,
+                    failed = emptyList()
+                )
+            )
         }
         "previous" -> {
             if (q.current == null) return invalid("no-current")

@@ -24,8 +24,12 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 class NextEpisodeCloseTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private class Gateway : PlaybackGateway {
         val requests = mutableListOf<PlaybackRequest>()
         val events = mutableListOf<String>()

@@ -6,9 +6,13 @@
 package app.pictureshow
 
 import android.app.Application
+import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -20,7 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
@@ -28,6 +35,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -36,14 +45,19 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.text.Cue
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.playback.MediaSourceInfo
+import app.pictureshow.core.playback.MediaStream
+import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.playback.PlayDecision
 import app.pictureshow.core.playback.PlayMethod
+import app.pictureshow.core.playback.SubtitleDeliveryMethod
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -53,6 +67,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** PLAY-27: a brief, polite, non-focusable notice, once per viewing and announced once, with a Settings switch. */
@@ -60,6 +75,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class ConversionNoticeTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun decision(vararg reasons: String) = PlayDecision(
@@ -108,7 +126,10 @@ class ConversionNoticeTest {
         assertEquals(LiveRegionMode.Polite, node.config.getOrNull(SemanticsProperties.LiveRegion))
         assertNull(node.config.getOrNull(SemanticsProperties.Focused), "the notice must not be an input-focus target")
         compose.onNodeWithText("Converting this video for this TV").assertExists()
-        compose.onNodeWithText("Its video format won't play on this TV. Press Down, then choose Playback info.").assertExists()
+        compose.onNodeWithText(
+            "Its video format won't play on this TV. It still plays, and a 1080p H.264 copy on the server plays directly. " +
+                "Press Down, then choose Playback info."
+        ).assertExists()
         // The remote still drives the focused control.
         compose.onNodeWithTag("play").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
@@ -233,7 +254,7 @@ class ConversionNoticeTest {
         compose.onNodeWithTag("player:conversion-notice").assertExists()
     }
 
-    @Test fun everyNoticeIsATitleAndOneLineOfAtMostTwentyWords() {
+    @Test fun everyNoticeSaysWhyAndHowToFixItInOneLineOfAtMostThirtyWords() {
         val codes = listOf(
             "VideoCodecNotSupported",
             "VideoRangeTypeNotSupported",
@@ -244,13 +265,56 @@ class ConversionNoticeTest {
             "AnamorphicVideoNotSupported",
             "VideoRotationNotSupported"
         )
-        val notices = codes.map { tvNotice(it) }
+        val burnIn = PlayDecision(
+            "film",
+            MediaSourceInfo(
+                mediaStreams = listOf(
+                    MediaStream(MediaStreamType.Subtitle, 3, codec = "pgssub", deliveryMethod = SubtitleDeliveryMethod.Encode)
+                )
+            ),
+            PlayMethod.Transcode,
+            "https://server.example/videos/film/master.m3u8?VideoCodec=h264&AudioCodec=aac",
+            emptyMap(),
+            "session",
+            listOf("SubtitleCodecNotSupported")
+        )
+        val notices = codes.map { tvNotice(it) } + requireNotNull(ConversionNotice.of(burnIn, 3, CONVERSION_NOTICE_DEVICE))
         notices.forEach { notice ->
             assertEquals("Converting this video for this TV", notice.title)
-            val line = "${notice.reason} $CONVERSION_NOTICE_ACTION"
-            assertTrue(line.split(' ').size <= 20, "too long for 10 s: $line")
+            val line = "${notice.reason} ${notice.fix} $CONVERSION_NOTICE_ACTION"
+            assertTrue(line.split(' ').size <= 30, "too long for 10 s: $line")
+            assertTrue(notice.fix.endsWith(".") && notice.fix.count { it == '.' } <= 2, "one sentence: ${notice.fix}")
             assertFalse("device" in line || "transcod" in line.lowercase(), line)
         }
+        // Each reason gets its own next step, not one generic line.
+        assertEquals(notices.size, notices.map { it.fix }.toSet().size)
+    }
+
+    // At 1.3 font the longest why-and-fix line still stays in the top half of a 960x540 TV frame, clear of bottom
+    // subtitles and the controls, placed as the player places it.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test
+    fun theLongestNoticeStaysInTheTopHalfAtALargerFont() {
+        val notice = tvNotice("VideoProfileNotSupported")
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                PictureshowTheme {
+                    Box(Modifier.fillMaxSize().background(Color.Black)) {
+                        ConversionNoticeCard(notice, Modifier.align(Alignment.TopStart).padding(horizontal = 48.dp, vertical = 36.dp)) {}
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("an 8-bit 1080p H.264 copy on the server plays directly", substring = true).assertExists()
+        val card = compose.onNodeWithTag("player:conversion-notice").getBoundsInRoot()
+        val root = compose.onRoot().getBoundsInRoot()
+        assertTrue(card.bottom <= root.bottom / 2, "card $card stays in the top half of $root")
+        assertTrue(card.right <= root.right - 48.dp, "card $card inside the safe area of $root")
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val dir = java.io.File("build/reports/notice-renders").apply { mkdirs() }
+        java.io.FileOutputStream(java.io.File(dir, "tv-960x540-font1.3.png")).use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     @Test fun topPositionedCuesAreRecognised() {
@@ -281,7 +345,7 @@ class ConversionNoticeTest {
         assertTrue(PlaybackPreferences.decode().conversionNotice, "a missing stored value is on")
         assertEquals(false, PlaybackPreferences.decode(conversionNotice = false).conversionNotice)
         compose.onNodeWithText("Conversion notice: On").assertExists()
-        compose.onNodeWithText("Shows a short note when the server has to convert a video for this TV.").assertExists()
+        compose.onNodeWithText("Shows a short note when the server has to convert a video or a song for this TV.").assertExists()
         val toggle = compose.onNodeWithTag("settings:conversion-notice").fetchSemanticsNode()
         assertEquals("On", toggle.config.getOrNull(SemanticsProperties.StateDescription))
         compose.onNodeWithTag("settings:passthrough").requestFocusNow()

@@ -9,9 +9,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 class PlaybackFdDiagnosticsTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun inspectionFailureIsContainedOffThreadAndReopenDoesNotSampleAgain() {
         val callingThread = Thread.currentThread()

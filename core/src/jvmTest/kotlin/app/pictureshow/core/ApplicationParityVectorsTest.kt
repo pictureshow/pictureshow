@@ -33,6 +33,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.double
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -60,6 +61,12 @@ class ApplicationParityVectorsTest {
             try {
                 val input = vector.getValue("input").jsonObject
                 val actual = when (val operation = vector.getValue("operation").jsonPrimitive.content) {
+                    "server-label" -> JsonPrimitive(
+                        serverLabel(
+                            Json.decodeFromJsonElement<Server>(input.getValue("server")),
+                            Json.decodeFromJsonElement<List<Server>>(input.getValue("all"))
+                        )
+                    )
                     "detail-read-failure" -> JsonPrimitive(
                         detailReadHasFailure(
                             input.getValue("readFailed").jsonPrimitive.booleanOrNull!!,
@@ -420,6 +427,13 @@ class ApplicationParityVectorsTest {
                     "next-trigger" -> nextEpisodeTriggerMs(
                         input.getValue("durationMs").jsonPrimitive.long,
                         Json.decodeFromJsonElement(input.getValue("segments"))
+                    )?.let(::JsonPrimitive) ?: JsonNull
+                    "grid-vertical-move" -> gridVerticalTarget(
+                        input.getValue("index").jsonPrimitive.int,
+                        input.getValue("columns").jsonPrimitive.int,
+                        input.getValue("count").jsonPrimitive.int,
+                        input.getValue("down").jsonPrimitive.booleanOrNull!!,
+                        input["loadingMore"]?.jsonPrimitive?.booleanOrNull ?: false
                     )?.let(::JsonPrimitive) ?: JsonNull
                     "next-countdown" -> nextEpisodeCardSeconds(
                         input.getValue("wallSeconds").jsonPrimitive.long,

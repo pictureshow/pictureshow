@@ -43,6 +43,7 @@ class OfflineRouteWindowTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("server", "Server", "https://example.test", "12"), User("viewer", "Viewer"), "fake")
     private lateinit var nav: NavHostController
+    private var musicEnded = 0
 
     /** An engine that never finishes its first load, so its routes stay in the gap before a player exists. */
     private fun inTheGap() {
@@ -79,7 +80,7 @@ class OfflineRouteWindowTest {
             nav = rememberNavController()
             NavHost(nav, startDestination = "start") {
                 composable("start") {}
-                offlineTouchScreens(nav, { account }, { error("no player in the gap") })
+                offlineTouchScreens(nav, { account }, { error("no player in the gap") }, { musicEnded++ })
             }
         }
         compose.waitForIdle()
@@ -99,6 +100,19 @@ class OfflineRouteWindowTest {
     @After fun tearDown() {
         stopKoin()
     }
+
+    /** Video and music never share the speakers (MUS-11), and the gap before the player is already video's. */
+    private fun endsMusicBeforeThePlayerExists(route: String) {
+        inTheGap()
+        assertEquals(0, musicEnded)
+        compose.runOnIdle { nav.navigate(route) }
+        compose.waitForIdle()
+        assertEquals(1, musicEnded)
+    }
+
+    @Test fun theDownloadedPlayersRouteEndsMusic() = endsMusicBeforeThePlayerExists("offline-player?entry=${Uri.encode("e2:original")}")
+
+    @Test fun theStreamRouteEndsMusic() = endsMusicBeforeThePlayerExists("online-player?entry=${Uri.encode("e1:original")}&start=0")
 
     @Test fun theDownloadedPlayersRouteHoldsTheRotationBeforeItsPlayerExists() =
         holdsThroughTheGap("offline-player?entry=${Uri.encode("e2:original")}")

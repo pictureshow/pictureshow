@@ -28,9 +28,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 
 /** A remote seek is a viewer intent that can supersede work while the server is still negotiating. */
 class TranscodeSeekSessionTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun tenRapidStepsNegotiateOnlyLatestTargetAfterOldEncodeCleanup() = runTest {
         val events = mutableListOf<String>()

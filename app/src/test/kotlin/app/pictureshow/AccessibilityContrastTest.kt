@@ -46,6 +46,9 @@ import org.robolectric.annotation.LooperMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class AccessibilityContrastTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private fun ratio(a: Color, b: Color): Float =
         (maxOf(a.luminance(), b.luminance()) + .05f) / (minOf(a.luminance(), b.luminance()) + .05f)
@@ -111,6 +114,93 @@ class AccessibilityContrastTest {
 
     @Test
     fun selectedCardOutlineHasKnownDarkPixelsOnItsArtworkSide() = assertArtworkKeyline(false)
+
+    /** A music row's artist line and track number follow the row, so they stay readable when focus turns it light. */
+    private fun assertMusicRowSecondaryText(focused: Boolean) {
+        // Read from composition: a color-only change redraws text without a new layout, so a layout result can be stale.
+        var muted = Color.Unspecified
+        compose.setContent {
+            PictureshowTheme {
+                Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(40.dp)) {
+                    androidx.tv.material3.Surface(onClick = {}, scale = musicRowScale, modifier = Modifier.testTag("row")) {
+                        androidx.compose.foundation.layout.Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            androidx.tv.material3.Text("Slow Current")
+                            muted = musicMutedOnRow
+                            androidx.tv.material3.Text("Marta Oren", color = muted)
+                        }
+                    }
+                }
+            }
+        }
+        val row = compose.onNodeWithTag("row")
+        if (focused) row.performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        compose.mainClock.advanceTimeBy(1000)
+        compose.waitForIdle()
+        // The row merges its texts, so the text's own bounds come from the unmerged tree.
+        val node = compose.onNodeWithText("Marta Oren", useUnmergedTree = true)
+        val text = node.getUnclippedBoundsInRoot()
+        val density = compose.activity.resources.displayMetrics.density
+        val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
+        try {
+            // Just left of the text, inside the row's padding: the row's own fill, focused or not.
+            val background =
+                Color(bitmap.getPixel(((text.left.value - 4f) * density).roundToInt(), ((text.top.value + 4f) * density).roundToInt()))
+            val foreground = muted.compositeOver(background)
+            val contrast = ratio(foreground, background)
+            val colors = "${Integer.toHexString(muted.toArgb())} on ${Integer.toHexString(background.toArgb())}"
+            assertTrue(contrast >= 4.5f, "music row secondary text contrast $contrast (focused=$focused): $colors")
+            // A full-width row sits 12 dp from its More button, so focus mustn't grow it past its own bounds.
+            val box = row.getUnclippedBoundsInRoot()
+            val middle = (box.top.value + box.bottom.value) / 2
+            val beside = bitmap.getPixel(((box.right.value + 4f) * density).roundToInt(), (middle * density).roundToInt())
+            val page = Color(0xFF10131C).toArgb()
+            assertTrue(
+                listOf(16, 8, 0).all { shift -> abs(((beside shr shift) and 255) - ((page shr shift) and 255)) <= 8 },
+                "focused music row grew past its bounds: ${Integer.toHexString(beside)}"
+            )
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /** A selected tab and a page's Play keep a #B8C4FF ring at rest, so they read as selected or primary with focus elsewhere. */
+    @Test
+    fun musicSelectedButtonCarriesTheSelectedRingAtRest() {
+        compose.setContent {
+            PictureshowTheme {
+                Box(Modifier.fillMaxSize().background(Color(0xFF10131C)).padding(40.dp)) {
+                    androidx.tv.material3.Button(onClick = {}, border = musicSelectedBorder, modifier = Modifier.testTag("selected")) {
+                        androidx.tv.material3.Text("Songs")
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1000)
+        compose.waitForIdle()
+        val box = compose.onNodeWithTag("selected").getUnclippedBoundsInRoot()
+        val density = compose.activity.resources.displayMetrics.density
+        val bitmap = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        compose.runOnIdle { compose.activity.window.decorView.draw(Canvas(bitmap)) }
+        try {
+            // Across the left edge, halfway down: the ring may sit just inside or just outside the bounds.
+            val middle = ((box.top.value + box.bottom.value) / 2 * density).roundToInt()
+            val ring = SelectedSeasonOutline.toArgb()
+            val edge = (-4..4).map { bitmap.getPixel(((box.left.value + it) * density).roundToInt(), middle) }
+            assertTrue(
+                edge.any { pixel -> listOf(16, 8, 0).all { shift -> abs(((pixel shr shift) and 255) - ((ring shr shift) and 255)) <= 24 } },
+                "selected button edge is ${edge.map(Integer::toHexString)}, not the selected ring"
+            )
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    @Test
+    fun musicRowSecondaryTextStaysReadableWhenFocused() = assertMusicRowSecondaryText(true)
+
+    @Test
+    fun musicRowSecondaryTextIsReadableUnfocused() = assertMusicRowSecondaryText(false)
 
     @Test
     fun preparingStatusKeepsContrastOverAWhiteDecodedFrame() {

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -37,6 +38,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -56,6 +59,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -82,6 +86,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,6 +102,8 @@ import app.pictureshow.core.nextEpisodeCardSeconds
 import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.trickplayTile
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal enum class TouchPlayerSheet(val title: String) {
     Audio("Audio"),
@@ -158,14 +166,49 @@ private val TOUCH_BAR_TEXT_INSET = 8.dp
 internal fun TouchReservedLabel(label: String, reserve: String, alignment: Alignment = Alignment.Center) {
     Box(contentAlignment = alignment) {
         Text(reserve, Modifier.alpha(0f).clearAndSetSemantics {}, maxLines = 1)
-        Text(label)
+        Text(label, maxLines = 1)
+    }
+}
+
+/** What the player needs to hand off. Only the touch app provides it, so a player without it offers no "Play on". */
+internal class TouchPlayerCast(val cast: CastSenderHost, val remote: RemoteControllerHost)
+
+internal val LocalTouchPlayerCast = staticCompositionLocalOf<TouchPlayerCast?> { null }
+
+/** This player during a Cast handoff. */
+private class PlayerCastOutput(private val host: PlaybackHostState) : CastLocalOutput {
+    override suspend fun pauseAndRead(): CastLocalMoment {
+        val paused = host.output.viewerPaused(host.player)
+        host.output.pauseForApp()
+        withTimeoutOrNull(1_000) { while (host.player?.isPlaying == true) delay(20) }
+        return CastLocalMoment(host.output.position().milliseconds, paused)
+    }
+
+    override fun release() = host.finish(reason = "cast")
+
+    override fun resume() {
+        host.player?.play()
     }
 }
 
 @Composable
 internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     val ui = remember { TouchControlsState() }
-    val accessible = rememberAccessibilityEnabled()
+    val entry = LocalTouchPlayerCast.current
+    val castOutput = remember(host) { PlayerCastOutput(host) }
+    // Null without a sender, so a player that has none reads nothing from it.
+    val castUi = entry?.let { it.cast.state.collectAsState().value }
+    val castStatus = castUi?.let(::castStatusLine)
+    // A chooser left open, or a pick on its way, is holding this viewing's next step, as a sheet does (CAST-23).
+    val choosing = entry?.cast?.holdsNextStep(castOutput) == true
+    val atEnd = host.atEnd
+    if (entry != null) {
+        DisposableEffect(castOutput) { onDispose { entry.cast.localClosed(castOutput) } }
+        // position() is now the last moment, so a pick here, or one still starting, would send the TV the end of a finished title.
+        LaunchedEffect(atEnd) { if (atEnd) entry.cast.localAdvancing(castOutput) }
+        LaunchedEffect(host) { if (entry.cast.consumeStartPaused(host.item.id)) host.output.pause() }
+    }
+    val accessible = rememberAssistiveServiceInUse()
     // Prepared with the player, as on TV: a sheet that prepared its own would measure its waiting line, then grow.
     val trackMenus = rememberPlayerTrackMenus(
         host.state.decision?.mediaSourceId,
@@ -186,7 +229,10 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         host.onFinishing = {
             ui.sheet = null
             ui.scrubMs = null
+            // From the moment this player starts to leave, a pick has nothing left to act on (CAST-23).
+            entry?.cast?.localLeaving(castOutput)
         }
+        host.onAdvancing = { entry?.cast?.localAdvancing(castOutput) }
         host.onSeekShown = {
             ui.visible = true
             ui.interact()
@@ -277,11 +323,35 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         }
         val noticeRoom = maxWidth - safeSides - TOUCH_PLAYER_EDGE * 2 - TOUCH_ACTIONS_WIDTH - 12.dp
         val noticeCap = noticeRoom.takeIf { it >= TOUCH_NOTICE_MIN_BESIDE }
+        val conversionNotice = host.state.decision?.takeIf { host.localPreferences.conversionNotice }?.let {
+            ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice)
+        }
+        // A short window at a large font has no room for the notice above the controls, so it waits for them to hide
+        // rather than covering them. Measured as the card lays out: its width, the title and the line at this font.
+        val noticeMeasurer = rememberTextMeasurer()
+        val titleStyle = MaterialTheme.typography.titleMedium
+        val lineStyle = LocalTextStyle.current.copy(fontSize = 16.sp)
+        val noticeBottom = conversionNotice?.let { notice ->
+            val cardWidth = minOf(480.dp, noticeCap ?: (maxWidth - safeSides - TOUCH_PLAYER_EDGE * 2))
+            val text = Constraints(maxWidth = with(density) { (cardWidth - 24.dp).roundToPx() }.coerceAtLeast(0))
+            val title = noticeMeasurer.measure(notice.title, titleStyle, constraints = text).size.height
+            val line = noticeMeasurer.measure(touchConversionNoticeLine(notice), lineStyle, constraints = text).size.height
+            val top = WindowInsets.safeDrawing.getTop(density) + with(density) { TOUCH_PLAYER_EDGE.roundToPx() }
+            top + title + line + with(density) { 28.dp.roundToPx() }
+        }
+        // TalkBack keeps the controls up for good, and its user needs the announcement most, so it never waits there.
+        val noticeClearsControls = accessible ||
+            !controlsVisible ||
+            noticeBottom == null ||
+            controlsTop?.let { noticeBottom <= it - playerTop } == true
         ConversionNoticeHost(
-            host.state.decision?.takeIf { host.localPreferences.conversionNotice }?.let {
-                ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice)
-            },
-            allowed = !topCues && host.player != null && foreground && !host.state.preparing && actionsVisible,
+            conversionNotice,
+            allowed = !topCues &&
+                host.player != null &&
+                foreground &&
+                !host.state.preparing &&
+                actionsVisible &&
+                noticeClearsControls,
             modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(TOUCH_PLAYER_EDGE),
             card = { notice, placement, announce, details ->
                 DisposableEffect(Unit) { onDispose { noticeBounds = null } }
@@ -402,7 +472,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                             Alignment.CenterStart
                                         )
                                     } else {
-                                        Text(sheet.title)
+                                        Text(sheet.title, maxLines = 1)
                                     }
                                 }
                             }
@@ -417,29 +487,46 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                                     ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
                                 }
                                 ui.interact()
-                            }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape") }
+                            }, placement.testTag("touch:orientation")) { Text(if (landscape) "Portrait" else "Landscape", maxLines = 1) }
                         }
+                    }
+                }
+                // Stop and the mark stay together, so a very large font moves them as one instead of parting them.
+                val exit: @Composable (Modifier) -> Unit = { placement ->
+                    Row(placement, horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                        if (entry != null) {
+                            TouchPlayOnMark(castStatus, filled = castUi?.let(::castIsCasting) == true, enabled = !atEnd) {
+                                entry.cast.openChooser(
+                                    CastPlayRequest(
+                                        listOf(castPlayItem(account.server, host.item)),
+                                        startMs = host.output.position().milliseconds,
+                                        mediaSourceId = host.state.decision?.mediaSourceId,
+                                        local = castOutput,
+                                        onJellyfinPick = {
+                                            // The player keeps playing under the chooser, so where it is now, not at the tap.
+                                            entry.remote.playNow(listOf(host.item.id), host.output.position().milliseconds * MS_TO_TICKS)
+                                            host.finish(reason = "remote")
+                                        }
+                                    )
+                                )
+                                ui.interact()
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        stop()
                     }
                 }
                 if (this@BoxWithConstraints.maxWidth < 600.dp) {
                     // Transport and exit on one line, then fixed columns: a break never falls where the width runs out.
-                    // A very large font moves Stop to its own line instead of squeezing it.
+                    // A very large font moves the exit to its own line, still at the far end, instead of squeezing it.
                     FlowRow(Modifier.fillMaxWidth()) {
                         toggle()
                         Spacer(Modifier.width(8.dp))
                         back()
                         forward()
-                        Spacer(Modifier.weight(1f))
-                        stop()
+                        exit(Modifier.weight(1f))
                     }
-                    options.chunked(3).forEach { row ->
-                        Row(Modifier.fillMaxWidth().testTag("touch:options-row")) {
-                            row.forEach { option ->
-                                Box(Modifier.weight(1f)) { option(Modifier.offset(x = (-8).dp)) }
-                            }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
+                    TouchOptionGrid(options)
                 } else {
                     TouchWideControls(
                         transport = {
@@ -451,7 +538,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             }
                         },
                         options = options,
-                        stop = stop
+                        stop = { exit(Modifier) }
                     )
                 }
                 host.state.reportError?.let { Text("Could not save progress: $it", color = Color.White) }
@@ -490,7 +577,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 })
                 next?.let {
                     key(host.deferredNext, host.output.stopGeneration) {
-                        val suspended = paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null
+                        val suspended =
+                            paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
                         val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
                         val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
@@ -575,6 +663,61 @@ internal fun touchOptionLines(widths: List<Int>, room: Int, gap: Int): List<List
         last.add(0, above.removeAt(above.lastIndex))
     }
     return lines
+}
+
+/** The most columns, up to three, that hold every label on one line with some air before the next column's text. */
+internal fun touchOptionColumns(textWidths: List<Int>, room: Int, air: Int): Int =
+    (3 downTo 2).firstOrNull { columns -> textWidths.all { it <= room / columns - air } } ?: 1
+
+/**
+ * The narrow panel's options, in fixed columns so labels don't move with their neighbours' wording. A button keeps its natural
+ * width rather than the column's, so its label never wraps; the text starts on the column's edge and the target hangs out by
+ * its inset. Measured, so the font scale and the reserved Speed label count.
+ */
+@Composable
+private fun TouchOptionGrid(options: List<@Composable (Modifier) -> Unit>) {
+    Layout(
+        content = { options.forEach { it(Modifier) } },
+        modifier = Modifier.fillMaxWidth().testTag("touch:option-grid")
+    ) { measurables, constraints ->
+        val boxes = measurables.map { it.measure(Constraints()) }
+        val width = constraints.maxWidth
+        val inset = TOUCH_BAR_TEXT_INSET.roundToPx()
+        val columns = touchOptionColumns(boxes.map { it.width - inset * 2 }, width, 8.dp.roundToPx())
+        val lines = boxes.chunked(columns)
+        val lineGap = 4.dp.roundToPx()
+        val height = lines.sumOf { line -> line.maxOf { it.height } } + lineGap * (lines.size - 1).coerceAtLeast(0)
+        layout(width, height) {
+            var y = 0
+            lines.forEach { line ->
+                val lineHeight = line.maxOf { it.height }
+                line.forEachIndexed { column, box ->
+                    box.placeRelative(width * column / columns - inset, y + (lineHeight - box.height) / 2)
+                }
+                y += lineHeight + lineGap
+            }
+        }
+    }
+}
+
+/**
+ * Play on, a mark beside Stop since both move this viewing away from here. [status] is what a sender is doing elsewhere, the
+ * line the browsing bar shows and the player hides, and a reader hears it. Only [filled] draws: the line also speaks for a
+ * device that is starting, reconnecting or lost, and a filled mark there would claim the opposite of the truth. Dimmed at the
+ * end of a title, which has nothing left to send: its next-episode card is the way on.
+ */
+@Composable
+internal fun TouchPlayOnMark(status: String?, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    TouchBarButton(
+        onClick,
+        Modifier.testTag("touch:play-on").semantics {
+            contentDescription = "Play on"
+            status?.let { stateDescription = it }
+        },
+        enabled = enabled
+    ) {
+        Icon(touchActionIcon(if (filled) "casting" else "cast"), contentDescription = null, modifier = Modifier.size(24.dp))
+    }
 }
 
 /**
@@ -678,8 +821,13 @@ internal fun TouchPlayerScrubber(
  * replaces `TextButton`'s wider one, which centred a short word and took its text off the line it starts from.
  */
 @Composable
-private fun TouchBarButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    TextButton(onClick, modifier.widthIn(min = 48.dp), contentPadding = PaddingValues(horizontal = TOUCH_BAR_TEXT_INSET, vertical = 8.dp)) {
+private fun TouchBarButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable () -> Unit) {
+    TextButton(
+        onClick,
+        modifier.widthIn(min = 48.dp),
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = TOUCH_BAR_TEXT_INSET, vertical = 8.dp)
+    ) {
         content()
     }
 }
@@ -737,6 +885,8 @@ internal fun TouchNextEpisodeCard(
     }
 }
 
+internal fun touchConversionNoticeLine(notice: ConversionNotice) = "${notice.reason} ${notice.fix} $TOUCH_CONVERSION_NOTICE_ACTION"
+
 /** Never blocks the video: a passing tap anywhere else still reaches the player, and playback continues underneath. */
 @Composable
 internal fun TouchConversionNoticeCard(
@@ -760,7 +910,7 @@ internal fun TouchConversionNoticeCard(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(notice.title, style = MaterialTheme.typography.titleMedium)
-            Text("${notice.reason} $TOUCH_CONVERSION_NOTICE_ACTION", fontSize = 16.sp)
+            Text(touchConversionNoticeLine(notice), fontSize = 16.sp)
         }
     }
 }

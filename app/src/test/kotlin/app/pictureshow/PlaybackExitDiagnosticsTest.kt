@@ -53,6 +53,9 @@ import org.robolectric.shadows.ShadowLog
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class PlaybackExitDiagnosticsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun hostOwnedObservationSurvivesPlayerRemovalAndReadsRealDetailFocusWithAccessibilityOff() {

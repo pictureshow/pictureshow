@@ -36,9 +36,13 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.Rule
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScreenModelsTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val dispatcher = StandardTestDispatcher()
     private val owned = mutableListOf<ViewModelStore>()
     private val server = Server("server-1", "Living room", "https://media.example.test/jellyfin", "12.0.0")

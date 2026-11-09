@@ -5,6 +5,9 @@
 
 package app.pictureshow
 
+import android.content.Context
+import android.os.Build
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -14,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.media3.common.Player
@@ -29,6 +33,16 @@ import kotlinx.coroutines.delay
  * count. Paused playback pins the bar instead (see [ControlsAutoHide]).
  */
 internal const val CONTROLS_TIMEOUT_MS = 10_000L
+
+/** The system's "Time to take action" and "Time to read" settings (API 29+) can lengthen the wait, never shorten it. */
+private fun recommendedControlsTimeout(context: Context, timeoutMs: Long): Long {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return timeoutMs
+    val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+    val controlsAndText = AccessibilityManager.FLAG_CONTENT_CONTROLS or
+        AccessibilityManager.FLAG_CONTENT_ICONS or
+        AccessibilityManager.FLAG_CONTENT_TEXT
+    return manager.getRecommendedTimeoutMillis(timeoutMs.toInt(), controlsAndText).toLong()
+}
 
 /** The two playback facts the controls render, refreshed from player events rather than a polling loop. */
 internal data class PlayerPlayback(val paused: Boolean, val showPlayButton: Boolean, val buffering: Boolean = false)
@@ -80,9 +94,10 @@ internal fun ControlsAutoHide(
     timeoutMs: Long = CONTROLS_TIMEOUT_MS,
     onHide: () -> Unit
 ) {
+    val context = LocalContext.current
     LaunchedEffect(visible, pinned, interaction, timeoutMs) {
         if (visible && !pinned) {
-            delay(timeoutMs)
+            delay(recommendedControlsTimeout(context, timeoutMs))
             onHide()
         }
     }
@@ -90,7 +105,7 @@ internal fun ControlsAutoHide(
 
 /** Keep player pills inside TalkBack's native outline; remote-only focus retains TV enlargement. */
 @Composable
-internal fun playerButtonScale() = ButtonDefaults.scale(focusedScale = if (rememberAccessibilityEnabled()) 1f else 1.1f)
+internal fun playerButtonScale() = ButtonDefaults.scale(focusedScale = if (rememberAssistiveServiceInUse()) 1f else 1.1f)
 
 internal fun playbackToggleState(paused: Boolean, showPlayButton: Boolean): String = if (paused) {
     "Paused"

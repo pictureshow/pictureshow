@@ -11,6 +11,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,17 +26,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.onFocusedBoundsChanged
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +50,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -53,10 +61,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -74,7 +84,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -109,11 +121,20 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalTextStyle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.pictureshow.core.Account
+import app.pictureshow.core.GRID_HOLD_CAP_MILLIS
+import app.pictureshow.core.GridSorts
+import app.pictureshow.core.GridVerticalMove
 import app.pictureshow.core.MediaItem
+import app.pictureshow.core.UNBOUNDED_TITLE_FONT_SCALE
 import app.pictureshow.core.episodeLabel
+import app.pictureshow.core.gridHoldRelease
+import app.pictureshow.core.gridStripDetail
+import app.pictureshow.core.gridVerticalMove
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.isEmptyContainer
 import app.pictureshow.core.isWatched
@@ -147,7 +168,8 @@ fun CatalogHome(
     onSearch: () -> Unit = {},
     onSettings: () -> Unit = {},
     onDownloads: (() -> Unit)? = null,
-    onWatchDownloads: (() -> Unit)? = null
+    onWatchDownloads: (() -> Unit)? = null,
+    serverLabel: String = account.server.name
 ) {
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
@@ -250,13 +272,13 @@ fun CatalogHome(
         val horizontal = rowStates.getValue(row.key)
         if (rowIndex == 0) {
             // The header belongs with the first shelf, including when returning from a lower shelf.
-            list.scrollToItem(0)
+            list.jumpTo(0)
         } else if (list.layoutInfo.visibleItemsInfo.none { it.index == rowIndex + 1 }) {
-            list.scrollToItem(rowIndex + 1)
+            list.jumpTo(rowIndex + 1)
         }
         val focused = withTimeoutOrNull(1_500) {
             snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.key == row.key } }.first { it }
-            if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
+            if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.jumpTo(itemIndex)
             snapshotFlow { horizontal.layoutInfo.visibleItemsInfo.any { it.index == itemIndex } }.first { it }
             while (true) {
                 withFrameNanos { }
@@ -275,7 +297,7 @@ fun CatalogHome(
         return focused
     }
     suspend fun focusAction(key: String, index: Int, requester: FocusRequester): Boolean {
-        list.scrollToItem(index)
+        list.jumpTo(index)
         return withTimeoutOrNull(1_500) {
             snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
             while (true) {
@@ -289,9 +311,11 @@ fun CatalogHome(
         movement = scope.launch {
             when {
                 index in rows.indices -> focusRow(index)
+
                 index >= rows.size -> {
                     focusAction("profile", rows.size + 1, profile)
                 }
+
                 else -> {
                     focusAction("header", 0, search)
                 }
@@ -317,17 +341,20 @@ fun CatalogHome(
     }
     val platformBringIntoView = LocalBringIntoViewSpec.current
     val firstRowFocused by rememberUpdatedState(rows.firstOrNull()?.key == selectedRow)
-    val homeBringIntoView = remember(platformBringIntoView) {
+    val focusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
+    val homeBringIntoView = remember(platformBringIntoView, focusMargin) {
         object : BringIntoViewSpec {
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = focusedCardScrollDistance(
+                offset,
+                size,
+                containerSize,
+                focusMargin,
                 // TV's default 30% pivot would hide Search even when the whole first card already fits.
-                if (firstRowFocused && offset >= 0f && offset + size <= containerSize) {
-                    0f
-                } else {
-                    platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
-                }
+                if (firstRowFocused && offset >= 0f) 0f else platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+            )
         }
     }
+    val reveal = Modifier.revealFocusAfterFontChange(list)
     CompositionLocalProvider(LocalBringIntoViewSpec provides homeBringIntoView) {
         CatalogLoadingFocus(returning && !restored) {
             initialNavigation = true
@@ -337,7 +364,7 @@ fun CatalogHome(
         }
         LazyColumn(
             state = list,
-            modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("home").accessibilityGroup().onPreviewKeyEvent {
+            modifier = reveal.fillMaxSize().background(CatalogBackground).testTag("home").accessibilityGroup().onPreviewKeyEvent {
                 if (it.type == KeyEventType.KeyDown) {
                     if (BuildConfig.DEBUG && returning) {
                         android.util.Log.d("CatalogFocus", "home-key key=${it.key} lifecycle=$homeLifecycle restored=$restored")
@@ -393,7 +420,7 @@ fun CatalogHome(
                     }
                     Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CatalogHeading("Pictureshow")
-                        Text("${account.user.name} · ${account.server.name}", color = CatalogMuted)
+                        Text("${account.user.name} · $serverLabel", color = CatalogMuted)
                     }
                     if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
                     CatalogError(
@@ -439,7 +466,7 @@ fun CatalogHome(
                                         CatalogCard(
                                             item = item,
                                             account = account,
-                                            wide = row.wide || item.type == "Episode",
+                                            wide = row.wide || row.library || item.type == "Episode",
                                             onClick = {
                                                 select(rowIndex, itemIndex)
                                                 onOpen(item)
@@ -552,16 +579,20 @@ fun CatalogHome(
                 restoreAction == "search" || restoreAction == "settings" -> {
                     focusAction("header", 0, if (restoreAction == "settings") settingsFocus else search)
                 }
+
                 restoreAction == "profile" -> {
                     if (!initialNavigation) focusAction("profile", rows.size + 1, profile) else false
                 }
+
                 rows.isNotEmpty() -> {
                     val rowIndex = rows.indexOfFirst { it.key == savedRow }.takeIf { it >= 0 }
                         ?: savedRowIndex.coerceIn(0, rows.lastIndex)
                     if (savedItem.isNotEmpty()) rowSelections = rowSelections + (savedRow to savedItem)
                     focusRow(rowIndex, savedRowSelections, savedRowPositions)
                 }
+
                 state.error != null -> focusAction("header", 0, retry)
+
                 else -> focusAction("profile", rows.size + 1, profile)
             }
             restored = focused
@@ -590,7 +621,7 @@ fun CatalogHome(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun CatalogGrid(
     state: CatalogGridState,
@@ -598,100 +629,382 @@ fun CatalogGrid(
     onNearEnd: (Int) -> Unit,
     onSort: (String, Boolean) -> Unit,
     onRetry: () -> Unit,
-    showSort: Boolean = true
+    showSort: Boolean = true,
+    stripTitle: String? = state.parent.name,
+    pinStrip: Boolean = false,
+    head: (@Composable () -> Unit)? = null,
+    headFocus: FocusRequester? = null,
+    revealKey: Any? = null,
+    grid: LazyGridState = rememberLazyGridState()
 ) {
-    val grid = rememberLazyGridState()
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
     var retryFocusRequest by remember { mutableIntStateOf(0) }
     val firstSort = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
+    val scope = rememberCoroutineScope()
+    var moving by remember { mutableStateOf<Job?>(null) }
+    var movingDown by remember { mutableStateOf(false) }
+    var focusedIndex by remember { mutableIntStateOf(-1) }
+    var headerFocused by remember { mutableStateOf(false) }
+    val sortBottoms = remember { mutableMapOf<Int, Float>() }
+    var focusedSort by remember { mutableIntStateOf(-1) }
+    val sortRequests = remember { mutableMapOf<String, FocusRequester>() }
+    // The card a Down is waiting on the next page from. Released by the page, a failure, an empty page or the cap; dropped
+    // by a newer key, a sort change or focus moving.
+    var heldDownFrom by remember { mutableIntStateOf(-1) }
+    // The card a footer Retry was pressed from, until that retry has landed or failed.
+    var retryingFrom by remember { mutableIntStateOf(-1) }
+    val focusManager = LocalFocusManager.current
+    val items by rememberUpdatedState(state.items)
+    val loadingMore by rememberUpdatedState(state.loading)
+    val pageFailed by rememberUpdatedState(state.error != null && state.items.isNotEmpty())
+    val scrolled by remember { derivedStateOf { grid.firstVisibleItemIndex > 0 } }
+
+    // There is never a second job to replace: a key cancels the last one first, and a hold only starts with none running.
+    fun startMove(down: Boolean, block: suspend () -> Unit) {
+        movingDown = down
+        moving = scope.launch { block() }
+    }
+
+    // A newer press replaces whatever the last one left waiting: the viewer gets the press they just made.
+    fun dropWaitingMoves() {
+        moving?.cancel()
+        heldDownFrom = -1
+    }
+
+    // The footer is the grid's last item, and may be further down than anything composed.
+    fun focusPageRetry() {
+        startMove(down = true) {
+            val position = items.size + GRID_HEADER_ITEMS
+            val layout = grid.layoutInfo
+            if (layout.visibleItemsInfo.none { it.index == position }) {
+                grid.requestScrollToItem(position, -(layout.viewportSize.height * GRID_ARRIVAL_FRACTION).toInt())
+            }
+            requestAttached(requests, GRID_PAGE_RETRY)
+        }
+    }
+
+    // The header is the grid's item 0, so a card's grid index is its position in the list plus one.
+    fun focusCard(index: Int, direction: FocusDirection): Boolean {
+        val item = items.getOrNull(index) ?: return false
+        val position = index + GRID_HEADER_ITEMS
+        val layout = grid.layoutInfo
+        val visible = layout.visibleItemsInfo.any { it.index == position }
+        if (visible) {
+            // No frame to wait for, and a held key repeats faster than a frame can be spared.
+            requests[item.id]?.let { return it.requestFocus() }
+        }
+        startMove(direction == FocusDirection.Down) {
+            // A row that isn't composed can't be a focus target. The bring-into-view spec settles the rest. Requested
+            // rather than scrollToItem, which a bring-into-view still running would cancel, losing the move.
+            if (!visible) grid.requestScrollToItem(position, -(layout.viewportSize.height * GRID_ARRIVAL_FRACTION).toInt())
+            landOnCard(
+                card = item.id,
+                holdingThePlaceNow = { items.getOrNull(index)?.id },
+                request = { requestAttached(requests, it) },
+                lookAround = { focusManager.moveFocus(direction) }
+            )
+        }
+        return true
+    }
+
+    // Up from the first row lands on what's selected, wherever the card was.
+    fun focusSelectedSort(): Boolean {
+        // A failed first load has no cards to come from, and a failed later page shows after the last card. A refresh error's
+        // Retry is in the header, next above the first row, and is what the viewer has to act on.
+        if (state.refreshError != null) return false
+        if (!showSort) {
+            val above = headFocus ?: return false
+            startMove(down = false) {
+                if (grid.layoutInfo.visibleItemsInfo.none { it.index == 0 }) grid.requestScrollToItem(0)
+                if (!awaitCatalogFocus(above)) focusManager.moveFocus(FocusDirection.Up)
+            }
+            return true
+        }
+        startMove(down = false) {
+            if (grid.layoutInfo.visibleItemsInfo.none { it.index == 0 }) grid.requestScrollToItem(0)
+            if (!requestAttached(sortRequests, state.sortBy)) focusManager.moveFocus(FocusDirection.Up)
+        }
+        return true
+    }
+
+    /**
+     * Compose's focus search only sees composed cards. The row below a focused card usually isn't composed when the card
+     * fills the viewport, and the grid composes one more item at a time to look for a target, so the first card of the
+     * next row won: Down from column 4 landed in column 1. Moving by index holds the column whatever is composed.
+     */
+    fun moveVertically(index: Int, down: Boolean): Boolean {
+        // A repeat of the key being carried out is part of that move. The other direction replaces it.
+        if (moving?.isActive == true && movingDown == down) return true
+        moving?.cancel()
+        if (!down) heldDownFrom = -1
+        return when (val move = gridVerticalMove(index, grid.layoutInfo.maxSpan, items.size, down, loadingMore, pageFailed)) {
+            is GridVerticalMove.Card -> focusCard(move.index, if (down) FocusDirection.Down else FocusDirection.Up)
+
+            // The page on its way lands in this column if focus is still here. A repeat doesn't restart the cap.
+            GridVerticalMove.Hold -> {
+                heldDownFrom = index
+                true
+            }
+
+            GridVerticalMove.Stay -> true
+
+            GridVerticalMove.Above -> focusSelectedSort()
+
+            GridVerticalMove.PageRetry -> {
+                focusPageRetry()
+                true
+            }
+        }
+    }
+
+    // A hold ends in a plain Down on what's loaded by then, whichever way it ended.
+    fun releaseHold() {
+        val from = heldDownFrom
+        if (from < 0) return
+        heldDownFrom = -1
+        when (val landing = gridHoldRelease(from, grid.layoutInfo.maxSpan, items.size, pageFailed)) {
+            is GridVerticalMove.Card -> focusCard(landing.index, FocusDirection.Down)
+            GridVerticalMove.PageRetry -> focusPageRetry()
+            else -> Unit
+        }
+    }
+
+    // A retry that fails again leaves focus on Retry. One that succeeds is a plain Down from the card the viewer left, or a
+    // return to it if nothing new came. The footer stays until focus has left it, so focus never falls out of the grid.
+    fun settlePageRetry() {
+        val from = retryingFrom
+        if (from < 0) return
+        if (state.error != null) {
+            retryingFrom = -1
+            return
+        }
+        val landing = gridHoldRelease(from, grid.layoutInfo.maxSpan, items.size) as? GridVerticalMove.Card
+        focusCard(landing?.index ?: from, FocusDirection.Down)
+        scope.launch {
+            moving?.join()
+            retryingFrom = -1
+        }
+    }
+
+    val platformBringIntoView = LocalBringIntoViewSpec.current
+    val focusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
+    val stripInset = with(LocalDensity.current) { ContextStripHeight.toPx() }
+    val gridBringIntoView = remember(platformBringIntoView, focusMargin, stripInset) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = focusedCardScrollDistance(
+                offset,
+                size,
+                containerSize,
+                focusMargin,
+                platformBringIntoView.calculateScrollDistance(offset, size, containerSize),
+                // The first row and the sort controls stay with the header while everything fits.
+                scrollToTop = grid.firstVisibleItemScrollOffset.toFloat().takeIf {
+                    (headerFocused || focusedIndex in 0 until grid.layoutInfo.maxSpan) && grid.firstVisibleItemIndex == 0
+                },
+                topInset = stripInset
+            )
+        }
+    }
     // Grid headings/card focus provide context. A navigation destination is not a pane:
     // late pane events from this departing grid would speak its title over detail focus.
-    Column(
-        modifier = Modifier.fillMaxSize().background(
-            CatalogBackground
-        ).padding(horizontal = 48.dp, vertical = 32.dp).testTag("grid").accessibilityGroup(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        CatalogHeading(state.parent.name)
-        Text(itemCountLabel(state.total), color = CatalogMuted, modifier = Modifier.testTag("grid:count"))
-        if (showSort) {
-            FlowRow(
-                modifier = Modifier.accessibilityGroup().semantics {
-                    traversalIndex = 1f
-                }.then(
-                    // Keep the visual/input controls while withholding their early accessibility targets.
-                    if (!restored) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+    val reveal = Modifier.revealFocusAfterFontChange(grid, ContextStripHeight, revealKey)
+    Box(modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("grid").accessibilityGroup()) {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides gridBringIntoView) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(144.dp),
+                state = grid,
+                modifier = reveal.fillMaxSize().focusRestorer().testTag("grid:items").semantics { traversalIndex = 0f },
+                // The grid reaches the screen's edges, so only the screen clips a focused card's 1.1x scale.
+                contentPadding = PaddingValues(
+                    start = 56.dp,
+                    end = 56.dp,
+                    top = if (pinStrip) ContextStripHeight + 8.dp else 32.dp,
+                    bottom = 32.dp
                 ),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                val sorts = listOf("SortName" to "Name", "DateCreated" to "Date added", "PremiereDate" to "Release date")
-                sorts.forEachIndexed { index, (sort, title) ->
-                    Button(
-                        onClick = { onSort(sort, state.descending) },
-                        modifier = (
-                            if (index ==
-                                0
-                            ) {
-                                Modifier.focusRequester(firstSort)
-                            } else {
-                                Modifier
+                // The header scrolls with the cards: fixed above them it left 325 dp of a 540 dp screen, less than a
+                // focused card with a three-line title needs at the largest system font.
+                item(key = "grid:header", span = { GridItemSpan(maxLineSpan) }) {
+                    Column(
+                        // Sits on the screen's 48 dp keyline, not the cards' 56 dp one.
+                        Modifier.offset(x = -GridHeaderOutset).padding(bottom = 12.dp).onFocusChanged {
+                            headerFocused = it.hasFocus
+                            if (it.hasFocus) {
+                                heldDownFrom = -1
+                                // A viewer who has moved on, by key or by a reader, isn't pulled back when a retry lands.
+                                retryingFrom = -1
                             }
-                            ).testTag("grid:sort:$sort").semantics {
-                            selected =
-                                state.sortBy == sort
+                        },
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        head?.invoke()
+                        CatalogHeading(state.parent.name)
+                        Text(itemCountLabel(state.total), color = CatalogMuted, modifier = Modifier.testTag("grid:count"))
+                        if (showSort) {
+                            FlowRow(
+                                modifier = Modifier.accessibilityGroup().semantics {
+                                    traversalIndex = 1f
+                                }.then(
+                                    // Keep the visual/input controls while withholding their early accessibility targets.
+                                    if (!restored) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+                                ).onPreviewKeyEvent {
+                                    // Down from the controls returns to the card Up left, in its column. A control on
+                                    // an upper wrapped line goes to the line below it first.
+                                    if (it.type != KeyEventType.KeyDown) {
+                                        false
+                                    } else if (it.key == Key.DirectionDown &&
+                                        items.isNotEmpty() &&
+                                        sortBottoms[focusedSort] == sortBottoms.values.maxOrNull()
+                                    ) {
+                                        moving?.isActive == true || focusCard(focusedIndex.coerceAtLeast(0), FocusDirection.Down)
+                                    } else {
+                                        dropWaitingMoves()
+                                        false
+                                    }
+                                },
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                itemVerticalAlignment = Alignment.CenterVertically
+                            ) {
+                                fun sortControl(index: Int) = Modifier.onFocusChanged { if (it.isFocused) focusedSort = index }
+                                    .onGloballyPositioned { sortBottoms[index] = it.positionInParent().y + it.size.height }
+                                GridSorts.forEachIndexed { index, (sort, title) ->
+                                    val requester = remember(sort) { if (index == 0) firstSort else FocusRequester() }
+                                    DisposableEffect(sort) {
+                                        sortRequests[sort] = requester
+                                        onDispose { sortRequests.remove(sort) }
+                                    }
+                                    Button(
+                                        onClick = { onSort(sort, state.descending) },
+                                        modifier = Modifier.focusRequester(requester).then(sortControl(index))
+                                            .testTag("grid:sort:$sort").semantics { selected = state.sortBy == sort }
+                                    ) { SortChipContent(title, "check".takeIf { state.sortBy == sort }) }
+                                }
+                                Button(
+                                    onClick = { onSort(state.sortBy, !state.descending) },
+                                    modifier = sortControl(GridSorts.size).testTag("grid:sort-order").semantics {
+                                        stateDescription = if (state.descending) "Descending" else "Ascending"
+                                    }
+                                ) {
+                                    Box(Modifier.clearAndSetSemantics {}) {
+                                        if (state.descending) {
+                                            SortChipContent("Descending", "arrow-down")
+                                        } else {
+                                            SortChipContent("Ascending", "arrow-up")
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    ) { Text(if (state.sortBy == sort) "$title ✓" else title) }
-                }
-                Button(
-                    onClick = { onSort(state.sortBy, !state.descending) },
-                    modifier = Modifier.testTag("grid:sort-order").semantics {
-                        stateDescription = if (state.descending) "Descending" else "Ascending"
+                        CatalogError(state.error.takeIf { state.items.isEmpty() } ?: state.refreshError, {
+                            restored = false
+                            if (state.error == null) retryFocusRequest++
+                            onRetry()
+                        }, Modifier.focusRequester(retry).testTag("grid:retry"))
+                        if (state.loading && state.items.isEmpty()) Text("Loading…")
+                        if (!state.loading && state.items.isEmpty() && state.error == null) Text(emptyGridLabel(state.parent))
                     }
-                ) {
-                    Text(if (state.descending) "Descending ↓" else "Ascending ↑", modifier = Modifier.clearAndSetSemantics {})
+                }
+                gridItemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
+                    val requester = remember(item.id) { FocusRequester() }
+                    DisposableEffect(item.id) {
+                        requests[item.id] = requester
+                        onDispose { requests.remove(item.id) }
+                    }
+                    CatalogCard(
+                        item = item,
+                        account = state.account,
+                        wide = item.type == "Episode",
+                        width = null,
+                        onClick = { onOpen(item) },
+                        modifier = Modifier.focusRequester(requester).testTag("grid:${item.id}").onFocusChanged {
+                            if (it.isFocused) {
+                                selectedId = item.id
+                                focusedIndex = index
+                                onNearEnd(index)
+                                heldDownFrom = -1
+                                retryingFrom = -1
+                            }
+                        }.onPreviewKeyEvent {
+                            when {
+                                it.type != KeyEventType.KeyDown -> false
+
+                                it.key == Key.DirectionDown || it.key == Key.DirectionUp ->
+                                    moveVertically(index, it.key == Key.DirectionDown)
+
+                                else -> {
+                                    dropWaitingMoves()
+                                    false
+                                }
+                            }
+                        }
+                    )
+                }
+                if (pageFailed || retryingFrom >= 0) {
+                    item(key = GRID_PAGE_RETRY, span = { GridItemSpan(maxLineSpan) }) {
+                        val requester = remember { FocusRequester() }
+                        DisposableEffect(Unit) {
+                            requests[GRID_PAGE_RETRY] = requester
+                            onDispose { requests.remove(GRID_PAGE_RETRY) }
+                        }
+                        GridPageFailure(
+                            state.error,
+                            onRetry = {
+                                if (state.error != null) {
+                                    retryingFrom = focusedIndex.coerceAtLeast(0)
+                                    onRetry()
+                                }
+                            },
+                            modifier = Modifier.focusRequester(requester).testTag("grid:page-retry").onPreviewKeyEvent {
+                                when {
+                                    it.type != KeyEventType.KeyDown -> false
+
+                                    it.key == Key.DirectionUp -> {
+                                        retryingFrom = -1
+                                        moving?.cancel()
+                                        focusCard(focusedIndex.coerceAtLeast(0), FocusDirection.Up)
+                                    }
+
+                                    // Nothing is below, and a platform search must not wrap anywhere.
+                                    it.key == Key.DirectionDown -> true
+
+                                    else -> false
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
-        CatalogError(state.error ?: state.refreshError, {
-            restored = false
-            if (state.error == null) retryFocusRequest++
-            onRetry()
-        }, Modifier.focusRequester(retry))
-        if (state.loading) Text("Loading…")
-        if (!state.loading && state.items.isEmpty() && state.error == null) Text(emptyGridLabel(state.parent))
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(144.dp),
-            state = grid,
-            modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer().testTag("grid:items").semantics { traversalIndex = 0f },
-            // Poster height grows more than width; the grid clips along its vertical axis.
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            gridItemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
-                val requester = remember(item.id) { FocusRequester() }
-                DisposableEffect(item.id) {
-                    requests[item.id] = requester
-                    onDispose { requests.remove(item.id) }
-                }
-                CatalogCard(
-                    item = item,
-                    account = state.account,
-                    wide = item.type == "Episode",
-                    width = null,
-                    onClick = { onOpen(item) },
-                    modifier = Modifier.focusRequester(requester).testTag("grid:${item.id}").onFocusChanged {
-                        if (it.isFocused) {
-                            selectedId = item.id
-                            onNearEnd(index)
-                        }
-                    }
-                )
-            }
+        if (stripTitle != null && (pinStrip || scrolled)) {
+            ContextStrip(stripTitle, gridStripDetail(state.sortBy, state.descending).takeIf { showSort }, Modifier.testTag("grid:strip"))
+        }
+    }
+    // Keyed on the state rather than the chips' clicks, so a reader's click and anything else that changes the sort count.
+    LaunchedEffect(state.sortBy, state.descending) {
+        dropWaitingMoves()
+        retryingFrom = -1
+    }
+    // The error is a key too: an instant answer can take a retry from failed back to not loading within one frame.
+    LaunchedEffect(state.loading, state.items.size, state.error) {
+        if (!state.loading) {
+            releaseHold()
+            settlePageRetry()
+        }
+    }
+    LaunchedEffect(heldDownFrom) {
+        if (heldDownFrom >= 0) {
+            // In frames, so a repeat of the key can't starve it and it stops with the screen.
+            val pressed = withFrameMillis { it }
+            do {
+                val now = withFrameMillis { it }
+            } while (now - pressed < GRID_HOLD_CAP_MILLIS)
+            releaseHold()
         }
     }
     LaunchedEffect(state.items.map(MediaItem::id), state.loading, retryFocusRequest) {
@@ -699,7 +1012,8 @@ fun CatalogGrid(
             withFrameNanos { }
             val focused = if (state.items.isNotEmpty()) {
                 val index = state.items.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
-                if (grid.layoutInfo.visibleItemsInfo.none { it.index == index }) grid.scrollToItem(index)
+                val position = index + GRID_HEADER_ITEMS
+                if (grid.layoutInfo.visibleItemsInfo.none { it.index == position }) grid.requestScrollToItem(position)
                 withFrameNanos { }
                 requestAttached(requests, state.items[index].id)
             } else if (state.error != null) {
@@ -707,15 +1021,191 @@ fun CatalogGrid(
             } else {
                 if (showSort) firstSort.requestFocus() else true
             }
-            // A failed card request uses the existing sort fallback instead of leaving controls hidden.
+            // A failed card request uses the existing sort fallback instead of leaving controls hidden. The header is an
+            // item now, and is detached when the restored card is far down the grid.
+            if (!focused && showSort && grid.layoutInfo.visibleItemsInfo.none { it.index == 0 }) {
+                grid.requestScrollToItem(0)
+                withFrameNanos { }
+            }
             restored = focused || (showSort && firstSort.requestFocus())
         }
     }
     LaunchedEffect(grid, state.items.size) {
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index }.collect { index ->
-            if (index != null) onNearEnd(index)
+            if (index != null && index >= GRID_HEADER_ITEMS) onNearEnd(index - GRID_HEADER_ITEMS)
         }
     }
+}
+
+/** The grid's items before its first card: the header. */
+private const val GRID_HEADER_ITEMS = 1
+
+/** The key of the footer shown after the last card when the next page failed, and of its Retry's focus requester. */
+private const val GRID_PAGE_RETRY = "grid:page-failure"
+
+/**
+ * Above the focused card's lifted top at the 30% pivot, so a strip over the content never covers it. The same at every font
+ * size, so its text clears the overscan margin (space.tv.safeTop) with [ContextStripTopPadding] above it.
+ */
+internal val ContextStripHeight = 56.dp
+
+private val ContextStripTopPadding = 20.dp
+
+/**
+ * One line saying what a scrolled grid or a collapsed head took off the screen. The name gives way to the [detail] when
+ * there's no room for both. Marked as not for a screen reader, since the viewer hears where they are from the card, but TV
+ * TalkBack still stops on it when nothing is above it. So a fixed head doesn't collapse under a reader (fixedHeadCollapses).
+ */
+@Composable
+internal fun ContextStrip(title: String, detail: String?, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().height(ContextStripHeight).background(CatalogBackground)
+            .semantics(mergeDescendants = true) { hideFromAccessibility() }
+            .padding(start = 48.dp, end = 48.dp, top = ContextStripTopPadding),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (detail != null) Text(" · $detail", color = CatalogMuted, maxLines = 1, softWrap = false)
+    }
+}
+
+/**
+ * Text and a mark drawn as a shape. As characters, the check and arrows come from a fallback font whose taller line made
+ * those chips higher than their neighbours at large sizes.
+ */
+@Composable
+private fun SortChipContent(title: String, icon: String?) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title)
+        if (icon != null) {
+            val size = with(LocalDensity.current) { LocalTextStyle.current.fontSize.toDp() }
+            Icon(touchActionIcon(icon), contentDescription = null, modifier = Modifier.size(size))
+        }
+    }
+}
+
+/** How far down the viewport a card lands when a move has to scroll to reach it; the TV pivot's 30%. */
+private const val GRID_ARRIVAL_FRACTION = .3f
+
+/** The grid's horizontal content padding beyond the screen's 48 dp keyline. */
+private val GridHeaderOutset = 8.dp
+
+/** Clear space kept outside a focused card's scaled edge and its border. */
+internal val FocusedCardMargin = 8.dp
+
+/**
+ * Moves a fixed header off the screen, still composed and focusable, so the content below it gets its height. A card
+ * whose title has unbounded lines (see CatalogCard above 1.15) would not fit under the header otherwise.
+ */
+internal fun Modifier.collapsedOffScreen(collapsed: Boolean): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val height = if (collapsed) 0 else placeable.height
+    layout(placeable.width, height) {
+        placeable.placeRelative(0, if (collapsed) -placeable.height - CollapsedHeaderClearance.roundToPx() else 0)
+    }
+}
+
+/**
+ * Spreads a strip over the screen padding around it, up to the screen's top. It reports only the height that reaches past
+ * [topPadding] and [gapBelow], so whatever follows after that gap starts exactly at the strip's bottom.
+ */
+internal fun Modifier.pinnedToScreenTop(horizontalPadding: Dp, topPadding: Dp, gapBelow: Dp): Modifier = layout { measurable, constraints ->
+    val horizontal = horizontalPadding.roundToPx()
+    val width = constraints.maxWidth + 2 * horizontal
+    val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+    val reported = (placeable.height - topPadding.roundToPx() - gapBelow.roundToPx()).coerceAtLeast(0)
+    layout(constraints.maxWidth, reported) { placeable.placeRelative(-horizontal, -topPadding.roundToPx()) }
+}
+
+/** More than any screen padding above a collapsed header, so no sliver of it shows. */
+private val CollapsedHeaderClearance = 64.dp
+
+/** Tracks the scroller's viewport and its focused descendant. Layout data, so no recomposition when they change. */
+private class FocusedInScroller {
+    var viewport: LayoutCoordinates? = null
+    var focused: LayoutCoordinates? = null
+}
+
+/**
+ * For a TV scroller's modifier. A font change keeps the activity (fontScale is in configChanges), and the platform only
+ * re-reveals a focused child when the viewport shrinks, not when the child or what's above it grows, so a focused control
+ * low on the page would end up below the screen.
+ *
+ * onFocusedBoundsChanged is deprecated with a note that it will become a no-op. Its replacement is on
+ * FocusTargetModifierNode, which would add a focus level to every scroller. If it does go, the inPlaceFontChange tests fail.
+ * A change of [key] reveals the same way: the caller's way of saying a head moved in or out of the scroller.
+ */
+@Suppress("DEPRECATION")
+@OptIn(ExperimentalFoundationApi::class)
+internal fun Modifier.revealFocusAfterFontChange(scroller: ScrollableState, topInset: Dp = 0.dp, key: Any? = null): Modifier = composed {
+    val density = LocalDensity.current
+    val margin = with(density) { FocusedCardMargin.toPx() }
+    val inset = with(density) { topInset.toPx() }
+    val tracked = remember { FocusedInScroller() }
+    var revealedFor by remember { mutableStateOf(density.fontScale to key) }
+    LaunchedEffect(density.fontScale, key) {
+        if ((density.fontScale to key) == revealedFor) return@LaunchedEffect
+        revealedFor = density.fontScale to key
+        // The grown layout is in place after the frame this composition belongs to.
+        repeat(2) { withFrameNanos { } }
+        val viewport = tracked.viewport?.takeIf { it.isAttached } ?: return@LaunchedEffect
+        val focused = tracked.focused?.takeIf { it.isAttached } ?: return@LaunchedEffect
+        val bounds = viewport.localBoundingBoxOf(focused, clipBounds = false)
+        val viewportHeight = viewport.size.height.toFloat()
+        scroller.scrollBy(focusedCardScrollDistance(bounds.top, bounds.height, viewportHeight, margin, 0f, topInset = inset))
+    }
+    Modifier.onGloballyPositioned { tracked.viewport = it }.onFocusedBoundsChanged { tracked.focused = it }
+}
+
+/** tv-material draws a focused card at 1.1x about its centre, so 5% of its height lies past each layout edge. */
+private const val FOCUS_SCALE_OVERHANG = .05f
+
+/**
+ * Scroll distance that shows the whole focused card, its focus scale included, keeping [wanted], the platform's distance,
+ * when that does. The platform counts only the layout bounds: on TV it puts a card that doesn't fit below its 30% pivot
+ * flush with the viewport's end, so the scale's overhang was cut there. A card that can't fit shows from its top.
+ * [scrollToTop] is the current scroll when the focus belongs with the header: the distance back to the top if the card
+ * fits there. [topInset] is what's pinned over the top of the viewport.
+ */
+internal fun focusedCardScrollDistance(
+    offset: Float,
+    size: Float,
+    containerSize: Float,
+    margin: Float,
+    wanted: Float,
+    scrollToTop: Float? = null,
+    topInset: Float = 0f
+): Float {
+    val overhang = size * FOCUS_SCALE_OVERHANG + margin
+    if (size + 2 * overhang + topInset >= containerSize) return offset - overhang - topInset
+    if (scrollToTop != null && offset + scrollToTop + size + overhang <= containerSize) return -scrollToTop
+    val top = offset - wanted
+    return when {
+        top < overhang + topInset -> offset - overhang - topInset
+        top + size + overhang > containerSize -> offset + size + overhang - containerSize
+        else -> wanted
+    }
+}
+
+/**
+ * A shelf's section title sits [above] the card's top and ends [gap] above it. After [distance], the title is whole in the list
+ * or wholly out of it, never cut by the top edge into half a word. It comes into view with the card when both fit; when they
+ * don't, it goes wholly under the edge, unless the card's own scaled edge would follow it, which only a card taller than
+ * the screen can do.
+ */
+internal fun sectionTitleScrollDistance(
+    distance: Float,
+    offset: Float,
+    size: Float,
+    containerSize: Float,
+    margin: Float,
+    above: Float,
+    gap: Float
+): Float {
+    val top = offset - distance
+    if (top >= above || top <= gap) return distance
+    if (above + size + size * FOCUS_SCALE_OVERHANG + margin <= containerSize) return offset - above
+    return offset - maxOf(gap, size * FOCUS_SCALE_OVERHANG)
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -1458,8 +1948,7 @@ fun CatalogDetail(
         movement?.cancel()
         movement = scope.launch {
             if (index < 0) {
-                list.scrollToItem(0)
-                withFrameNanos { }
+                list.jumpTo(0)
                 selectedSection = "header"
                 restored = initial.requestFocus()
             } else if (index in sections.indices) {
@@ -1467,9 +1956,9 @@ fun CatalogDetail(
                 val target = rowSelections[section] ?: state.selectedSeasonId.takeIf { section == "seasons" }
                 val itemIndex = items.indexOfFirst { it.id == target }.coerceAtLeast(0)
                 // A visible shelf heading does not mean its lazy cards are attached.
-                list.scrollToItem(index + 1)
+                list.jumpTo(index + 1)
                 val horizontal = rowStates.getValue(section)
-                if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
+                if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.jumpTo(itemIndex)
                 selectedSection = section
                 selectedId = items[itemIndex].id
                 rowSelections = rowSelections + (section to selectedId)
@@ -1479,14 +1968,24 @@ fun CatalogDetail(
     }
     val platformBringIntoView = LocalBringIntoViewSpec.current
     val headerFocused by rememberUpdatedState(selectedSection == "header")
-    val detailBringIntoView = remember(platformBringIntoView) {
+    val cardFocusMargin = with(LocalDensity.current) { FocusedCardMargin.toPx() }
+    val reveal = Modifier.revealFocusAfterFontChange(list)
+    val detailBringIntoView = remember(platformBringIntoView, cardFocusMargin) {
         object : BringIntoViewSpec {
             override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
                 // An already-visible header action must not pivot the hero/title above the screen.
                 if (headerFocused && offset >= 0f && offset + size <= containerSize) {
                     0f
-                } else {
+                } else if (headerFocused) {
                     platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+                } else {
+                    focusedCardScrollDistance(
+                        offset,
+                        size,
+                        containerSize,
+                        cardFocusMargin,
+                        platformBringIntoView.calculateScrollDistance(offset, size, containerSize)
+                    )
                 }
         }
     }
@@ -1522,7 +2021,7 @@ fun CatalogDetail(
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = list,
-                modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("detail").semantics { testTagsAsResourceId = true }
+                modifier = reveal.fillMaxSize().background(CatalogBackground).testTag("detail").semantics { testTagsAsResourceId = true }
                     // A returning page must expose its restored input target before TalkBack can
                     // choose a heading or overview as a replacement for the departing player.
                     .then(
@@ -1837,7 +2336,9 @@ fun CatalogDetail(
                             val status = commandNotice ?: when {
                                 state.readSucceeded && !state.loading && state.playbackPending && !state.playbackReportFinished ->
                                     "Item loaded. Saving progress…"
+
                                 !state.playbackPending || state.playbackReportFinished -> "Loading item…"
+
                                 else -> "Saving progress…"
                             }
                             Box(Modifier.align(Alignment.TopEnd).background(CatalogBackground).padding(8.dp)) {
@@ -1988,7 +2489,7 @@ fun CatalogDetail(
             playbackReturn = false
             semanticsRevealed = true
             restored = false
-            list.scrollToItem(0)
+            if (list.firstVisibleItemIndex != 0 || list.firstVisibleItemScrollOffset != 0) list.requestScrollToItem(0)
             repeat(2) { withFrameNanos { } }
             restored = retry.requestFocus()
             recoveryFocusOwned = restored
@@ -2071,13 +2572,12 @@ fun CatalogDetail(
                 pendingSemanticsRevealed = false
                 readerMovement.reset()
                 pendingFocusRestored = false
-                list.scrollToItem(0)
-                withFrameNanos { }
+                list.jumpTo(0)
                 val focused = retry.requestFocus()
                 reportFocus("retry", focused)
             } else if (pendingEnabled) {
                 if (!pendingFocusRestored) {
-                    list.scrollToItem(0)
+                    list.jumpTo(0)
                     if (!pendingSemanticsRevealed) {
                         withFrameNanos { }
                         // An already-focused hidden control emits no new Focused change on publish.
@@ -2173,27 +2673,31 @@ fun CatalogDetail(
                 val savedId = if (savedSectionIndex < 0 && section == "seasons") state.selectedSeasonId else selectedId
                 val itemIndex = items.indexOfFirst { it.id == savedId }.coerceAtLeast(0)
                 val horizontal = rowStates.getValue(section)
-                list.scrollToItem(sectionIndex + 1)
-                if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.scrollToItem(itemIndex)
+                list.jumpTo(sectionIndex + 1)
+                if (horizontal.layoutInfo.visibleItemsInfo.none { it.index == itemIndex }) horizontal.jumpTo(itemIndex)
                 targetKey = "$section:${items[itemIndex].id}"
                 targetSection = section
                 targetId = items[itemIndex].id
             } else if (hasActions || state.error != null) {
-                list.scrollToItem(0)
+                list.jumpTo(0)
                 target = when {
                     state.error != null -> retry
+
                     pendingHeaderTarget == "from-start" && playItem != null -> {
                         headerTarget = "from-start"
                         fromStartFocus
                     }
+
                     pendingHeaderTarget == "played" && (playbackLayout || !state.busy) && item?.isEmptyContainer == false -> {
                         headerTarget = "played"
                         playedFocus
                     }
+
                     pendingHeaderTarget == "favorite" && (playbackLayout || !state.busy) -> {
                         headerTarget = "favorite"
                         favoriteFocus
                     }
+
                     else -> initial
                 }
             }
@@ -2458,6 +2962,7 @@ private fun DetailActions(
                             role = Role.Button
                             if (activeRequestCue != target && available) currentState?.let { stateDescription = it }
                         }
+
                         else -> app.pictureshow.core.detailActionDescription(
                             currentState,
                             available && activeRequestCue != target
@@ -2697,6 +3202,33 @@ private fun DetailRow(
     }
 }
 
+/**
+ * Puts [index] at the viewport's start, for code about to move focus there. Not scrollToItem: a bring-into-view left running
+ * by the last focus change holds the list's scroll mutex at a priority that makes scrollToItem throw CancellationException,
+ * and `launch` swallows that, so everything after it, the focus request included, never runs and the press is lost.
+ */
+internal suspend fun LazyListState.jumpTo(index: Int) {
+    // Already there: no frame to spend, which a reader's forward open into Detail counts.
+    if (firstVisibleItemIndex == index && firstVisibleItemScrollOffset == 0) return
+    requestScrollToItem(index)
+    withFrameNanos { }
+}
+
+/**
+ * Focus for a move's card once it's composed. The list may have changed under the move, so take what holds that place now,
+ * and only then look around: asking the same card again would repeat frames it has already refused.
+ */
+internal suspend fun landOnCard(
+    card: String,
+    holdingThePlaceNow: () -> String?,
+    request: suspend (String) -> Boolean,
+    lookAround: () -> Unit
+) {
+    if (request(card)) return
+    val now = holdingThePlaceNow()
+    if (now == null || now == card || !request(now)) lookAround()
+}
+
 /** Lazy targets are registered only while attached, including across navigation restoration. */
 private suspend fun requestAttached(requests: Map<String, FocusRequester>, key: String, stillWanted: () -> Boolean = { true }): Boolean {
     repeat(8) {
@@ -2795,14 +3327,14 @@ internal fun CatalogCard(
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     item.name,
-                    maxLines = if (LocalDensity.current.fontScale > 1.15f) Int.MAX_VALUE else 2,
+                    maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleSmall
                 )
                 if (item.type == "Episode") {
                     Text(
                         listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
-                        maxLines = if (LocalDensity.current.fontScale > 1.15f) Int.MAX_VALUE else 1,
+                        maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
                         overflow = TextOverflow.Ellipsis,
                         color = CatalogMuted,
                         style = MaterialTheme.typography.labelSmall
@@ -2847,6 +3379,22 @@ private fun CatalogHeading(title: String, modifier: Modifier = Modifier, large: 
         style = if (large) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineSmall,
         modifier = modifier.semantics { heading() }
     )
+}
+
+/** After the last card when the next page failed. It stays through a retry, so Retry never loses focus to the loading. */
+@Composable
+private fun GridPageFailure(message: String?, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        Modifier.offset(x = -GridHeaderOutset).padding(top = 8.dp).accessibilityGroup(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            message ?: "Loading…",
+            color = if (message != null) Color(0xFFFFCCB8) else CatalogMuted,
+            modifier = Modifier.testTag("grid:page-failure").semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        Button(onClick = onRetry, modifier = modifier) { Text("Retry") }
+    }
 }
 
 @Composable

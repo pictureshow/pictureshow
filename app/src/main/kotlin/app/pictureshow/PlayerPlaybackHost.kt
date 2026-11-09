@@ -118,6 +118,9 @@ internal class PlaybackHostState(
     /** Panels close before any exit. */
     var onFinishing: () -> Unit = {}
 
+    /** Once the next item is really on its way, not when asking was refused. */
+    var onAdvancing: () -> Unit = {}
+
     /** A seek reveals the controls with its new position. */
     var onSeekShown: () -> Unit = {}
 
@@ -128,6 +131,9 @@ internal class PlaybackHostState(
     val error get() = setupError ?: state.error
     val nextEpisode get() = remoteNext ?: (nextLookup?.result as? ClientResult.Success)?.value
     val findingNext get() = ended && (nextLookup == null || nextLookup?.result is ClientResult.Failure)
+
+    /** This viewing is over, though the player may wait here for the viewer: with a screen reader on, or after a trip away. */
+    val atEnd get() = ended || deferredNext != null
 
     fun finish(next: MediaItem? = null, reason: String = "next-episode") {
         onFinishing()
@@ -142,6 +148,7 @@ internal class PlaybackHostState(
         }
         if (switching || exitRequested || !output.foreground.value) return
         switching = true
+        onAdvancing()
         if (advanceReported) {
             onNext(next)
             return

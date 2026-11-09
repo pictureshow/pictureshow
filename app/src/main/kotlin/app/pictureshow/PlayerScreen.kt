@@ -174,7 +174,7 @@ internal fun PlayerItemScreen(
     val view = LocalView.current
     val layoutDirection = LocalLayoutDirection.current
     val windowFocused = LocalWindowInfo.current.isWindowFocused
-    val accessibleControls = rememberAccessibilityEnabled()
+    val accessibleControls = rememberAssistiveServiceInUse()
     val output = host.output
     val localPreferences by host::localPreferences
     var subtitleDelayMs by host::subtitleDelayMs

@@ -41,9 +41,17 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w400dp-h850dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchParitySettingsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private fun settings(onThisDevice: () -> Unit = {}): () -> PlaybackSettingsState {
+    private fun settings(
+        onThisDevice: () -> Unit = {},
+        castEnabled: Boolean? = null,
+        onCastEnabled: (Boolean) -> Unit = {},
+        onUpdateServices: (() -> Unit)? = null
+    ): () -> PlaybackSettingsState {
         var state by mutableStateOf(PlaybackSettingsState())
         compose.setContent {
             MaterialTheme {
@@ -56,17 +64,58 @@ class TouchParitySettingsTest {
                     {},
                     {},
                     {},
-                    onThisDevice = onThisDevice
+                    onThisDevice = onThisDevice,
+                    castEnabled = castEnabled,
+                    onCastEnabled = onCastEnabled,
+                    onUpdateServices = onUpdateServices
                 )
             }
         }
         return { state }
     }
 
+    @Test fun theCastSwitchSaysWhichWayItIsAndAsksToChange() {
+        val asked = mutableListOf<Boolean>()
+        settings(castEnabled = true, onCastEnabled = { asked += it })
+        compose.onNodeWithTag("touch:settings:google-cast").performScrollTo().assertIsOn().performClick()
+        compose.runOnIdle { assertEquals(listOf(false), asked) }
+    }
+
+    @Test fun whereCastCantBeUsedThereIsNoSwitch() {
+        settings(castEnabled = null)
+        compose.onNodeWithTag("touch:settings:google-cast").assertDoesNotExist()
+    }
+
+    @Test fun theCastSwitchShowsWhatIsStored() {
+        fun cap(state: String, visible: Boolean = true) = app.pictureshow.core.control.CastCapability(state, visible, false)
+        listOf("viewer-disabled", "ready", "searching", "no-targets", "idle", "permission-denied", "services-update-required").forEach {
+            assertEquals(true, castSwitchState(cap(it), stored = true), it)
+            assertEquals(false, castSwitchState(cap(it), stored = false), it)
+        }
+        listOf("os-too-old", "browser-unsupported", "services-missing").forEach {
+            assertEquals(null, castSwitchState(cap(it), stored = true), it)
+        }
+        assertEquals(null, castSwitchState(cap("tv-interface", visible = false), stored = true))
+    }
+
+    @Test fun servicesThatNeedUpdatingAreSaidAndOfferedTheWayToFixThem() {
+        var updates = 0
+        settings(castEnabled = false, onUpdateServices = { updates++ })
+        compose.onNodeWithTag("touch:settings:google-cast").performScrollTo().assertIsOff()
+        compose.onNodeWithText("Google Cast can't run until Google Play services is updated.", substring = true).assertExists()
+        compose.onNodeWithTag("touch:settings:update-play-services").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(1, updates) }
+    }
+
+    @Test fun withServicesUpToDateThereIsNothingToUpdate() {
+        settings(castEnabled = true)
+        compose.onNodeWithTag("touch:settings:update-play-services").assertDoesNotExist()
+    }
+
     @Test fun conversionNoticeDefaultsOnAndTogglesTheStoredPreference() {
         val state = settings()
         val toggle = compose.onNodeWithTag("touch:settings:conversion-notice").performScrollTo().assertIsOn()
-        compose.onNodeWithText("Shows a short note when the server has to convert a video for this phone.").assertExists()
+        compose.onNodeWithText("Shows a short note when the server has to convert a video or a song for this phone.").assertExists()
         toggle.performClick()
         compose.waitForIdle()
         toggle.assertIsOff().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Off"))
@@ -110,7 +159,7 @@ class TouchParitySettingsTest {
     fun aTabletSaysTablet() {
         settings()
         compose.onNodeWithText("This tablet").performScrollTo()
-        compose.onNodeWithText("Shows a short note when the server has to convert a video for this tablet.").assertExists()
+        compose.onNodeWithText("Shows a short note when the server has to convert a video or a song for this tablet.").assertExists()
     }
 
     @Test fun thisDeviceShowsTheCapturedReportWithoutSayingTv() {

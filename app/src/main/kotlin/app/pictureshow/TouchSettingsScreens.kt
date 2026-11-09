@@ -6,6 +6,7 @@ package app.pictureshow
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -53,7 +54,12 @@ internal fun TouchSettings(
     onBack: (() -> Unit)? = null,
     onRemote: () -> Unit = {},
     onThisDevice: () -> Unit = {},
-    onDownloads: () -> Unit = {}
+    onDownloads: () -> Unit = {},
+    /** Null where Cast can't be used on this device. */
+    castEnabled: Boolean? = null,
+    onCastEnabled: (Boolean) -> Unit = {},
+    /** Set while Google Play services need updating before Cast can run. */
+    onUpdateServices: (() -> Unit)? = null
 ) {
     val local = state.local
     val device = touchDeviceName(LocalConfiguration.current.smallestScreenWidthDp)
@@ -64,6 +70,24 @@ internal fun TouchSettings(
             TouchNavRow("Accounts", onClick = onAccounts)
             TouchNavRow("Remote for a TV", onClick = onRemote)
             TouchNavRow("Downloads", onClick = onDownloads)
+            castEnabled?.let {
+                TouchSwitchRow(
+                    "Google Cast",
+                    if (onUpdateServices != null) {
+                        "Google Cast can't run until Google Play services is updated. This setting applies after that."
+                    } else {
+                        "Lists Cast devices in Play on. Turning it off leaves anything already playing on one alone."
+                    },
+                    it,
+                    "touch:settings:google-cast",
+                    onCastEnabled
+                )
+                onUpdateServices?.let { update ->
+                    Box(Modifier.testTag("touch:settings:update-play-services")) {
+                        TouchNavRow("Update Google Play services", onClick = update)
+                    }
+                }
+            }
         }
         TouchSection(
             "Playback on ${device.replaceFirstChar(Char::lowercase)}",
@@ -83,10 +107,13 @@ internal fun TouchSettings(
             ) { checked -> onLocal { it.copy(passthrough = checked) } }
             TouchSwitchRow(
                 "Conversion notice",
-                "Shows a short note when the server has to convert a video for ${device.replaceFirstChar(Char::lowercase)}.",
+                "Shows a short note when the server has to convert a video or a song for ${device.replaceFirstChar(Char::lowercase)}.",
                 local.conversionNotice,
                 "touch:settings:conversion-notice"
             ) { checked -> onLocal { it.copy(conversionNotice = checked) } }
+            TouchChoice("Music quality", local.musicQuality, musicQualityOptions.map { it.first }, ::musicQualityLabel) { value ->
+                onLocal { it.copy(musicQuality = value) }
+            }
             TouchChoice("Subtitle size", local.subtitleSize, SubtitleSize.entries, { settingLabel(it.name) }) { value ->
                 onLocal { it.copy(subtitleSize = value) }
             }

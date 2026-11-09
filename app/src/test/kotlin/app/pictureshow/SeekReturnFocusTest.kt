@@ -70,6 +70,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SeekReturnFocusTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var output: Media3PlaybackOutput
     private lateinit var http: HttpClient
@@ -115,7 +118,7 @@ class SeekReturnFocusTest {
             compose.runOnIdle {
                 val manager = host.context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
                 assertTrue(!manager.isEnabled, "Accessibility must start disabled for this transition")
-                shadowOf(manager).setEnabled(true)
+                shadowOf(manager).setScreenReader(true)
                 assertTrue(manager.isEnabled)
             }
             compose.waitForIdle()
@@ -793,7 +796,7 @@ class SeekReturnFocusTest {
         })
         val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             host = androidx.compose.ui.platform.LocalView.current
             androidx.compose.runtime.CompositionLocalProvider(

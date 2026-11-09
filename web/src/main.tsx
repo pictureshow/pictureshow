@@ -8,6 +8,7 @@ import {
     type Server,
     type Item,
 } from "@pictureshow/core";
+import { serverLabel } from "@pictureshow/core/parity";
 import { spatialKey } from "./navigation";
 import { installLastInput } from "./last-input";
 import { Player } from "./player";
@@ -64,6 +65,8 @@ function App() {
             initial.preferences,
         ),
         [storageError, setStorageError] = useState(initial.error);
+    const labelOf = (s: { id: string; name: string; url: string }) =>
+        serverLabel(s, saved?.servers ?? []);
     const [account, setAccount] = useState(() =>
             initial.saved?.accounts.find(
                 (a) => accountKey(a) === initial.saved?.current,
@@ -658,8 +661,8 @@ function App() {
                 </span>
                 <span className="connection">
                     {account
-                        ? `${account.user.Name} · ${server?.name}`
-                        : (server?.name ?? "Your library, everywhere.")}
+                        ? `${account.user.Name} · ${server ? labelOf(server) : ""}`
+                        : (server ? labelOf(server) : "Your library, everywhere.")}
                 </span>
                 {account && (
                     <nav className="header-actions" aria-label="Main navigation">
@@ -747,6 +750,7 @@ function App() {
                     <SignIn
                         key={server.id + device.current}
                         client={client}
+                        label={labelOf(server)}
                         initialUsername={username}
                         onAccount={signedIn}
                         onError={fail}
@@ -781,6 +785,7 @@ function App() {
                     <Home
                         key={generation}
                         client={client}
+                        label={server ? labelOf(server) : undefined}
                         navigate={navigate}
                         onError={fail}
                         onSearch={() => navigate({ kind: "search" })}
@@ -893,8 +898,8 @@ function App() {
                 <Confirmation
                     question={
                         confirmation.account
-                            ? `Remove ${confirmation.account.user.Name} on ${confirmation.account.server.name} from this browser?`
-                            : `Remove ${confirmation.server!.name} and ${saved.accounts.filter((a) => a.server.id === confirmation.server!.id).length} saved account(s) from this browser?`
+                            ? `Remove ${confirmation.account.user.Name} on ${labelOf(confirmation.account.server)} from this browser?`
+                            : `Remove ${labelOf(confirmation.server!)} and ${saved.accounts.filter((a) => a.server.id === confirmation.server!.id).length} saved account(s) from this browser?`
                     }
                     busy={busy}
                     error={confirmError}

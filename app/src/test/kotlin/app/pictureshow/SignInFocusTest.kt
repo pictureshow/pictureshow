@@ -65,6 +65,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SignInFocusTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val server = Server("server", "Screen room", "https://media.example.test", "12.0.0")
     private val account = Account(server, User("sam", "Sam"), "fake-token")
@@ -136,6 +139,8 @@ class SignInFocusTest {
             modules(
                 module {
                     single { inertRemoteTarget() }
+                    single { inertMusicHost(get()) }
+                    single { inertRemoteController() }
                     single { inertPlaybackPreferences() }
                     single { accounts }
                     single<JellyfinService> { service }

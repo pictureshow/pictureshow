@@ -34,7 +34,7 @@ const good = {
 describe("playback-information strict vector runner", () => {
     it("runs a well-formed conversion-notice case", () => {
         expect(runVector(good)).toBe(
-            "Converting this video for this browser\nIts video format won't play on this browser.",
+            "Converting this video for this browser\nIts video format won't play on this browser.\nIt still plays, and a 1080p H.264 copy on the server plays directly.",
         );
     });
     it("fails unknown operations instead of passing them", () => {
@@ -290,7 +290,7 @@ describe("conversion notice on web", () => {
         expect(transcodeReasons("/videos/1/stream?static=true")).toEqual([]);
         expect(transcodeReasons(undefined)).toEqual([]);
     });
-    it("is a title plus one line of at most 20 words with the web action path", () => {
+    it("is a title plus one why-and-fix line of at most 30 words with the web action path", () => {
         for (const reason of [
             "VideoCodecNotSupported",
             "VideoRangeTypeNotSupported",
@@ -322,8 +322,8 @@ describe("conversion notice on web", () => {
             )!;
             expect(n.title).toBe("Converting this video for this browser");
             for (const action of Object.values(BROWSER_NOTICE_ACTIONS)) {
-                const line = `${n.reason} ${action}`;
-                expect(line.split(/\s+/).length).toBeLessThanOrEqual(20);
+                const line = `${n.reason} ${n.fix} ${action}`;
+                expect(line.split(/\s+/).length).toBeLessThanOrEqual(30);
                 expect(line).not.toMatch(/transcod/i);
             }
         }

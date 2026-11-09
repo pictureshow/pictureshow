@@ -93,7 +93,10 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         val detail = request<MediaItem>(account, "Items/${id.encodeURLPathPart()}")
         if (detail !is ClientResult.Success ||
             detail.value.type !in
-            listOf("Movie", "Episode", "Video", "Series", "Season", "BoxSet", "Playlist", "Folder", "CollectionFolder")
+            listOf(
+                "Movie", "Episode", "Video", "Series", "Season", "BoxSet", "Playlist", "Folder", "CollectionFolder",
+                "MusicAlbum", "Audio"
+            )
         ) {
             return detail
         }
@@ -204,6 +207,10 @@ private fun chooseImage(item: MediaItem, wide: Boolean): ItemImage? {
     }
     val primary = own("Primary")
     if (primary != null) return primary
+    // A track usually has no art of its own and shows its album's.
+    if (!item.albumId.isNullOrBlank() && !item.albumPrimaryImageTag.isNullOrBlank()) {
+        return ItemImage(item.albumId, "Primary", item.albumPrimaryImageTag)
+    }
     if (item.seriesId != null && !item.seriesPrimaryImageTag.isNullOrBlank()) {
         return ItemImage(item.seriesId, "Primary", item.seriesPrimaryImageTag)
     }

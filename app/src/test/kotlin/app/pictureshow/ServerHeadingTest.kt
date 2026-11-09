@@ -49,6 +49,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class ServerHeadingTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @After fun cleanup() {
@@ -75,6 +78,8 @@ class ServerHeadingTest {
             modules(
                 module {
                     single { inertRemoteTarget() }
+                    single { inertMusicHost(get()) }
+                    single { inertRemoteController() }
                     single { inertPlaybackPreferences() }
                     single { accounts }
                     single<JellyfinService> { service }

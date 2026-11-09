@@ -94,11 +94,19 @@ class OfflineReconnectMenuTest {
     @Test fun `every playing route owns the whole touch screen and nothing else does`() {
         val playing = listOf("player?item={item}&start={start}", "offline-player?entry={entry}", OFFLINE_STREAM_ROUTE)
         playing.forEach {
-            assertTrue(isTouchPlayerRoute(it), it)
+            assertTrue(isPlayerRoute(it), it)
             assertFalse(touchShowsNavigation(it, signedIn = true), it)
         }
         assertTrue(touchShowsNavigation("downloads", signedIn = true))
-        listOf("downloads", "home", null).forEach { assertFalse(isTouchPlayerRoute(it)) }
+        listOf("downloads", "home", null).forEach { assertFalse(isPlayerRoute(it)) }
+    }
+
+    @Test fun `TV's music bar stays off every playing route, downloaded and streamed too`() {
+        listOf("player?item={item}&start={start}", "offline-player?entry={entry}", OFFLINE_STREAM_ROUTE, MUSIC_NOW_ROUTE).forEach {
+            assertFalse(tvShowsMusicBar(musicVisible = true, it), it)
+        }
+        listOf(OFFLINE_DOWNLOADS_ROUTE, "home", null).forEach { assertTrue(tvShowsMusicBar(musicVisible = true, it), it.toString()) }
+        assertFalse(tvShowsMusicBar(musicVisible = false, "home"))
     }
 
     private lateinit var nav: NavHostController

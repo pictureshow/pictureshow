@@ -64,6 +64,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class NextEpisodeResolutionTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val account = Account(Server("server", "Test", "https://example.test", "12"), User("viewer", "Viewer"), "token")
     private val episode = MediaItem("episode", "An episode", "Episode", seriesId = "series")
@@ -343,7 +346,7 @@ class NextEpisodeResolutionTest {
                 WaitingSource { if (holdReopenedManifest.get()) reopenedManifest.await() }
             }
         )
-        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(accessible)
+        shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {
             PictureshowTheme {
                 PlayerItemScreen(account, episode, 42_000, catalog, { next += it.id }, { exits++ }, providedOutput = output)
@@ -429,7 +432,7 @@ class NextEpisodeResolutionTest {
         }
         if (enableAccessibilityAtEnd) {
             compose.runOnIdle {
-                shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setEnabled(true)
+                shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(true)
             }
             compose.waitForIdle()
         }

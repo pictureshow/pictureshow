@@ -6317,6 +6317,410 @@
       },
       "expected": false,
       "source": "Leg 75 Follow-up 7; DetailFeedback.kt"
+    },
+    {
+      "id": "server-label.alone-is-its-name",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "a",
+          "name": "Home",
+          "url": "http://nas.example:8096",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "http://nas.example:8096",
+            "version": "12"
+          },
+          {
+            "id": "c",
+            "name": "Cabin",
+            "url": "http://cabin.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "Home"
+    },
+    {
+      "id": "server-label.one-server-by-two-addresses-shows-each",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "a",
+          "name": "Home",
+          "url": "http://nas.example:8096",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "http://nas.example:8096",
+            "version": "12"
+          },
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "https://home.example",
+            "version": "12"
+          },
+          {
+            "id": "c",
+            "name": "Cabin",
+            "url": "http://cabin.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "Home · http://nas.example:8096"
+    },
+    {
+      "id": "server-label.the-other-address-too",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "a",
+          "name": "Home",
+          "url": "https://home.example",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "http://nas.example:8096",
+            "version": "12"
+          },
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "https://home.example",
+            "version": "12"
+          },
+          {
+            "id": "c",
+            "name": "Cabin",
+            "url": "http://cabin.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "Home · https://home.example"
+    },
+    {
+      "id": "server-label.another-server-of-the-same-name",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "d",
+          "name": "home ",
+          "url": "http://other.example",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "http://nas.example:8096",
+            "version": "12"
+          },
+          {
+            "id": "d",
+            "name": "home ",
+            "url": "http://other.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "home · http://other.example"
+    },
+    {
+      "id": "server-label.the-same-entry-twice-isnt-a-repeat",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "a",
+          "name": "Home",
+          "url": "http://nas.example:8096",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "http://nas.example:8096",
+            "version": "12"
+          },
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "http://nas.example:8096",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "Home"
+    },
+    {
+      "id": "server-label.no-name-is-its-address",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "n",
+          "name": "  ",
+          "url": "http://noname.example",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "n",
+            "name": "  ",
+            "url": "http://noname.example",
+            "version": "12"
+          },
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "http://nas.example:8096",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "http://noname.example"
+    },
+    {
+      "id": "server-label.one-server-listed-twice-counts-once-by-its-first-name",
+      "operation": "server-label",
+      "input": {
+        "server": {
+          "id": "a",
+          "name": "Home",
+          "url": "https://home.example",
+          "version": "12"
+        },
+        "all": [
+          {
+            "id": "a",
+            "name": "Home",
+            "url": "https://home.example",
+            "version": "12"
+          },
+          {
+            "id": "a",
+            "name": "Den",
+            "url": "https://home.example",
+            "version": "12"
+          },
+          {
+            "id": "b",
+            "name": "Den",
+            "url": "https://cabin.example",
+            "version": "12"
+          }
+        ]
+      },
+      "expected": "Home"
+    },
+    {
+      "id": "grid-vertical-move.down-keeps-column",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 35,
+        "down": true
+      },
+      "expected": 8,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.up-keeps-column",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 35,
+        "down": false
+      },
+      "expected": 3,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.up-from-first-row-leaves",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 35,
+        "down": false
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-to-short-last-row-lands-on-its-last",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 7,
+        "down": true
+      },
+      "expected": 6,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-exact-column-in-short-last-row",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 1,
+        "columns": 5,
+        "count": 7,
+        "down": true
+      },
+      "expected": 6,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-from-last-row-stays",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 6,
+        "columns": 5,
+        "count": 7,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-from-last-full-row-stays",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 9,
+        "columns": 5,
+        "count": 10,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.single-column",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 2,
+        "columns": 1,
+        "count": 4,
+        "down": true
+      },
+      "expected": 3,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.empty-grid",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 0,
+        "columns": 5,
+        "count": 0,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.unknown-columns",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 0,
+        "columns": 0,
+        "count": 5,
+        "down": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.index-out-of-range",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 7,
+        "columns": 5,
+        "count": 5,
+        "down": false
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-past-a-short-row-holds-while-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-from-last-row-holds-while-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 11,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": true
+      },
+      "expected": null,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-within-loaded-rows-ignores-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 3,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": true
+      },
+      "expected": 8,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.down-past-a-short-row-after-loading-lands-on-its-last",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 12,
+        "down": true,
+        "loadingMore": false
+      },
+      "expected": 11,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "grid-vertical-move.up-ignores-loading",
+      "operation": "grid-vertical-move",
+      "input": {
+        "index": 8,
+        "columns": 5,
+        "count": 12,
+        "down": false,
+        "loadingMore": true
+      },
+      "expected": 3,
+      "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
     }
   ]
 }

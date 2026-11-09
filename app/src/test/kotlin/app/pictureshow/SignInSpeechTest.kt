@@ -34,6 +34,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SignInSpeechTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun fieldCaptionsSupplyNoTextForTalkBackToPromoteToAnEmptyGroupStop() {
@@ -94,7 +97,7 @@ class SignInSpeechTest {
         val manager = compose.activity.getSystemService(
             android.content.Context.ACCESSIBILITY_SERVICE
         ) as android.view.accessibility.AccessibilityManager
-        org.robolectric.Shadows.shadowOf(manager).setEnabled(true)
+        org.robolectric.Shadows.shadowOf(manager).setScreenReader(true)
         val code = mutableStateOf<String?>(null)
         val announcements = mutableListOf<String>()
         compose.setContent {

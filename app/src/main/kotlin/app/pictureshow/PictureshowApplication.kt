@@ -80,6 +80,8 @@ class PictureshowApplication : Application() {
                         )
                     }
                     single<ServerDiscovery> { JvmServerDiscovery() }
+                    // Lazy on purpose: only the touch interface ever resolves it, and it reaches the Cast SDK later still.
+                    single { castSenderHost(this@PictureshowApplication, get(), get()) }
                     single {
                         val name = deviceDisplayName(this@PictureshowApplication)
                         val store = get<DeviceIdentityStore>()
@@ -126,6 +128,41 @@ class PictureshowApplication : Application() {
                         PersistentIdentityService(get(), get(), name)
                     }
                     single<CatalogService> { get<JellyfinService>() as CatalogService }
+                    single<app.pictureshow.core.music.MusicService> { get<JellyfinService>() as app.pictureshow.core.music.MusicService }
+                    single {
+                        val application = this@PictureshowApplication
+                        val name = deviceDisplayName(application)
+                        val identity = get<DeviceIdentityStore>()
+                        val http = get<HttpClient>()
+                        val playbackPreferences = get<PlaybackPreferencesStore>()
+                        val controller = get<RemoteControllerHost>()
+                        val decoders by lazy {
+                            DeviceCapabilityProbe(application).use { probe -> probe.snapshot().audioDecoders.map { it.codec }.toSet() }
+                        }
+                        MusicHost(
+                            application,
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main.immediate),
+                            get(),
+                            MusicStore(application),
+                            ClientMusicGateway(
+                                client = { account ->
+                                    app.pictureshow.core.playback.PlaybackClient(
+                                        http,
+                                        app.pictureshow.core.ClientIdentity(
+                                            name,
+                                            identity.getOrCreate(),
+                                            BuildConfig.VERSION_NAME
+                                        ).forAccount(account)
+                                    )
+                                },
+                                music = get(),
+                                decoders = { decoders }
+                            ),
+                            preferences = playbackPreferences::read,
+                            remoteAttached = { controller.state.value.controller?.target?.name },
+                            remoteTarget = { get<RemoteTargetHost>() }
+                        )
+                    }
                     single<app.pictureshow.core.UserConfigurationService> {
                         get<JellyfinService>() as app.pictureshow.core.UserConfigurationService
                     }
@@ -134,6 +171,27 @@ class PictureshowApplication : Application() {
                         PersonViewModel(account, item, session)
                     }
                     viewModel { SessionViewModel(get(), get()) }
+                    viewModel { (account: Account, item: app.pictureshow.core.MediaItem) ->
+                        MusicLibraryViewModel(account, item, get(), get())
+                    }
+                    viewModel { parameters ->
+                        val account: Account = parameters.get()
+                        val item: app.pictureshow.core.MediaItem = parameters.get()
+                        val role: String = parameters[2]
+                        val library: String = parameters[3]
+                        val session: CatalogSession = parameters.get()
+                        MusicDetailViewModel(
+                            account,
+                            item,
+                            app.pictureshow.core.music.ArtistRole.entries.firstOrNull { it.name == role }
+                                ?: app.pictureshow.core.music.ArtistRole.ALBUM_ARTIST,
+                            library.ifBlank { null },
+                            get(),
+                            get(),
+                            session
+                        )
+                    }
+                    viewModel { (account: Account, items: List<String>) -> MusicPlaylistPickerViewModel(account, items, get()) }
                     viewModel { (account: Account) -> PlaybackSettingsViewModel(account, get(), get(), get()) }
                     viewModel { ServerViewModel(get(), get()) }
                     viewModel { (server: Server) -> LoginViewModel(server, get(), get()) }
@@ -166,6 +224,7 @@ internal class PersistentIdentityService(
 ) : JellyfinService,
     CatalogService,
     SearchService,
+    app.pictureshow.core.music.MusicService,
     app.pictureshow.core.UserConfigurationService {
     private suspend fun client(deviceId: String? = null): JellyfinClient = withContext(Dispatchers.IO) {
         JellyfinClient(
@@ -181,6 +240,32 @@ internal class PersistentIdentityService(
     } catch (_: Exception) {
         ClientResult.Failure(identityError())
     }
+
+    override suspend fun music(account: Account, request: app.pictureshow.core.music.MusicRequest) =
+        call(account.deviceId) { it.music(account, request) }
+
+    override suspend fun instantMix(account: Account, item: String) = call(account.deviceId) { it.instantMix(account, item) }
+
+    override suspend fun playlistCanEdit(account: Account, playlist: String) =
+        runCatching { client(account.deviceId) }.getOrNull()?.playlistCanEdit(account, playlist) ?: false
+
+    private suspend fun playlistWrite(account: Account, block: suspend (JellyfinClient) -> app.pictureshow.core.music.PlaylistWrite) =
+        runCatching { client(account.deviceId) }.getOrNull()?.let { block(it) } ?: app.pictureshow.core.music.PlaylistWrite("failed")
+
+    override suspend fun createPlaylist(account: Account, name: String, items: List<String>, isPublic: Boolean) =
+        playlistWrite(account) { it.createPlaylist(account, name, items, isPublic) }
+
+    override suspend fun renamePlaylist(account: Account, playlist: String, name: String) =
+        playlistWrite(account) { it.renamePlaylist(account, playlist, name) }
+
+    override suspend fun addToPlaylist(account: Account, playlist: String, items: List<String>) =
+        playlistWrite(account) { it.addToPlaylist(account, playlist, items) }
+
+    override suspend fun removeFromPlaylist(account: Account, playlist: String, entries: List<String>) =
+        playlistWrite(account) { it.removeFromPlaylist(account, playlist, entries) }
+
+    override suspend fun movePlaylistEntry(account: Account, playlist: String, entry: String, index: Int) =
+        playlistWrite(account) { it.movePlaylistEntry(account, playlist, entry, index) }
 
     override suspend fun probe(address: String) = call { it.probe(address) }
     override suspend fun publicUsers(server: Server) = call { it.publicUsers(server) }

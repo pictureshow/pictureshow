@@ -23,6 +23,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,6 +32,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = android.app.Application::class)
 class TrickplayCacheTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     private val account = Account(Server("s", "Test", "http://localhost/base", "12"), User("u", "Test"), "fictional-token")
 
     @Test

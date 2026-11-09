@@ -9,6 +9,28 @@ import {
     ClientError,
 } from "./index";
 
+/**
+ * What an entry for this server is called, against the others listed with it. Jellyfin's name is free text and defaults to
+ * the machine's hostname, so two entries can share it. The address then tells them apart. A server with no name is its address.
+ */
+export function serverLabel(
+    server: { id: string; name: string; url: string },
+    all: { id: string; name: string; url: string }[],
+): string {
+    const name = server.name.trim();
+    if (!name) return server.url;
+    const distinct = new Map<string, { name: string }>();
+    for (const s of all) {
+        const key = s.id + " " + s.url;
+        if (!distinct.has(key)) distinct.set(key, s);
+    }
+    const repeats =
+        [...distinct.values()].filter(
+            (s) => s.name.trim().toLowerCase() === name.toLowerCase(),
+        ).length > 1;
+    return repeats ? name + " · " + server.url : name;
+}
+
 export const BITRATES = [null, 120, 80, 40, 20, 10, 4] as const;
 export const SEGMENT_TYPES = [
     "Intro",
@@ -307,6 +329,20 @@ export function activeSegment(
             )
             .sort((a, b) => a.StartTicks - b.StartTicks)[0] ?? null
     );
+}
+export function gridVerticalMove(
+    index: number,
+    columns: number,
+    count: number,
+    down: boolean,
+    loadingMore: boolean,
+): number | null {
+    if (columns <= 0 || index < 0 || index >= count) return null;
+    if (!down) return index >= columns ? index - columns : null;
+    const last = count - 1;
+    if (index + columns <= last) return index + columns;
+    if (loadingMore) return null;
+    return Math.floor(last / columns) > Math.floor(index / columns) ? last : null;
 }
 export function nextCountdown(
     wallSeconds: number,

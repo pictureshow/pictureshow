@@ -169,9 +169,13 @@ private suspend fun offlineInteractiveApi(context: Context, account: Account, id
     )
 )
 
-/** The player owns the whole screen on every route that plays, downloaded or streamed. */
-internal fun isTouchPlayerRoute(route: String?): Boolean =
+/** The player owns the whole screen on every route that plays, downloaded or streamed, on touch and TV. */
+internal fun isPlayerRoute(route: String?): Boolean =
     listOf("player?", "offline-player?", "online-player?").any { route?.startsWith(it) == true }
+
+/** TV's music bar sits under everything but a player and Now playing, whichever route the video plays on. */
+internal fun tvShowsMusicBar(musicVisible: Boolean, route: String?): Boolean =
+    musicVisible && !isPlayerRoute(route) && route != MUSIC_NOW_ROUTE
 
 internal fun offlineStreamRoute(entry: OfflineEntry, start: OfflineStreamStart) =
     "online-player?entry=${Uri.encode(entry.id)}&start=${start.positionMs}" +
@@ -237,7 +241,13 @@ internal fun NavController.leaveLocalPlayer(from: NavBackStackEntry, route: Stri
     popUpTo(from.destination.id) { inclusive = true }
 }
 
-internal fun NavGraphBuilder.offlineTvScreens(nav: NavController, account: () -> Account?, catalog: () -> CatalogSession) {
+/** [beforeVideo] ends music before a downloaded or streamed title plays: video and music never share the speakers (MUS-11). */
+internal fun NavGraphBuilder.offlineTvScreens(
+    nav: NavController,
+    account: () -> Account?,
+    catalog: () -> CatalogSession,
+    beforeVideo: () -> Unit
+) {
     composable(OFFLINE_DOWNLOADS_ROUTE) {
         val current = account() ?: return@composable
         val back = rememberDownloadsBack(nav)
@@ -269,6 +279,7 @@ internal fun NavGraphBuilder.offlineTvScreens(nav: NavController, account: () ->
         )
     }
     composable("offline-player?entry={entry}", listOf(navArgument("entry") { type = NavType.StringType })) { entry ->
+        LaunchedEffect(entry) { beforeVideo() }
         OfflineLocalPlayer(
             account(),
             entry.text("entry").orEmpty(),
@@ -279,13 +290,20 @@ internal fun NavGraphBuilder.offlineTvScreens(nav: NavController, account: () ->
         }
     }
     composable(OFFLINE_STREAM_ROUTE, offlineStreamArguments) { entry ->
+        LaunchedEffect(entry) { beforeVideo() }
         OfflineStreamPlayer(nav, entry, account()) { current, item, start, onCurrentItem ->
             PlayerScreen(current, item, start, catalog(), onCurrentItem, onExit = { nav.popBackStack() })
         }
     }
 }
 
-internal fun NavGraphBuilder.offlineTouchScreens(nav: NavController, account: () -> Account?, catalog: () -> CatalogSession) {
+/** [beforeVideo] as for TV. */
+internal fun NavGraphBuilder.offlineTouchScreens(
+    nav: NavController,
+    account: () -> Account?,
+    catalog: () -> CatalogSession,
+    beforeVideo: () -> Unit
+) {
     composable(OFFLINE_DOWNLOADS_ROUTE) {
         val current = account() ?: return@composable
         val back = rememberDownloadsBack(nav)
@@ -318,6 +336,7 @@ internal fun NavGraphBuilder.offlineTouchScreens(nav: NavController, account: ()
         )
     }
     composable("offline-player?entry={entry}", listOf(navArgument("entry") { type = NavType.StringType })) { entry ->
+        LaunchedEffect(entry) { beforeVideo() }
         // Held from the route, not the player: the seconds it takes to load the next episode mustn't rotate the screen and back.
         TouchPlayerWindow()
         OfflineLocalPlayer(
@@ -330,6 +349,7 @@ internal fun NavGraphBuilder.offlineTouchScreens(nav: NavController, account: ()
         }
     }
     composable(OFFLINE_STREAM_ROUTE, offlineStreamArguments) { entry ->
+        LaunchedEffect(entry) { beforeVideo() }
         TouchPlayerWindow()
         OfflineStreamPlayer(nav, entry, account()) { current, item, start, onCurrentItem ->
             TouchPlayerScreen(current, item, start, catalog(), onCurrentItem, onExit = { nav.popBackStack() })

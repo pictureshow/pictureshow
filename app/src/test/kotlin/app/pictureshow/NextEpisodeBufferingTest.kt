@@ -29,6 +29,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = android.app.Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class NextEpisodeBufferingTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>(effectContext = kotlinx.coroutines.test.StandardTestDispatcher())
 
     @Test

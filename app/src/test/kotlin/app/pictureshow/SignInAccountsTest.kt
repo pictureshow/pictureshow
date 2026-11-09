@@ -70,6 +70,9 @@ import org.robolectric.annotation.LooperMode
 @Config(sdk = [30], application = Application::class, qualifiers = "w960dp-h540dp-land-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class SignInAccountsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val server = Server("server", "Screen room", "https://media.example.test", "12.0.0")
     private val account = Account(server, User("viewer-one", "Viewer one"), "fake-token")
@@ -145,6 +148,8 @@ class SignInAccountsTest {
             modules(
                 module {
                     single { inertRemoteTarget() }
+                    single { inertMusicHost(get()) }
+                    single { inertRemoteController() }
                     single { inertPlaybackPreferences() }
                     single { accounts }
                     single<JellyfinService> { service }
@@ -208,11 +213,11 @@ class SignInAccountsTest {
         key(Key.DirectionCenter)
     }
 
-    private fun chooser() {
+    private fun chooser(home: String = "Viewer one · Screen room") {
         runBlocking { accounts.remember(account) }
         homeReady.complete(Unit)
         launch()
-        waitForText("Viewer one · Screen room")
+        waitForText(home)
         compose.onNodeWithTag("home:switch-user").performSemanticsAction(SemanticsActions.RequestFocus) { it() }
         key(Key.DirectionCenter)
         waitForText("Who’s watching?")
@@ -438,7 +443,7 @@ class SignInAccountsTest {
         val manager = compose.activity.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         val shadow = org.robolectric.Shadows.shadowOf(manager)
-        shadow.setEnabled(true)
+        shadow.setScreenReader(true)
         try {
             chooser()
             compose.mainClock.autoAdvance = false
@@ -523,6 +528,17 @@ class SignInAccountsTest {
         waitForText("Who’s watching?")
         assertEquals(listOf(elsewhere), accounts.snapshots.value.accounts)
         assertEquals(listOf(elsewhere.server), accounts.snapshots.value.rememberedServers)
+    }
+
+    // The opener tells two same-named servers apart, so the confirmation has to as well.
+    @Test
+    fun removeServerConfirmsWhichOfTwoSameNamedServers() {
+        val twin = other.copy(server = server.copy(id = "twin", url = "https://twin.example.test"))
+        runBlocking { accounts.remember(twin) }
+        chooser(home = "Viewer one · Screen room · https://media.example.test")
+        click("Remove server Screen room · https://media.example.test")
+        waitForText("Remove server?")
+        compose.onNodeWithText("This removes Screen room · https://media.example.test", substring = true).assertExists()
     }
 
     @Test

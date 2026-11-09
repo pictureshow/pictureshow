@@ -10,7 +10,8 @@ const jsonHeaders = {
     "content-type": "application/json",
 };
 const TITLE = "Converting this video for this browser";
-const REASON = "Its video format won't play on this browser.";
+const REASON =
+    "Its video format won't play on this browser. It still plays, and a 1080p H.264 copy on the server plays directly.";
 const ACTION = {
     mouse: "Click this note for details and fixes.",
     touch: "Tap this note for details and fixes.",

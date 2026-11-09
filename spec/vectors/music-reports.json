@@ -1,0 +1,501 @@
+{
+  "schemaVersion": 1,
+  "suite": "music-reports",
+  "cases": [
+    {
+      "id": "music-reports.one-track-one-start-one-stop",
+      "operation": "report",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing",
+            "ticks": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "ended",
+            "ticks": "100"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "100",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "ended",
+            "ticks": "100"
+          },
+          "expected": {
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.same-song-twice-is-two-viewings",
+      "operation": "report",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "load",
+            "entry": "b",
+            "media": "x",
+            "ticks": "9"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "9",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "playing"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "2",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.repeat-one-is-a-new-viewing",
+      "operation": "report",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x",
+            "ticks": "9"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "9",
+                "paused": false,
+                "failed": false
+              }
+            ],
+            "viewing": {
+              "entry": "a",
+              "serial": "2",
+              "started": false
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "playing"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "2",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.restored-paused-says-nothing-until-play",
+      "operation": "report",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": [],
+            "serial": "1"
+          }
+        },
+        {
+          "event": {
+            "op": "stop",
+            "ticks": "5"
+          },
+          "expected": {
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.progress-before-start-is-dropped",
+      "operation": "report",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "progress",
+            "ticks": "5"
+          },
+          "expected": {
+            "effects": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.pause-reports-progress-with-paused",
+      "operation": "report",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "progress",
+            "ticks": "5",
+            "paused": true
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "progress",
+                "media": "x",
+                "serial": "1",
+                "ticks": "5",
+                "paused": true,
+                "failed": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.failure-closes-as-failed",
+      "operation": "report",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "stop",
+            "ticks": "5",
+            "failed": true
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "5",
+                "paused": false,
+                "failed": true
+              }
+            ],
+            "viewing": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.a-natural-end-reports-the-full-duration",
+      "operation": "report",
+      "state": {},
+      "note": "The output moved on by itself: the track was heard to its end, though the last position seen was up to a second short.",
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing",
+            "ticks": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "load",
+            "entry": "b",
+            "media": "y",
+            "ticks": "1700000",
+            "natural": true,
+            "durationTicks": "1800000"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "1800000",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "music-reports.a-skip-reports-the-last-position-seen",
+      "operation": "report",
+      "state": {},
+      "note": "Next, a jump or a seek to another track: the stop says where the listener actually left it.",
+      "steps": [
+        {
+          "event": {
+            "op": "load",
+            "entry": "a",
+            "media": "x"
+          },
+          "expected": {
+            "effects": []
+          }
+        },
+        {
+          "event": {
+            "op": "playing",
+            "ticks": "0"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "start",
+                "media": "x",
+                "serial": "1",
+                "ticks": "0",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "load",
+            "entry": "b",
+            "media": "y",
+            "ticks": "400000",
+            "natural": false,
+            "durationTicks": "1800000"
+          },
+          "expected": {
+            "effects": [
+              {
+                "report": "stopped",
+                "media": "x",
+                "serial": "1",
+                "ticks": "400000",
+                "paused": false,
+                "failed": false
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import app.pictureshow.buildlogic.Media3ControllerIdentityFix
 import com.android.build.api.instrumentation.FramesComputationMode
 import com.android.build.api.instrumentation.InstrumentationScope
+import java.time.Duration
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -20,8 +21,8 @@ android {
         applicationId = "app.pictureshow"
         minSdk = 23
         targetSdk = 36
-        versionCode = 34
-        versionName = "0.3.0-rc32"
+        versionCode = 35
+        versionName = "0.3.0-rc33"
     }
     buildTypes {
         getByName("release") {
@@ -56,6 +57,8 @@ android {
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
             // Robolectric keeps bitmaps on the JVM heap: at 2,022 tests the default 512 MB ran out in TrickplayCacheTest, twice in a row.
             it.maxHeapSize = "1g"
+            // Backstop for what PerTestTimeLimit can't stop: code spinning with no looper and no interrupt.
+            it.timeout.set(Duration.ofMinutes(25))
         }
     }
     lint {
@@ -80,6 +83,8 @@ androidComponents.onVariants { variant ->
 dependencies {
     implementation(project(":core"))
     implementation(libs.play.billing)
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.mediarouter)
     implementation(libs.tvprovider)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)

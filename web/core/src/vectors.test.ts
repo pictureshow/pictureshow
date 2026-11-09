@@ -25,6 +25,7 @@ import {
     endPosition,
     activeSegment,
     nextTrigger,
+    gridVerticalMove,
     nextCountdown,
     nextAdjacency,
     imageUrl,
@@ -40,6 +41,7 @@ import {
     urlProjection,
     ParityCatalogClient,
     playbackRequest,
+    serverLabel,
 } from "./parity";
 import { referenceProfile, referenceCompatibility } from "./reference-profile";
 import * as rc26 from "./rc26";
@@ -51,6 +53,12 @@ const spec =
     fileURLToPath(new URL("../../../spec", import.meta.url));
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
+    "music-catalog",
+    "music-queue",
+    "music-session",
+    "music-reports",
+    "music-quality",
+    "music-playlists",
     "remote-targets",
     "remote-wire",
     "remote-receive",
@@ -65,6 +73,10 @@ const pendingPortSuites = new Set([
     "offline-reconnect",
     "offline-next",
     "offline-fmp4",
+    "cast-handoff",
+    "cast-capability",
+    "cast-session",
+    "grid-navigation",
 ]);
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))
@@ -675,6 +687,9 @@ for (const file of files) {
                             value = { error: "IllegalArgumentException" };
                         }
                         break;
+                    case "server-label":
+                        value = serverLabel(i.server, i.all);
+                        break;
                     case "settings":
                         value = decodeSettings(i);
                         break;
@@ -719,6 +734,15 @@ for (const file of files) {
                         break;
                     case "next-trigger":
                         value = nextTrigger(i.durationMs, i.segments);
+                        break;
+                    case "grid-vertical-move":
+                        value = gridVerticalMove(
+                            i.index,
+                            i.columns,
+                            i.count,
+                            i.down,
+                            i.loadingMore ?? false,
+                        );
                         break;
                     case "next-countdown":
                         value = nextCountdown(

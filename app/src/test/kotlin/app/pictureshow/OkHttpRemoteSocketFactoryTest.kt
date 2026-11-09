@@ -14,8 +14,12 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import org.junit.Rule
 
 class OkHttpRemoteSocketFactoryTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test fun headerAuthenticatesAndMessagesFlowBothWays() {
         val server = MockWebServer()
         val fromClient = LinkedBlockingQueue<String>()

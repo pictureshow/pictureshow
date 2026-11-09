@@ -25,9 +25,13 @@ import okhttp3.OkHttpClient
 import okhttp3.ResponseBody
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import org.junit.Rule
 import org.junit.Test
 
 class KtorResponseCancellationTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun cancellationAfterCallbackBeforeEngineResumeClosesTheUnclaimedBody() = runBlocking {
         MockWebServer().use { server ->

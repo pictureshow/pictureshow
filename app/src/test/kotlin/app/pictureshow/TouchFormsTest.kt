@@ -49,6 +49,9 @@ import org.robolectric.shadows.ShadowDialog
 @Config(sdk = [30], application = Application::class, qualifiers = "w411dp-h891dp-port-xhdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TouchFormsTest {
+    @get:Rule(order = -2)
+    val timeLimit = PerTestTimeLimit(180)
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val server = Server("fixture-server", "Fixture server", "https://media.example.test", "12.0.0")
     private val account = Account(server, User("fixture-viewer", "Viewer"), "fixture-token")
@@ -185,6 +188,24 @@ class TouchFormsTest {
             current = AccountSnapshot()
         }
         compose.onNodeWithText("No remembered accounts. Sign in to start watching.").assertExists()
+    }
+
+    @Test fun oneServerByTwoAddressesCanBeToldApart() {
+        val other = server.copy(url = "http://other.example:8096")
+        val current = snapshot.copy(lastServer = other)
+        compose.setContent {
+            MaterialTheme { TouchAccounts(AccountsState(), current, {}, {}, {}, {}, {}) }
+        }
+        compose.onNodeWithText("Remove server Fixture server · http://other.example:8096").assertExists()
+        compose.onNodeWithText("Remove server Fixture server · ${server.url}").assertExists()
+    }
+
+    @Test fun signInSaysWhichOfTwoSameNamedServersItIsFor() {
+        val label = "Fixture server · ${server.url}"
+        compose.setContent {
+            MaterialTheme { TouchLogin(LoginState(), server, false, {}, {}, {}, {}, {}, label) }
+        }
+        compose.onNodeWithText("Sign in to $label").assertExists()
     }
 
     @Test fun settingsDialogSelectsValueAndShowsLoadingSaveAndRetryStates() {

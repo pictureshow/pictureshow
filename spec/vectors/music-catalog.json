@@ -1,0 +1,617 @@
+{
+  "schemaVersion": 1,
+  "suite": "music-catalog",
+  "cases": [
+    {
+      "id": "music-catalog.album-section-stays-in-its-library",
+      "operation": "section",
+      "input": {
+        "section": "ALBUMS",
+        "library": "lib",
+        "start": 60
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "parentId": "lib",
+          "includeItemTypes": "MusicAlbum",
+          "recursive": "true",
+          "startIndex": "60",
+          "limit": "60",
+          "sortBy": "SortName",
+          "sortOrder": "Ascending"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.album-artists-and-artists-are-distinct-routes",
+      "operation": "section",
+      "input": {
+        "section": "ALBUM_ARTISTS",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Artists/AlbumArtists",
+        "parameters": {
+          "parentId": "lib"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.contributing-artists-route",
+      "operation": "section",
+      "input": {
+        "section": "ARTISTS",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Artists",
+        "parameters": {
+          "parentId": "lib"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.songs-section",
+      "operation": "section",
+      "input": {
+        "section": "SONGS",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "includeItemTypes": "Audio",
+          "parentId": "lib"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.genres-section",
+      "operation": "section",
+      "input": {
+        "section": "GENRES",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Genres",
+        "parameters": {
+          "parentId": "lib"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.playlists-are-audio-only",
+      "operation": "section",
+      "input": {
+        "section": "PLAYLISTS",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "includeItemTypes": "Playlist",
+          "mediaTypes": "Audio",
+          "recursive": "true"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.favorites-filter-in-library",
+      "operation": "section",
+      "input": {
+        "section": "FAVORITES",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "filters": "IsFavorite",
+          "includeItemTypes": "MusicAlbum,Audio",
+          "parentId": "lib"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.artist-albums-by-credit-album-artist",
+      "operation": "artist-albums",
+      "input": {
+        "artist": "a1",
+        "role": "ALBUM_ARTIST",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "albumArtistIds": "a1",
+          "includeItemTypes": "MusicAlbum",
+          "parentId": "lib"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.artist-albums-by-credit-contributing",
+      "operation": "artist-albums",
+      "input": {
+        "artist": "a1",
+        "role": "ARTIST",
+        "library": "lib"
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "contributingArtistIds": "a1",
+          "includeItemTypes": "MusicAlbum"
+        }
+      }
+    },
+    {
+      "id": "music-catalog.tracks-disc-then-track-with-fallback",
+      "operation": "order",
+      "input": {
+        "tracks": [
+          {
+            "Id": "z",
+            "Name": "Second disc",
+            "Type": "Audio",
+            "ParentIndexNumber": 2,
+            "IndexNumber": 1
+          },
+          {
+            "Id": "y",
+            "Name": "Two",
+            "Type": "Audio",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 2
+          },
+          {
+            "Id": "x",
+            "Name": "Untagged disc is disc one",
+            "Type": "Audio",
+            "IndexNumber": 1
+          },
+          {
+            "Id": "w",
+            "Name": "Beta",
+            "Type": "Audio",
+            "ParentIndexNumber": 1
+          },
+          {
+            "Id": "v",
+            "Name": "Alpha",
+            "Type": "Audio",
+            "ParentIndexNumber": 1
+          },
+          {
+            "Id": "u",
+            "Name": "Alpha",
+            "Type": "Audio",
+            "ParentIndexNumber": 1
+          },
+          {
+            "Id": "t",
+            "Name": "Last",
+            "Type": "Audio",
+            "ParentIndexNumber": 2
+          }
+        ]
+      },
+      "expected": [
+        "x",
+        "y",
+        "u",
+        "v",
+        "w",
+        "z",
+        "t"
+      ]
+    },
+    {
+      "id": "music-catalog.one-disc-has-no-disc-heading",
+      "operation": "discs",
+      "input": {
+        "tracks": [
+          {
+            "Id": "a",
+            "Name": "a",
+            "Type": "Audio",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 1
+          },
+          {
+            "Id": "b",
+            "Name": "b",
+            "Type": "Audio",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 2
+          }
+        ]
+      },
+      "expected": [
+        {
+          "disc": null,
+          "tracks": [
+            "a",
+            "b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "music-catalog.discs-group-in-order",
+      "operation": "discs",
+      "input": {
+        "tracks": [
+          {
+            "Id": "c",
+            "Name": "c",
+            "Type": "Audio",
+            "ParentIndexNumber": 2,
+            "IndexNumber": 1
+          },
+          {
+            "Id": "a",
+            "Name": "a",
+            "Type": "Audio",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 1
+          },
+          {
+            "Id": "b",
+            "Name": "b",
+            "Type": "Audio",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 2
+          }
+        ]
+      },
+      "expected": [
+        {
+          "disc": 1,
+          "tracks": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "disc": 2,
+          "tracks": [
+            "c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "music-catalog.compilation-stays-one-album",
+      "operation": "discs",
+      "input": {
+        "tracks": [
+          {
+            "Id": "a",
+            "Name": "a",
+            "Type": "Audio",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 1,
+            "ArtistItems": [
+              {
+                "Id": "p",
+                "Name": "Performer"
+              }
+            ]
+          },
+          {
+            "Id": "b",
+            "Name": "b",
+            "Type": "Audio",
+            "ParentIndexNumber": 1,
+            "IndexNumber": 2,
+            "ArtistItems": [
+              {
+                "Id": "q",
+                "Name": "Other"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": [
+        {
+          "disc": null,
+          "tracks": [
+            "a",
+            "b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "music-catalog.track-credit-hidden-when-it-is-the-albums",
+      "operation": "artist-line",
+      "input": {
+        "track": {
+          "Id": "a",
+          "Name": "a",
+          "Type": "Audio",
+          "ArtistItems": [
+            {
+              "Id": "p",
+              "Name": "Same"
+            }
+          ]
+        },
+        "albumArtist": "Same"
+      },
+      "expected": null
+    },
+    {
+      "id": "music-catalog.compilation-track-shows-its-own-credit",
+      "operation": "artist-line",
+      "input": {
+        "track": {
+          "Id": "a",
+          "Name": "a",
+          "Type": "Audio",
+          "ArtistItems": [
+            {
+              "Id": "p",
+              "Name": "Solo"
+            },
+            {
+              "Id": "q",
+              "Name": "Guest"
+            }
+          ]
+        },
+        "albumArtist": "Various Artists"
+      },
+      "expected": "Solo, Guest"
+    },
+    {
+      "id": "music-catalog.short-page-is-not-the-end",
+      "operation": "page",
+      "input": {
+        "pages": [
+          {
+            "ids": [
+              "a",
+              "b"
+            ],
+            "total": 4
+          },
+          {
+            "ids": [
+              "b",
+              "c"
+            ],
+            "total": 4
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          "a",
+          "b",
+          "c"
+        ],
+        "offset": 4,
+        "total": 4,
+        "ended": true
+      }
+    },
+    {
+      "id": "music-catalog.short-page-keeps-going",
+      "operation": "page",
+      "input": {
+        "pages": [
+          {
+            "ids": [
+              "a",
+              "b"
+            ],
+            "total": 5
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          "a",
+          "b"
+        ],
+        "offset": 2,
+        "total": 5,
+        "ended": false
+      }
+    },
+    {
+      "id": "music-catalog.empty-page-ends-a-shrunken-list",
+      "operation": "page",
+      "input": {
+        "pages": [
+          {
+            "ids": [
+              "a"
+            ],
+            "total": 5
+          },
+          {
+            "ids": [],
+            "total": 5
+          }
+        ]
+      },
+      "expected": {
+        "ids": [
+          "a"
+        ],
+        "offset": 1,
+        "total": 5,
+        "ended": true
+      }
+    },
+    {
+      "id": "music-catalog.state-empty",
+      "operation": "list-state",
+      "input": {
+        "loading": false,
+        "items": 0
+      },
+      "expected": "EMPTY"
+    },
+    {
+      "id": "music-catalog.state-inaccessible-403",
+      "operation": "list-state",
+      "input": {
+        "loading": false,
+        "items": 0,
+        "status": 403,
+        "kind": "SERVER"
+      },
+      "expected": "INACCESSIBLE"
+    },
+    {
+      "id": "music-catalog.state-inaccessible-404",
+      "operation": "list-state",
+      "input": {
+        "loading": false,
+        "items": 0,
+        "status": 404,
+        "kind": "SERVER"
+      },
+      "expected": "INACCESSIBLE"
+    },
+    {
+      "id": "music-catalog.state-failed-500",
+      "operation": "list-state",
+      "input": {
+        "loading": false,
+        "items": 0,
+        "status": 500,
+        "kind": "SERVER"
+      },
+      "expected": "FAILED"
+    },
+    {
+      "id": "music-catalog.state-failed-network",
+      "operation": "list-state",
+      "input": {
+        "loading": false,
+        "items": 0,
+        "kind": "NETWORK"
+      },
+      "expected": "FAILED"
+    },
+    {
+      "id": "music-catalog.state-expired",
+      "operation": "list-state",
+      "input": {
+        "loading": false,
+        "items": 0,
+        "status": 401,
+        "kind": "EXPIRED"
+      },
+      "expected": "EXPIRED"
+    },
+    {
+      "id": "music-catalog.state-rows-outlive-a-failed-next-page",
+      "operation": "list-state",
+      "input": {
+        "loading": false,
+        "items": 3,
+        "status": 500,
+        "kind": "SERVER"
+      },
+      "expected": "READY"
+    },
+    {
+      "id": "music-catalog.virtual-tracks-are-unavailable",
+      "operation": "playable",
+      "input": {
+        "tracks": [
+          {
+            "Id": "a",
+            "Name": "a",
+            "Type": "Audio",
+            "LocationType": "Virtual"
+          },
+          {
+            "Id": "b",
+            "Name": "b",
+            "Type": "Audio",
+            "LocationType": "FileSystem"
+          }
+        ]
+      },
+      "expected": [
+        "b"
+      ]
+    },
+    {
+      "id": "music-catalog.album-with-only-missing-tracks-has-no-play",
+      "operation": "playable",
+      "input": {
+        "tracks": [
+          {
+            "Id": "a",
+            "Name": "a",
+            "Type": "Audio",
+            "LocationType": "Virtual"
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "id": "music-catalog.track-art-falls-back-to-its-album",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "t",
+          "Name": "t",
+          "Type": "Audio",
+          "AlbumId": "alb",
+          "AlbumPrimaryImageTag": "tag"
+        }
+      },
+      "expected": "http://s/Items/alb/Images/Primary?tag=tag&maxWidth=100&quality=85"
+    },
+    {
+      "id": "music-catalog.track-own-art-wins",
+      "operation": "image",
+      "input": {
+        "item": {
+          "Id": "t",
+          "Name": "t",
+          "Type": "Audio",
+          "AlbumId": "alb",
+          "AlbumPrimaryImageTag": "tag",
+          "ImageTags": {
+            "Primary": "own"
+          }
+        }
+      },
+      "expected": "http://s/Items/t/Images/Primary?tag=own&maxWidth=100&quality=85"
+    },
+    {
+      "id": "music-catalog.genre-tracks-stay-in-the-library-in-album-order",
+      "operation": "genre-tracks",
+      "input": {
+        "genre": "g",
+        "library": "lib",
+        "start": 200
+      },
+      "expected": {
+        "path": "Items",
+        "parameters": {
+          "parentId": "lib",
+          "genreIds": "g",
+          "recursive": "true",
+          "includeItemTypes": "Audio",
+          "startIndex": "200",
+          "limit": "200",
+          "sortBy": "Album,ParentIndexNumber,IndexNumber,SortName",
+          "sortOrder": "Ascending"
+        }
+      }
+    }
+  ]
+}

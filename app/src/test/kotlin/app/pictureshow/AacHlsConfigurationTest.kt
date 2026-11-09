@@ -32,6 +32,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -46,6 +47,9 @@ import org.robolectric.shadows.ShadowLog
 @Config(sdk = [30, 36], application = Application::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class AacHlsConfigurationTest {
+    @get:Rule
+    val timeLimit = PerTestTimeLimit(180)
+
     @Test
     fun hlsCopyAndReencodeSendTheExtractedConfigToTheCodecOnFirstInitialization() {
         for (fixture in listOf("copied-audio-preroll.ts", "aac-fdk-surround.ts", "aac-stereo.ts")) {
