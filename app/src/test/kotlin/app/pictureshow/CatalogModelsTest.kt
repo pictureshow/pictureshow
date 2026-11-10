@@ -111,6 +111,32 @@ class CatalogModelsTest {
     }
 
     @Test
+    fun filtersCancelOldPageResetOffsetRetainSortAndDiscardLateNoncancellableResponse() = runTest(dispatcher) {
+        val pending = CompletableDeferred<ClientResult<ItemPage>>()
+        service.pageBlock = { q -> if (q.startIndex == 0) ok(page(0, 60, 125)) else withContext(NonCancellable) { pending.await() } }
+        val vm = own(CatalogGridViewModel(account, movies, session))
+        advanceUntilIdle()
+        vm.sort("DateCreated", true)
+        advanceUntilIdle()
+        vm.nearEnd(59)
+        runCurrent()
+        val filters = app.pictureshow.core.LibraryFilters(unwatched = true, favorite = true)
+        service.pageBlock = { ok(ItemPage(listOf(movie), 1)) }
+        vm.filter(filters)
+        runCurrent()
+        pending.complete(ok(ItemPage(listOf(MediaItem("stale")), 125)))
+        advanceUntilIdle()
+        assertEquals(listOf("film"), vm.state.value.items.map { it.id })
+        assertEquals(filters, service.queries.last().filters)
+        assertEquals(0, service.queries.last().startIndex)
+        assertEquals("DateCreated", service.queries.last().sortBy)
+        assertTrue(service.queries.last().descending)
+        vm.filter(app.pictureshow.core.LibraryFilters())
+        advanceUntilIdle()
+        assertFalse(service.queries.last().filters.active)
+    }
+
+    @Test
     fun pagingRequestsOnlyNearEndNeverOverlapsAndStopsAtTotal() = runTest(dispatcher) {
         val pending = CompletableDeferred<ClientResult<ItemPage>>()
         service.pageBlock = { q -> if (q.startIndex == 0) ok(page(0, 60, 125)) else pending.await() }

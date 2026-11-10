@@ -1,0 +1,411 @@
+{
+  "schemaVersion": 1,
+  "suite": "home-browse",
+  "cases": [
+    {
+      "id": "home-order-hide-stable",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "a",
+            "title": "a",
+            "items": [
+              {
+                "id": "a"
+              }
+            ]
+          },
+          {
+            "key": "b",
+            "title": "b",
+            "items": [
+              {
+                "id": "b"
+              }
+            ]
+          },
+          {
+            "key": "c",
+            "title": "c",
+            "items": [
+              {
+                "id": "c"
+              }
+            ]
+          },
+          {
+            "key": "d",
+            "title": "d",
+            "items": [
+              {
+                "id": "d"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "order": [
+            "missing",
+            "c",
+            "c",
+            "a"
+          ],
+          "hidden": [
+            "b"
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "c",
+          "ids": [
+            "c"
+          ]
+        },
+        {
+          "key": "a",
+          "ids": [
+            "a"
+          ]
+        },
+        {
+          "key": "d",
+          "ids": [
+            "d"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-merge-resume-wins",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Resume",
+            "items": [
+              {
+                "id": "a",
+                "seriesId": "s"
+              },
+              {
+                "id": "film"
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "Next",
+            "items": [
+              {
+                "id": "b",
+                "seriesId": "s"
+              },
+              {
+                "id": "c",
+                "seriesId": "t"
+              },
+              {
+                "id": "hidden",
+                "seriesId": "h"
+              },
+              {
+                "id": "film"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "s",
+            "h"
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "watching",
+          "ids": [
+            "a",
+            "film",
+            "c"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-remove-nextup-no-history-write",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Resume",
+            "items": [
+              {
+                "id": "a",
+                "seriesId": "s"
+              }
+            ]
+          },
+          {
+            "key": "nextup",
+            "title": "Next",
+            "items": [
+              {
+                "id": "b",
+                "seriesId": "s"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "hiddenSeries": [
+            "s"
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "resume",
+          "ids": [
+            "a"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-merge-hide-combined",
+      "operation": "home-rows",
+      "input": {
+        "rows": [
+          {
+            "key": "resume",
+            "title": "Resume",
+            "items": [
+              {
+                "id": "a"
+              }
+            ]
+          }
+        ],
+        "preferences": {
+          "mergeWatching": true,
+          "hidden": [
+            "watching"
+          ]
+        }
+      },
+      "expected": []
+    },
+    {
+      "id": "home-empty-never-pin-cache",
+      "operation": "home-rows",
+      "input": {
+        "rows": [],
+        "preferences": {
+          "pins": [
+            {
+              "kind": "COLLECTION",
+              "value": "denied"
+            }
+          ]
+        }
+      },
+      "expected": []
+    },
+    {
+      "id": "filter-clear-omits-all",
+      "operation": "library-filter-parameters",
+      "input": {},
+      "expected": {}
+    },
+    {
+      "id": "filter-all-facets-intersect",
+      "operation": "library-filter-parameters",
+      "input": {
+        "genre": "Animation & stories",
+        "year": 2025,
+        "officialRating": "PG-13",
+        "unwatched": true,
+        "favorite": true,
+        "resolution": "FULL_HD",
+        "personId": "p",
+        "studio": "Workshop"
+      },
+      "expected": {
+        "genres": "Animation & stories",
+        "years": "2025",
+        "officialRatings": "PG-13",
+        "isPlayed": "false",
+        "isFavorite": "true",
+        "minWidth": "1920",
+        "maxWidth": "3839",
+        "personIds": "p",
+        "studios": "Workshop"
+      }
+    },
+    {
+      "id": "filter-width-sd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "SD"
+      },
+      "expected": {
+        "maxWidth": "719"
+      }
+    },
+    {
+      "id": "filter-width-hd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "HD"
+      },
+      "expected": {
+        "minWidth": "720",
+        "maxWidth": "1919"
+      }
+    },
+    {
+      "id": "filter-width-full_hd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "FULL_HD"
+      },
+      "expected": {
+        "minWidth": "1920",
+        "maxWidth": "3839"
+      }
+    },
+    {
+      "id": "filter-width-uhd",
+      "operation": "library-filter-parameters",
+      "input": {
+        "resolution": "UHD"
+      },
+      "expected": {
+        "minWidth": "3840"
+      }
+    },
+    {
+      "id": "home-pin-collection",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "COLLECTION",
+        "value": "box"
+      },
+      "expected": {
+        "parentId": "box",
+        "recursive": false,
+        "filters": {}
+      }
+    },
+    {
+      "id": "home-pin-playlist",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "PLAYLIST",
+        "value": "list"
+      },
+      "expected": {
+        "parentId": "list",
+        "recursive": false,
+        "filters": {}
+      }
+    },
+    {
+      "id": "home-pin-favorites",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "FAVORITES",
+        "value": ""
+      },
+      "expected": {
+        "parentId": "",
+        "recursive": true,
+        "filters": {
+          "isFavorite": "true"
+        }
+      }
+    },
+    {
+      "id": "home-pin-genre",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "GENRE",
+        "value": "Adventure"
+      },
+      "expected": {
+        "parentId": "",
+        "recursive": true,
+        "filters": {
+          "genres": "Adventure"
+        }
+      }
+    },
+    {
+      "id": "home-pin-studio",
+      "operation": "home-pin-query",
+      "input": {
+        "kind": "STUDIO",
+        "value": "Workshop"
+      },
+      "expected": {
+        "parentId": "",
+        "recursive": true,
+        "filters": {
+          "studios": "Workshop"
+        }
+      }
+    },
+    {
+      "id": "home-preferences-preserve-and-roundtrip",
+      "operation": "home-preferences-document",
+      "input": {
+        "document": {
+          "Future": {
+            "v": 3
+          },
+          "CustomPrefs": {
+            "other": "keep"
+          },
+          "SortOrder": "Descending"
+        },
+        "preferences": {
+          "landing": "library:one",
+          "order": [
+            "libraries",
+            "resume"
+          ],
+          "hidden": [
+            "nextup"
+          ],
+          "pins": [
+            {
+              "kind": "FAVORITES",
+              "value": ""
+            }
+          ],
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "s"
+          ],
+          "libraries": {
+            "one": {
+              "sortBy": "DateCreated",
+              "descending": true,
+              "list": true
+            }
+          }
+        }
+      },
+      "expected": {
+        "preserved": true,
+        "roundtrip": true
+      }
+    }
+  ]
+}

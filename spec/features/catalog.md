@@ -1,5 +1,7 @@
 # Home, libraries, details, search and people
 
+Home builder, saved landing/display and metadata filters extend CAT-01/CAT-04: [HOME-01–08, BROWSE-01–03, ACCESS-01](home-browse.md).
+
 Sources: `CatalogScreens.kt`, `RowFocus.kt`, `CatalogModels.kt`, `CatalogFormatting.kt`, `CatalogFocusHandoff.kt`, `PlaybackExitHandoff.kt`, `SearchScreens.kt`, `SearchModels.kt`, `SearchIme.kt`, `SearchEntry.kt`; core `CatalogModels.kt`, `CatalogClient.kt`, `SearchClient.kt`. Tests: `CatalogModelsTest`, `CatalogFreshnessTest`, `CatalogFocusTest`, `CatalogOpenerRestorationTest`, `CatalogDetailHandoffTest`, `CatalogDetailReadRecoveryTest`, `CatalogRetryBudgetTest`, `EmptyContainersTest`, search and detail accessibility tests.
 
 | ID | Feature/behavior | Acceptance criteria |

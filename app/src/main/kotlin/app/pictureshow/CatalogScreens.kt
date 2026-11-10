@@ -167,6 +167,7 @@ fun CatalogHome(
     onResume: () -> Unit = {},
     onSearch: () -> Unit = {},
     onSettings: () -> Unit = {},
+    onCustomize: (() -> Unit)? = null,
     serverLabel: String = account.server.name
 ) {
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -187,7 +188,7 @@ fun CatalogHome(
             android.util.Log.d(
                 "CatalogFocus",
                 "home-entry saved=${selectedRow.isNotEmpty()} " +
-                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "profile") } ?: "card"} " +
+                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "customize", "profile") } ?: "card"} " +
                     "rowIndex=$selectedRowIndex rows=${rows.size} loading=${state.loading}"
             )
         }
@@ -202,13 +203,14 @@ fun CatalogHome(
     }
     val restoreAction = when {
         state.busy && selectedRow in listOf("settings", "profile") -> "search"
-        selectedRow in listOf("search", "settings", "profile") -> selectedRow
+        selectedRow in listOf("search", "settings", "customize", "profile") -> selectedRow
         rows.isEmpty() && !state.loading -> if (state.error != null) "retry" else "profile"
         else -> null
     }
     val restoreTarget = when (restoreAction) {
         "search" -> "Search"
         "settings" -> "Settings"
+        "customize" -> "Customize home"
         "profile" -> "Switch user"
         "retry" -> "Retry"
         else -> restoreItem?.let(::catalogAnnouncement)
@@ -238,6 +240,7 @@ fun CatalogHome(
     }
     val profile = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
+    val customizeFocus = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
@@ -328,7 +331,8 @@ fun CatalogHome(
             false
         }
     // Back below the first shelf returns to the top of home, where it opened; Back at the top leaves the app.
-    val belowTop = rows.isNotEmpty() && selectedRow.isNotEmpty() && selectedRow !in listOf("search", "settings", rows.first().key)
+    val belowTop =
+        rows.isNotEmpty() && selectedRow.isNotEmpty() && selectedRow !in listOf("search", "settings", "customize", rows.first().key)
     val pendingReturn = returning && !restored
     var entryBackSwallowed by remember { mutableStateOf(false) }
     BackHandler(enabled = if (pendingReturn) !entryBackSwallowed else belowTop && homeLifecycle == Lifecycle.State.RESUMED) {
@@ -403,10 +407,22 @@ fun CatalogHome(
                             },
                             enabled = !state.busy,
                             modifier = target(Modifier, restoreAction == "settings").focusRequester(settingsFocus).testTag("home:settings")
-                                .staysInRow(first = false, last = true)
+                                .staysInRow(first = false, last = onCustomize == null)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Settings") }
+                        if (onCustomize != null) {
+                            Button(
+                                onClick = {
+                                    selectedRow = "customize"
+                                    onCustomize()
+                                },
+                                modifier = target(Modifier, restoreAction == "customize").focusRequester(customizeFocus)
+                                    .testTag("home:customize").staysInRow(first = false, last = true)
+                                    .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "customize" }
+                                    .onPreviewKeyEvent { headerDown(it) }
+                            ) { Text("Customize home") }
+                        }
                     }
                     Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CatalogHeading("Pictureshow")
@@ -559,8 +575,16 @@ fun CatalogHome(
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             val focused = when {
-                restoreAction == "search" || restoreAction == "settings" -> {
-                    focusAction("header", 0, if (restoreAction == "settings") settingsFocus else search)
+                restoreAction in listOf("search", "settings", "customize") -> {
+                    focusAction(
+                        "header",
+                        0,
+                        when (restoreAction) {
+                            "settings" -> settingsFocus
+                            "customize" -> customizeFocus
+                            else -> search
+                        }
+                    )
                 }
 
                 restoreAction == "profile" -> {
@@ -589,7 +613,7 @@ fun CatalogHome(
             }
         } else if (!state.loading &&
             restored &&
-            savedRow !in listOf("profile", "search", "settings") &&
+            savedRow !in listOf("profile", "search", "settings", "customize") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {
@@ -618,7 +642,9 @@ fun CatalogGrid(
     head: (@Composable () -> Unit)? = null,
     headFocus: FocusRequester? = null,
     revealKey: Any? = null,
-    grid: LazyGridState = rememberLazyGridState()
+    grid: LazyGridState = rememberLazyGridState(),
+    onFilters: (() -> Unit)? = null,
+    onDisplayList: ((Boolean) -> Unit)? = null
 ) {
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
@@ -797,7 +823,7 @@ fun CatalogGrid(
     Box(modifier = Modifier.fillMaxSize().background(CatalogBackground).testTag("grid").accessibilityGroup()) {
         CompositionLocalProvider(LocalBringIntoViewSpec provides gridBringIntoView) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(144.dp),
+                columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(144.dp),
                 state = grid,
                 modifier = reveal.fillMaxSize().focusRestorer().testTag("grid:items").semantics { traversalIndex = 0f },
                 // The grid reaches the screen's edges, so only the screen clips a focused card's 1.1x scale.
@@ -868,6 +894,18 @@ fun CatalogGrid(
                                             .testTag("grid:sort:$sort").semantics { selected = state.sortBy == sort }
                                     ) { SortChipContent(title, "check".takeIf { state.sortBy == sort }) }
                                 }
+                                if (onFilters != null) {
+                                    Button(
+                                        onClick = onFilters,
+                                        modifier = sortControl(GridSorts.size + 1).testTag("grid:filters")
+                                    ) { Text(if (state.filters.active) "Filters · active" else "Filters") }
+                                }
+                                if (onDisplayList != null) {
+                                    Button(
+                                        onClick = { onDisplayList(!state.list) },
+                                        modifier = sortControl(GridSorts.size + 2).testTag("grid:display")
+                                    ) { Text(if (state.list) "View: List" else "View: Grid") }
+                                }
                                 Button(
                                     onClick = { onSort(state.sortBy, !state.descending) },
                                     modifier = sortControl(GridSorts.size).testTag("grid:sort-order").semantics {
@@ -902,8 +940,8 @@ fun CatalogGrid(
                     CatalogCard(
                         item = item,
                         account = state.account,
-                        wide = item.type == "Episode",
-                        width = null,
+                        wide = state.list || item.type == "Episode",
+                        width = if (state.list) 240.dp else null,
                         onClick = { onOpen(item) },
                         modifier = Modifier.focusRequester(requester).testTag("grid:${item.id}").onFocusChanged {
                             if (it.isFocused) {
@@ -969,7 +1007,7 @@ fun CatalogGrid(
         }
     }
     // Keyed on the state rather than the chips' clicks, so a reader's click and anything else that changes the sort count.
-    LaunchedEffect(state.sortBy, state.descending) {
+    LaunchedEffect(state.sortBy, state.descending, state.filters, state.list) {
         dropWaitingMoves()
         retryingFrom = -1
     }

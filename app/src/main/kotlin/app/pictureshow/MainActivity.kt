@@ -836,27 +836,54 @@ internal fun Pictureshow(
             }
         }
 
-        composable("home") {
-            state.snapshot.currentAccount?.let { account ->
-                val profile: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
-                val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
-                val screen by vm.state.collectAsStateWithLifecycle()
-                val profileState by profile.state.collectAsStateWithLifecycle()
-                CatalogHome(
-                    screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
-                    profileState.account.copy(server = account.server),
-                    serverLabel = state.snapshot.serverLabel(account.server),
-                    onOpen = { nav.navigate(itemRoute(it)) },
-                    onRetry = {
-                        profile.verify()
-                        vm.reload()
-                    },
-                    onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
-                    onSignOut = profile::signOut,
-                    onSearch = { nav.navigate(searchRoute()) },
-                    onResume = vm::resumed,
-                    onSettings = { nav.navigate("settings") }
-                )
+        listOf("home", "libraries").forEach { destination ->
+            composable(destination) {
+                state.snapshot.currentAccount?.let { account ->
+                    val profile: HomeViewModel = koinViewModel(key = account.key, parameters = { parametersOf(account) })
+                    val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
+                    val screen by vm.state.collectAsStateWithLifecycle()
+                    val profileState by profile.state.collectAsStateWithLifecycle()
+                    var editing by remember { mutableStateOf(false) }
+                    var landed by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(screen.preferencesReady) {
+                        if (screen.preferencesReady && !landed && destination == "home") {
+                            landed = true
+                            val landing = screen.preferences.landing
+                            if (landing == "libraries") nav.navigate("libraries")
+                            if (landing.startsWith("library:")) {
+                                screen.libraries.firstOrNull { it.id == landing.removePrefix("library:") }
+                                    ?.let { nav.navigate(itemRoute(it)) }
+                            }
+                        }
+                    }
+                    if (editing) HomeCustomization(screen, account, catalogService, vm::customize) { editing = false }
+                    CatalogHome(
+                        screen.copy(
+                            busy = profileState.busy,
+                            error = screen.error ?: profileState.error,
+                            rows = if (destination ==
+                                "libraries"
+                            ) {
+                                listOf(app.pictureshow.core.HomeRow("libraries", "Libraries", screen.libraries, library = true))
+                            } else {
+                                screen.rows
+                            }
+                        ),
+                        profileState.account.copy(server = account.server),
+                        serverLabel = state.snapshot.serverLabel(account.server),
+                        onOpen = { nav.navigate(itemRoute(it)) },
+                        onRetry = {
+                            profile.verify()
+                            vm.reload()
+                        },
+                        onSwitchUser = { nav.navigate("accounts") { launchSingleTop = true } },
+                        onSignOut = profile::signOut,
+                        onSearch = { nav.navigate(searchRoute()) },
+                        onResume = vm::resumed,
+                        onSettings = { nav.navigate("settings") },
+                        onCustomize = { editing = true }
+                    )
+                }
             }
         }
         aboutScreens(nav)
@@ -987,7 +1014,17 @@ internal fun Pictureshow(
                 ) {
                     val vm: CatalogGridViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()
-                    CatalogGrid(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::sort, vm::retry)
+                    var filtering by remember { mutableStateOf(false) }
+                    if (filtering) LibraryFilterEditor(screen, catalogService, vm::filter) { filtering = false }
+                    CatalogGrid(
+                        screen,
+                        { nav.navigate(itemRoute(it)) },
+                        vm::nearEnd,
+                        vm::sort,
+                        vm::retry,
+                        onFilters = { filtering = true },
+                        onDisplayList = vm::displayList
+                    )
                 } else {
                     val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                     val screen by vm.state.collectAsStateWithLifecycle()

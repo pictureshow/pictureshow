@@ -316,6 +316,20 @@ internal fun TouchPictureshow(
                         val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
                         val profileState by profile.state.collectAsStateWithLifecycle()
+                        var editing by remember { mutableStateOf(false) }
+                        var landed by rememberSaveable { mutableStateOf(false) }
+                        LaunchedEffect(screen.preferencesReady) {
+                            if (screen.preferencesReady && !landed && destination == "home") {
+                                landed = true
+                                val landing = screen.preferences.landing
+                                if (landing == "libraries") nav.navigate("libraries")
+                                if (landing.startsWith("library:")) {
+                                    screen.libraries.firstOrNull { it.id == landing.removePrefix("library:") }
+                                        ?.let { nav.navigate(itemRoute(it)) }
+                                }
+                            }
+                        }
+                        if (editing) HomeCustomization(screen, account, catalogService, vm::customize) { editing = false }
                         TouchCatalogHome(
                             screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                             profileState.account.copy(server = account.server),
@@ -325,7 +339,8 @@ internal fun TouchPictureshow(
                                 vm.reload()
                             },
                             onResume = vm::resumed,
-                            librariesOnly = destination == "libraries"
+                            librariesOnly = destination == "libraries",
+                            onCustomize = { editing = true }
                         )
                     }
                 }
@@ -435,7 +450,17 @@ internal fun TouchPictureshow(
                     ) {
                         val vm: CatalogGridViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()
-                        TouchCatalogGrid(screen, { nav.navigate(itemRoute(it)) }, vm::nearEnd, vm::sort, vm::retry) { nav.popBackStack() }
+                        var filtering by remember { mutableStateOf(false) }
+                        if (filtering) LibraryFilterEditor(screen, catalogService, vm::filter) { filtering = false }
+                        TouchCatalogGrid(
+                            screen,
+                            { nav.navigate(itemRoute(it)) },
+                            vm::nearEnd,
+                            vm::sort,
+                            vm::retry,
+                            onFilters = { filtering = true },
+                            onDisplayList = vm::displayList
+                        ) { nav.popBackStack() }
                     } else {
                         val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })
                         val screen by vm.state.collectAsStateWithLifecycle()

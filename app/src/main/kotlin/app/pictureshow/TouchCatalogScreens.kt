@@ -111,7 +111,8 @@ internal fun TouchCatalogHome(
     onOpen: (MediaItem) -> Unit,
     onRetry: () -> Unit,
     onResume: () -> Unit = {},
-    librariesOnly: Boolean = false
+    librariesOnly: Boolean = false,
+    onCustomize: (() -> Unit)? = null
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     val shortWindow = isShortTouchWindow()
@@ -129,6 +130,13 @@ internal fun TouchCatalogHome(
         item(key = "heading") {
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TouchCatalogHeading("Pictureshow")
+                if (onCustomize !=
+                    null
+                ) {
+                    TextButton(onClick = onCustomize, modifier = Modifier.heightIn(min = 48.dp).testTag("touch:customize")) {
+                        Text("Customize home")
+                    }
+                }
                 if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.loading) TouchCatalogLoading("Loading your library…")
                 TouchCatalogError(state.error, onRetry)
@@ -186,9 +194,11 @@ internal fun TouchCatalogGrid(
     onNearEnd: (Int) -> Unit,
     onSort: (String, Boolean) -> Unit,
     onRetry: () -> Unit,
+    onFilters: (() -> Unit)? = null,
+    onDisplayList: ((Boolean) -> Unit)? = null,
     onBack: () -> Unit
 ) {
-    TouchMediaGrid(state, onOpen, onNearEnd, onRetry, onBack, onSort = onSort)
+    TouchMediaGrid(state, onOpen, onNearEnd, onRetry, onBack, onSort = onSort, onFilters = onFilters, onDisplayList = onDisplayList)
 }
 
 @Composable
@@ -210,7 +220,9 @@ private fun TouchMediaGrid(
     onRetry: () -> Unit,
     onBack: () -> Unit,
     onSort: ((String, Boolean) -> Unit)? = null,
-    person: MediaItem? = null
+    person: MediaItem? = null,
+    onFilters: (() -> Unit)? = null,
+    onDisplayList: ((Boolean) -> Unit)? = null
 ) {
     val shortWindow = isShortTouchWindow()
     val grid = rememberLazyGridState()
@@ -220,7 +232,7 @@ private fun TouchMediaGrid(
         // One artwork height per grid: columns round to different pixels, and an aspect ratio would inherit that wobble.
         val artHeight = touchGridArtHeight(maxWidth, cellMinimum, if (shortWindow) 9f / 16f else 3f / 2f)
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(cellMinimum),
+            columns = if (state.list) GridCells.Fixed(1) else GridCells.Adaptive(cellMinimum),
             state = grid,
             modifier = Modifier.fillMaxSize().testTag("touch:grid"),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = if (shortWindow) 12.dp else 20.dp),
@@ -253,13 +265,30 @@ private fun TouchMediaGrid(
                         }
                     }
                     if (onSort != null) TouchCatalogSort(state, onSort)
+                    if (onFilters !=
+                        null
+                    ) {
+                        TextButton(onClick = onFilters, modifier = Modifier.heightIn(min = 48.dp).testTag("touch:filters")) {
+                            Text(if (state.filters.active) "Filters · active" else "Filters")
+                        }
+                    }
+                    if (onDisplayList !=
+                        null
+                    ) {
+                        TextButton(onClick = { onDisplayList(!state.list) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(if (state.list) "View: List" else "View: Grid")
+                        }
+                    }
+                    state.preferenceStatus?.let { Text(it) }
                     TouchCatalogError(state.error ?: state.refreshError, onRetry)
                     if (state.loading && state.items.isEmpty()) TouchCatalogLoading("Loading titles…")
                     if (!state.loading && state.items.isEmpty() && state.error == null) Text("No titles are available.")
                 }
             }
             itemsIndexed(state.items, key = { _, item -> item.id }) { _, item ->
-                TouchCatalogCard(item, state.account, shortWindow, { onOpen(item) }, Modifier.fillMaxWidth(), artHeight = artHeight)
+                TouchCatalogCard(item, state.account, shortWindow || state.list, {
+                    onOpen(item)
+                }, Modifier.fillMaxWidth(), artHeight = if (state.list) 140.dp else artHeight)
             }
             if (state.loading && state.items.isNotEmpty()) {
                 item(key = "progress", span = { GridItemSpan(maxLineSpan) }) { TouchCatalogLoading("Loading more titles…") }

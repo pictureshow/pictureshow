@@ -5,17 +5,37 @@ package app.pictureshow.core
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.request
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.URLBuilder
+import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 interface CatalogService {
+    suspend fun displayPreferences(account: Account): ClientResult<JsonObject> =
+        ClientResult.Failure(ClientError(ErrorKind.SERVER, "Server display preferences are unavailable."))
+
+    suspend fun saveDisplayPreferences(account: Account, document: JsonObject): ClientResult<Unit> =
+        ClientResult.Failure(ClientError(ErrorKind.SERVER, "Server display preferences are unavailable."))
+
+    suspend fun facets(account: Account, parentId: String): ClientResult<LibraryFacets> = ClientResult.Success(LibraryFacets())
+
+    suspend fun namedItems(
+        account: Account,
+        kind: String,
+        parentId: String = "",
+        term: String = "",
+        startIndex: Int = 0
+    ): ClientResult<ItemPage> = ClientResult.Success(ItemPage())
+
     suspend fun views(account: Account): ClientResult<ItemPage>
 
     suspend fun resume(account: Account): ClientResult<ItemPage>
@@ -44,6 +64,47 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         coerceInputValues = true
     }
 
+    override suspend fun displayPreferences(account: Account): ClientResult<JsonObject> =
+        request(account, "DisplayPreferences/usersettings", mapOf("client" to "pictureshow"))
+
+    override suspend fun saveDisplayPreferences(account: Account, document: JsonObject): ClientResult<Unit> =
+        request(account, "DisplayPreferences/usersettings", mapOf("client" to "pictureshow"), HttpMethod.Post, document.toString())
+
+    override suspend fun facets(account: Account, parentId: String): ClientResult<LibraryFacets> {
+        // Metadata endpoints can enumerate a denied parent on Jellyfin 12. Check the item route first.
+        val parent = request<MediaItem>(account, "Items/${parentId.encodeURLPathPart()}")
+        if (parent is ClientResult.Failure) return parent
+        return request(account, "Items/Filters", mapOf("parentId" to parentId))
+    }
+
+    override suspend fun namedItems(
+        account: Account,
+        kind: String,
+        parentId: String,
+        term: String,
+        startIndex: Int
+    ): ClientResult<ItemPage> {
+        if (parentId.isNotBlank()) {
+            val parent = request<MediaItem>(account, "Items/${parentId.encodeURLPathPart()}")
+            if (parent is ClientResult.Failure) return parent
+        }
+        require(kind in setOf("Genres", "Studios", "Persons", "BoxSet", "Playlist"))
+        val path = if (kind in setOf("BoxSet", "Playlist")) "Items" else kind
+        return request(
+            account,
+            path,
+            mapOf(
+                "parentId" to parentId.takeIf { it.isNotBlank() },
+                "searchTerm" to term.takeIf { it.isNotBlank() },
+                "startIndex" to startIndex.coerceAtLeast(0).toString(),
+                "limit" to "60",
+                "recursive" to "true",
+                "includeItemTypes" to kind.takeIf { path == "Items" },
+                "sortBy" to "SortName"
+            )
+        )
+    }
+
     override suspend fun views(account: Account): ClientResult<ItemPage> = request(account, "UserViews", mapOf("fields" to CARD_FIELDS))
 
     override suspend fun resume(account: Account): ClientResult<ItemPage> = request(
@@ -58,11 +119,25 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         mapOf("limit" to "24", "fields" to CARD_FIELDS, "seriesId" to seriesId)
     )
 
-    override suspend fun latest(account: Account, parentId: String): ClientResult<List<MediaItem>> = request(
-        account,
-        "Items/Latest",
-        mapOf("parentId" to parentId, "limit" to "24", "fields" to CARD_FIELDS)
-    )
+    override suspend fun latest(account: Account, parentId: String): ClientResult<List<MediaItem>> = when (
+        // /Items/Latest can return children from an inaccessible parent on Jellyfin 12.
+        // The ordinary browse query enforces parent access, tags and rating policy.
+        val result =
+            items(
+                account,
+                BrowseQuery(
+                    parentId,
+                    includeItemTypes = "Movie,Series",
+                    recursive = true,
+                    sortBy = "DateCreated",
+                    descending = true,
+                    limit = 24
+                )
+            )
+    ) {
+        is ClientResult.Success -> ClientResult.Success(result.value.items)
+        is ClientResult.Failure -> result
+    }
 
     override suspend fun items(account: Account, query: BrowseQuery): ClientResult<ItemPage> = request(
         account,
@@ -76,7 +151,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
             )
         } else {
             mapOf(
-                "parentId" to query.parentId,
+                "parentId" to query.parentId.takeIf { it.isNotBlank() },
                 "recursive" to query.recursive.toString(),
                 "includeItemTypes" to query.includeItemTypes,
                 "sortBy" to query.sortBy,
@@ -85,7 +160,7 @@ internal class CatalogClient(private val client: HttpClient, private val identit
                 "limit" to query.limit.coerceIn(1, 200).toString(),
                 "enableTotalRecordCount" to "true",
                 "fields" to CARD_FIELDS
-            )
+            ) + query.filters.parameters()
         }
     )
 
@@ -141,17 +216,24 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         account: Account,
         path: String,
         parameters: Map<String, String?> = emptyMap(),
-        method: HttpMethod = HttpMethod.Get
+        method: HttpMethod = HttpMethod.Get,
+        body: String? = null
     ): ClientResult<T> = try {
         withTimeoutOrNull(ApiTimeouts.REQUEST_MILLIS) {
             val response = client.request("${account.server.url.trimEnd('/')}/$path") {
                 this.method = method
+                if (body != null) {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
                 headers.append(HttpHeaders.Authorization, AuthorizationHeader.build(identity.forAccount(account), account.accessToken))
                 url.parameters.append("userId", account.user.id)
                 parameters.forEach { (name, value) -> if (value != null) url.parameters.append(name, value) }
             }
             when (response.status.value) {
-                in 200..299 -> ClientResult.Success(json.decodeFromString<T>(response.bodyAsText()))
+                in 200..299 -> ClientResult.Success(
+                    if (T::class == Unit::class) Unit as T else json.decodeFromString<T>(response.bodyAsText())
+                )
                 401 -> catalogFailure(ErrorKind.EXPIRED, "Your session has expired. Sign in again.")
                 else -> catalogFailure(ErrorKind.SERVER, "The server could not complete the request (${response.status.value}).")
             }

@@ -75,3 +75,6 @@ These are not portable server preferences. This table keeps the rest of the audi
 | Local account switcher/sign out | **honored today**, AUTH-07..12; local state, not UserConfiguration. |
 | Max bitrate/passthrough/subtitle size/background/segment action inventory aliases | **honored today**, SET-01..05. |
 | This TV; Supporter; About inventory aliases | Existing navigation/read-only diagnostics or purchase flow, not settings; SET-10 and information manifest. |
+
+
+2026-11-10 Android home/browse addition: see [HOME-01–08 and BROWSE-01–03](home-browse.md). These supersede the historical gaps for Pictureshow home layout, landing, per-library Grid/List/sort and the user-configuration MyMediaExcludes/LatestItemsExcludes/HidePlayedInLatest bindings. Jellyfin web's ten section slots, image choice and image size remain separate gaps.
