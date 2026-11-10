@@ -339,6 +339,7 @@ internal class RemoteTargetHost(
                     }
                     override fun closed() {
                         scope.launch {
+                            if (!live) return@launch
                             live = false
                             socketConnected = false
                             syncConnection(false)

@@ -551,4 +551,42 @@ class RemoteTargetHostTest {
         assertEquals(1_000, RemoteTargetHost.backoffMs(0))
         assertEquals(30_000, RemoteTargetHost.backoffMs(40))
     }
+
+    @Test fun lateCloseFromTheRenewedSocketCannotDisconnectItsReplacement() = runTest {
+        val rig = Rig(this)
+        val connections = mutableListOf<Boolean>()
+        val oldMessages = mutableListOf<String>()
+        val newMessages = mutableListOf<String>()
+        rig.host.syncConnection = { connections += it }
+        rig.host.syncMessages = { oldMessages += it }
+        rig.online(this)
+        val oldSocket = rig.sockets.single()
+        rig.host.syncMessages = { newMessages += it }
+        rig.host.renewSyncSocket()
+        runCurrent()
+        assertTrue(oldSocket.closed)
+        assertEquals(2, rig.sockets.size)
+        val replacement = rig.sockets.last()
+        replacement.events.opened()
+        runCurrent()
+        rig.watching()
+        assertTrue(rig.host.socketConnected)
+        assertEquals(true, connections.last())
+        val before = connections.toList()
+        oldSocket.events.closed()
+        oldSocket.events.message(state("old-socket-stop", "Stop"))
+        runCurrent()
+        assertTrue(rig.host.socketConnected)
+        assertEquals(before, connections, "an old close cannot publish false for the new socket")
+        assertTrue(oldMessages.isEmpty())
+        assertTrue(newMessages.isEmpty())
+        assertTrue(rig.player.calls.isEmpty(), "an old message cannot stop the replacement's viewing")
+        val fresh = state("new-socket-pause", "Pause")
+        replacement.events.message(fresh)
+        runCurrent()
+        assertEquals(listOf(fresh), newMessages)
+        assertTrue(oldMessages.isEmpty())
+        assertEquals(listOf("pause"), rig.player.calls)
+        assertTrue(rig.host.socketConnected)
+    }
 }
