@@ -52,8 +52,9 @@ jobs:
           $env:QSG_INFO = '1'
           New-Item -ItemType Directory -Force desktop-evidence | Out-Null
           & qt-build/hdr-api-state.exe > desktop-evidence/hdr-api-state.json
+          $hdrExit = $LASTEXITCODE
           & qt-build/qt-proof.exe $dll.FullName desktop-fixtures desktop-evidence/windows --sustain 2>&1 | Tee-Object desktop-evidence/windows.log
-          if ($LASTEXITCODE -ne 0) { throw 'Qt harness failed; inspect artifacts' }
+          if ($LASTEXITCODE -ne 0 -or $hdrExit -ne 0) { throw 'Qt or HDR API harness failed; inspect artifacts' }
       - uses: actions/upload-artifact@v7
         if: always()
         with:

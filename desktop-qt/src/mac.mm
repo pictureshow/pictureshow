@@ -59,3 +59,5 @@ static void layers(CALayer *l,QJsonArray &a){if([l isKindOfClass:[CAMetalLayer c
 QJsonObject macReceipt(WId id){NSView *v=(NSView*)id;NSWindow*w=v.window;NSScreen*s=w.screen;QJsonArray a;layers(v.layer,a);return {{"windowFrame",rect(w.frame)},{"screenFrame",rect(s.frame)},{"styleMask",qint64(w.styleMask)},{"nativeFullscreen",bool(w.styleMask&NSWindowStyleMaskFullScreen)},{"screenMaximumEDR",s.maximumExtendedDynamicRangeColorComponentValue},{"screenPotentialEDR",s.maximumPotentialExtendedDynamicRangeColorComponentValue},{"screenReferenceEDR",s.maximumReferenceExtendedDynamicRangeColorComponentValue},{"metalLayers",a}};}
 
 void macActivate(WId id){[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[NSApp activateIgnoringOtherApps:YES];NSWindow*w=((NSView*)id).window;[w makeKeyAndOrderFront:nil];}
+
+void macImmersive(WId id,bool enabled){NSWindow*w=((NSView*)id).window;[NSApp setPresentationOptions:enabled?(NSApplicationPresentationAutoHideDock|NSApplicationPresentationAutoHideMenuBar):NSApplicationPresentationDefault];if(enabled)[w setFrame:w.screen.frame display:YES];macActivate(id);}

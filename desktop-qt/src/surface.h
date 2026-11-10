@@ -16,4 +16,5 @@ void macDraw(void *state, void *target, void *commandBuffer, int width, int heig
 void macDestroy(void *state);
 QJsonObject macReceipt(WId view);
 void macActivate(WId view);
+void macImmersive(WId view,bool enabled);
 #endif

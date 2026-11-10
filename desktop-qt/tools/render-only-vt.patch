@@ -1,0 +1,19 @@
+--- a/meson.build
++++ b/meson.build
+@@ -1552,7 +1552,7 @@
+ endif
+ 
+ videotoolbox_gl = get_option('videotoolbox-gl').require(
+-    features['gl-cocoa'] or features['ios-gl'],
++    (darwin and GL.found()) or features['ios-gl'],
+     error_message: 'gl-cocoa nor ios-gl could be found!',
+ )
+ features += {'videotoolbox-gl': videotoolbox_gl.allowed()}
+@@ -1567,6 +1567,7 @@
+     sources += files('video/out/hwdec/hwdec_vt.c')
+ endif
+ if features['videotoolbox-gl']
++    dependencies += GL
+     sources += files('video/out/hwdec/hwdec_mac_gl.c')
+ endif
+ if features['videotoolbox-pl']

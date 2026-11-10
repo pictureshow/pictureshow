@@ -49,7 +49,9 @@ class Renderer:public QQuickRhiItemRenderer {
   mpv_d3d11_fbo target{reinterpret_cast<void*>(colorTexture()->nativeTexture().object)};
   mpv_render_param params[]={{MPV_RENDER_PARAM_D3D11_FBO,&target},{MPV_RENDER_PARAM_INVALID,nullptr}};
 #else
-  auto *gl=QOpenGLContext::currentContext()->extraFunctions();gl->glBindFramebuffer(GL_FRAMEBUFFER,fbo);gl->glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,GLuint(colorTexture()->nativeTexture().object),0);
+  auto *gl=QOpenGLContext::currentContext()->extraFunctions();
+  gl->glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);gl->glBindBuffer(GL_PIXEL_PACK_BUFFER,0);gl->glPixelStorei(GL_UNPACK_ROW_LENGTH,0);gl->glPixelStorei(GL_UNPACK_SKIP_ROWS,0);gl->glPixelStorei(GL_UNPACK_SKIP_PIXELS,0);gl->glDisable(GL_BLEND);gl->glDisable(GL_SCISSOR_TEST);gl->glDisable(GL_DEPTH_TEST);gl->glDisable(GL_CULL_FACE);gl->glColorMask(true,true,true,true);for(int unit=0;unit<16;unit++)gl->glBindSampler(unit,0);gl->glActiveTexture(GL_TEXTURE0);
+  gl->glBindFramebuffer(GL_FRAMEBUFFER,fbo);gl->glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,GLuint(colorTexture()->nativeTexture().object),0);
   mpv_opengl_fbo target{int(fbo),size.width(),size.height(),GL_RGBA16F};int flip=1;
   mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&target},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_INVALID,nullptr}};
 #endif

@@ -17,8 +17,15 @@
 class Proof:public QObject {
  Q_OBJECT
  Player *p;
+ QQuickWindow *window=nullptr; QRect previous; Qt::WindowFlags previousFlags; bool immersive=false;
 public:
  explicit Proof(Player *player):p(player){}
+ void setWindow(QQuickWindow *w){window=w;}
+ Q_INVOKABLE void fullscreen(){if(!window)return;if(!immersive){previous=window->geometry();previousFlags=window->flags();window->setFlags(previousFlags|Qt::FramelessWindowHint);window->setGeometry(window->screen()->geometry());window->show();immersive=true;}else{window->setFlags(previousFlags);window->setGeometry(previous);window->show();immersive=false;}
+#ifdef Q_OS_MACOS
+ macImmersive(window->winId(),immersive);
+#endif
+ window->requestActivate();}
  Q_INVOKABLE void pause(){p->command({"cycle","pause"});}
  Q_INVOKABLE void subtitle(){p->command({"cycle","sid"});}
 };
@@ -29,7 +36,7 @@ int main(int argc,char**argv){
  qmlRegisterType<Surface>("Pictureshow.Proof",1,0,"Surface");
  Player player(args[1]);Surface::player=&player;Proof proof(&player);
  QQmlApplicationEngine engine;engine.rootContext()->setContextProperty("proof",&proof);engine.load(QUrl("qrc:/Main.qml"));
- if(engine.rootObjects().isEmpty())return 2;auto*w=qobject_cast<QQuickWindow*>(engine.rootObjects().first());w->requestActivate();
+ if(engine.rootObjects().isEmpty())return 2;auto*w=qobject_cast<QQuickWindow*>(engine.rootObjects().first());proof.setWindow(w);w->requestActivate();
 #ifdef Q_OS_MACOS
  macActivate(w->winId());
 #endif
@@ -58,8 +65,8 @@ int main(int argc,char**argv){
  add(1500,[&]{player.command({"loadfile",fixtures+"/hevc-main.mkv"});});
  add(6500,[&]{capture("01-main-window");QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,QPoint(w->width()-145,68));});
  add(1000,[&]{capture("02-overlay-input");if(w->property("clicks").toInt()!=1)failed=true;w->resize(740,500);});
- add(1500,[&]{capture("03-resize");w->showFullScreen();});
- add(3500,[&]{capture("04-fullscreen");if(w->geometry()!=w->screen()->geometry())failed=true;w->showNormal();});
+ add(1500,[&]{capture("03-resize");proof.fullscreen();});
+ add(3500,[&]{capture("04-fullscreen");if(w->geometry()!=w->screen()->geometry())failed=true;proof.fullscreen();});
  add(3000,[&]{capture("05-return");player.command({"loadfile",fixtures+"/hevc-main10.mkv"});});
  add(6000,[&]{capture("06-main10");player.command({"set","pause","yes"});player.command({"seek","1","absolute+exact"});player.command({"set","sid","1"});});
  add(1200,[&]{capture("07-srt");player.command({"set","sid","2"});});

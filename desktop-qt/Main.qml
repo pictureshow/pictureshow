@@ -21,7 +21,7 @@ Window {
     model: ["Pause", "Fullscreen", "Subtitle"]
     Rectangle { required property string modelData; width: 130; height: 44; radius: 8; color: "#496f92"
      Text { anchors.centerIn: parent; text: modelData; color: "white"; font.pixelSize: 17 }
-     MouseArea { anchors.fill: parent; onClicked: { if(modelData==="Fullscreen") {if(root.visibility===Window.FullScreen)root.showNormal();else root.showFullScreen()} else if(modelData==="Pause") proof.pause();else proof.subtitle(); } }
+     MouseArea { anchors.fill: parent; onClicked: { if(modelData==="Fullscreen") {proof.fullscreen()} else if(modelData==="Pause") proof.pause();else proof.subtitle(); } }
     }
    }
   }
