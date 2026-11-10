@@ -6,12 +6,14 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.Account
 import app.pictureshow.core.LibraryFilters
@@ -61,7 +63,7 @@ class CatalogRevisionPresentationTest {
         compose.onNodeWithText("No movies match these filters").assertExists()
         compose.onNodeWithText("This library is empty.").assertDoesNotExist()
         compose.onNodeWithText("Filters (3)").assertExists()
-        compose.onNodeWithTag("grid:clear-filters").assertIsFocused().performClick()
+        compose.onNodeWithTag("grid:clear-filters").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue(cleared) }
     }
 

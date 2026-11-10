@@ -4,6 +4,8 @@
 package app.pictureshow
 
 import android.app.Application
+import android.app.UiModeManager
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,10 +21,10 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
@@ -46,10 +48,12 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
@@ -64,6 +68,11 @@ class CatalogCustomizationTest {
     private val account = Account(Server("s", "Cinema", "https://media.example.test", "12.0.0"), User("v", "Viewer"), "fake")
     private val library = MediaItem("lib", "Cinema", "CollectionFolder", collectionType = "movies", isFolder = true)
     private val service = EditorCatalog()
+
+    @Before fun matchUiModeServiceToDeviceConfiguration() {
+        shadowOf(compose.activity.getSystemService(UiModeManager::class.java))
+            .setCurrentModeType(compose.activity.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK)
+    }
 
     @Test fun homeBuilderShowsCurrentChoiceAndPersistsReversibleRowEdits() {
         var preferences by mutableStateOf(HomePreferences())
@@ -90,7 +99,7 @@ class CatalogCustomizationTest {
         compose.runOnIdle { assertTrue("watching" in preferences.hidden) }
         compose.onNodeWithText("Show Continue watching and next up").performClick()
         compose.runOnIdle { assertFalse("watching" in preferences.hidden) }
-        compose.onRoot().performKeyInput { pressKey(Key.Back) }
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.runOnIdle { assertTrue(closed) }
     }
 
@@ -109,7 +118,7 @@ class CatalogCustomizationTest {
         }
         compose.onNodeWithTag("home:reorder:resume").performClick()
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.RequestFocus)
-        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithTag("home:reorder:resume").performKeyInput { pressKey(Key.DirectionDown) }
         compose.runOnIdle { assertTrue(preferences.order.isEmpty(), "Moving a row must not save until drop") }
         compose.onNodeWithTag("home:reorder:resume").performClick()
         compose.runOnIdle { assertEquals(listOf("nextup", "resume", "libraries"), preferences.order) }
@@ -129,7 +138,8 @@ class CatalogCustomizationTest {
             assertTrue(retried)
             screen = screen.copy(preferenceStatus = null, preferenceRetryable = false, saving = true)
         }
-        compose.onNodeWithText("Saving layout…").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("catalog:editor").performScrollToIndex(0)
+        compose.onNodeWithText("Saving layout…").assertIsDisplayed()
         compose.onNodeWithTag("home:retry-save").assertDoesNotExist()
     }
 
@@ -181,13 +191,13 @@ class CatalogCustomizationTest {
         compose.setContent { MaterialTheme { LibraryFilterEditor(CatalogGridState(account, library), service, { applied = it }, {}) } }
         repeat(3) {
             compose.onNodeWithTag("filters:genre").performScrollTo().performClick()
-            compose.onNodeWithText("Genre 1").performScrollTo().performClick()
+            compose.onNodeWithTag("catalog:option:1").performScrollTo().performClick()
             compose.onNodeWithTag("filters:year").performScrollTo().performClick()
             compose.onNodeWithText("2020–2029").performScrollTo().performClick()
             compose.onNodeWithText("2026").performScrollTo().performClick()
             compose.onNodeWithTag("filters:genre").performScrollTo().performClick()
-            compose.onNodeWithText("Genre 1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
-            compose.onNodeWithText("Genre 1").performClick()
+            compose.onNodeWithTag("catalog:option:1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+            compose.onNodeWithTag("catalog:option:1").performClick()
             compose.onNodeWithText("Apply").performClick()
             compose.runOnIdle { assertEquals(LibraryFilters(genre = "Genre 1", year = 2026), applied) }
         }
