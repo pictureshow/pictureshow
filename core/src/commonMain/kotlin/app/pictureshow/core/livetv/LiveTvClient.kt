@@ -324,6 +324,33 @@ class LiveTvClient(
                 message = "Could not refresh schedules. Nothing was submitted."
             )
         }
+        // A server link identifies the series rule even when it was created from another episode/airing.
+        val refreshedSeriesProgram = if (series) program(account, draft.programId) else null
+        if (refreshedSeriesProgram is ClientResult.Failure) {
+            return@withLock LiveWrite(
+                if (refreshedSeriesProgram.error.status in setOf(401, 403, 404)) "denied" else "failed",
+                message = "Could not refresh this program. Nothing was submitted."
+            )
+        }
+        if (refreshedSeriesProgram is ClientResult.Success) {
+            val linkedId = refreshedSeriesProgram.value.seriesTimerId?.takeIf(String::isNotBlank)
+            if (linkedId != null) {
+                val linked = before.value.filter { it.id == linkedId && it.status != "Cancelled" }
+                if (linked.size != 1) {
+                    return@withLock LiveWrite(
+                        "failed",
+                        message = "This program identifies an existing series rule that could not be read. Refresh schedules."
+                    )
+                }
+                pendingWrites.remove(scope)
+                val result = confirmedCreate(draft, linked.single())
+                return@withLock if (result.outcome == "failed") {
+                    result.copy(message = "This series already has a rule with different recording options. Review or edit that rule.")
+                } else {
+                    result
+                }
+            }
+        }
         val existing = before.value.filter { sameScope(it, draft) && it.status != "Cancelled" }
         if (existing.size == 1) {
             pendingWrites.remove(scope)
@@ -335,7 +362,7 @@ class LiveTvClient(
                 message = "An earlier request is still unresolved. Check schedules before creating another recording."
             )
         }
-        val fresh = program(account, draft.programId)
+        val fresh = refreshedSeriesProgram ?: program(account, draft.programId)
         if (fresh !is ClientResult.Success) {
             return@withLock LiveWrite(
                 if (fresh is ClientResult.Failure && fresh.error.status in setOf(401, 403, 404)) "denied" else "failed",

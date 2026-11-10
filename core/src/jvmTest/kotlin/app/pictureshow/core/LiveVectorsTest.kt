@@ -141,7 +141,7 @@ class LiveVectorsTest {
 
     private suspend fun TestScope.createTrace(input: JsonObject): JsonObject {
         var posts = 0
-        var stored: JsonObject? = null
+        var stored: JsonObject? = input["stored"]?.jsonObject
         val methods = mutableListOf<String>()
         val series = input.getValue("series").jsonPrimitive.boolean
         val path = if (series) "/LiveTv/SeriesTimers" else "/LiveTv/Timers"
@@ -160,7 +160,8 @@ class LiveVectorsTest {
                                     mapOf("Items" to JsonArray(listOfNotNull(stored)))
                                 ).toString()
                                 route == "/LiveTv/Programs/p" -> JsonObject(
-                                    draft + mapOf("Id" to JsonPrimitive("p"), "IsSeries" to JsonPrimitive(true))
+                                    draft + mapOf("Id" to JsonPrimitive("p"), "IsSeries" to JsonPrimitive(true)) +
+                                        (input["program"]?.jsonObject ?: emptyMap())
                                 ).toString()
                                 route == "/LiveTv/Channels/c" -> """{"Id":"c","Name":"Channel"}"""
                                 request.method.value == "POST" && route == path -> {
@@ -194,6 +195,10 @@ class LiveVectorsTest {
             put("second", second.outcome)
             put("postCount", posts)
             put("posts", JsonArray(methods.filter { it.startsWith("POST") }.map(::JsonPrimitive)))
+            if (input["reportSchedule"]?.jsonPrimitive?.boolean == true) {
+                put("firstRuleId", first.schedule?.id)
+                put("secondRuleId", second.schedule?.id)
+            }
         }
     }
 

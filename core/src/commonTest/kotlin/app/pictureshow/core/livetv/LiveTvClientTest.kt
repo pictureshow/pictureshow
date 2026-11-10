@@ -46,6 +46,7 @@ class LiveTvClientTest {
     private var cancelAfterWrite = false
     private var ignoreUpdate = false
     private var expiredProgram = false
+    private var linkedSeriesId: String? = null
     private var deniedChannel = false
     private var itemCanDelete = true
     private var deletedRecording = false
@@ -110,6 +111,7 @@ class LiveTvClientTest {
                                 draft.fields + mapOf(
                                     "Id" to JsonPrimitive("p"),
                                     "IsSeries" to JsonPrimitive(true),
+                                    "SeriesTimerId" to JsonPrimitive(linkedSeriesId),
                                     "EndDate" to
                                         (if (expiredProgram) JsonPrimitive("2020-01-01T01:00:00Z") else draft.fields.getValue("EndDate"))
                                 )
@@ -223,6 +225,49 @@ class LiveTvClientTest {
         applyCreate = true
         assertEquals("ok", live.createTimer(account, draft).outcome)
         assertEquals(2, requests.count { it == "POST /LiveTv/Timers" })
+    }
+
+    @Test fun seriesLinkReusesTheExactRuleCreatedFromAnotherEpisodeWithoutPosting() = runTest {
+        linkedSeriesId = "saved"
+        stored = JsonObject(
+            draft.fields + mapOf(
+                "Id" to JsonPrimitive("saved"),
+                "ProgramId" to JsonPrimitive("different-episode"),
+                "ChannelId" to JsonPrimitive("original-channel"),
+                "StartDate" to JsonPrimitive("2029-01-01T00:00:00Z"),
+                "EndDate" to JsonPrimitive("2029-01-01T01:00:00Z")
+            )
+        )
+        val result = client().createTimer(account, draft, series = true)
+        assertEquals("ok", result.outcome)
+        assertEquals("saved", result.schedule!!.id)
+        assertEquals("different-episode", result.schedule!!.programId)
+        assertTrue(requests.contains("GET /LiveTv/Programs/p"))
+        assertFalse(requests.any { it.startsWith("POST") })
+    }
+
+    @Test fun seriesLinkWithDifferentOptionsReturnsTheReadableRuleWithoutCreatingAnother() = runTest {
+        linkedSeriesId = "saved"
+        stored = JsonObject(
+            draft.fields + mapOf(
+                "Id" to JsonPrimitive("saved"),
+                "ProgramId" to JsonPrimitive("different-episode"),
+                "Priority" to JsonPrimitive(99)
+            )
+        )
+        val result = client().createTimer(account, draft, series = true)
+        assertEquals("failed", result.outcome)
+        assertEquals("saved", result.schedule!!.id)
+        assertTrue(result.message.orEmpty().contains("series"))
+        assertFalse(requests.any { it.startsWith("POST") })
+    }
+
+    @Test fun anUnreadableLinkedSeriesRuleCannotBeBlindlyRecreated() = runTest {
+        linkedSeriesId = "not-returned"
+        val result = client().createTimer(account, draft, series = true)
+        assertEquals("failed", result.outcome)
+        assertTrue(result.message.orEmpty().contains("existing series rule"))
+        assertFalse(requests.any { it.startsWith("POST") })
     }
 
     @Test fun seriesCreationAndOccurrenceCancellationUseDifferentResources() = runTest {
