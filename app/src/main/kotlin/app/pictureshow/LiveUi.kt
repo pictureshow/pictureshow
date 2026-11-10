@@ -107,6 +107,7 @@ internal fun LiveAction(label: String, tv: Boolean, modifier: Modifier = Modifie
     }
 }
 
+@OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun LiveChip(label: String, selected: Boolean, tv: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     if (tv) {

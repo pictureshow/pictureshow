@@ -45,6 +45,7 @@ internal fun PlayerIconButton(
 }
 
 /** The live chip is part of the position row, rather than a second filled transport action. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun TouchLivePlayerTimeline(host: PlaybackHostState, ui: TouchControlsState, paused: Boolean) {
     val window = host.liveWindow

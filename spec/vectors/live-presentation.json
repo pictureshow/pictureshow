@@ -1,22 +1,173 @@
 {
-  "version": 1,
-  "description": "Live guide presentation: a common mapping, visual text budget and device-local clocks. Platform UI geometry remains native.",
+  "schemaVersion": 1,
+  "suite": "live-presentation",
+  "sources": [
+    "app/src/main/kotlin/app/pictureshow/LiveGuide.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveTime.kt"
+  ],
   "cases": [
-    {"id":"ruler-start","op":"tick","tick":0,"expected":0},
-    {"id":"ruler-half-hour","op":"tick","tick":1,"expected":180},
-    {"id":"ruler-hour","op":"tick","tick":2,"expected":360},
-    {"id":"ruler-end","op":"tick","tick":6,"expected":1080},
-    {"id":"sliver-no-glyphs","op":"text","width":2,"expected":false},
-    {"id":"short-slot-no-glyphs","op":"text","width":48,"expected":false},
-    {"id":"text-threshold","op":"text","width":72,"expected":true},
-    {"id":"regular-slot-title","op":"text","width":240,"expected":true},
-    {"id":"device-twelve-hour","op":"clock","twentyFour":false,"instant":"2026-11-10T20:14:00Z","expected":"3:14 PM"},
-    {"id":"device-twenty-four-hour","op":"clock","twentyFour":true,"instant":"2026-11-10T20:14:00Z","expected":"15:14"},
-    {"id":"dst-first-fold","op":"clock","twentyFour":false,"instant":"2026-11-01T05:30:00Z","expected":"1:30 AM -04:00"},
-    {"id":"dst-second-fold","op":"clock","twentyFour":false,"instant":"2026-11-01T06:30:00Z","expected":"1:30 AM -05:00"},
-    {"id":"after-fold-no-offset","op":"clock","twentyFour":true,"instant":"2026-11-01T07:30:00Z","expected":"02:30"},
-    {"id":"same-day-concise-range","op":"range","twentyFour":false,"start":"2026-11-10T20:14:00Z","end":"2026-11-10T20:42:00Z","expected":"3:14 – 3:42 PM"},
-    {"id":"period-crossing-range","op":"range","twentyFour":false,"start":"2026-11-10T16:55:00Z","end":"2026-11-10T17:10:00Z","expected":"11:55 AM – 12:10 PM"},
-    {"id":"tomorrow-range","op":"range","twentyFour":true,"start":"2026-11-11T20:00:00Z","end":"2026-11-11T21:00:00Z","expected":"Tomorrow · 15:00 – 16:00"}
+    {
+      "id": "live-presentation.ruler-start",
+      "operation": "tick",
+      "input": {
+        "tick": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "live-presentation.ruler-half-hour",
+      "operation": "tick",
+      "input": {
+        "tick": 1
+      },
+      "expected": 180
+    },
+    {
+      "id": "live-presentation.ruler-hour",
+      "operation": "tick",
+      "input": {
+        "tick": 2
+      },
+      "expected": 360
+    },
+    {
+      "id": "live-presentation.ruler-end",
+      "operation": "tick",
+      "input": {
+        "tick": 6
+      },
+      "expected": 1080
+    },
+    {
+      "id": "live-presentation.sliver-no-glyphs",
+      "operation": "text",
+      "input": {
+        "width": 2
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.short-slot-no-glyphs",
+      "operation": "text",
+      "input": {
+        "width": 48
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.text-threshold",
+      "operation": "text",
+      "input": {
+        "width": 72
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.regular-slot-title",
+      "operation": "text",
+      "input": {
+        "width": 240
+      },
+      "expected": true
+    },
+    {
+      "id": "live-presentation.device-twelve-hour",
+      "operation": "clock",
+      "input": {
+        "twentyFour": false,
+        "instant": "2026-11-10T20:14:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "3:14 PM"
+    },
+    {
+      "id": "live-presentation.device-twenty-four-hour",
+      "operation": "clock",
+      "input": {
+        "twentyFour": true,
+        "instant": "2026-11-10T20:14:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "15:14"
+    },
+    {
+      "id": "live-presentation.dst-first-fold",
+      "operation": "clock",
+      "input": {
+        "twentyFour": false,
+        "instant": "2026-11-01T05:30:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "1:30 AM -04:00"
+    },
+    {
+      "id": "live-presentation.dst-second-fold",
+      "operation": "clock",
+      "input": {
+        "twentyFour": false,
+        "instant": "2026-11-01T06:30:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "1:30 AM -05:00"
+    },
+    {
+      "id": "live-presentation.after-fold-no-offset",
+      "operation": "clock",
+      "input": {
+        "twentyFour": true,
+        "instant": "2026-11-01T07:30:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "02:30"
+    },
+    {
+      "id": "live-presentation.same-day-concise-range",
+      "operation": "range",
+      "input": {
+        "twentyFour": false,
+        "start": "2026-11-10T20:14:00Z",
+        "end": "2026-11-10T20:42:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "3:14 \u2013 3:42 PM"
+    },
+    {
+      "id": "live-presentation.period-crossing-range",
+      "operation": "range",
+      "input": {
+        "twentyFour": false,
+        "start": "2026-11-10T16:55:00Z",
+        "end": "2026-11-10T17:10:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "11:55 AM \u2013 12:10 PM"
+    },
+    {
+      "id": "live-presentation.tomorrow-range",
+      "operation": "range",
+      "input": {
+        "twentyFour": true,
+        "start": "2026-11-11T20:00:00Z",
+        "end": "2026-11-11T21:00:00Z",
+        "locale": "en-US",
+        "zone": "America/New_York",
+        "now": "2026-11-10T18:00:00Z"
+      },
+      "expected": "Tomorrow \u00b7 15:00 \u2013 16:00"
+    }
   ]
 }

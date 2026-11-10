@@ -455,3 +455,9 @@ normalized operation arguments use lower camel case. `create-trace` supplies a f
 write/disconnect outcome, then checks production client outcomes and the exact number and resource of POSTs.
 It must never turn an accepted-but-lost response into a duplicate recording request. No mock trace proves a real
 tuner or recorder works. Apple, web and desktop owe equivalent runners and device/server evidence.
+
+`live-presentation.json` is the same version-1 envelope, executed by Android's `LivePresentationVectorsTest`.
+It fixes a shared half-hour tick/cell mapping and visual narrow-cell threshold, plus device-clock preference,
+locale, timezone, DST-fold offset and compact-date examples. Each case supplies explicit clock context; ordinary
+spaces normalize the locale's equivalent narrow/nonbreaking period separator. Other platforms owe native formatter
+and guide implementations and this runner. Native dimensions can adapt while the time mapping remains exact.

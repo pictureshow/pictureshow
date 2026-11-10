@@ -63,6 +63,7 @@ internal fun LiveChannelRow(
     now: Long,
     modifier: Modifier,
     canFavorite: Boolean,
+    tuneEnabled: Boolean,
     onFavorite: () -> Unit,
     onTune: () -> Unit
 ) {
@@ -89,6 +90,7 @@ internal fun LiveChannelRow(
         androidx.tv.material3.ListItem(
             selected = false, onClick = onTune, headlineContent = { LiveText(channel.name, true, maxLines = 1) },
             modifier = modifier.fillMaxWidth(),
+            enabled = tuneEnabled,
             leadingContent = { LiveChannelMark(channel, account, true) }, supportingContent = support,
             trailingContent = { if (channel.userData.isFavorite) LiveText("★", true) },
             onLongClick = if (canFavorite) {
@@ -101,7 +103,7 @@ internal fun LiveChannelRow(
     } else {
         androidx.compose.material3.ListItem(
             headlineContent = { LiveText(channel.name, false, maxLines = 1) },
-            modifier = modifier.fillMaxWidth().clickable(onClick = onTune),
+            modifier = modifier.fillMaxWidth().clickable(enabled = tuneEnabled, onClick = onTune),
             leadingContent = { LiveChannelMark(channel, account, false) },
             supportingContent = support,
             trailingContent = if (canFavorite) {

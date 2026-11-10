@@ -397,11 +397,13 @@ internal fun LiveTvScreen(
                                             key,
                                             tv &&
                                                 !state.loading &&
-                                                (returnFocus == key || returnFocus == null && index == 0)
+                                                (returnFocus == key || returnFocus == null && index == 0),
+                                            enabled = canAct
                                         ) {
                                             focused(key)
                                         },
                                         canFavorite = state.policy?.userData == true && canAct && !state.writing,
+                                        tuneEnabled = canAct,
                                         onFavorite = { vm.favorite(channel) }, onTune = { if (canAct) onPlay(channel.mediaItem()) }
                                     )
                                 } else {

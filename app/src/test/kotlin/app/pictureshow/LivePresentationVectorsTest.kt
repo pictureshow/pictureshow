@@ -28,13 +28,18 @@ class LivePresentationVectorsTest {
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
         assertEquals(16, cases.size)
         for (element in cases) {
-            val c = element.jsonObject
+            val envelope = element.jsonObject
+            val c = envelope.getValue("input").jsonObject
             fun value(key: String) = c.getValue(key).jsonPrimitive.content
-            val id = value("id")
-            when (value("op")) {
-                "tick" -> assertEquals(c.getValue("expected").jsonPrimitive.float, liveGuideTickX(c.getValue("tick").jsonPrimitive.int), id)
+            val id = envelope.getValue("id").jsonPrimitive.content
+            when (envelope.getValue("operation").jsonPrimitive.content) {
+                "tick" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveGuideTickX(c.getValue("tick").jsonPrimitive.int),
+                    id
+                )
                 "text" -> assertEquals(
-                    c.getValue("expected").jsonPrimitive.boolean,
+                    envelope.getValue("expected").jsonPrimitive.boolean,
                     liveGuideShowsText(c.getValue("width").jsonPrimitive.float),
                     id
                 )
@@ -42,12 +47,22 @@ class LivePresentationVectorsTest {
                     val time =
                         LiveTime(
                             c.getValue("twentyFour").jsonPrimitive.boolean,
-                            Locale.US,
-                            ZoneId.of("America/New_York"),
-                            Instant.parse("2026-11-10T18:00:00Z").toEpochMilli()
+                            Locale.forLanguageTag(value("locale")),
+                            ZoneId.of(value("zone")),
+                            Instant.parse(value("now")).toEpochMilli()
                         )
-                    val actual = if (value("op") == "clock") time.clock(value("instant")) else time.range(value("start"), value("end"))
-                    assertEquals(value("expected"), actual.replace('\u202f', ' ').replace('\u00a0', ' '), id)
+                    val actual = if (envelope.getValue("operation").jsonPrimitive.content ==
+                        "clock"
+                    ) {
+                        time.clock(value("instant"))
+                    } else {
+                        time.range(value("start"), value("end"))
+                    }
+                    assertEquals(
+                        envelope.getValue("expected").jsonPrimitive.content,
+                        actual.replace('\u202f', ' ').replace('\u00a0', ' '),
+                        id
+                    )
                 }
             }
         }

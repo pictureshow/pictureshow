@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
@@ -144,6 +145,7 @@ class LiveTvScreensTest {
     fun compactTvHeaderShowsContentAndRequestsRealInitialFocus() {
         val vm = LiveTvViewModel(account, LiveFake())
         compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        compose.mainClock.advanceTimeBy(1_100)
         compose.onNodeWithTag("live:tab:Channels").assertIsSelected()
         val row = compose.onNodeWithTag("live:c:c").assertIsDisplayed().assertIsFocused().getUnclippedBoundsInRoot()
         assertTrue(row.top <= 160.dp, "Initial channel must be visible below compact chrome: $row")
@@ -183,5 +185,38 @@ class LiveTvScreensTest {
         val left = compose.onNodeWithTag("live:tick:0").getUnclippedBoundsInRoot().left
         val next = compose.onNodeWithTag("live:tick:1").getUnclippedBoundsInRoot().left
         assertEquals(180.dp, next - left)
+    }
+
+    @Test
+    fun guideBackRestoresTheExactProgramFocusWithoutTuning() {
+        val now = java.time.Instant.now()
+        var tuned = 0
+        val fake = LiveFake().apply {
+            show = show.copy(startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, { tuned++ }, {}, {}) } }
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithTag("live:p:p").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
+        compose.onNodeWithTag("live:p:p").performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.onNodeWithText("Program details").assertIsDisplayed()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("live:p:p").assertIsDisplayed().assertIsFocused()
+        compose.runOnIdle { assertEquals(0, tuned) }
+    }
+
+    @Test
+    fun staleChannelTuneIsSemanticallyDisabledWhileCachedGuideRemainsReadable() {
+        val fake = LiveFake()
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { androidx.tv.material3.MaterialTheme { LiveTvScreen(vm, account, true, {}, {}, {}) } }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithTag("live:c:c").assertIsEnabled()
+        compose.runOnIdle {
+            fake.failPrograms = true
+            vm.refresh()
+        }
+        compose.onNodeWithTag("live:c:c").assertIsNotEnabled()
+        compose.onNodeWithText("Saved guide is for reference. Reconnect before scheduling or tuning.").assertIsDisplayed()
     }
 }
