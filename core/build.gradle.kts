@@ -90,7 +90,7 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
     from(rootProject.file("spec/vectors")) {
         exclude(liveSuites)
         // Native formatter/layout vectors run in the Android presentation suite.
-        exclude("live-presentation.json")
+        exclude("live-presentation.json", "player-overlay-layout.json")
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude(offlineSuites)

@@ -34,6 +34,8 @@ import coil3.compose.AsyncImage
 import java.time.Instant
 
 internal fun LiveChannel.mediaItem() = MediaItem(id, name, type = "TvChannel", imageTags = imageTags, userData = userData)
+internal fun LiveProgram.hasRecordingTimer(): Boolean = !timerId.isNullOrBlank()
+
 internal fun liveInstant(value: String?): Long = runCatching { Instant.parse(value).toEpochMilli() }.getOrDefault(Long.MIN_VALUE)
 
 @Composable

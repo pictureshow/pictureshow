@@ -168,6 +168,42 @@
         "now": "2026-11-10T18:00:00Z"
       },
       "expected": "Tomorrow \u00b7 15:00 \u2013 16:00"
+    },
+    {
+      "id": "live-presentation.no-timer-dot",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": null,
+        "seriesTimerId": null
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.blank-timer-dot",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": "",
+        "seriesTimerId": null
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.series-rule-is-not-an-occurrence",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": null,
+        "seriesTimerId": "series-rule"
+      },
+      "expected": false
+    },
+    {
+      "id": "live-presentation.scheduled-occurrence-dot",
+      "operation": "recording-dot",
+      "input": {
+        "timerId": "timer",
+        "seriesTimerId": "series-rule"
+      },
+      "expected": true
     }
   ]
 }

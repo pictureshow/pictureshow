@@ -10,6 +10,7 @@ import java.util.Locale
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.float
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -26,13 +27,22 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(16, cases.size)
+        assertEquals(20, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
             fun value(key: String) = c.getValue(key).jsonPrimitive.content
             val id = envelope.getValue("id").jsonPrimitive.content
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "recording-dot" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.boolean,
+                    app.pictureshow.core.livetv.LiveProgram(
+                        "p",
+                        timerId = c["timerId"]?.jsonPrimitive?.contentOrNull,
+                        seriesTimerId = c["seriesTimerId"]?.jsonPrimitive?.contentOrNull
+                    ).hasRecordingTimer(),
+                    id
+                )
                 "tick" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.float,
                     liveGuideTickX(c.getValue("tick").jsonPrimitive.int),

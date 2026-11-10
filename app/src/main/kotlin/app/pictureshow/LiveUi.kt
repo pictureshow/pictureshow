@@ -204,3 +204,13 @@ internal fun LiveFavorite(checked: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+@Composable
+internal fun LiveRecordingDot(tv: Boolean) {
+    val color = Color(0xFFFF6B6B)
+    if (tv) {
+        androidx.tv.material3.Text("●", color = color, style = androidx.tv.material3.MaterialTheme.typography.labelSmall)
+    } else {
+        androidx.compose.material3.Text("●", color = color, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+    }
+}

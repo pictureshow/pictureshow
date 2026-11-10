@@ -209,8 +209,14 @@ internal fun LiveTvScreen(
                     }
                     if (tab == "Guide") {
                         item {
-                            LiveChip(if (linear) "List" else "Grid", true, tv) {
-                                linear = !linear
+                            LiveChip("Grid", !linear, tv) {
+                                linear = false
+                                returnFocus = null
+                            }
+                        }
+                        item {
+                            LiveChip("List", linear, tv) {
+                                linear = true
                                 returnFocus = null
                             }
                         }
@@ -348,10 +354,10 @@ internal fun LiveTvScreen(
                         program != null -> item {
                             LiveProgramDetail(program, state, account, tv, canAct, now, onPlay, {
                                 vm.defaults(program, false)
-                            }, { vm.defaults(program, true) }) { timer ->
+                            }, { vm.defaults(program, true) }) { timer, series ->
                                 selectedSchedule =
                                     timer
-                                selectedSeries = false
+                                selectedSeries = series
                             }
                         }
                         recording != null -> item {

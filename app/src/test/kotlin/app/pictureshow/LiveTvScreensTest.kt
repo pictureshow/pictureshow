@@ -241,4 +241,35 @@ class LiveTvScreensTest {
             assertEquals(0, tuned)
         }
     }
+
+    @Test
+    fun linkedSeriesOpensExistingRuleInsteadOfCreatingAnotherFromThisEpisode() {
+        val now = java.time.Instant.now()
+        val fake = LiveFake().apply {
+            show =
+                show.copy(
+                    isSeries = true,
+                    seriesTimerId = "rule",
+                    startDate = now.minusSeconds(30).toString(),
+                    endDate = now.plusSeconds(1800).toString()
+                )
+            seriesRows = listOf(
+                app.pictureshow.core.livetv.LiveSchedule(
+                    kotlinx.serialization.json.buildJsonObject {
+                        put("Id", kotlinx.serialization.json.JsonPrimitive("rule"))
+                        put("Name", kotlinx.serialization.json.JsonPrimitive("Existing series"))
+                    }
+                )
+            )
+        }
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, {}, {}, {}) } }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithTag("live:tab:Guide").performClick()
+        compose.onNodeWithTag("live:p:p").performClick()
+        compose.onNodeWithText("Manage series…").performScrollTo().performClick()
+        compose.onNodeWithText("Recording schedule").assertIsDisplayed()
+        compose.onNodeWithText("Existing series").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, fake.created) }
+    }
 }

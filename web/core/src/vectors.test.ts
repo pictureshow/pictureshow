@@ -81,6 +81,7 @@ const pendingPortSuites = new Set([
     "live-dvr",
     "live-source",
     "live-presentation",
+    "player-overlay-layout",
 ]);
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))

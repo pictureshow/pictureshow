@@ -35,12 +35,13 @@ internal fun LiveProgramDetail(
     onPlay: (MediaItem) -> Unit,
     onOnce: () -> Unit,
     onSeries: () -> Unit,
-    onSchedule: (LiveSchedule) -> Unit
+    onSchedule: (LiveSchedule, Boolean) -> Unit
 ) {
     val time = liveTime()
     val channel = state.channels.firstOrNull { it.id == program.channelId }
     val current = canTune(program, now)
     val timer = state.timers.firstOrNull { it.programId == program.id || it.id == program.timerId }
+    val seriesRule = state.series.firstOrNull { it.id == program.seriesTimerId && it.id.isNotBlank() }
     val item = MediaItem(program.id, program.name, imageTags = program.imageTags, backdropImageTags = program.backdropImageTags)
     val artwork: @Composable (Modifier) -> Unit = { modifier ->
         Box(modifier.aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(LiveAccent.copy(alpha = .1f))) {
@@ -86,7 +87,7 @@ internal fun LiveProgramDetail(
                             },
                             tv,
                             enabled = canAct && !state.writing
-                        ) { onSchedule(timer) }
+                        ) { onSchedule(timer, false) }
                     } else {
                         LiveAction(
                             "Record once…",
@@ -98,11 +99,11 @@ internal fun LiveProgramDetail(
                     }
                     if (program.isSeries) {
                         LiveAction(
-                            "Record series…",
+                            if (seriesRule != null) "Manage series…" else "Record series…",
                             tv,
                             enabled =
                             canAct && !state.writing && liveInstant(program.endDate) > now,
-                            onClick = onSeries
+                            onClick = { if (seriesRule != null) onSchedule(seriesRule, true) else onSeries() }
                         )
                     }
                 }
@@ -133,14 +134,14 @@ internal fun LiveProgramRow(program: LiveProgram, tv: Boolean, modifier: Modifie
             { LiveText(program.name, tv) },
             modifier.fillMaxWidth(),
             supportingContent = { LiveText(time.range(program.startDate, program.endDate), tv, small = true) },
-            trailingContent = { if (program.timerId != null || program.seriesTimerId != null) LiveText("●", tv) }
+            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot(tv) }
         )
     } else {
         androidx.compose.material3.ListItem(
             headlineContent = { LiveText(program.name, tv) },
             modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
             supportingContent = { LiveText(time.range(program.startDate, program.endDate), tv, small = true) },
-            trailingContent = { if (program.timerId != null || program.seriesTimerId != null) LiveText("●", tv) }
+            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot(tv) }
         )
     }
 }

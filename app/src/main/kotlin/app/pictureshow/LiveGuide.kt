@@ -121,7 +121,8 @@ internal fun LiveGuide(
                             val show = cell.program
                             val key = "p:${show.id}"
                             val width = cell.widthFraction * LIVE_GUIDE_WIDTH
-                            val label = "${show.name} · ${time.range(show.startDate, show.endDate)}"
+                            val label = "${show.name} · ${time.range(show.startDate, show.endDate)}" +
+                                if (show.hasRecordingTimer()) " · Recording scheduled" else ""
                             val target = Modifier.offset(x = (cell.startFraction * LIVE_GUIDE_WIDTH).dp, y = rowHeight * cell.lane)
                                 .width(width.dp).height(rowHeight - 2.dp)
                                 .liveFocus(key, returnFocus == key || returnFocus == null && index == 0 && cellIndex == 0) {
@@ -137,7 +138,7 @@ internal fun LiveGuide(
                                         LiveText(show.name, tv, Modifier.testTag("live:cell-title:${show.id}"), maxLines = 2)
                                         if (rowHeight >= 70.dp) LiveText(time.clock(show.startDate), tv, small = true, maxLines = 1)
                                     }
-                                    if (show.timerId != null || show.seriesTimerId != null) LiveText("●", tv, small = true)
+                                    if (show.hasRecordingTimer()) LiveRecordingDot(tv)
                                 }
                             }
                             if (tv) {
