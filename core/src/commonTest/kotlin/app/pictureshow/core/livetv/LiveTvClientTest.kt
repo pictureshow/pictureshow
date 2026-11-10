@@ -264,10 +264,15 @@ class LiveTvClientTest {
 
     @Test fun anUnreadableLinkedSeriesRuleCannotBeBlindlyRecreated() = runTest {
         linkedSeriesId = "not-returned"
-        val result = client().createTimer(account, draft, series = true)
-        assertEquals("failed", result.outcome)
-        assertTrue(result.message.orEmpty().contains("existing series rule"))
-        assertFalse(requests.any { it.startsWith("POST") })
+        val unrelated = JsonObject(draft.fields + mapOf("Id" to JsonPrimitive("unrelated")))
+        for (readback in listOf(null, unrelated)) {
+            stored = readback
+            val result = client().createTimer(account, draft, series = true)
+            assertEquals("failed", result.outcome)
+            assertEquals(null, result.schedule)
+            assertTrue(result.message.orEmpty().contains("existing series rule"))
+            assertFalse(requests.any { it.startsWith("POST") })
+        }
     }
 
     @Test fun seriesCreationAndOccurrenceCancellationUseDifferentResources() = runTest {
