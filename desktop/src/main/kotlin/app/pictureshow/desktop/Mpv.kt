@@ -71,6 +71,7 @@ class Mpv(val out: File) : AutoCloseable {
         val osc = api.mpv_set_option_string(handle, "osc", "no")
         if (osc != -5) check(osc) // MPV_ERROR_OPTION_NOT_FOUND
         option("osd-level", "0")
+        option("sub-margin-y", "80") // Keep SRT above the always-visible diagnostic controls.
     }
     fun check(code: Int) { check(code >= 0) { api.mpv_error_string(code) } }
     fun option(name: String, value: String) {

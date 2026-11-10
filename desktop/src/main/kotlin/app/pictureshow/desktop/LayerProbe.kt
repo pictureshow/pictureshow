@@ -60,7 +60,7 @@ fun layerMain(args: Array<String>) {
         val state=rememberWindowState(width=960.dp,height=640.dp)
         var clicks by remember { mutableStateOf(0) }
         var full by remember { mutableStateOf(false) }
-        var restoreBounds:java.awt.Rectangle?=null
+        var restoreBounds by remember { mutableStateOf<java.awt.Rectangle?>(null) }
         fun stop(code:Int=0) {
             if(!stopping.compareAndSet(false,true)) return
             val workerInitiated=Thread.currentThread()===worker.get()
