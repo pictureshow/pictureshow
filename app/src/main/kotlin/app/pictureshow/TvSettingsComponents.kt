@@ -217,7 +217,7 @@ internal fun TvSettingsRow(
         supportingContent = supportingText?.let { text ->
             { Text(text, color = supportingColor, style = MaterialTheme.typography.bodyMedium) }
         },
-        leadingContent = leading,
+        leadingContent = leading?.let { content -> { content() } },
         trailingContent = trailing?.let { content ->
             { androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides supportingColor) { content() } }
         },

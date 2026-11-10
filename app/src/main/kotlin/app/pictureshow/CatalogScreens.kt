@@ -150,7 +150,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-private val CatalogBackground = Color(0xFF10131C)
+internal val CatalogBackground = Color(0xFF10131C)
 private val CatalogMuted = Color(0xFFB9C1D6)
 internal val SelectedSeasonOutline = Color(0xFFB8C4FF)
 
@@ -647,7 +647,7 @@ fun CatalogHome(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
 fun CatalogGrid(
     state: CatalogGridState,

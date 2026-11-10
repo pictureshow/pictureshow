@@ -222,6 +222,20 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("catalog:choice:saved").assertDoesNotExist()
     }
 
+    @Test fun pendingSearchRemovesPreviouslySelectableChoices() {
+        val pending = CompletableDeferred<ClientResult<ItemPage>>()
+        service.named = { term ->
+            if (term.isEmpty()) ClientResult.Success(ItemPage(listOf(MediaItem("old", "Old choice")), 1)) else pending.await()
+        }
+        compose.setContent { MaterialTheme { NamedCatalogPicker(account, service, "Genres", select = {}, close = {}) } }
+        compose.onNodeWithText("Old choice").assertIsDisplayed()
+        compose.onNode(hasSetTextAction()).performTextInput("replacement")
+        compose.mainClock.advanceTimeBy(350)
+        compose.onNodeWithText("Old choice").assertDoesNotExist()
+        compose.runOnIdle { pending.complete(ClientResult.Success(ItemPage(listOf(MediaItem("new", "Replacement choice")), 1))) }
+        compose.onNodeWithText("Replacement choice").assertIsDisplayed()
+    }
+
     @Test fun lateFailedChoiceCannotReplaceNewSuccessfulSearch() {
         val old = CompletableDeferred<ClientResult<ItemPage>>()
         service.named = { term ->

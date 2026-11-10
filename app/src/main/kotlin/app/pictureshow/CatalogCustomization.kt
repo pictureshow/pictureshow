@@ -491,8 +491,8 @@ internal fun NamedCatalogPicker(
     var requested by remember { mutableStateOf("") }
     var page by remember { mutableIntStateOf(0) }
     var retry by remember { mutableIntStateOf(0) }
-    var pageChoices by remember { mutableStateOf(emptyList<MediaItem>()) }
-    var currentChoices by remember { mutableStateOf(emptyList<MediaItem>()) }
+    var pageChoices by remember(account.key, kind, parentId) { mutableStateOf(emptyList<MediaItem>()) }
+    var currentChoices by remember(account.key, kind, parentId) { mutableStateOf(emptyList<MediaItem>()) }
     var total by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -521,6 +521,7 @@ internal fun NamedCatalogPicker(
     }
     LaunchedEffect(kind, parentId, requested, page, retry) {
         loading = true
+        pageChoices = emptyList()
         error = null
         val result = service.namedItems(account, kind, parentId, requested, page)
         currentCoroutineContext().ensureActive()
@@ -536,7 +537,11 @@ internal fun NamedCatalogPicker(
         }
         loading = false
     }
-    val choices = namedPickerChoices(currentChoices, pageChoices, requested, page)
+    val choices = if (loading || error != null || query.trim() != requested) {
+        emptyList()
+    } else {
+        namedPickerChoices(currentChoices, pageChoices, requested, page)
+    }
     fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
     val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
     val title = when (kind) {
