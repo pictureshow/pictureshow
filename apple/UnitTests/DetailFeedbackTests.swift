@@ -21,11 +21,38 @@ private final class DetailFixtureProtocol: URLProtocol {
     static var itemFailureStatus = 503
     static var held: [DetailFixtureProtocol] = []
     static var holdItems = false
+    private static let playedHoldLock = NSLock()
+    private static var holdNextPlayed = false
+    private static var heldPlayed: DetailFixtureProtocol?
+    static func holdNextPlayedResponse() {
+        playedHoldLock.lock(); defer { playedHoldLock.unlock() }
+        holdNextPlayed = true
+    }
+    static var hasHeldPlayedResponse: Bool {
+        playedHoldLock.lock(); defer { playedHoldLock.unlock() }
+        return heldPlayed != nil
+    }
+    static func releasePlayedResponse() {
+        playedHoldLock.lock()
+        let request = heldPlayed
+        heldPlayed = nil; holdNextPlayed = false
+        playedHoldLock.unlock()
+        request?.respond()
+    }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         if request.url!.path.hasSuffix("/Users/Me") { Self.homeReads += 1 }
-        if request.url!.path.hasSuffix("/UserPlayedItems/title") { Self.playedWrites.append(request.httpMethod ?? "") }
+        if request.url!.path.hasSuffix("/UserPlayedItems/title") {
+            Self.playedHoldLock.lock()
+            Self.playedWrites.append(request.httpMethod ?? "")
+            if Self.holdNextPlayed {
+                Self.holdNextPlayed = false; Self.heldPlayed = self
+                Self.playedHoldLock.unlock()
+                return
+            }
+            Self.playedHoldLock.unlock()
+        }
         if request.url!.path.hasSuffix("/Items/title") {
             Self.itemReads += 1
             if Self.holdItems { Self.held.append(self); return }
@@ -108,13 +135,28 @@ private final class DetailFixtureProtocol: URLProtocol {
         model.finishPlayedProjection(raw.id, owner: owner, success: true)
         XCTAssertTrue(model.presented(raw).isWatched, "The stale completion projection returns to authoritative state while the accepted choice waits")
 
+        DetailFixtureProtocol.holdNextPlayedResponse()
+        defer { DetailFixtureProtocol.releasePlayedResponse() }
         model.playbackSaving = false
         detail.drain(model: model)
+        var releasedPlayedResponse = false
         for _ in 0..<100 {
-            if DetailFixtureProtocol.playedWrites.count == 1 { break }
+            if !releasedPlayedResponse, DetailFixtureProtocol.hasHeldPlayedResponse {
+                XCTAssertEqual(DetailFixtureProtocol.playedWrites, ["DELETE"], "The queued user choice runs after the completion save barrier")
+                XCTAssertTrue(detail.writing)
+                XCTAssertEqual(detail.activeCommand, .watched(false))
+                XCTAssertEqual(detail.item?.isWatched, true, "Transport arrival cannot publish Unplayed before its response completes")
+                releasedPlayedResponse = true
+                DetailFixtureProtocol.releasePlayedResponse()
+            }
+            // Request arrival precedes server mutation, response decoding and the
+            // MainActor publication. Share the original budget across both phases.
+            if releasedPlayedResponse, detail.item?.isWatched == false { break }
             try await Task.sleep(for: .milliseconds(10))
         }
+        XCTAssertTrue(releasedPlayedResponse, "The Unplayed mutation must reach the controlled response boundary")
         XCTAssertEqual(DetailFixtureProtocol.playedWrites, ["DELETE"], "The queued user choice runs after the completion save barrier")
+        XCTAssertNil(detail.writeError)
         XCTAssertEqual(detail.item?.isWatched, false)
         detail.leave()
     }
@@ -177,6 +219,7 @@ private final class DetailFixtureProtocol: URLProtocol {
         delivery.resume(); enabled = false; delivery.submit(AccessibilityCue(message: "Off")); XCTAssertEqual(posts, 2)
     }
     override func tearDown() {
+        DetailFixtureProtocol.releasePlayedResponse()
         DetailFixtureProtocol.itemType = "Movie"; DetailFixtureProtocol.itemPlayed = false; DetailFixtureProtocol.playedWrites = []; DetailFixtureProtocol.failItems = false; DetailFixtureProtocol.failEpisodes = false
         DetailFixtureProtocol.holdItems = false; DetailFixtureProtocol.itemReads = 0; DetailFixtureProtocol.episodeReads = 0; DetailFixtureProtocol.held = []; DetailFixtureProtocol.homeReads = 0; DetailFixtureProtocol.itemFailureStatus = 503
     }

@@ -21,6 +21,7 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     private static let lock = NSLock()
     private static var delivery: Delivery = .valid
     private static var recorded: [Recorded] = []
+    private static var requestObserver: ((Recorded) -> Void)?
     private static var cancelled: [String] = []
     private static var held: [ObjectIdentifier: ExternalSubtitleHTTP] = [:]
     private static var captionReference: String? = "/captions/selected.vtt"
@@ -58,7 +59,7 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     static func reset(_ value: Delivery, captionReference: String? = "/captions/selected.vtt", encodedExternalSubrip: Bool = false, embeddedSelectedTrack: Bool = false, expandedTracks: Bool = false) {
         lock.lock(); defer { lock.unlock() }
         delivery = value; self.captionReference = captionReference; self.encodedExternalSubrip = encodedExternalSubrip; self.embeddedSelectedTrack = embeddedSelectedTrack; self.expandedTracks = expandedTracks
-        recorded = []; cancelled = []; held = [:]
+        recorded = []; cancelled = []; held = [:]; requestObserver = nil
     }
     // Shared resolve-24/25 append even slash-prefixed references to the configured
     // server base. Absolute DeliveryUrl values retain their own same-origin path.
@@ -69,6 +70,9 @@ private final class ExternalSubtitleHTTP: URLProtocol {
     static func completeHeldCaptions() {
         lock.lock(); let responses = Array(held.values); held = [:]; lock.unlock()
         responses.forEach { $0.respond(status: 200, data: caption) }
+    }
+    static func observeRequests(_ observer: ((Recorded) -> Void)?) {
+        lock.lock(); requestObserver = observer; lock.unlock()
     }
     static var requests: [Recorded] { lock.lock(); defer { lock.unlock() }; return recorded }
     static var stoppedPaths: [String] { lock.lock(); defer { lock.unlock() }; return cancelled }
@@ -95,10 +99,15 @@ private final class ExternalSubtitleHTTP: URLProtocol {
         let path = request.url!.path
         let body = Self.body(request)
         Self.lock.lock()
-        Self.recorded.append(Recorded(url: request.url!, body: body))
+        let receipt = Recorded(url: request.url!, body: body)
+        Self.recorded.append(receipt)
+        let observer = Self.requestObserver
         let delivery = Self.delivery
-        if Self.isCaptionPath(path), case .held = delivery { Self.held[ObjectIdentifier(self)] = self; Self.lock.unlock(); return }
+        var isHeld = false
+        if Self.isCaptionPath(path), case .held = delivery { Self.held[ObjectIdentifier(self)] = self; isHeld = true }
         Self.lock.unlock()
+        observer?(receipt)
+        if isHeld { return }
         if Self.isCaptionPath(path) {
             switch delivery {
             case .http500: respond(status: 500, data: Data("Unavailable".utf8))
@@ -134,12 +143,14 @@ private final class ExternalSubtitleHTTP: URLProtocol {
 @MainActor private final class SubtitleRetryClock {
     var delays: [Int64] = []
     var elapsedMs: Int64 = 0
+    var reachedLimit: (() -> Void)?
     let stopAtMs: Int64
     private var waiters: [CheckedContinuation<Void, Error>] = []
     init(stopAtMs: Int64 = 242_000) { self.stopAtMs = stopAtMs }
     func sleep(_ milliseconds: Int64) async throws {
         delays.append(milliseconds); elapsedMs += milliseconds
         if elapsedMs < stopAtMs { await Task.yield(); try Task.checkCancellation(); return }
+        let receipt = reachedLimit; reachedLimit = nil; receipt?()
         try await withCheckedThrowingContinuation { waiters.append($0) }
     }
     func finish() { let pending = waiters; waiters = []; pending.forEach { $0.resume(throwing: CancellationError()) } }
@@ -290,18 +301,59 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
     }
     /// `timeout` is real time. Waits that need many fake-clock retries, each a real loopback
     /// request, get a longer budget: a 3-core hosted CI simulator manages about 12 per second.
-    private func eventually(_ message: String, timeout: Duration = .seconds(2), joining selectedTask: Task<Void, Never>? = nil, _ predicate: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
-        // Only finite valid-load probes supply a task. The dependency donates
-        // priority to real fetch/parse/publication while the original predicate's
-        // deadline runs; held/retry/readiness probes remain independent of it.
-        let join = selectedTask.map { task in Task(priority: .userInitiated) { await task.value } }
-        defer { join?.cancel() }
+    private func eventually(_ message: String, timeout: Duration = .seconds(2), observing loader: ExternalTextSubtitles? = nil, _ predicate: @escaping () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
         let deadline = ContinuousClock.now.advanced(by: timeout)
+        if predicate() { return }
+        if let loader {
+            // @Published emits before loading is assigned. Record the real false
+            // publication within the budget, then check the original predicate
+            // after fulfillment, when all synchronous state assignments have run.
+            let completed = XCTestExpectation(description: message)
+            let observation = loader.$loading.filter { !$0 }.prefix(1).sink { _ in
+                if ContinuousClock.now < deadline { completed.fulfill() }
+            }
+            let selectedTask = loader.task
+            let join = Task(priority: .userInitiated) { await selectedTask?.value }
+            defer { observation.cancel(); join.cancel() }
+            let result = await XCTWaiter.fulfillment(of: [completed], timeout: seconds(timeout))
+            XCTAssertEqual(result, .completed, message, file: file, line: line)
+            XCTAssertTrue(predicate(), message, file: file, line: line)
+            return
+        }
         while ContinuousClock.now < deadline {
             if predicate() { return }
             try await Task.sleep(for: .milliseconds(5))
         }
         XCTFail(message, file: file, line: line)
+    }
+    private func seconds(_ duration: Duration) -> TimeInterval {
+        let parts = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+    }
+    /// Receipts reject events outside the original budget even if XCTest's own
+    /// timeout callback is delayed. Polling wake-up latency cannot erase an event.
+    nonisolated private func receipt(_ message: String, timeout: Duration = .seconds(2)) -> (XCTestExpectation, () -> Void) {
+        let expectation = XCTestExpectation(description: message)
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        return (expectation, { if ContinuousClock.now < deadline { expectation.fulfill() } })
+    }
+    func testEventReceiptsKeepTheirDeadlineWhenTheWaiterResumesLate() async throws {
+        let (early, didArriveEarly) = receipt("An on-time event survives delayed observation", timeout: .milliseconds(100))
+        didArriveEarly()
+        // Delay the observer, not the event. The old poller checked its expired
+        // deadline first and could lose a result that had already committed.
+        try await Task.sleep(for: .milliseconds(150))
+        let earlyResult = await XCTWaiter.fulfillment(of: [early], timeout: 0.01)
+        XCTAssertEqual(earlyResult, .completed)
+
+        let (late, didArriveLate) = receipt("An expired event remains rejected", timeout: .milliseconds(10))
+        try await Task.sleep(for: .milliseconds(20))
+        didArriveLate()
+        let lateResult = await XCTWaiter.fulfillment(of: [late], timeout: 0.01)
+        XCTAssertEqual(lateResult, .timedOut)
+        let (missing, _) = receipt("An absent event remains rejected", timeout: .milliseconds(10))
+        let missingResult = await XCTWaiter.fulfillment(of: [missing], timeout: 0.01)
+        XCTAssertEqual(missingResult, .timedOut)
     }
     private var captionRequests: [ExternalSubtitleHTTP.Recorded] { ExternalSubtitleHTTP.requests.filter { ExternalSubtitleHTTP.isCaptionPath($0.path) } }
 
@@ -341,7 +393,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
                 loader.select(asset("new"))
                 try await eventually("New response was not held") { transport.pending["/captions/new.vtt"] != nil }
                 transport.complete("/captions/new.vtt", text: "WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nNew selection")
-                try await eventually("New selected cues did not publish", joining: loader.task) { loader.text(atFullMediaMs: 121_000) == "New selection" }
+                try await eventually("New selected cues did not publish", observing: loader) { loader.text(atFullMediaMs: 121_000) == "New selection" }
             } else if action == "off" { loader.select(nil) } else { loader.release() }
             transport.complete("/captions/old-\(action).vtt", text: "WEBVTT\n\n00:02:00.000 --> 00:02:05.000\nStale selection")
             // A queued uncooperative completion must get an opportunity to execute.
@@ -356,7 +408,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
         defer { loader.release(); clock.finish() }
         loader.select(asset())
-        try await eventually("Full-file cues did not load", joining: loader.task) { !loader.loading && !loader.cues.isEmpty }
+        try await eventually("Full-file cues did not load", observing: loader) { !loader.loading && !loader.cues.isEmpty }
         XCTAssertEqual(loader.text(atFullMediaMs: 120_000), "Selected caption")
         XCTAssertNil(loader.text(atFullMediaMs: 125_000))
         loader.select(nil); loader.select(asset())
@@ -364,19 +416,19 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertNil(loader.text(atFullMediaMs: 0)); XCTAssertEqual(loader.text(atFullMediaMs: 124_999), "Selected caption")
         XCTAssertEqual(captionRequests.count, 1, "Off/on and local timeline queries must reuse parsed cues")
         loader.release(); loader.select(asset())
-        try await eventually("A released media period must not retain its cache", joining: loader.task) { self.captionRequests.count == 2 && !loader.loading }
+        try await eventually("A released media period must not retain its cache", observing: loader) { self.captionRequests.count == 2 && !loader.loading }
     }
 
     func testRebasedTextUsesExtractionOriginWhileFullFileRetainsAuthoredTime() async throws {
         let loader = ExternalTextSubtitles(fetch: { _ in Data("WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nRebased".utf8) })
         defer { loader.release() }
         loader.select(asset("rebased", originMs: 120_000))
-        try await eventually("Rebased cues did not load", joining: loader.task) { !loader.loading }
+        try await eventually("Rebased cues did not load", observing: loader) { !loader.loading }
         XCTAssertNil(loader.text(atFullMediaMs: 2_000))
         XCTAssertEqual(loader.text(atFullMediaMs: 122_000), "Rebased")
         XCTAssertNil(loader.text(atFullMediaMs: 124_000))
         loader.select(asset("full", originMs: 0))
-        try await eventually("Full-file cues did not load", joining: loader.task) { !loader.loading }
+        try await eventually("Full-file cues did not load", observing: loader) { !loader.loading }
         XCTAssertEqual(loader.text(atFullMediaMs: 2_000), "Rebased")
         XCTAssertNil(loader.text(atFullMediaMs: 122_000))
     }
@@ -390,10 +442,14 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         try await session.prepare(startTicks: 0, audio: nil, subtitle: subtitleIndex)
         XCTAssertEqual(loader.selected?.url.path, expectedCaptionPath,
                        "Selected caption resolution must honor the configured server base or absolute DeliveryUrl")
+        let (started, didStart) = receipt("Optional selected subtitles must not gate real session readiness or Start")
+        ExternalSubtitleHTTP.observeRequests { if $0.path.hasSuffix("/Sessions/Playing") { didStart() } }
         session.ready(version: 0)
-        try await eventually("Optional selected subtitles must not gate real session readiness or Start") {
-            !session.waitingForVideo && ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing") }
-        }
+        let readyResult = await XCTWaiter.fulfillment(of: [started], timeout: 2)
+        ExternalSubtitleHTTP.observeRequests(nil)
+        XCTAssertEqual(readyResult, .completed, "Optional selected subtitles must not gate real session readiness or Start")
+        XCTAssertFalse(session.waitingForVideo)
+        XCTAssertTrue(ExternalSubtitleHTTP.requests.contains { $0.path.hasSuffix("/Sessions/Playing") })
         return (session, player)
     }
 
@@ -491,7 +547,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         loader.setContext(itemID: "first-item", viewingID: "first-viewing")
         let first = ExternalTextSubtitles.Asset(id: "opaque-first", url: URL(string: "https://media.example.test/first.vtt")!, format: "vtt", originMs: 30_000, streamIndex: 4, sourceID: "source-a", selectionCount: 7)
         loader.select(first)
-        try await eventually("Selected text must finish parsing", joining: loader.task) { !loader.loading && !loader.cues.isEmpty }
+        try await eventually("Selected text must finish parsing", observing: loader) { !loader.loading && !loader.cues.isEmpty }
         let revision = loader.revision
         XCTAssertEqual(events.map(\.kind), ["subtitle-loaded"])
         loader.didDisplayVisibleText(selection: revision)
@@ -507,7 +563,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         XCTAssertEqual(visible.itemID, "first-item"); XCTAssertEqual(visible.viewingID, "first-viewing")
         loader.setContext(itemID: "second-item", viewingID: "second-viewing")
         loader.select(.init(id: "opaque-second", url: URL(string: "https://media.example.test/second.vtt")!, format: "vtt", originMs: 0, streamIndex: 9, sourceID: "source-b", selectionCount: 8))
-        try await eventually("New selected text must finish parsing", joining: loader.task) { !loader.loading && !loader.cues.isEmpty }
+        try await eventually("New selected text must finish parsing", observing: loader) { !loader.loading && !loader.cues.isEmpty }
         let before = events.count
         loader.didDisplayVisibleText(selection: revision)
         XCTAssertEqual(events.count, before, "Old layout cannot attribute a cue to a newly selected stream")
@@ -625,7 +681,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
             let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
             defer { loader.release(); clock.finish() }
             let (session, _) = try await readySession(loader: loader, expectedCaptionPath: expectedPath)
-            try await eventually("Resolved selected caption did not load from \(expectedPath)", joining: loader.task) { !loader.loading && !loader.cues.isEmpty }
+            try await eventually("Resolved selected caption did not load from \(expectedPath)", observing: loader) { !loader.loading && !loader.cues.isEmpty }
             XCTAssertEqual(captionRequests.map(\.path), [expectedPath], "No other caption path may be prefetched")
             XCTAssertEqual(loader.text(atFullMediaMs: 121_000), "Selected caption")
             await session.stop(); clock.finish()
@@ -678,7 +734,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         defer { loader.release(); clock.finish() }
         let expectedPath = "/jellyfin/Videos/movie/source/Subtitles/0/Stream.vtt"
         let (session, player) = try await readySession(loader: loader, expectedCaptionPath: expectedPath, subtitleIndex: 0)
-        try await eventually("An external SubRip source proposed as Encode must still load through optional VTT extraction", joining: loader.task) {
+        try await eventually("An external SubRip source proposed as Encode must still load through optional VTT extraction", observing: loader) {
             self.captionRequests.count == 1 && !loader.loading && !loader.cues.isEmpty
         }
         XCTAssertEqual(captionRequests.map(\.path), [expectedPath])
@@ -744,10 +800,15 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         try await eventually("Cold selected caption request was not held") { self.captionRequests.count == 1 }
         XCTAssertNil(session.subtitleCue); XCTAssertTrue(loader.cues.isEmpty)
         let seeksAtLoad = player.seekTargets.count
+        let (visible, didPublish) = receipt("Cold cues must reach the session overlay while paused, without a resume or moving A/V clock")
+        let publication = session.$subtitleCue.filter { $0 == "Selected caption" }.prefix(1).sink { _ in didPublish() }
+        let selectedTask = loader.task
+        let join = Task(priority: .userInitiated) { await selectedTask?.value }
+        defer { publication.cancel(); join.cancel() }
         ExternalSubtitleHTTP.completeHeldCaptions()
-        try await eventually("Cold cues must reach the session overlay while paused, without a resume or moving A/V clock", joining: loader.task) {
-            session.subtitleCue == "Selected caption"
-        }
+        let visibleResult = await XCTWaiter.fulfillment(of: [visible], timeout: 2)
+        XCTAssertEqual(visibleResult, .completed, "Cold cues must reach the session overlay while paused, without a resume or moving A/V clock")
+        XCTAssertEqual(session.subtitleCue, "Selected caption")
         XCTAssertEqual(loader.text(atFullMediaMs: 121_000), "Selected caption")
         XCTAssertTrue(session.isPaused)
         XCTAssertEqual(session.positionTicks, 121_000 * 10_000)
@@ -793,7 +854,19 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         }
         let (session, _) = try await readySession(loader: loader, player: player)
         defer { player.mediaTime = { .invalid } }
-        try await eventually("Optional retry clock did not cross the 242-second held-failure interval", timeout: .seconds(30)) { clock.elapsedMs >= 242_000 }
+        let (retried, didReachLimit) = receipt("Optional retry clock did not cross the 242-second held-failure interval", timeout: .seconds(30))
+        let retryProbeStart = ContinuousClock.now
+        clock.reachedLimit = {
+            print("OPTIONAL_SUBTITLE_RETRY_LIMIT elapsed=\(retryProbeStart.duration(to: .now)) retryMs=\(clock.elapsedMs)")
+            didReachLimit()
+        }
+        let selectedTask = loader.task
+        let retryJoin = Task(priority: .userInitiated) { await selectedTask?.value }
+        defer { retryJoin.cancel(); clock.reachedLimit = nil }
+        if clock.elapsedMs >= 242_000 { clock.reachedLimit?(); clock.reachedLimit = nil }
+        let retryResult = await XCTWaiter.fulfillment(of: [retried], timeout: 30)
+        XCTAssertEqual(retryResult, .completed, "Optional retry clock did not cross the 242-second held-failure interval")
+        XCTAssertGreaterThanOrEqual(clock.elapsedMs, 242_000)
         // Cross the real 12-second A/V watchdog even on a fast runner. An invalid
         // or frozen fake video clock used to make these subtitle assertions depend
         // on URLSession throughput; healthy video must retain Direct play instead.
@@ -831,7 +904,7 @@ private final class SubtitleSizedPlayerItem: AVPlayerItem {
         let clock = SubtitleRetryClock(), loader = makeLoader(clock: clock)
         defer { loader.release(); clock.finish() }
         let (session, player) = try await readySession(loader: loader)
-        try await eventually("Selected cues did not load", joining: loader.task) { !loader.loading }
+        try await eventually("Selected cues did not load", observing: loader) { !loader.loading }
         let playbackRequests = ExternalSubtitleHTTP.requests.filter { $0.path.hasSuffix("PlaybackInfo") }.count
         await session.changeTracks(audio: session.decision?.audioIndex, subtitle: -1)
         await session.changeTracks(audio: session.decision?.audioIndex, subtitle: 4)
