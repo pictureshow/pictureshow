@@ -150,10 +150,13 @@ data class LiveGuideCache(
             )
         }
 
-    fun actionAllowed(program: LiveProgram, now: Long): Boolean = !offline &&
+    fun snapshotFresh(now: Long): Boolean = !offline &&
+        !refreshing &&
         fetchedAtMillis != null &&
         now >= fetchedAtMillis &&
-        now - fetchedAtMillis <= 300_000 &&
+        now - fetchedAtMillis <= 300_000
+
+    fun actionAllowed(program: LiveProgram, now: Long): Boolean = snapshotFresh(now) &&
         program.channelId in channelIds &&
         (liveInstant(program.endDate)?.let { it > now } == true)
 }

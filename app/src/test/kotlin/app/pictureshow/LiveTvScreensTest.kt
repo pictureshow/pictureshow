@@ -6,6 +6,7 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -46,7 +47,9 @@ class LiveTvScreensTest {
             it()
         }
         compose.runOnIdle { assertEquals(0, tuned) }
-        compose.onNodeWithTag("live:c:c").performClick()
+        // The screen samples its action clock once a second; loading can finish after the first sample.
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithTag("live:c:c").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(1, tuned) }
     }
 
