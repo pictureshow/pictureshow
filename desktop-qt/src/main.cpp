@@ -11,6 +11,8 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QTest>
+#include <QMutex>
+#include <QMutexLocker>
 #include <rhi/qrhi.h>
 class Proof:public QObject {
  Q_OBJECT
@@ -31,11 +33,12 @@ int main(int argc,char**argv){
 #ifdef Q_OS_MACOS
  macActivate(w->winId());
 #endif
+ QJsonObject graphics;QMutex graphicsMutex;
+ QObject::connect(w,&QQuickWindow::afterRendering,w,[&]{QJsonObject g;if(auto *sc=w->swapChain()){g["swapchainFormat"]=int(sc->format());g["swapchainPixels"]=QJsonArray{sc->currentPixelSize().width(),sc->currentPixelSize().height()};auto h=sc->hdrInfo();g["hdrLuminanceBehavior"]=int(h.luminanceBehavior);g["hdrLimitsType"]=int(h.limitsType);if(h.limitsType==QRhiSwapChainHdrInfo::ColorComponentValue){g["hdrMaxColorComponent"]=h.limits.colorComponentValue.maxColorComponentValue;g["hdrPotentialMaxColorComponent"]=h.limits.colorComponentValue.maxPotentialColorComponentValue;}else{g["hdrMaxNits"]=h.limits.luminanceInNits.maxLuminance;g["hdrMinNits"]=h.limits.luminanceInNits.minLuminance;}}QMutexLocker lock(&graphicsMutex);graphics=g;},Qt::DirectConnection);
  bool failed=false;QElapsedTimer elapsed;elapsed.start();
  auto capture=[&](QString name){
   auto r=player.receipt();r["stage"]=name;r["elapsedMs"]=elapsed.elapsed();r["qtVersion"]=qVersion();r["windowGeometry"]=rect(w->geometry());r["frameGeometry"]=rect(w->frameGeometry());r["screenGeometry"]=rect(w->screen()->geometry());r["devicePixelRatio"]=w->devicePixelRatio();r["qtVisibility"]=int(w->visibility());r["clicks"]=w->property("clicks").toInt();
-  // Reading swapchain properties is serialized while GUI blocks scenegraph synchronization.
-  if(auto *sc=w->swapChain()){r["swapchainFormat"]=int(sc->format());r["swapchainPixels"]=QJsonArray{sc->currentPixelSize().width(),sc->currentPixelSize().height()};auto h=sc->hdrInfo();r["hdrLuminanceBehavior"]=int(h.luminanceBehavior);r["hdrMaxColorComponent"]=h.limits.colorComponentValue.maxColorComponentValue;}
+  {QMutexLocker lock(&graphicsMutex);for(auto it=graphics.begin();it!=graphics.end();++it)r[it.key()]=it.value();}
 #ifdef Q_OS_MACOS
   r["native"]=macReceipt(w->winId());
 #endif
@@ -64,10 +67,11 @@ int main(int argc,char**argv){
  add(1200,[&]{capture("09-pgs");player.command({"loadfile",fixtures+"/av1.mkv"});player.command({"set","pause","no"});});
  add(6500,[&]{capture("10-av1");player.command({"loadfile",fixtures+"/hevc-pq-metadata.mkv"});});
  add(6500,[&]{capture("11-pq-input");});
+ double sustainStart=-1; qint64 sustainWallStart=0;
  if(args.contains("--sustain")){
   add(1000,[&]{player.command({"loadfile",fixtures+"/sustain-1080p60.mkv"});});
-  add(6000,[&]{capture("12-sustain-start");});
-  add(121000,[&]{capture("13-sustain-end");});
+  add(6000,[&]{sustainStart=player.property("time-pos").toDouble(-1);sustainWallStart=elapsed.elapsed();capture("12-sustain-start");});
+  add(121000,[&]{capture("13-sustain-end");double end=player.property("time-pos").toDouble(-1);auto vp=player.property("video-params").toObject();bool valid=sustainStart>=0 && end-sustainStart>=119 && vp["w"].toInt()==1920 && vp["h"].toInt()==1080;QFile f(out+"/sustain-verdict.json");f.open(QFile::WriteOnly);f.write(QJsonDocument(QJsonObject{{"mediaSeconds",end-sustainStart},{"wallMs",elapsed.elapsed()-sustainWallStart},{"qualifiedProgress",valid}}).toJson());if(!valid)failed=true;});
  }
  add(1000,[&]{capture("14-before-teardown");w->hide();engine.clearComponentCache();w->releaseResources();});
  add(1000,[&]{engine.rootObjects().first()->deleteLater();});

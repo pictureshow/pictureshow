@@ -3,11 +3,12 @@
 """Install only LGPL Qt base/declarative from the current split official repo.
 Aqt3.3 does not recognize the per-compiler Updates.xml layout for Qt6.12.
 """
-import hashlib,subprocess,sys,urllib.request,xml.etree.ElementTree as ET
+import hashlib,shutil,subprocess,sys,urllib.request,xml.etree.ElementTree as ET
 from pathlib import Path
 base='https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/'
 r=ET.fromstring(urllib.request.urlopen(base+'Updates.xml').read())
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
+unpack=out/'_unpack';unpack.mkdir(exist_ok=True)
 for p in r.findall('PackageUpdate'):
  if p.findtext('Name')!='qt.qt6.6120.win64_msvc2022_64':continue
  version=p.findtext('Version');name=p.findtext('Name')
@@ -17,9 +18,13 @@ for p in r.findall('PackageUpdate'):
   expected=urllib.request.urlopen(url+'.sha1').read().decode().split()[0]
   dest=out/archive;urllib.request.urlretrieve(url,dest)
   if hashlib.sha1(dest.read_bytes()).hexdigest()!=expected:raise SystemExit('Qt archive checksum mismatch')
-  subprocess.run(['7z','x',str(dest),'-o'+str(out),'-y'],check=True,stdout=subprocess.DEVNULL)
+  subprocess.run(['7z','x',str(dest),'-o'+str(unpack),'-y'],check=True,stdout=subprocess.DEVNULL)
   dest.unlink()
 qt=out/'6.12.0/msvc2022_64'
+root=next(unpack.rglob('Qt6Config.cmake')).parents[3]
+qt.mkdir(parents=True,exist_ok=True)
+for child in list(root.iterdir()):shutil.move(str(child),str(qt/child.name))
+shutil.rmtree(unpack)
 # Qt binary archive's qmake carries the original SDK prefix; relocatable CMake uses this file.
 (qt/'bin/qt.conf').write_text('[Paths]\nPrefix=..\n')
 print(qt)
