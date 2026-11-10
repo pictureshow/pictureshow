@@ -2094,6 +2094,267 @@
       "openItemId": "media-a",
       "currentItemId": null,
       "expected": false
+    },
+    {
+      "id": "sync-state.access-initial-unknown",
+      "operation": "access-presentation",
+      "policy": "None",
+      "known": false,
+      "busy": false,
+      "failed": false,
+      "expected": {
+        "notice": "UNKNOWN",
+        "canJoin": false,
+        "canCreate": false,
+        "canRefresh": true
+      }
+    },
+    {
+      "id": "sync-state.access-lookup-in-flight",
+      "operation": "access-presentation",
+      "policy": "None",
+      "known": false,
+      "busy": true,
+      "failed": false,
+      "expected": {
+        "notice": "CHECKING",
+        "canJoin": false,
+        "canCreate": false,
+        "canRefresh": false
+      }
+    },
+    {
+      "id": "sync-state.access-lookup-failed",
+      "operation": "access-presentation",
+      "policy": "None",
+      "known": false,
+      "busy": false,
+      "failed": true,
+      "expected": {
+        "notice": "UNAVAILABLE",
+        "canJoin": false,
+        "canCreate": false,
+        "canRefresh": true
+      }
+    },
+    {
+      "id": "sync-state.access-confirmed-denied-can-refresh",
+      "operation": "access-presentation",
+      "policy": "None",
+      "known": true,
+      "busy": false,
+      "failed": false,
+      "expected": {
+        "notice": "DENIED",
+        "canJoin": false,
+        "canCreate": false,
+        "canRefresh": true
+      }
+    },
+    {
+      "id": "sync-state.access-confirmed-join-only",
+      "operation": "access-presentation",
+      "policy": "JoinGroups",
+      "known": true,
+      "busy": false,
+      "failed": false,
+      "expected": {
+        "notice": "ALLOWED",
+        "canJoin": true,
+        "canCreate": false,
+        "canRefresh": true
+      }
+    },
+    {
+      "id": "sync-state.access-confirmed-create-and-join",
+      "operation": "access-presentation",
+      "policy": "CreateAndJoinGroups",
+      "known": true,
+      "busy": false,
+      "failed": false,
+      "expected": {
+        "notice": "ALLOWED",
+        "canJoin": true,
+        "canCreate": true,
+        "canRefresh": true
+      }
+    },
+    {
+      "id": "sync-state.access-stale-allowed-is-not-confirmed",
+      "operation": "access-presentation",
+      "policy": "CreateAndJoinGroups",
+      "known": false,
+      "busy": true,
+      "failed": false,
+      "expected": {
+        "notice": "CHECKING",
+        "canJoin": false,
+        "canCreate": false,
+        "canRefresh": false
+      }
+    },
+    {
+      "id": "sync-state.access-failed-lookup-invalidates-old-allowed",
+      "operation": "access-presentation",
+      "policy": "CreateAndJoinGroups",
+      "known": true,
+      "busy": false,
+      "failed": true,
+      "expected": {
+        "notice": "UNAVAILABLE",
+        "canJoin": false,
+        "canCreate": false,
+        "canRefresh": true
+      }
+    },
+    {
+      "id": "sync-state.access-unknown-server-policy-fails-closed",
+      "operation": "access-presentation",
+      "policy": "FuturePolicy",
+      "known": true,
+      "busy": false,
+      "failed": false,
+      "expected": {
+        "notice": "UNAVAILABLE",
+        "canJoin": false,
+        "canCreate": false,
+        "canRefresh": true
+      }
+    },
+    {
+      "id": "sync-state.future-unpause-replaces-paused-seek-before-output-time",
+      "operation": "membership",
+      "state": {
+        "generation": 1,
+        "groupId": "g",
+        "phase": "Joining"
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageType": "SyncPlayGroupUpdate",
+              "Data": {
+                "GroupId": "g",
+                "Type": "GroupJoined",
+                "Data": {
+                  "GroupId": "g",
+                  "GroupName": "Evening",
+                  "State": "Paused",
+                  "Participants": [
+                    "Viewer A",
+                    "Viewer B"
+                  ],
+                  "LastUpdatedAt": "2026-11-10T12:00:00.0000000Z"
+                }
+              }
+            }
+          },
+          "expected": {
+            "phase": "Joining",
+            "hasSnapshot": false
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageType": "SyncPlayGroupUpdate",
+              "Data": {
+                "GroupId": "g",
+                "Type": "PlayQueue",
+                "Data": {
+                  "Reason": "NewPlaylist",
+                  "LastUpdate": "2026-11-10T12:00:00.0000000Z",
+                  "Playlist": [
+                    {
+                      "ItemId": "same-media",
+                      "PlaylistItemId": "entry-a"
+                    },
+                    {
+                      "ItemId": "same-media",
+                      "PlaylistItemId": "entry-b"
+                    }
+                  ],
+                  "PlayingItemIndex": 0,
+                  "StartPositionTicks": 123456789,
+                  "IsPlaying": false,
+                  "RepeatMode": "RepeatNone",
+                  "ShuffleMode": "Sorted"
+                }
+              }
+            }
+          },
+          "expected": {
+            "phase": "Paused",
+            "hasSnapshot": true,
+            "currentEntry": "entry-a"
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageType": "SyncPlayCommand",
+              "Data": {
+                "GroupId": "g",
+                "PlaylistItemId": "entry-a",
+                "Command": "Seek",
+                "PositionTicks": "50000000",
+                "When": "2026-11-10T12:00:00.100Z",
+                "EmittedAt": "2026-11-10T12:00:00.100Z"
+              }
+            }
+          },
+          "expected": {
+            "phase": "Paused",
+            "command": "Seek",
+            "commandTicks": "50000000"
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageType": "SyncPlayGroupUpdate",
+              "Data": {
+                "GroupId": "g",
+                "Type": "StateUpdate",
+                "Data": {
+                  "State": "Playing",
+                  "Reason": "Ready"
+                }
+              }
+            }
+          },
+          "expected": {
+            "phase": "Playing",
+            "command": "Seek"
+          }
+        },
+        {
+          "event": {
+            "op": "message",
+            "envelope": {
+              "MessageType": "SyncPlayCommand",
+              "Data": {
+                "GroupId": "g",
+                "PlaylistItemId": "entry-a",
+                "Command": "Unpause",
+                "PositionTicks": "50000000",
+                "When": "2026-11-10T12:00:04.100Z",
+                "EmittedAt": "2026-11-10T12:00:03.100Z"
+              }
+            }
+          },
+          "expected": {
+            "phase": "Playing",
+            "command": "Unpause",
+            "commandTicks": "50000000"
+          }
+        }
+      ]
     }
   ]
 }

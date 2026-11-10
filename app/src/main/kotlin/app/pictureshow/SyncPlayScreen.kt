@@ -50,6 +50,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import app.pictureshow.core.sync.SyncAccessNotice
+import app.pictureshow.core.sync.syncAccessPresentation
 
 /** Names and membership counts are facts supplied by the signed-in server, never inferred locally. */
 internal data class SyncPlayGroupRow(val id: String, val name: String, val members: Int)
@@ -62,6 +64,8 @@ internal data class SyncPlayPresentation(
     val phase: String = "idle",
     val status: String = "",
     val policy: String = "None",
+    val policyKnown: Boolean = false,
+    val policyFailed: Boolean = false,
     val groupId: String? = null,
     val groupName: String? = null,
     val groups: List<SyncPlayGroupRow> = emptyList(),
@@ -71,7 +75,19 @@ internal data class SyncPlayPresentation(
     val repeat: String = "RepeatNone",
     val shuffle: String = "Sorted",
     val busy: Boolean = false
-)
+) {
+    private val access get() = syncAccessPresentation(policy, policyKnown, busy, policyFailed)
+    val accessAllowed: Boolean get() = access.canJoin
+    val canRefresh: Boolean get() = access.canRefresh
+    val accessNotice: String? get() = when (access.notice) {
+        SyncAccessNotice.CHECKING -> "Checking watch-together access…"
+        SyncAccessNotice.UNKNOWN -> "Refresh to check watch-together access."
+        SyncAccessNotice.UNAVAILABLE -> "Watch-together access could not be confirmed. Refresh to try again."
+        SyncAccessNotice.DENIED ->
+            "This viewer is not allowed to join watch-together groups. Ask the server administrator to enable SyncPlay access."
+        SyncAccessNotice.ALLOWED -> null
+    }
+}
 
 /**
  * One modal for both Android presentations. Actions are requests: only the next server state changes the selection.
@@ -149,21 +165,19 @@ internal fun SyncPlayPanel(state: SyncPlayPresentation, onAction: (String, Strin
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SyncPlayGroups(state: SyncPlayPresentation, onAction: (String, String?) -> Unit) {
-    val permitted = state.policy == "CreateAndJoinGroups" || state.policy == "JoinGroups"
+    val permitted = state.accessAllowed
     var name by rememberSaveable(state.server, state.viewer) { mutableStateOf("") }
     Text("Groups and participant names are visible to other authorized viewers on this server. There is no public invite link.")
-    if (!permitted) {
-        Text("This viewer is not allowed to join watch-together groups. Ask the server administrator to enable SyncPlay access.")
-    }
+    state.accessNotice?.let { Text(it, modifier = Modifier.testTag("sync:access")) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SyncPlayAction(
             "Refresh groups",
             { onAction("refresh", null) },
-            enabled = permitted && !state.busy,
+            enabled = state.canRefresh,
             modifier = Modifier.testTag("sync:refresh")
         )
     }
-    if (permitted && state.groups.isEmpty() && !state.busy && state.phase.lowercase() != "error") {
+    if (permitted && state.groups.isEmpty() && !state.busy && state.status.isBlank() && state.phase.lowercase() != "error") {
         Text("No groups are available on this server.", modifier = Modifier.testTag("sync:empty"))
     }
     if (permitted) {
@@ -176,7 +190,7 @@ private fun SyncPlayGroups(state: SyncPlayPresentation, onAction: (String, Strin
             )
         }
     }
-    if (state.policy == "CreateAndJoinGroups") {
+    if (permitted && state.policy == "CreateAndJoinGroups") {
         HorizontalDivider()
         Text("Create a group", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         OutlinedTextField(
@@ -193,7 +207,7 @@ private fun SyncPlayGroups(state: SyncPlayPresentation, onAction: (String, Strin
             enabled = !state.busy && name.isNotBlank(),
             modifier = Modifier.testTag("sync:create")
         )
-    } else if (state.policy == "JoinGroups") {
+    } else if (permitted && state.policy == "JoinGroups") {
         Text("You can join an existing group. Creating groups is disabled by this viewer's server policy.")
     }
 }

@@ -75,6 +75,7 @@ class SyncPlayHostTest {
         var httpStatus = 204
         var sendGate: CompletableDeferred<Unit>? = null
         var accessGate: CompletableDeferred<Unit>? = null
+        var failAccess = false
         var failClock = false
         val epoch = 1_762_776_000_000L
         fun wall() = epoch + scope.testScheduler.currentTime
@@ -90,7 +91,11 @@ class SyncPlayHostTest {
         override suspend fun groups(account: Account) = ClientResult.Success(listOf(group()))
         override suspend fun access(account: Account): ClientResult<String> {
             accessGate?.let { withContext(NonCancellable) { it.await() } }
-            return ClientResult.Success(policy)
+            return if (failAccess) {
+                ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Access check unavailable"))
+            } else {
+                ClientResult.Success(policy)
+            }
         }
         override suspend fun time(account: Account): ClientResult<SyncUtcTime> = if (failClock) {
             ClientResult.Failure(ClientError(ErrorKind.NETWORK, "Clock unavailable"))
@@ -230,6 +235,43 @@ class SyncPlayHostTest {
         runCurrent()
         assertEquals("server-item", rig.opens.single().itemId)
         assertTrue(rig.host.membership.hasSnapshot)
+    }
+
+    @Test fun futureUnpauseReplacesAnOldPausedSeekBeforeItsPlayingPhaseCanAdvanceTheWait() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.host.receive(rig.command("Seek", ticks = 50_000_000L))
+        runCurrent()
+        assertEquals(50_000_000L, rig.renderer.value.positionTicks)
+        assertFalse(rig.renderer.value.playing)
+        advanceTimeBy(3_000)
+        runCurrent()
+        rig.renderer.applied.clear()
+        rig.sent.clear()
+        rig.host.receive(
+            rig.update(
+                "StateUpdate",
+                buildJsonObject {
+                    put("State", "Playing")
+                    put("Reason", "Ready")
+                }
+            )
+        )
+        rig.host.receive(rig.command("Unpause", delayMs = 1_000, ticks = 50_000_000L))
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.renderer.applied.any { it.position != null || it.playing == true })
+        assertEquals(50_000_000L, rig.renderer.value.positionTicks)
+        advanceTimeBy(999)
+        runCurrent()
+        assertFalse(rig.renderer.applied.any { it.position != null || it.playing == true })
+        assertFalse(rig.renderer.value.playing)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(rig.renderer.value.playing)
+        assertEquals(50_000_000L, rig.renderer.value.positionTicks)
+        assertFalse(rig.operations().any { it in setOf("Seek", "Unpause") })
     }
 
     @Test fun futureUnpauseWaitsForTheCalibratedWhenAndDoesNotEcho() = runTest {
@@ -616,7 +658,114 @@ class SyncPlayHostTest {
         runCurrent()
         assertEquals("Bea", rig.host.state.value.viewer)
         assertEquals("None", rig.host.state.value.policy)
+        assertFalse(rig.host.state.value.policyKnown)
+        assertFalse(rig.host.state.value.accessAllowed)
+        assertTrue(rig.host.state.value.canRefresh)
+        assertFalse(rig.host.state.value.accessNotice.orEmpty().contains("not allowed"))
         assertTrue(rig.host.state.value.groups.isEmpty())
+    }
+
+    @Test fun checkingAccessIsUnknownRatherThanDeniedAndCannotDispatch() = runTest {
+        val rig = Rig(this)
+        assertFalse(rig.host.state.value.policyKnown)
+        assertTrue(rig.host.state.value.canRefresh)
+        rig.accessGate = CompletableDeferred()
+        rig.refresh()
+        val checking = rig.host.state.value
+        assertTrue(checking.busy)
+        assertFalse(checking.policyKnown)
+        assertFalse(checking.accessAllowed)
+        assertFalse(checking.canRefresh)
+        assertEquals("Checking watch-together access…", checking.accessNotice)
+        rig.host.create("Evening")
+        rig.host.join("g")
+        runCurrent()
+        assertTrue(rig.sent.isEmpty())
+        assertFalse(rig.host.state.value.status.contains("not allowed"))
+        rig.accessGate!!.complete(Unit)
+        runCurrent()
+        assertTrue(rig.host.state.value.policyKnown)
+        assertTrue(rig.host.state.value.accessAllowed)
+        assertTrue(rig.host.state.value.canRefresh)
+        assertEquals(null, rig.host.state.value.accessNotice)
+        assertEquals("", rig.host.state.value.status)
+        assertEquals(listOf("g"), rig.host.state.value.groups.map { it.id })
+    }
+
+    @Test fun failedAccessClearsOldGroupsAndPermissionWithoutInventingADenial() = runTest {
+        val rig = Rig(this)
+        rig.refresh()
+        assertTrue(rig.host.state.value.accessAllowed)
+        assertTrue(rig.host.state.value.groups.isNotEmpty())
+        rig.failAccess = true
+        rig.refresh()
+        val failed = rig.host.state.value
+        assertFalse(failed.policyKnown)
+        assertFalse(failed.accessAllowed)
+        assertTrue(failed.canRefresh)
+        assertTrue(failed.groups.isEmpty())
+        assertEquals("Access check unavailable", failed.status)
+        assertFalse(failed.accessNotice.orEmpty().contains("not allowed"))
+        rig.host.create("Evening")
+        rig.host.join("g")
+        runCurrent()
+        assertTrue(rig.sent.isEmpty())
+        rig.failAccess = false
+        rig.refresh()
+        assertTrue(rig.host.state.value.policyKnown)
+        assertTrue(rig.host.state.value.accessAllowed)
+        assertEquals("", rig.host.state.value.status)
+        assertEquals(listOf("g"), rig.host.state.value.groups.map { it.id })
+    }
+
+    @Test fun confirmedDeniedAccessCanRefreshAfterTheAdministratorChangesIt() = runTest {
+        val rig = Rig(this)
+        rig.policy = "None"
+        rig.refresh()
+        val denied = rig.host.state.value
+        assertTrue(denied.policyKnown)
+        assertFalse(denied.accessAllowed)
+        assertTrue(denied.canRefresh)
+        assertTrue(denied.accessNotice.orEmpty().contains("not allowed"))
+        assertTrue(denied.groups.isEmpty())
+        rig.host.create("Evening")
+        rig.host.join("g")
+        runCurrent()
+        assertTrue(rig.sent.isEmpty())
+        rig.policy = "CreateAndJoinGroups"
+        rig.refresh()
+        assertTrue(rig.host.state.value.policyKnown)
+        assertTrue(rig.host.state.value.accessAllowed)
+        assertEquals(null, rig.host.state.value.accessNotice)
+        rig.host.create("Evening")
+        runCurrent()
+        assertTrue(rig.operations().contains("New"))
+    }
+
+    @Test fun switchingAccountsDiscardsConfirmedAccessBeforeTheNewViewerCheck() = runTest {
+        val rig = Rig(this)
+        rig.refresh()
+        assertTrue(rig.host.state.value.accessAllowed)
+        rig.host.bind(other)
+        assertEquals("Bea", rig.host.state.value.viewer)
+        assertEquals("None", rig.host.state.value.policy)
+        assertFalse(rig.host.state.value.policyKnown)
+        assertTrue(rig.host.state.value.groups.isEmpty())
+        assertTrue(rig.host.state.value.canRefresh)
+        rig.accessGate = CompletableDeferred()
+        rig.policy = "None"
+        rig.refresh()
+        rig.host.join("g")
+        rig.host.create("Evening")
+        runCurrent()
+        assertTrue(rig.sent.isEmpty())
+        assertFalse(rig.host.state.value.accessNotice.orEmpty().contains("not allowed"))
+        rig.accessGate!!.complete(Unit)
+        runCurrent()
+        assertTrue(rig.host.state.value.policyKnown)
+        assertFalse(rig.host.state.value.accessAllowed)
+        assertTrue(rig.host.state.value.canRefresh)
+        assertTrue(rig.host.state.value.accessNotice.orEmpty().contains("not allowed"))
     }
 
     @Test fun staleJoinCompletionCannotReacquireMembershipAfterTheAccountChanges() = runTest {

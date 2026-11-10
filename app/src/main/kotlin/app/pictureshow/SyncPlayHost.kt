@@ -165,14 +165,23 @@ internal class SyncPlayHost(
     fun refresh() {
         val target = account ?: return
         val version = sequence
-        mutable.value = mutable.value.copy(busy = true)
+        mutable.value =
+            mutable.value.copy(busy = true, policy = "None", policyKnown = false, policyFailed = false, groups = emptyList(), status = "")
         scope.launch {
-            val policy = gateway.access(target)
-            if (!current(target, version)) return@launch
-            mutable.value = mutable.value.copy(policy = (policy as? ClientResult.Success)?.value ?: "None")
-            mutable.value = mutable.value.copy(busy = false)
-            if (policy is ClientResult.Failure) {
-                note(policy.error.message)
+            when (val policy = gateway.access(target)) {
+                is ClientResult.Failure -> {
+                    if (!current(target, version)) return@launch
+                    mutable.value = mutable.value.copy(busy = false, policyFailed = true)
+                    note(policy.error.message)
+                    return@launch
+                }
+                is ClientResult.Success -> {
+                    if (!current(target, version)) return@launch
+                    mutable.value = mutable.value.copy(policy = policy.value, policyKnown = true, status = "")
+                }
+            }
+            if (!mutable.value.accessAllowed) {
+                mutable.value = mutable.value.copy(busy = false)
                 return@launch
             }
             when (val groups = gateway.groups(target)) {
@@ -186,7 +195,10 @@ internal class SyncPlayHost(
                         )
                 }
 
-                is ClientResult.Failure -> if (current(target, version)) note(groups.error.message)
+                is ClientResult.Failure -> if (current(target, version)) {
+                    mutable.value = mutable.value.copy(busy = false)
+                    note(groups.error.message)
+                }
             }
         }
     }
@@ -308,8 +320,13 @@ internal class SyncPlayHost(
             note("Watch together is unavailable for live, infinite or offline sources. Open an online movie, episode or song first.")
             return
         }
-        val policy = state.value.policy
-        if (policy == "None" || (creating && policy != "CreateAndJoinGroups")) {
+        val presentation = state.value
+        if (!presentation.policyKnown) {
+            note("Refresh to confirm watch-together access before joining a group.")
+            return
+        }
+        val policy = presentation.policy
+        if (!presentation.accessAllowed || (creating && policy != "CreateAndJoinGroups")) {
             note("This viewer is not allowed to ${if (creating) "create" else "join"} a group.")
             return
         }
@@ -671,11 +688,13 @@ internal class SyncPlayHost(
 
     private fun schedule(command: SyncCommand) {
         scheduled?.cancel()
+        // Acceptance can publish Playing before When. The ticker must wait on this command,
+        // rather than extrapolating a previous paused Seek through the wait interval.
+        timeline = command
         scheduled = scope.launch {
             val generation = membership.generation
             val now = anchor?.serverNowTicks(wall(), monotonic()) ?: run {
-                // Join's clock exchange may still be in flight. Retain command, but never output on an uncalibrated clock.
-                timeline = command
+                // Join's clock exchange may still be in flight. Keep the pending timeline, but never output without calibration.
                 return@launch
             }
             val duration = renderer?.snapshot()?.durationTicks ?: return@launch
@@ -688,7 +707,6 @@ internal class SyncPlayHost(
             ) ?: return@launch
             if (target.delayMillis > 0) delay(target.delayMillis)
             if (generation != membership.generation || command.playlistItemId != membership.queue?.current?.playlistItemId) return@launch
-            timeline = command
             val r = renderer?.snapshot() ?: return@launch
             if (!r.ready ||
                 r.buffering ||

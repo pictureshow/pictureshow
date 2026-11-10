@@ -9,6 +9,7 @@ import app.pictureshow.core.sync.beginSyncJoin
 import app.pictureshow.core.sync.leaveSync
 import app.pictureshow.core.sync.parseSyncMessage
 import app.pictureshow.core.sync.reduceSyncEvent
+import app.pictureshow.core.sync.syncAccessPresentation
 import app.pictureshow.core.sync.syncOpenMatches
 import app.pictureshow.core.sync.syncRendererOwnsEntry
 import app.pictureshow.core.sync.syncReportsReadiness
@@ -26,6 +27,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -110,6 +112,10 @@ class SyncProtocolTest {
                 runRendererBindCase(case, id)
                 return@forEach
             }
+            if (case.getValue("operation").jsonPrimitive.content == "access-presentation") {
+                runAccessCase(case, id)
+                return@forEach
+            }
             checkKeys(case, setOf("id", "operation", "state", "steps"))
             assertEquals("membership", case.getValue("operation").jsonPrimitive.content, id)
             val initial = case.getValue("state").jsonObject
@@ -128,6 +134,28 @@ class SyncProtocolTest {
                 assertProjection(step.getValue("expected").jsonObject, state, "$id/$index")
             }
         }
+    }
+
+    private fun runAccessCase(case: JsonObject, id: String) {
+        checkKeys(case, setOf("id", "operation", "policy", "known", "busy", "failed", "expected"))
+        val actual = syncAccessPresentation(
+            case.getValue("policy").jsonPrimitive.content,
+            case.getValue("known").jsonPrimitive.boolean,
+            case.getValue("busy").jsonPrimitive.boolean,
+            case.getValue("failed").jsonPrimitive.boolean
+        )
+        val expected = case.getValue("expected").jsonObject
+        assertEquals(setOf("notice", "canJoin", "canCreate", "canRefresh"), expected.keys, id)
+        assertEquals(
+            expected,
+            buildJsonObject {
+                put("notice", actual.notice.name)
+                put("canJoin", actual.canJoin)
+                put("canCreate", actual.canCreate)
+                put("canRefresh", actual.canRefresh)
+            },
+            id
+        )
     }
 
     private fun runReadinessCase(case: JsonObject, id: String) {
