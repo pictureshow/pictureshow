@@ -19,7 +19,13 @@ internal suspend fun playbackNetwork(context: Context, serverUrl: String): Playb
     val addresses = runCatching { InetAddress.getAllByName(URI(serverUrl).host).toList() }.getOrDefault(emptyList())
     classifyPlaybackNetwork(
         false,
-        addresses.isNotEmpty() && addresses.all { it.isLoopbackAddress || it.isLinkLocalAddress || it.isSiteLocalAddress }
+        addresses.isNotEmpty() &&
+            addresses.all {
+                it.isLoopbackAddress ||
+                    it.isLinkLocalAddress ||
+                    it.isSiteLocalAddress ||
+                    PlaybackNetworkPolicy.isUniqueLocalAddress(it.address)
+            }
     )
 }
 

@@ -18,6 +18,7 @@ import app.pictureshow.core.MediaSegment
 import app.pictureshow.core.SegmentType
 import app.pictureshow.core.playback.PassthroughEncoding
 import app.pictureshow.core.playback.PlaybackNetwork
+import app.pictureshow.core.playback.PlaybackNetworkPolicy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -36,6 +37,9 @@ class PlaybackTuningRuntimeTest {
         assertEquals(PlaybackNetwork.Metered, classifyPlaybackNetwork(true, true))
         assertEquals(PlaybackNetwork.Metered, classifyPlaybackNetwork(true, false))
         assertEquals(PlaybackNetwork.Home, classifyPlaybackNetwork(false, true))
+        val ula = java.net.InetAddress.getByName("fd12:3456::1")
+        assertTrue(PlaybackNetworkPolicy.isUniqueLocalAddress(ula.address))
+        assertEquals(PlaybackNetwork.Home, classifyPlaybackNetwork(false, PlaybackNetworkPolicy.isUniqueLocalAddress(ula.address)))
         assertEquals(PlaybackNetwork.Remote, classifyPlaybackNetwork(false, false))
     }
 

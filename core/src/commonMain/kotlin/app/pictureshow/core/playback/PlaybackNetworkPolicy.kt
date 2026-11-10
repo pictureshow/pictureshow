@@ -11,6 +11,9 @@ object PlaybackNetworkPolicy {
         else -> PlaybackNetwork.Remote
     }
 
+    /** IPv6 unique-local fc00::/7 is not covered by the legacy site-local predicate on every runtime. */
+    fun isUniqueLocalAddress(address: ByteArray): Boolean = address.size == 16 && (address[0].toInt() and 0xfe) == 0xfc
+
     fun shouldReduce(currentCap: Int, proposedCap: Int, sampleCount: Int, sampleBytes: Long, elapsedSinceAdjustmentMs: Long): Boolean =
         currentCap > 0 &&
             proposedCap > 0 &&

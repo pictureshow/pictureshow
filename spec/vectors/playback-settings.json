@@ -697,6 +697,94 @@
         "activeBitrate": 80
       },
       "expected": "Quality is capped at <1 kbps for this viewing. Change player quality or network quality in Playback settings to try original video; device or server limits may still require conversion."
+    },
+    {
+      "id": "playback-settings.network.ipv6-fc",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          252,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.network.ipv6-fd",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          253,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "playback-settings.network.ipv6-public",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          32,
+          1,
+          72,
+          96,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "playback-settings.network.ipv4-not-ula",
+      "operation": "unique-local-address",
+      "input": {
+        "addressBytes": [
+          192,
+          168,
+          1,
+          2
+        ]
+      },
+      "expected": false
     }
   ]
 }

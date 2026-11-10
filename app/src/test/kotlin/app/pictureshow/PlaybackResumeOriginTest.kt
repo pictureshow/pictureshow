@@ -23,7 +23,7 @@ class PlaybackResumeOriginTest {
     @Test fun receiverClockAndExplicitRemotePositionRemainExactWhileSavedResumeRewinds() {
         val item = MediaItem("item", "Film", userData = ItemUserData(playbackPositionTicks = 900_000_000L))
         val server = Server("s", "Server", "https://example.test", "12.0.0")
-        val context = RuntimeEnvironment.getApplication<Application>()
+        val context = RuntimeEnvironment.getApplication()
         // Cast's local-start navigation uses the explicit-position overload, as does an explicit controller/deep link.
         val routes = listOf(playerRoute(item, 90_000L) to 90_000L, playerRoute(item, true) to 60_000L, playerRoute(item, false) to 0L)
         for ((route, expected) in routes) {
