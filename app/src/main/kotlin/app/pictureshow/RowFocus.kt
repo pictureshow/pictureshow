@@ -3,18 +3,21 @@
  */
 package app.pictureshow
 
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,10 +29,14 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.ScrollAxisRange
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.horizontalScrollAxisRange
+import androidx.compose.ui.semantics.scrollBy
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 /**
  * A press along a row stays in that row. Past its end Compose searches the whole screen and accepts anything whose
@@ -64,45 +71,75 @@ internal fun shelfEndStart(layout: LazyListLayoutInfo): Int? {
 }
 
 /**
- * A shelf with stops for a reader beside its first and last cards, "Start of Libraries" and "End of Libraries". A reader's
- * Left and Right prefer the next node in line with the card, and otherwise accept any node further that way: another
- * row's card, a heading, Sign out. A stop is in line, and it reaches the shelf's edge, so nothing lies beyond it.
+ * Stops belong to the same horizontal scroll container as the cards. TalkBack checks that ancestry before
+ * traversing an edge: a sibling of LazyRow is outside the scrollable, so a long row can skip it even when
+ * its bounds are in line. Each lazy item wraps its card with [endCard]; the invisible stop occupies the
+ * existing gutter without adding a lazy item or changing card indices.
  *
- * A stop takes no input focus, draws nothing and exists only while its card has focus, so a reader moving between rows
- * can't land on one. [StopInset] keeps it shorter than the cards, so a reader moving Down from the heading finds the
- * card first.
- *
- * [content] puts endCard(index) on each card.
+ * A stop takes no input focus, draws nothing and exists only while its card has focus. Its inset keeps
+ * it further from a heading than the card, so Down reaches the card first.
  */
 @Composable
-internal fun ShelfWithEnds(title: String, state: LazyListState, lastIndex: Int, content: @Composable (endCard: (Int) -> Modifier) -> Unit) {
-    var firstFocused by remember { mutableStateOf(false) }
-    var lastFocused by remember { mutableStateOf(false) }
-    val firstCard = remember { Modifier.onFocusChanged { firstFocused = it.isFocused } }
-    val lastCard = remember { Modifier.onFocusChanged { lastFocused = it.isFocused } }
-    Box(Modifier.fillMaxWidth()) {
-        content { index -> (if (index == 0) firstCard else Modifier).then(if (index == lastIndex) lastCard else Modifier) }
-        val density = LocalDensity.current
-        if (firstFocused) {
-            val width by remember(state) { derivedStateOf { shelfStartEnd(state.layoutInfo) } }
-            width?.takeIf { it > 0 }?.let {
-                Box(
-                    Modifier.matchParentSize().padding(vertical = StopInset).wrapContentWidth(Alignment.Start)
-                        .width(with(density) { it.toDp() }).semantics { contentDescription = "Start of $title" }
-                )
-            }
-        }
-        if (lastFocused) {
-            val start by remember(state) { derivedStateOf { shelfEndStart(state.layoutInfo) } }
-            start?.let {
-                Box(
-                    Modifier.matchParentSize().padding(vertical = StopInset).padding(start = with(density) { it.toDp() })
-                        .semantics { contentDescription = "End of $title" }
-                )
+internal fun ShelfWithEnds(
+    title: String,
+    state: LazyListState,
+    lastIndex: Int,
+    content: @Composable (endCard: @Composable (Int, @Composable (Modifier) -> Unit) -> Unit, rowSemantics: Modifier) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val rowSemantics = Modifier.semantics {
+        // Include the two reader stops in the logical range. Older TV readers otherwise
+        // replace an unavailable horizontal action with a vertical ancestor's linear scroll.
+        horizontalScrollAxisRange = ScrollAxisRange(
+            value = { state.firstVisibleItemIndex + 1f + state.firstVisibleItemScrollOffset / 100000f },
+            maxValue = { lastIndex + 2f },
+            reverseScrolling = false
+        )
+        scrollBy { x, _ ->
+            if (!x.isFinite() || x == 0f || (x < 0 && !state.canScrollBackward) || (x > 0 && !state.canScrollForward)) {
+                false
+            } else {
+                scope.launch { state.animateScrollBy(x) }
+                true
             }
         }
     }
+    content({ index, card ->
+        var focused by remember { mutableStateOf(false) }
+        val focus = Modifier.onFocusChanged { focused = it.isFocused }
+        LaunchedEffect(focused, index, lastIndex) {
+            // Bring-into-view can consume a shelf's edge padding. Restore its gutter when an end
+            // card takes focus so the reader's stop has real, visible bounds beside that card.
+            if (focused && (index == 0 || index == lastIndex)) state.requestScrollToItem(index)
+        }
+        Box {
+            card(focus)
+            val density = LocalDensity.current
+            if (focused && index == 0) {
+                val width by remember(state) { derivedStateOf { shelfStartEnd(state.layoutInfo) } }
+                width?.takeIf { it > 0 }?.let {
+                    val gutter = with(density) { it.toDp() }
+                    Box(
+                        Modifier.matchParentSize().padding(vertical = StopInset).wrapContentWidth(Alignment.Start, unbounded = true)
+                            .offset(x = -gutter).width(gutter).semantics { contentDescription = "Start of $title" }
+                    )
+                }
+            }
+            if (focused && index == lastIndex) {
+                val width by remember(state) {
+                    derivedStateOf { shelfEndStart(state.layoutInfo)?.let { state.layoutInfo.viewportSize.width - it } }
+                }
+                width?.takeIf { it > 0 }?.let {
+                    val gutter = with(density) { it.toDp() }
+                    Box(
+                        Modifier.matchParentSize().padding(vertical = StopInset).wrapContentWidth(Alignment.End, unbounded = true)
+                            .offset(x = gutter).width(gutter).semantics { contentDescription = "End of $title" }
+                    )
+                }
+            }
+        }
+    }, rowSemantics)
 }
 
-/** Shelf padding, 16.dp, plus enough that a stop's top is further than a card's from any heading above. */
+/** Enough inset that Down from a heading reaches the card before either stop. */
 private val StopInset = 40.dp
