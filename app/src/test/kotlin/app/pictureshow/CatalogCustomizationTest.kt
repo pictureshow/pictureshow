@@ -123,12 +123,14 @@ class CatalogCustomizationTest {
         compose.onNodeWithText("Moving · Up/Down · OK to drop").assertIsDisplayed()
         compose.onNodeWithTag("home:visibility:resume").assertIsNotEnabled()
         compose.onNodeWithTag("home:reorder:nextup").assertIsNotEnabled()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.CustomActions, emptyList()))
+            .assert(SemanticsMatcher.expectValue(SemanticsActions.CustomActions, emptyList()))
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithTag("home:reorder:resume").performKeyInput { pressKey(Key.DirectionDown) }
         compose.runOnIdle { assertTrue(preferences.order.isEmpty(), "Moving a row must not save until drop") }
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(listOf("nextup", "resume", "libraries"), preferences.order) }
+        compose.onNodeWithTag("home:reorder:nextup").assertIsEnabled()
+            .assert(SemanticsMatcher("Enabled rows regain movement actions") { it.config[SemanticsActions.CustomActions].isNotEmpty() })
     }
 
     @Test fun pickedPinKeepsVisibilityAndUnpinDisabledUntilDrop() {
@@ -168,7 +170,7 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("catalog:editor").performScrollToIndex(0)
         compose.onNodeWithText("Saving layout…").assertIsDisplayed()
         compose.onNodeWithTag("home:reorder:resume")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.CustomActions, emptyList()))
+            .assert(SemanticsMatcher.expectValue(SemanticsActions.CustomActions, emptyList()))
         compose.onNodeWithTag("home:retry-save").assertDoesNotExist()
     }
 
