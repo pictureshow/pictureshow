@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) Legitimate LLC.
+ */
 /* Private isolated-test compositor module. Never installed on a user desktop. */
 #include <libweston/libweston.h>
 #include <libweston/weston-log.h>
