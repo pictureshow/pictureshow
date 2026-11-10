@@ -40,6 +40,8 @@ struct Layer {
     UINT presentInterval=std::getenv("SPIKE_PRESENT_INTERVAL")?std::atoi(std::getenv("SPIKE_PRESENT_INTERVAL")):1;
     std::atomic<unsigned long> polls{0}, updates{0};
     Timing drawTime, presentTime, frameTime;
+    std::atomic<long> lastPresentResult{S_OK};
+    std::atomic<unsigned long> occludedPresents{0};
     std::string receipt;
 };
 #define API extern "C" __declspec(dllexport)
@@ -111,6 +113,8 @@ API int ps_frame(Layer *s,int w,int h) {
     auto t=Clock::now();
     int rc=s->draw(s->render,p);s->drawTime.add(elapsedMs(t));target->Release();if(rc<0)return rc;
     t=Clock::now(); HRESULT hr=s->swap->Present(s->presentInterval,0);s->presentTime.add(elapsedMs(t));
+    s->lastPresentResult.store(hr);
+    if(hr==DXGI_STATUS_OCCLUDED) s->occludedPresents++;
     if(FAILED(hr))return -3;
     s->report(s->render);s->frames++;s->frameTime.add(elapsedMs(started));return 0;
 }
@@ -120,7 +124,7 @@ API const char *ps_receipt(Layer *s) {
     IDXGIOutput *output=nullptr;DXGI_OUTPUT_DESC1 od={};
     if(SUCCEEDED(s->swap->GetContainingOutput(&output))){IDXGIOutput6 *o6=nullptr;if(SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6),(void**)&o6))){o6->GetDesc1(&od);o6->Release();}output->Release();}
     auto rect=[](RECT a){std::ostringstream t;t<<"["<<a.left<<","<<a.top<<","<<a.right<<","<<a.bottom<<"]";return t.str();};
-    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames.load()<<",\"updateDrivenNonblocking\":"<<(s->paced?"true":"false")<<",\"presentInterval\":"<<s->presentInterval<<",\"polls\":"<<s->polls.load()<<",\"updateFrames\":"<<s->updates.load()<<",\"drawMsTotal\":"<<s->drawTime.total.load()<<",\"drawMsMax\":"<<s->drawTime.maximum.load()<<",\"presentMsTotal\":"<<s->presentTime.total.load()<<",\"presentMsMax\":"<<s->presentTime.maximum.load()<<",\"frameMsTotal\":"<<s->frameTime.total.load()<<",\"frameMsMax\":"<<s->frameTime.maximum.load()<<",\"perFrameCPUReadbacks\":0}";
+    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames.load()<<",\"updateDrivenNonblocking\":"<<(s->paced?"true":"false")<<",\"presentInterval\":"<<s->presentInterval<<",\"lastPresentHRESULT\":"<<s->lastPresentResult.load()<<",\"occludedPresentCount\":"<<s->occludedPresents.load()<<",\"polls\":"<<s->polls.load()<<",\"updateFrames\":"<<s->updates.load()<<",\"drawMsTotal\":"<<s->drawTime.total.load()<<",\"drawMsMax\":"<<s->drawTime.maximum.load()<<",\"presentMsTotal\":"<<s->presentTime.total.load()<<",\"presentMsMax\":"<<s->presentTime.maximum.load()<<",\"frameMsTotal\":"<<s->frameTime.total.load()<<",\"frameMsMax\":"<<s->frameTime.maximum.load()<<",\"perFrameCPUReadbacks\":0}";
     s->receipt=o.str();return s->receipt.c_str();
 }
 API void ps_fullscreen(Layer *,int) {}
