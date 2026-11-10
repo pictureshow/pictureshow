@@ -87,7 +87,11 @@ private fun LiveRecordingCard(
     val fraction = liveRecordingProgress(item, now)
     val growing = item.isInProgress || item.recordingStatus == "InProgress"
     val target = modifier.width(if (tv) 240.dp else 244.dp).semantics {
-        stateDescription = listOfNotNull(label, metadata.takeIf(String::isNotBlank)).joinToString(" · ")
+        stateDescription = listOfNotNull(
+            liveRecordingTitle(item).takeUnless { it == item.name },
+            label,
+            metadata.takeIf(String::isNotBlank)
+        ).joinToString(" · ")
         if (tv && canDelete) onLongClick(label = "Recording options", action = null)
     }.then(
         if (tv && canDelete) {
