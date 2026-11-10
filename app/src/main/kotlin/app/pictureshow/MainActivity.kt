@@ -382,6 +382,7 @@ internal fun Pictureshow(
     }
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
+    var landingApplied by rememberSaveable(state.snapshot.currentKey) { mutableStateOf(false) }
     var accountInstalled by rememberSaveable { mutableStateOf(false) }
     var installedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var installedExpired by rememberSaveable { mutableStateOf<Boolean?>(null) }
@@ -844,16 +845,15 @@ internal fun Pictureshow(
                     val screen by vm.state.collectAsStateWithLifecycle()
                     val profileState by profile.state.collectAsStateWithLifecycle()
                     var editing by remember { mutableStateOf(false) }
-                    var landed by rememberSaveable { mutableStateOf(false) }
                     LaunchedEffect(screen.preferencesReady) {
                         val landing = app.pictureshow.core.homeLanding(
                             screen.preferencesReady,
-                            landed,
+                            landingApplied,
                             screen.preferences.landing,
                             screen.libraries.map { it.id }.toSet()
                         )
                         if (landing != null && destination == "home") {
-                            landed = true
+                            landingApplied = true
                             if (landing == "libraries") nav.navigate("libraries")
                             if (landing.startsWith("library:")) {
                                 screen.libraries.firstOrNull { it.id == landing.removePrefix("library:") }

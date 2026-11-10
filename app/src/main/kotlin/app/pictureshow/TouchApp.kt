@@ -76,6 +76,7 @@ internal fun TouchPictureshow(
     }
     // Navigation restores its own stack. Save the identity that installed it too: the first
     // composition after recreation is not an account change. Do not put credentials in saved state.
+    var landingApplied by rememberSaveable(state.snapshot.currentKey) { mutableStateOf(false) }
     var accountInstalled by rememberSaveable { mutableStateOf(false) }
     var installedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var installedExpired by rememberSaveable { mutableStateOf<Boolean?>(null) }
@@ -148,7 +149,10 @@ internal fun TouchPictureshow(
         item?.let { nav.navigate(playerRoute(it.value, start.positionMs)) }
     }
     // The shell subcomposes its content; keep effects with the host so its graph exists first.
-    TouchShell(showNavigation, touchTabFor(route), { selectTouchTab(nav, it) }, fullscreen = inPlayer, above = {
+    TouchShell(showNavigation, touchTabFor(route), {
+        if (it == "home") landingApplied = true
+        selectTouchTab(nav, it)
+    }, fullscreen = inPlayer, above = {
         if (!inPlayer && route != MUSIC_NOW_ROUTE) TouchMusicBar(music) { nav.navigate(MUSIC_NOW_ROUTE) { launchSingleTop = true } }
         if (!inPlayer && route != "remote") TouchRemoteBar(remoteState, remote.now()) { nav.navigate("remote") { launchSingleTop = true } }
         if (!inPlayer && route != "cast") TouchCastBar(castState) { nav.navigate("cast") { launchSingleTop = true } }
@@ -317,16 +321,15 @@ internal fun TouchPictureshow(
                         val screen by vm.state.collectAsStateWithLifecycle()
                         val profileState by profile.state.collectAsStateWithLifecycle()
                         var editing by remember { mutableStateOf(false) }
-                        var landed by rememberSaveable { mutableStateOf(false) }
                         LaunchedEffect(screen.preferencesReady) {
                             val landing = app.pictureshow.core.homeLanding(
                                 screen.preferencesReady,
-                                landed,
+                                landingApplied,
                                 screen.preferences.landing,
                                 screen.libraries.map { it.id }.toSet()
                             )
                             if (landing != null && destination == "home") {
-                                landed = true
+                                landingApplied = true
                                 if (landing == "libraries") nav.navigate("libraries")
                                 if (landing.startsWith("library:")) {
                                     screen.libraries.firstOrNull { it.id == landing.removePrefix("library:") }

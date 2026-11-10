@@ -125,10 +125,15 @@ class TouchNavigationTest {
         stopKoin()
     }
 
-    private fun launch(signedIn: Boolean = false, expired: Boolean = false, activityRecreation: Boolean = false) {
+    private fun launch(signedIn: Boolean = false, expired: Boolean = false, activityRecreation: Boolean = false, landing: String = "home") {
         if (signedIn || expired) {
             runBlocking {
                 accounts.remember(account)
+                if (landing !=
+                    "home"
+                ) {
+                    accounts.saveHomePreferences(account.key, app.pictureshow.core.HomePreferences(landing = landing), pending = true)
+                }
                 if (expired) accounts.expire(account.key, account.accessToken)
             }
         }
@@ -202,7 +207,9 @@ class TouchNavigationTest {
         }
         if (activityRecreation) compose.setContent(screenContent) else restoration.setContent(screenContent)
         waitFor(
-            if (signedIn) {
+            if (signedIn && landing == "libraries") {
+                "No libraries are available for this account."
+            } else if (signedIn) {
                 "What would you like to watch?"
             } else if (expired) {
                 "Sign in to Test server"
@@ -476,6 +483,19 @@ class TouchNavigationTest {
         back()
         waitFor("Accounts")
         compose.onNodeWithText("Sign in again as Viewer").assertExists()
+    }
+
+    @Test
+    fun explicitHomeTabNeverReappliesSavedLibrariesLandingAfterRestoration() {
+        launch(signedIn = true, landing = "libraries")
+        compose.onNodeWithText("Home").performClick()
+        waitFor("What would you like to watch?")
+        compose.onNodeWithText("Customize home").assertExists()
+        compose.onNodeWithText("Libraries").performClick()
+        waitFor("No libraries are available for this account.")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("Home").performClick()
+        waitFor("What would you like to watch?")
     }
 
     @Test
