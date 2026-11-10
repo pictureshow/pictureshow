@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -87,7 +86,7 @@ internal fun LiveGuide(
     }
     Row(Modifier.fillMaxWidth().height(32.dp)) {
         Box(Modifier.width(channelWidth).height(32.dp), contentAlignment = Alignment.CenterStart) { LiveText("Channel", tv, small = true) }
-        Box(Modifier.weight(1f).clipToBounds()) {
+        Box(Modifier.weight(1f)) {
             Box(Modifier.horizontalScroll(scroll).width(LIVE_GUIDE_WIDTH.dp).height(32.dp)) {
                 (0..6).forEach { tick ->
                     Column(Modifier.offset(x = liveGuideTickX(tick).dp).testTag("live:tick:$tick")) {
@@ -116,7 +115,7 @@ internal fun LiveGuide(
                         }
                     }
                 }
-                Box(Modifier.weight(1f).clipToBounds()) {
+                Box(Modifier.weight(1f)) {
                     Box(Modifier.horizontalScroll(scroll).width(LIVE_GUIDE_WIDTH.dp).height(rowHeight * lanes)) {
                         cells.forEachIndexed { cellIndex, cell ->
                             val show = cell.program

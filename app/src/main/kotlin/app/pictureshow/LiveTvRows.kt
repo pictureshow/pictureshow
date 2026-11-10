@@ -107,7 +107,7 @@ internal fun LiveChannelRow(
             leadingContent = { LiveChannelMark(channel, account, false) },
             supportingContent = support,
             trailingContent = if (canFavorite) {
-                { LiveIcon("star", if (channel.userData.isFavorite) "Remove favorite" else "Add favorite", false, onClick = onFavorite) }
+                { LiveFavorite(channel.userData.isFavorite, onFavorite) }
             } else {
                 null
             },

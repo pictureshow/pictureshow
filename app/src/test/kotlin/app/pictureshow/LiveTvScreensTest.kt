@@ -7,15 +7,16 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -160,6 +161,12 @@ class LiveTvScreensTest {
         val first = compose.onNodeWithTag("live:tab:Channels").getUnclippedBoundsInRoot()
         val last = compose.onNodeWithTag("live:tab:Schedules").getUnclippedBoundsInRoot()
         assertEquals(first.top, last.top)
+        listOf("Channels", "Guide", "Recordings", "Schedules").forEach { label ->
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithText(label, useUnmergedTree = true)
+                .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue(layouts.isNotEmpty() && layouts.none { it.hasVisualOverflow }, "$label must fit at 360dp")
+        }
         compose.onNodeWithTag("live:c:c").assertIsDisplayed()
         compose.onNodeWithTag("live:tab:Guide").performClick().assertIsSelected()
     }
@@ -218,5 +225,20 @@ class LiveTvScreensTest {
         }
         compose.onNodeWithTag("live:c:c").assertIsNotEnabled()
         compose.onNodeWithText("Saved guide is for reference. Reconnect before scheduling or tuning.").assertIsDisplayed()
+    }
+
+    @Test
+    fun phoneFavoriteIsACheckedTrailingActionAndDoesNotTuneTheParentRow() {
+        var tuned = 0
+        val fake = LiveFake()
+        val vm = LiveTvViewModel(account, fake)
+        compose.setContent { TouchTheme { LiveTvScreen(vm, account, false, { tuned++ }, {}, {}) } }
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithContentDescription("Add favorite").performClick()
+        compose.onNodeWithContentDescription("Remove favorite").assertIsOn()
+        compose.runOnIdle {
+            assertEquals(1, fake.favoriteWrites)
+            assertEquals(0, tuned)
+        }
     }
 }

@@ -68,5 +68,8 @@ internal class LiveTime(
 internal fun liveTime(): LiveTime {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    return LiveTime(DateFormat.is24HourFormat(context), configuration.locales[0])
+    return LiveTime(
+        DateFormat.is24HourFormat(context),
+        androidx.core.os.ConfigurationCompat.getLocales(configuration)[0] ?: Locale.getDefault()
+    )
 }

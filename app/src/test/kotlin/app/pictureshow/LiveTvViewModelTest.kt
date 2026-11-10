@@ -122,6 +122,7 @@ internal class LiveFake : LiveTvService {
     var failPrograms = false
     var created = 0
     var deleted = 0
+    var favoriteWrites = 0
     var result = LiveWrite("ok", message = "Confirmed by server")
     override suspend fun policy(account: Account) = ClientResult.Success(rights)
     override suspend fun info(account: Account) = ClientResult.Success(LiveInfo(true))
@@ -158,5 +159,9 @@ internal class LiveFake : LiveTvService {
         deleted++
         return result
     }
-    override suspend fun favorite(account: Account, id: String, favorite: Boolean) = channel(account, id)
+    override suspend fun favorite(account: Account, id: String, favorite: Boolean): ClientResult<LiveChannel> {
+        favoriteWrites++
+        channelRows = channelRows.map { if (it.id == id) it.copy(userData = it.userData.copy(isFavorite = favorite)) else it }
+        return channel(account, id)
+    }
 }

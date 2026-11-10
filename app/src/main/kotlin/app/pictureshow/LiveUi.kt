@@ -15,6 +15,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
@@ -133,7 +134,7 @@ internal fun LiveIcon(kind: String, description: String, tv: Boolean, enabled: B
 private fun liveIcon(kind: String): ImageVector {
     if (kind == "search") return touchNavIcon("search")
     return ImageVector.Builder(kind, 24.dp, 24.dp, 24f, 24f).apply {
-        path(fill = SolidColor(Color.White)) {
+        path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
             when (kind) {
                 "back", "earlier", "later" -> {
                     val right = kind == "later"
@@ -175,8 +176,31 @@ private fun liveIcon(kind: String): ImageVector {
                     lineTo(2f, 9f)
                     lineTo(9f, 8f)
                     close()
+                    if (kind == "star-outline") {
+                        val points = listOf(
+                            12f to 2f, 15f to 8f, 22f to 9f, 17f to 14f, 18f to 21f, 12f to 18f, 6f to 21f, 7f to 14f,
+                            2f to 9f, 9f to 8f
+                        )
+                        points.forEachIndexed { index, (x, y) ->
+                            val px = 12f + (x - 12f) * .65f
+                            val py = 12f + (y - 12f) * .65f
+                            if (index == 0) moveTo(px, py) else lineTo(px, py)
+                        }
+                        close()
+                    }
                 }
             }
         }
     }.build()
+}
+
+@Composable
+internal fun LiveFavorite(checked: Boolean, onClick: () -> Unit) {
+    androidx.compose.material3.IconToggleButton(checked, { onClick() }) {
+        androidx.compose.material3.Icon(
+            remember(checked) { liveIcon(if (checked) "star" else "star-outline") },
+            if (checked) "Remove favorite" else "Add favorite",
+            Modifier.size(24.dp)
+        )
+    }
 }
