@@ -27,6 +27,11 @@ jobs:
           Invoke-WebRequest https://github.com/mpv-player/mpv/releases/download/v0.42.0/libmpv-v0.42.0-x86_64-w64-mingw32-lgpl.zip -OutFile mpv.zip
           if ((Get-FileHash mpv.zip -Algorithm SHA256).Hash.ToLower() -ne '8e5f77430efc53ef175804ba6618527e3af0448a0dcabf04d3cc72659d1a6fce') { throw 'libmpv digest mismatch' }
           Expand-Archive mpv.zip native
+          # Hosted runners have no GPU: provide an explicit software OpenGL implementation.
+          Invoke-WebRequest https://github.com/pal1000/mesa-dist-win/releases/download/26.2.6/mesa3d-26.2.6-release-msvc.7z -OutFile mesa.7z
+          if ((Get-FileHash mesa.7z -Algorithm SHA256).Hash.ToLower() -ne 'b2e00615feaba45942343c265cc8c5f576142ca682c1ac6661922d4b72492877') { throw 'Mesa digest mismatch' }
+          7z x mesa.7z -omesa -y
+          Copy-Item mesa/x64/*.dll "$env:JAVA_HOME/bin/"
           choco install ffmpeg --no-progress -y
           $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"
           python desktop/tools/fixtures.py desktop-fixtures
@@ -38,10 +43,15 @@ jobs:
           $env:MPV_LIBRARY = $dll.FullName
           $env:PATH = "$($dll.DirectoryName);$env:PATH"
           $env:SPIKE_NULL_AUDIO = '1'
+          $env:SPIKE_SOFTWARE_GPU = '1'
+          $env:GALLIUM_DRIVER = 'llvmpipe'
+          $env:LIBGL_ALWAYS_SOFTWARE = '1'
           $failed = $false
           foreach ($shape in @('render', 'wid')) {
-            java --enable-native-access=ALL-UNNAMED -cp 'desktop/build/spike-runtime/lib/*' app.pictureshow.desktop.MainKt $shape desktop-fixtures/hevc-main10.mkv "desktop-evidence/windows-$shape" --auto
-            if ($LASTEXITCODE -ne 0) { $failed = $true }
+            foreach ($media in @('hevc-main', 'hevc-main10', 'av1', 'hevc-pq-metadata')) {
+              java --enable-native-access=ALL-UNNAMED -cp 'desktop/build/spike-runtime/lib/*' app.pictureshow.desktop.MainKt $shape "desktop-fixtures/$media.mkv" "desktop-evidence/windows-$shape-$media" --auto
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
+            }
           }
           if ($failed) { throw 'One or more surface probes failed; inspect evidence' }
       - uses: actions/upload-artifact@v7

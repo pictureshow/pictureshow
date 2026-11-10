@@ -21,6 +21,9 @@ import java.awt.event.InputEvent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import com.sun.jna.Native
+import com.sun.jna.Library
+import java.util.concurrent.atomic.AtomicReference
+import java.awt.event.MouseEvent
 import java.awt.BorderLayout
 import java.awt.Canvas
 import java.awt.Robot
@@ -31,6 +34,8 @@ import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
+
+interface MacActivation : Library { fun pictureshow_activate() }
 
 fun main(args: Array<String>) {
     require(args.size >= 2) { "Usage: <render|wid> <media-file> [evidence-dir] [--auto]" }
@@ -43,6 +48,7 @@ fun main(args: Array<String>) {
     val mpv = Mpv(out)
     var gl: GlSurface? = null
     val frame = mutableStateOf<ImageBitmap?>(null)
+    val failure = AtomicReference<Throwable?>(null)
     var started = false
     var overlayBounds: androidx.compose.ui.geometry.Rect? = null
     Thread { Thread.sleep(90000); System.err.println("Probe exceeded 90 seconds"); Runtime.getRuntime().halt(3) }.apply { isDaemon = true }.start()
@@ -51,17 +57,17 @@ fun main(args: Array<String>) {
         var status by remember { mutableStateOf("Starting $shape") }
         var clicks by remember { mutableStateOf(0) }
         var paused by remember { mutableStateOf(false) }
-        fun stop() {
+        fun stop(code: Int = 0) {
             Thread {
                 gl?.close()
                 mpv.close()
-                SwingUtilities.invokeLater { exitApplication() }
+                SwingUtilities.invokeLater { exitApplication(); if (code != 0) kotlin.system.exitProcess(code) }
             }.start()
         }
         Window(onCloseRequest = { stop() }, title = "Pictureshow · $shape surface probe", state = state) {
             MaterialTheme(colors = darkColors()) {
                 Column(Modifier.fillMaxSize().background(Color(0xFF141820))) {
-                    Text("Pictureshow desktop · $shape · prototype", Modifier.padding(12.dp))
+                    Text("Pictureshow desktop · $shape · prototype", Modifier.padding(12.dp), color = Color.White)
                     Box(Modifier.weight(1f).fillMaxWidth().background(Color.Black)) {
                         if (shape == "render") {
                             frame.value?.let { Image(it, "Locally decoded video", Modifier.fillMaxSize().onSizeChanged { s -> gl?.width = s.width; gl?.height = s.height }, contentScale = ContentScale.Fit) }
@@ -69,10 +75,10 @@ fun main(args: Array<String>) {
                                 Thread {
                                     try {
                                         mpv.option("vo", "libmpv"); mpv.initialize()
-                                        gl = GlSurface(mpv) { frame.value = it }
+                                        gl = GlSurface(mpv, { frame.value = it }, { failure.set(it) })
                                         mpv.command("loadfile", media)
                                         started = true
-                                    } catch (e: Throwable) { status = "FAILED: ${e.message}"; e.printStackTrace() }
+                                    } catch (e: Throwable) { failure.set(e); status = "FAILED: ${e.message}"; e.printStackTrace() }
                                 }.start()
                             }
                         } else {
@@ -89,7 +95,7 @@ fun main(args: Array<String>) {
                                                     mpv.option("wid", com.sun.jna.Pointer.nativeValue(handle).toString())
                                                     mpv.option("vo", "gpu-next")
                                                     mpv.initialize(); mpv.command("loadfile", media)
-                                                } catch (e: Throwable) { status = "FAILED: ${e.message}"; e.printStackTrace() }
+                                                } catch (e: Throwable) { failure.set(e); status = "FAILED: ${e.message}"; e.printStackTrace() }
                                             }.start()
                                         }
                                     }
@@ -107,13 +113,17 @@ fun main(args: Array<String>) {
                         Button(onClick = { state.placement = if (state.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating else WindowPlacement.Fullscreen }) { Text("Fullscreen") }
                         Spacer(Modifier.width(8.dp))
                         Button(onClick = { mpv.command("cycle", "sub") }) { Text("Subtitle") }
-                        Text(status, Modifier.padding(start = 12.dp))
+                        Text(status, Modifier.padding(start = 12.dp), color = Color.White)
                     }
                 }
             }
             LaunchedEffect(Unit) {
                 Thread {
+                    try {
+                    Thread.sleep(1000)
+                    System.getenv("SPIKE_MAC_BRIDGE")?.let { Native.load(it, MacActivation::class.java).pictureshow_activate() }
                     fun stage(name: String) {
+                        failure.get()?.let { throw it }
                         Thread.sleep(1200)
                         SwingUtilities.invokeAndWait {
                             val bounds = window.bounds
@@ -137,16 +147,53 @@ fun main(args: Array<String>) {
                             }
                         }
                         stage("01-overlay-click")
+                        if (clicks == 0 && shape == "render") {
+                            // Same-window AWT event delivery also works without macOS global input permission.
+                            SwingUtilities.invokeAndWait {
+                                overlayBounds?.let { b ->
+                                    val target = SwingUtilities.getDeepestComponentAt(window.contentPane, b.center.x.toInt(), b.center.y.toInt())
+                                    if (target != null) {
+                                        val point = SwingUtilities.convertPoint(window.contentPane, b.center.x.toInt(), b.center.y.toInt(), target)
+                                        for (id in listOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED)) {
+                                            target.dispatchEvent(MouseEvent(target, id, System.currentTimeMillis(), 0, point.x, point.y, 1, false, MouseEvent.BUTTON1))
+                                        }
+                                    }
+                                }
+                            }
+                            stage("01-local-event-click")
+                        }
+                        check(mpv.get("vo-configured") == "yes") { "No configured video output" }
+                        check(mpv.get("video-params/w")?.toIntOrNull() == 640) { "No decoded fixture video" }
                         mpv.set("pause", "no")
                         SwingUtilities.invokeAndWait { state.size = androidx.compose.ui.unit.DpSize(740.dp, 500.dp) }
                         stage("02-resize")
                         SwingUtilities.invokeAndWait { state.placement = WindowPlacement.Fullscreen }
+                        Thread.sleep(2500)
                         stage("03-fullscreen")
                         SwingUtilities.invokeAndWait { state.placement = WindowPlacement.Floating }
-                        for (sid in 1..3) { mpv.set("sid", sid.toString()); mpv.command("seek", "2", "absolute+exact"); stage("04-sub-$sid") }
+                        val count = mpv.get("track-list/count")?.toIntOrNull() ?: 0
+                        val subtitles = (0 until count).filter { mpv.get("track-list/$it/type") == "sub" }
+                        check(subtitles.size == 3) { "Expected SRT, ASS and PGS tracks" }
+                        subtitles.forEachIndexed { n, track ->
+                            val sid = requireNotNull(mpv.get("track-list/$track/id"))
+                            mpv.set("pause", "yes")
+                            mpv.set("sid", sid)
+                            // Reload avoids a fixture seek/index defect from masquerading as subtitle failure.
+                            mpv.command("loadfile", media)
+                            Thread.sleep(500)
+                            mpv.set("sid", sid)
+                            mpv.set("pause", "no")
+                            stage("04-sub-${n + 1}")
+                            check(mpv.get("track-list/$track/selected") == "yes") { "Subtitle did not select: $sid" }
+                        }
                         mpv.dump("final", "completed sequence")
                         File(out, "sequence.txt").writeText("overlayClicks=$clicks\n")
                         stop()
+                    }
+                    } catch (e: Throwable) {
+                        File(out, "failure.txt").writeText(e.stackTraceToString())
+                        e.printStackTrace()
+                        stop(2)
                     }
                 }.apply { isDaemon = true }.start()
             }

@@ -58,6 +58,7 @@ class Mpv(val out: File) : AutoCloseable {
         option("msg-level", "all=warn,vd=debug,vo=debug")
         option("log-file", File(out, "mpv.log").absolutePath)
         option("hwdec", "auto-safe")
+        if (System.getenv("SPIKE_SOFTWARE_GPU") == "1") option("gpu-sw", "yes")
         option("audio-channels", "auto")
         option("volume", "0") // Never emit sound in an unattended probe.
         if (System.getenv("SPIKE_NULL_AUDIO") == "1") option("ao", "null")
@@ -88,7 +89,7 @@ class Mpv(val out: File) : AutoCloseable {
         fun quote(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\""
         val data = keys.associateWith(::get).toMutableMap()
         val count = get("track-list/count")?.toIntOrNull() ?: 0
-        repeat(count) { n -> listOf("type", "codec", "selected", "title", "demux-channel-count").forEach { k ->
+        repeat(count) { n -> listOf("id", "type", "codec", "selected", "title", "demux-channel-count").forEach { k ->
             data["track-list/$n/$k"] = get("track-list/$n/$k")
         } }
         data["geometry"] = geometry

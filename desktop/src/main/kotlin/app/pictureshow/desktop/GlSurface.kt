@@ -31,11 +31,16 @@ class GlFbo : Structure() {
  * This proves composition/controls, NOT zero-copy performance or HDR presentation.
  * All render API calls stay on one GL thread; client API calls stay off it.
  */
-class GlSurface(private val mpv: Mpv, private val publish: (ImageBitmap) -> Unit) : AutoCloseable {
+class GlSurface(private val mpv: Mpv, private val publish: (ImageBitmap) -> Unit, private val onFailure: (Throwable) -> Unit) : AutoCloseable {
     @Volatile var width = 640
     @Volatile var height = 360
     private var render: Pointer? = null
+    private var fboId = 0
+    private var textureId = 0
+    private var targetWidth = 0
+    private var targetHeight = 0
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "mpv-gl").apply { isDaemon = true } }
+    private var animator: java.util.concurrent.ScheduledFuture<*>? = null
     private val drawable: GLOffscreenAutoDrawable
     // Keep callbacks and backing memory alive until render context teardown.
     private val glLib = NativeLibrary.getInstance(if (Platform.isMac()) "/System/Library/Frameworks/OpenGL.framework/OpenGL" else if (Platform.isWindows()) "opengl32" else "GL")
@@ -60,13 +65,29 @@ class GlSurface(private val mpv: Mpv, private val publish: (ImageBitmap) -> Unit
             override fun display(d: GLAutoDrawable) {
                 val ctx = render ?: return
                 val gl = d.gl.gL2GL3
-                val binding = IntArray(1)
-                gl.glGetIntegerv(0x8CA6, binding, 0)
-                val fbo = GlFbo().apply { fbo = binding[0]; width = d.surfaceWidth; height = d.surfaceHeight; write() }
+                val w = width.coerceIn(64, 1280); val h = height.coerceIn(64, 720)
+                if (w != targetWidth || h != targetHeight) {
+                    if (textureId != 0) gl.glDeleteTextures(1, intArrayOf(textureId), 0)
+                    if (fboId != 0) gl.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
+                    val ids = IntArray(1)
+                    gl.glGenTextures(1, ids, 0); textureId = ids[0]
+                    gl.glBindTexture(GL.GL_TEXTURE_2D, textureId)
+                    gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
+                    gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+                    gl.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, null)
+                    gl.glGenFramebuffers(1, ids, 0); fboId = ids[0]
+                    gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, fboId)
+                    gl.glFramebufferTexture2D(GL.GL_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, textureId, 0)
+                    check(gl.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER) == GL.GL_FRAMEBUFFER_COMPLETE) { "Incomplete video FBO" }
+                    targetWidth = w; targetHeight = h
+                }
+                val fbo = GlFbo().apply { fbo = fboId; width = w; height = h; write() }
                 val flip = intMemory(1)
                 val params = renderParams(3 to fbo.pointer, 4 to flip)
                 mpv.check(mpv.api.mpv_render_context_render(ctx, params[0].pointer))
-                val w = d.surfaceWidth; val h = d.surfaceHeight
+                // mpv may change bindings. Read our own explicit FBO, never JOGL's default.
+                gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, fboId)
+                gl.glReadBuffer(GL.GL_COLOR_ATTACHMENT0)
                 val pixels = ByteBuffer.allocateDirect(w * h * 4)
                 gl.glReadPixels(0, 0, w, h, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, pixels)
                 val image = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
@@ -86,18 +107,17 @@ class GlSurface(private val mpv: Mpv, private val publish: (ImageBitmap) -> Unit
         })
         // Create renderer before loadfile, per render API contract.
         executor.submit { drawable.display() }.get(30, TimeUnit.SECONDS)
-        executor.scheduleWithFixedDelay({
+        animator = executor.scheduleWithFixedDelay({
             try {
-                val w = width.coerceIn(64, 1280); val h = height.coerceIn(64, 720)
-                if (drawable.surfaceWidth != w || drawable.surfaceHeight != h) drawable.setSurfaceSize(w, h)
                 drawable.display()
-            } catch (e: Throwable) { e.printStackTrace(); executor.shutdown() }
+            } catch (e: Throwable) { e.printStackTrace(); onFailure(e); animator?.cancel(false) }
         }, 0, 33, TimeUnit.MILLISECONDS)
     }
     override fun close() {
+        animator?.cancel(false)
+        // Queue dispose after any in-flight display, on the same owning GL thread.
+        executor.execute { drawable.destroy() }
         executor.shutdown()
-        executor.awaitTermination(10, TimeUnit.SECONDS)
-        // JOGL makes the same context current for dispose.
-        drawable.destroy()
+        check(executor.awaitTermination(30, TimeUnit.SECONDS)) { "GL teardown did not finish" }
     }
 }

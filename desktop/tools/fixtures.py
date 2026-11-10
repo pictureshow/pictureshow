@@ -64,7 +64,7 @@ def run(args):
  subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y',*map(str,args)],check=True)
 common=['-f','lavfi','-i','testsrc2=size=640x360:rate=24:duration=12','-f','lavfi','-i','anullsrc=channel_layout=5.1:sample_rate=48000','-i',root/'sub.srt','-i',root/'sub.ass','-i',root/'sub.sup','-map','0:v','-map','1:a','-map','2:s','-map','3:s','-map','4:s','-t','12','-c:a','aac','-ac','6','-c:s','copy','-metadata:s:s:0','title=SRT LOCAL','-metadata:s:s:1','title=ASS LOCAL','-metadata:s:s:2','title=PGS LOCAL']
 for name,pix in [('hevc-main','yuv420p'),('hevc-main10','yuv420p10le')]:
- run(common+['-c:v','libx265','-preset','ultrafast','-threads','2','-x265-params','pools=1:frame-threads=1:log-level=error','-pix_fmt',pix,root/(name+'.mkv')])
+ run(common+['-c:v','libx265','-preset','ultrafast','-threads','2','-x265-params','pools=1:frame-threads=1:log-level=error:keyint=48:min-keyint=48:scenecut=0:open-gop=0','-pix_fmt',pix,root/(name+'.mkv')])
 encoders=subprocess.check_output(['ffmpeg','-hide_banner','-encoders'],stderr=subprocess.DEVNULL,text=True)
 av1=['-c:v','libaom-av1','-cpu-used','8'] if 'libaom-av1' in encoders else ['-c:v','libsvtav1','-preset','12','-svtav1-params','lp=2']
 run(common+av1+['-threads','2','-crf','45','-pix_fmt','yuv420p10le',root/'av1.mkv'])
