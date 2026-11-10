@@ -1,0 +1,66 @@
+name: Desktop numeric HDR Windows
+on:
+  push:
+    branches: ["ci/136-windows*", "ci/136-hdr*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: desktop-hdr-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build independent DWM FP16 capture
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force desktop-evidence,desktop/build | Out-Null
+          cl /nologo /EHsc /std:c++20 desktop/tools/hdr/windows_capture.cpp /link d3d11.lib dxgi.lib windowsapp.lib user32.lib /OUT:desktop/build/hdr-capture.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Capture tool did not compile' }
+          & desktop/build/hdr-capture.exe | Tee-Object desktop-evidence/display-before.jsonl
+      - name: Try signed HDR virtual output on disposable runner
+        shell: pwsh
+        run: |
+          try { & desktop/tools/hdr/windows_install_vdd.ps1 *> desktop-evidence/vdd-install.log } catch { $_ | Out-File -Append desktop-evidence/vdd-install.log }
+          & desktop/build/hdr-capture.exe --enable-hdr | Tee-Object desktop-evidence/display-after.jsonl
+          Get-Content desktop-evidence/vdd-install.log
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build actual Compose app runtime
+        run: ./gradlew.bat --no-daemon :desktop:spikeRuntime
+      - name: Pinned LGPL libmpv and deterministic CC0 media
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/mpv-player/mpv/releases/download/v0.42.0/libmpv-v0.42.0-x86_64-w64-mingw32-lgpl.zip -OutFile mpv.zip
+          if ((Get-FileHash mpv.zip -Algorithm SHA256).Hash.ToLower() -ne '8e5f77430efc53ef175804ba6618527e3af0448a0dcabf04d3cc72659d1a6fce') { throw 'libmpv digest mismatch' }
+          Expand-Archive mpv.zip native
+          choco install ffmpeg --no-progress -y
+          $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"
+          python desktop/tools/hdr/fixture.py desktop-fixtures/hdr
+          $header = 'native/include/mpv/client.h'
+          (Get-Content $header -Raw).Replace('__declspec(dllexport)', '__declspec(dllimport)') | Set-Content $header
+          cl /nologo /EHsc /LD /std:c++17 /I native/include desktop/src/native/windows_layer.cpp /link d3d11.lib dxgi.lib user32.lib /OUT:desktop/build/pictureshow-layer.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Native app adapter compile failed' }
+      - name: Capture actual PQ and SDR playback via DWM
+        shell: pwsh
+        run: |
+          & desktop/tools/hdr/windows_run.ps1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-hdr-windows
+          retention-days: 7
+          path: |
+            desktop-evidence/**
+            desktop-fixtures/hdr/manifest.json
+            desktop-fixtures/hdr/*LICENSE*

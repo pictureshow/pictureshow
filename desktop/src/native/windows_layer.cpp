@@ -15,6 +15,8 @@
 #include <atomic>
 #include <chrono>
 #include <algorithm>
+#include <fstream>
+#include <filesystem>
 using Clock = std::chrono::steady_clock;
 static double elapsedMs(Clock::time_point t) { return std::chrono::duration<double, std::milli>(Clock::now()-t).count(); }
 struct Timing {
@@ -43,6 +45,7 @@ struct Layer {
     std::atomic<long> lastPresentResult{S_OK};
     std::atomic<unsigned long> occludedPresents{0};
     std::string receipt;
+    bool hdrReadbackDone=false;
 };
 #define API extern "C" __declspec(dllexport)
 API void ps_sync(Layer *s) {
@@ -111,7 +114,28 @@ API int ps_frame(Layer *s,int w,int h) {
     int block=s->paced?0:1;
     mpv_d3d11_fbo fbo={target};mpv_render_param p[]={{MPV_RENDER_PARAM_D3D11_FBO,&fbo},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
     auto t=Clock::now();
-    int rc=s->draw(s->render,p);s->drawTime.add(elapsedMs(t));target->Release();if(rc<0)return rc;
+    int rc=s->draw(s->render,p);s->drawTime.add(elapsedMs(t));
+    // Explicit diagnostic only: sample actual app swapchain pixels before DWM.
+    // This is not compositor/scanout proof; ordinary playback performs no readback.
+    const char *capture=std::getenv("SPIKE_HDR_READBACK_DIR");
+    if(rc>=0 && capture && !s->hdrReadbackDone && s->frames.load()>=4) {
+        D3D11_TEXTURE2D_DESC d={};target->GetDesc(&d);
+        d.Usage=D3D11_USAGE_STAGING;d.BindFlags=0;d.CPUAccessFlags=D3D11_CPU_ACCESS_READ;d.MiscFlags=0;
+        ID3D11Texture2D *staging=nullptr;
+        if(FAILED(s->device->CreateTexture2D(&d,nullptr,&staging))){target->Release();return -7;}
+        s->context->CopyResource(staging,target);D3D11_MAPPED_SUBRESOURCE map={};
+        HRESULT read=s->context->Map(staging,0,D3D11_MAP_READ,0,&map);
+        if(FAILED(read)){staging->Release();target->Release();return -8;}
+        std::filesystem::create_directories(capture);auto base=std::filesystem::path(capture)/"swapchain";
+        std::ofstream raw(base.string()+".rgba16f",std::ios::binary);
+        for(int y=0;y<h;++y)raw.write((const char*)map.pData+y*map.RowPitch,w*8);
+        s->context->Unmap(staging,0);staging->Release();raw.close();
+        std::ofstream meta(base.string()+".json");
+        meta<<"{\"captureAPI\":\"app swapchain diagnostic before Present\",\"encoding\":\"linear\",\"primaries\":\"bt709\",\"referenceWhiteNits\":80,\"width\":"<<w<<",\"height\":"<<h<<",\"videoBounds\":[0,0,"<<w<<","<<h<<"]}\n";
+        if(!raw||!meta){target->Release();return -9;}
+        s->hdrReadbackDone=true;
+    }
+    target->Release();if(rc<0)return rc;
     t=Clock::now(); HRESULT hr=s->swap->Present(s->presentInterval,0);s->presentTime.add(elapsedMs(t));
     s->lastPresentResult.store(hr);
     if(hr==DXGI_STATUS_OCCLUDED) s->occludedPresents++;
@@ -127,7 +151,7 @@ API const char *ps_receipt(Layer *s) {
     IDXGIOutput *output=nullptr;DXGI_OUTPUT_DESC1 od={};
     if(SUCCEEDED(s->swap->GetContainingOutput(&output))){IDXGIOutput6 *o6=nullptr;if(SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6),(void**)&o6))){o6->GetDesc1(&od);o6->Release();}output->Release();}
     auto rect=[](RECT a){std::ostringstream t;t<<"["<<a.left<<","<<a.top<<","<<a.right<<","<<a.bottom<<"]";return t.str();};
-    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames.load()<<",\"updateDrivenNonblocking\":"<<(s->paced?"true":"false")<<",\"presentInterval\":"<<s->presentInterval<<",\"lastPresentHRESULT\":"<<s->lastPresentResult.load()<<",\"occludedPresentCount\":"<<s->occludedPresents.load()<<",\"polls\":"<<s->polls.load()<<",\"updateFrames\":"<<s->updates.load()<<",\"drawMsTotal\":"<<s->drawTime.total.load()<<",\"drawMsMax\":"<<s->drawTime.maximum.load()<<",\"presentMsTotal\":"<<s->presentTime.total.load()<<",\"presentMsMax\":"<<s->presentTime.maximum.load()<<",\"frameMsTotal\":"<<s->frameTime.total.load()<<",\"frameMsMax\":"<<s->frameTime.maximum.load()<<",\"perFrameCPUReadbacks\":0}";
+    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames.load()<<",\"updateDrivenNonblocking\":"<<(s->paced?"true":"false")<<",\"presentInterval\":"<<s->presentInterval<<",\"lastPresentHRESULT\":"<<s->lastPresentResult.load()<<",\"occludedPresentCount\":"<<s->occludedPresents.load()<<",\"polls\":"<<s->polls.load()<<",\"updateFrames\":"<<s->updates.load()<<",\"drawMsTotal\":"<<s->drawTime.total.load()<<",\"drawMsMax\":"<<s->drawTime.maximum.load()<<",\"presentMsTotal\":"<<s->presentTime.total.load()<<",\"presentMsMax\":"<<s->presentTime.maximum.load()<<",\"frameMsTotal\":"<<s->frameTime.total.load()<<",\"frameMsMax\":"<<s->frameTime.maximum.load()<<",\"perFrameCPUReadbacks\":0,\"diagnosticReadbacks\":"<<(s->hdrReadbackDone?1:0)<<"}";
     s->receipt=o.str();return s->receipt.c_str();
 }
 API void ps_fullscreen(Layer *,int) {}

@@ -44,6 +44,7 @@ fun layerMain(args: Array<String>) {
     require(args.size >= 2) { "Usage: layer MEDIA EVIDENCE [--sustain=125]" }
     val media=File(args[0]).absolutePath
     val out=File(args[1]).apply { mkdirs() }
+    val hdrHold=System.getenv("SPIKE_HDR_HOLD_SECONDS")?.toInt()?.also { require(it in 1..60) } ?: 0
     val sustain=args.firstOrNull { it.startsWith("--sustain=") }?.substringAfter('=')?.toInt() ?: 0
     val bridge=Native.load(requireNotNull(System.getenv("SPIKE_LAYER_BRIDGE") ?: System.getProperty("spike.layer.bridge")),NativeLayer::class.java)
     val mpv=Mpv(out)
@@ -178,6 +179,15 @@ fun layerMain(args: Array<String>) {
                             }
                         }
                         stage("01-window")
+                        if(hdrHold>0) {
+                            // Numeric OS capture gate: hold the real app's video layer stationary.
+                            // No input injection, resize, subtitle assertions or screenshots needed.
+                            mpv.dump("hdr-source", "numeric capture hold")
+                            Thread.sleep(hdrHold*1000L)
+                            failure.get()?.let {throw it}
+                            File(out,"hdr-final-native.json").writeText(bridge.ps_receipt(surface!!))
+                            stop(); return@Thread
+                        }
                         SwingUtilities.invokeAndWait {overlayBounds.get()?.let { b ->
                             val origin=window.contentPane.locationOnScreen; val d=window.graphicsConfiguration.defaultTransform
                             Robot().apply { mouseMove(origin.x+(b.center.x/d.scaleX).toInt(),origin.y+(b.center.y/d.scaleY).toInt()); mousePress(InputEvent.BUTTON1_DOWN_MASK); mouseRelease(InputEvent.BUTTON1_DOWN_MASK) }
