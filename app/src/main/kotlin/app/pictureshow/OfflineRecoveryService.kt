@@ -49,12 +49,7 @@ internal fun offlineRecoveryNextId(current: Int, owner: Int?): Int {
 }
 
 /** A READY UIDT retry can have no timer after a disconnected host. Keep a separate timed request. */
-internal fun offlineBookRecovery(
-    context: Context,
-    current: Int? = null,
-    owner: Int? = null,
-    refreshUnknown: Boolean = false
-): Boolean {
+internal fun offlineBookRecovery(context: Context, current: Int? = null, owner: Int? = null, refreshUnknown: Boolean = false): Boolean {
     if (Build.VERSION.SDK_INT < 34) return false
     val scheduler = context.getSystemService(JobScheduler::class.java) ?: return false
     // Task Manager Stop removes user-visible work. A watchdog must not create a replacement request.
