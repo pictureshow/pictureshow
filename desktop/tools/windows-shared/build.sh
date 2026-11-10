@@ -15,7 +15,7 @@ curl -fL --retry 2 https://github.com/mpv-player/mpv/archive/refs/tags/v0.42.0.t
 printf '%s  %s\n' bcfebbfa2b65a6d88dc97ea18117831072373e38b5785a2afb874ed4df5070dd native/mpv.tar.gz | sha256sum -c -
 tar xf native/mpv.tar.gz -C native/source
 meson setup native/mpv-build native/source/mpv-0.42.0 --prefix="$PWD/native/install" \
-  --buildtype=release --default-library=shared --prefer-static=false --auto-features=disabled \
+  --buildtype=release --default-library=shared -Dprefer_static=false --auto-features=disabled \
   -Dgpl=false -Dlibmpv=true -Dcplayer=true -Dlua=disabled -Dd3d11=enabled -Dwasapi=enabled \
   -Dwin32-threads=enabled -Dwin32-subsystem=console -Dmanpage-build=disabled
 meson compile -C native/mpv-build -j 4
