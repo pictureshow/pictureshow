@@ -55,9 +55,10 @@ for package in sorted(packages):
     dest.mkdir(parents=True, exist_ok=True)
     (dest/'package.txt').write_text(info)
     for file in subprocess.check_output(['pacman', '-Qlq', package], text=True).splitlines():
-        source = native(file)
-        if '/share/licenses/' in file and source.is_file():
-            shutil.copy2(source, dest/source.name)
+        if '/share/licenses/' in file:
+            source = native(file)
+            if source.is_file():
+                shutil.copy2(source, dest/source.name)
 for name in ['LICENSE.LGPL', 'Copyright']:
     shutil.copy2(root/'native/source/mpv-0.42.0'/name, evidence/('mpv-'+name))
 for file in ffmpeg.glob('*LICENSE*'):
