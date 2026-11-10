@@ -6721,6 +6721,95 @@
       },
       "expected": 3,
       "source": "core/src/commonMain/kotlin/app/pictureshow/core/GridNavigation.kt"
+    },
+    {
+      "id": "detail.retain-season-focus.episode-read-keeps-card",
+      "operation": "detail-retain-season-focus",
+      "input": {
+        "selectedSection": "seasons",
+        "restored": true,
+        "semanticsRevealed": true,
+        "selectedId": "specials",
+        "seasonIds": [
+          "specials",
+          "s1"
+        ]
+      },
+      "expected": true,
+      "source": "CAT-07; DetailHeaderTest"
+    },
+    {
+      "id": "detail.retain-season-focus.full-refresh-removed-card",
+      "operation": "detail-retain-season-focus",
+      "input": {
+        "selectedSection": "seasons",
+        "restored": true,
+        "semanticsRevealed": true,
+        "selectedId": "specials",
+        "seasonIds": []
+      },
+      "expected": false,
+      "source": "CAT-07; DetailHeaderTest"
+    },
+    {
+      "id": "detail.retain-season-focus.item-replaced-card",
+      "operation": "detail-retain-season-focus",
+      "input": {
+        "selectedSection": "seasons",
+        "restored": true,
+        "semanticsRevealed": true,
+        "selectedId": "specials",
+        "seasonIds": [
+          "other"
+        ]
+      },
+      "expected": false,
+      "source": "CAT-07; DetailHeaderTest"
+    },
+    {
+      "id": "detail.retain-season-focus.unrestored-page",
+      "operation": "detail-retain-season-focus",
+      "input": {
+        "selectedSection": "seasons",
+        "restored": false,
+        "semanticsRevealed": true,
+        "selectedId": "specials",
+        "seasonIds": [
+          "specials"
+        ]
+      },
+      "expected": false,
+      "source": "CAT-07; DetailHeaderTest"
+    },
+    {
+      "id": "detail.retain-season-focus.hidden-page",
+      "operation": "detail-retain-season-focus",
+      "input": {
+        "selectedSection": "seasons",
+        "restored": true,
+        "semanticsRevealed": false,
+        "selectedId": "specials",
+        "seasonIds": [
+          "specials"
+        ]
+      },
+      "expected": false,
+      "source": "CAT-07; DetailHeaderTest"
+    },
+    {
+      "id": "detail.retain-season-focus.another-section",
+      "operation": "detail-retain-season-focus",
+      "input": {
+        "selectedSection": "episodes",
+        "restored": true,
+        "semanticsRevealed": true,
+        "selectedId": "specials",
+        "seasonIds": [
+          "specials"
+        ]
+      },
+      "expected": false,
+      "source": "CAT-07; DetailHeaderTest"
     }
   ]
 }

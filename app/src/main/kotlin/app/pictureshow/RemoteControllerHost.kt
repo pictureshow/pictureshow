@@ -14,6 +14,7 @@ import app.pictureshow.core.control.RemoteControllerState
 import app.pictureshow.core.control.RemoteRequest
 import app.pictureshow.core.control.RemoteTarget
 import app.pictureshow.core.control.RemoteWire
+import app.pictureshow.core.control.confirmWindowMs
 import app.pictureshow.core.control.reduceRemoteController
 import app.pictureshow.core.control.remoteCapNote
 import app.pictureshow.core.control.remoteRequest
@@ -247,7 +248,8 @@ internal fun remoteProblem(phase: String?): String? = when (phase) {
     else -> null
 }
 
-private const val STATUS_SHOWN_MS = 15_000L
+/** An outcome stays this long after the command's confirmation window closes. */
+private const val STATUS_AFTER_WINDOW_MS = 10_000L
 
 /** Every wording of [remoteCommandStatus] and the slot's other lines: the screen reserves room for the longest. */
 internal val REMOTE_STATUS_WORDINGS = listOf(
@@ -275,7 +277,7 @@ internal fun remoteCommandStatus(state: RemoteControllerState?, nowMs: Long, cap
         pending?.let { Triple(it.operation, it.result, it.sentAtMs) }
     } ?: return null
     val (operation, result, sentAtMs) = latest
-    if (nowMs - sentAtMs >= STATUS_SHOWN_MS) return null
+    if (nowMs - sentAtMs >= confirmWindowMs(operation) + STATUS_AFTER_WINDOW_MS) return null
     val latestId = if (follow != null && (pending == null || follow.id > pending.id)) follow.id else pending?.id
     // A cut list says how much went for as long as its command is the one on screen and nothing has gone wrong.
     if (capped != null && capped.id == latestId && result == "sent") return capped.note

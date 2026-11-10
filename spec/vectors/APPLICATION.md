@@ -263,3 +263,11 @@ number fixtures are within the exact JavaScript integer range (`abs(n) <= 900719
 resume boundary. Parse them without floating-point rounding. Future cases outside that range must use decimal-string
 fields and update all platform adapters explicitly; silently rounding an Int64 through JavaScript `Number` is not
 parity. Integer expected values are exact, and division truncates according to the operation above.
+
+## `detail-retain-season-focus`
+
+Input: `selectedSection`, `restored`, `semanticsRevealed`, `selectedId`, and `seasonIds`.
+Returns true only for an already revealed/restored Seasons selection whose exact card remains present.
+An episode-only read (or refresh retaining that card) keeps reader focus. Removing the card for a full
+refresh or another item requires normal focus restoration when loading completes. Native tree publication
+and reader traversal remain platform UI checks.

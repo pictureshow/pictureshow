@@ -173,6 +173,11 @@ function normalizeQueue(value: unknown): Dict {
     };
 }
 
+// Starting a title waits for the target to resolve, negotiate and buffer it before its start report; a transport change does not.
+export function confirmWindowMs(operation: unknown): bigint {
+    return operation === "play-now" ? 12000n : 5000n;
+}
+
 function defaultState(operation: string, input: unknown): Dict {
     if (operation === "owner") {
         const s = keys(input, ["owner", "local", "candidate", "phase", "generation", "intent", "route", "reportSequence", "effect", "reason"], "owner state");
@@ -524,7 +529,7 @@ function commandEvent(state: Dict, event: Dict): Dict {
             now = int64(event.nowMs, "command timeout.nowMs", false),
             p = state.pending;
         if (!p || p.id !== id || p.result !== "sent") return freshState;
-        if (BigInt(now) - BigInt(p.sentAtMs ?? "0") < 5000n) return freshState;
+        if (BigInt(now) - BigInt(p.sentAtMs ?? "0") < confirmWindowMs(p.operation)) return freshState;
         return { ...freshState, pending: { ...p, result: "unknown" }, effect: "refresh" };
     }
     if (op === "observe") {
@@ -533,7 +538,7 @@ function commandEvent(state: Dict, event: Dict): Dict {
         if (!p || p.id !== id || p.result !== "sent") return freshState;
         if (event.nowMs !== undefined) {
             const now = int64(event.nowMs, "command observe.nowMs", false);
-            if (BigInt(now) - BigInt(p.sentAtMs ?? "0") >= 5000n)
+            if (BigInt(now) - BigInt(p.sentAtMs ?? "0") >= confirmWindowMs(p.operation))
                 return { ...freshState, pending: { ...p, result: "unknown" }, effect: "refresh" };
         }
         const observedTicks = event.value === undefined

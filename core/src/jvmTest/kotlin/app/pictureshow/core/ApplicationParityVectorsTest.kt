@@ -209,6 +209,15 @@ class ApplicationParityVectorsTest {
                             }
                         )
                     }
+                    "detail-retain-season-focus" -> JsonPrimitive(
+                        detailRetainsSeasonFocus(
+                            input.getValue("selectedSection").jsonPrimitive.content,
+                            input.getValue("restored").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("semanticsRevealed").jsonPrimitive.booleanOrNull!!,
+                            input.getValue("selectedId").jsonPrimitive.content,
+                            input.getValue("seasonIds").jsonArray.map { it.jsonPrimitive.content }
+                        )
+                    )
                     "detail-host-focus-handoff" -> JsonPrimitive(
                         detailSuppressesEmptyHostFocus(
                             input.getValue("ordinaryArrivalWithActions").jsonPrimitive.booleanOrNull!!,

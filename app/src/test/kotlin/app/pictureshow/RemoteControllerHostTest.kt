@@ -224,6 +224,44 @@ class RemoteControllerHostTest {
         assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime, host.state.value.capped))
     }
 
+    // rc33: a picker start read "didn't confirm" while the TV was already starting the title, which takes it seconds.
+    @Test
+    fun aTitleTheTvStartsAfterSevenSecondsIsConfirmedNotDoubted() = runTest {
+        val item = "00000000000000000000000000000002"
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        host.playNow(listOf(item))
+        runCurrent()
+        assertEquals(item, gateway.sent.single().query["itemIds"])
+        advanceTimeBy(6_000)
+        assertEquals("Sending to the TV…", remoteCommandStatus(host.state.value.controller, currentTime))
+        gateway.targets = ClientResult.Success(listOf(tv.copy(now = tv.now!!.copy(item = item, positionTicks = 0, paused = false))))
+        advanceTimeBy(1_500)
+        assertEquals("confirmed", host.state.value.controller!!.command!!.pending!!.result)
+        assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
+    @Test
+    fun aTitleTheTvNeverStartsIsDoubtedOnceItsWindowCloses() = runTest {
+        val item = "00000000000000000000000000000002"
+        val gateway = Gateway()
+        gateway.targets = ClientResult.Success(listOf(tv))
+        val host = host(gateway)
+        host.attach(tv)
+        runCurrent()
+        host.playNow(listOf(item))
+        runCurrent()
+        assertEquals(item, gateway.sent.single().query["itemIds"])
+        advanceTimeBy(12_500)
+        runCurrent()
+        assertEquals("The TV didn't confirm that.", remoteCommandStatus(host.state.value.controller, currentTime))
+        advanceTimeBy(10_000)
+        assertNull(remoteCommandStatus(host.state.value.controller, currentTime))
+    }
+
     @Test
     fun aConfirmedCommandShowsNothingAfterTheLockScreen() = runTest {
         val gateway = Gateway()

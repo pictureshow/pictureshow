@@ -2111,6 +2111,213 @@
           }
         }
       ]
+    },
+    {
+      "id": "session-command.play-now-waits-for-the-title-to-start",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807",
+        "capabilities": [
+          "play-now"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "10",
+            "value": "play-now",
+            "entry": "b"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "pending": {
+              "entry": "b",
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "timeout",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "5010"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            },
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "6000",
+            "entry": "a",
+            "paused": false,
+            "value": "100000000"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            },
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "observe",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "9000",
+            "entry": "b",
+            "paused": false,
+            "value": "0"
+          },
+          "expected": {
+            "pending": {
+              "result": "confirmed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-command.play-now-unconfirmed-after-its-window",
+      "operation": "command",
+      "state": {
+        "owner": {
+          "server": "s",
+          "viewer": "v",
+          "device": "d",
+          "session": "p",
+          "generation": "1",
+          "kind": "local"
+        },
+        "observed": {
+          "entry": "a",
+          "ticks": "100000000",
+          "paused": false
+        },
+        "durationTicks": "9223372036854775807",
+        "capabilities": [
+          "play-now"
+        ]
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "intent",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "10",
+            "value": "play-now",
+            "entry": "b"
+          },
+          "expected": {
+            "effect": "dispatch",
+            "pending": {
+              "result": "sent"
+            }
+          }
+        },
+        {
+          "event": {
+            "op": "timeout",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "12009"
+          },
+          "expected": {
+            "pending": {
+              "result": "sent"
+            },
+            "effect": "none"
+          }
+        },
+        {
+          "event": {
+            "op": "timeout",
+            "owner": {
+              "server": "s",
+              "viewer": "v",
+              "device": "d",
+              "session": "p",
+              "generation": "1",
+              "kind": "local"
+            },
+            "id": "1",
+            "nowMs": "12010"
+          },
+          "expected": {
+            "pending": {
+              "result": "unknown"
+            },
+            "effect": "refresh"
+          }
+        }
+      ]
     }
   ]
 }

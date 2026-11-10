@@ -451,9 +451,18 @@ class MusicHostTest {
     @Test fun aRemotesQueueCommandsActOnTheMusicQueue() {
         val music = host()
         ready(music)
+        // Auto-advancing 100ms media must not finish before the queued pause commits.
+        val prepared = kotlinx.coroutines.CompletableDeferred<Unit>().also { negotiateGate = it }
         music.request(album("a", "b"))
         music.pause()
-        until("the paused queue") { music.state.value.current?.track?.id == "a" && lastPlayer?.playWhenReady == false }
+        until("the committed pause") { music.state.value.current?.track?.id == "a" && music.state.value.queue?.paused == true }
+        prepared.complete(Unit)
+        until("the paused queue") {
+            music.state.value.current?.track?.id == "a" &&
+                music.state.value.queue?.paused == true &&
+                lastPlayer?.playbackState == androidx.media3.common.Player.STATE_READY &&
+                lastPlayer?.playWhenReady == false
+        }
         assertTrue(music.remoteBridge.enqueue(listOf("c"), next = true))
         until("play next") { music.state.value.queue!!.entries.map { it.media } == listOf("a", "c", "b") }
         assertTrue(music.remoteBridge.enqueue(listOf("d", "v1"), next = false))

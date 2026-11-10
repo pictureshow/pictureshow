@@ -250,3 +250,15 @@ export const showDetailEmptyState = (
     !readFailed &&
     episodeCount === 0 &&
     seasonCount === 0;
+
+export const detailRetainsSeasonFocus = (
+    selectedSection: string,
+    restored: boolean,
+    semanticsRevealed: boolean,
+    selectedId: string,
+    seasonIds: string[],
+): boolean =>
+    selectedSection === "seasons" &&
+    restored &&
+    semanticsRevealed &&
+    seasonIds.includes(selectedId);
