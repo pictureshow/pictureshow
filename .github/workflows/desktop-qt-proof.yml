@@ -37,7 +37,9 @@ jobs:
         shell: pwsh
         run: |
           cmake -S desktop-qt -B qt-build -G Ninja -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64 -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
           cmake --build qt-build --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
           $env:PATH = "C:/Qt/6.12.0/msvc2022_64/bin;$env:PATH"
           ctest --test-dir qt-build/core --output-on-failure
       - name: Hosted WARP surfaces and explicit HDR API state
@@ -45,12 +47,15 @@ jobs:
         run: |
           $dll = Get-ChildItem native -Recurse -Filter '*mpv*.dll' | Select-Object -First 1
           if (!$dll) { throw 'Missing libmpv DLL' }
+          Get-ChildItem native -Recurse -File | Select-Object -ExpandProperty Name | Set-Content native-archive-files.txt
           $env:PATH = "C:/Qt/6.12.0/msvc2022_64/bin;$($dll.DirectoryName);$env:PATH"
           $env:QSG_RHI_BACKEND = 'd3d11'
           $env:QSG_RHI_PREFER_SOFTWARE_RENDERER = '1'
           $env:QSG_RHI_HDR = 'scrgb'
           $env:QSG_INFO = '1'
           New-Item -ItemType Directory -Force desktop-evidence | Out-Null
+          Move-Item native-archive-files.txt desktop-evidence/
+          & dumpbin /DEPENDENTS $dll.FullName > desktop-evidence/libmpv-imports.txt
           & qt-build/hdr-api-state.exe > desktop-evidence/hdr-api-state.json
           $hdrExit = $LASTEXITCODE
           & qt-build/qt-proof.exe $dll.FullName desktop-fixtures desktop-evidence/windows --sustain 2>&1 | Tee-Object desktop-evidence/windows.log

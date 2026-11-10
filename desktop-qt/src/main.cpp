@@ -68,7 +68,7 @@ g["swapchainPixels"]=QJsonArray{sc->currentPixelSize().width(),sc->currentPixelS
   r["native"]=macReceipt(w->winId());
 #endif
 #ifdef Q_OS_WIN
-  RECT wr{};MONITORINFO mi{};mi.cbSize=sizeof(mi);auto hwnd=reinterpret_cast<HWND>(w->winId());bool wb=GetWindowRect(hwnd,&wr);bool mb=GetMonitorInfo(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);auto rr=[](RECT v){return QJsonArray{v.left,v.top,v.right-v.left,v.bottom-v.top};};r["native"]=QJsonObject{{"getWindowRectSucceeded",wb},{"getMonitorInfoSucceeded",mb},{"windowRect",rr(wr)},{"monitorRect",rr(mi.rcMonitor)},{"windowStyle",qint64(GetWindowLongPtr(hwnd,GWL_STYLE))},{"hasCaption",bool(GetWindowLongPtr(hwnd,GWL_STYLE)&WS_CAPTION)}};
+  RECT wr{};MONITORINFO mi{};mi.cbSize=sizeof(mi);auto hwnd=reinterpret_cast<HWND>(w->winId());bool wb=GetWindowRect(hwnd,&wr);bool mb=GetMonitorInfo(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);auto rr=[](RECT v){return QJsonArray{int(v.left),int(v.top),int(v.right-v.left),int(v.bottom-v.top)};};r["native"]=QJsonObject{{"getWindowRectSucceeded",wb},{"getMonitorInfoSucceeded",mb},{"windowRect",rr(wr)},{"monitorRect",rr(mi.rcMonitor)},{"windowStyle",qint64(GetWindowLongPtr(hwnd,GWL_STYLE))},{"hasCaption",bool(GetWindowLongPtr(hwnd,GWL_STYLE)&WS_CAPTION)}};
 #endif
   // Use native display capture for evidence; Qt6.12 grabWindow misinterprets FP16 readback on macOS.
   auto screen=w->screen()->grabWindow(0);
