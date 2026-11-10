@@ -56,6 +56,8 @@ data class MediaSourceInfo(
     @SerialName("SupportsDirectPlay") val supportsDirectPlay: Boolean = false,
     @SerialName("IsInfiniteStream") val isInfiniteStream: Boolean = false,
     @SerialName("RequiresOpening") val requiresOpening: Boolean = false,
+    @SerialName("OpenToken") val openToken: String? = null,
+    @SerialName("RequiresClosing") val requiresClosing: Boolean = false,
     @SerialName("LiveStreamId") val liveStreamId: String? = null,
     @SerialName("MediaStreams") val mediaStreams: List<MediaStream> = emptyList(),
     @SerialName("Bitrate") val bitrate: Int? = null,
@@ -151,3 +153,27 @@ data class PlaybackStopInfo(
     @SerialName("PositionTicks") val positionTicks: Long,
     @SerialName("Failed") val failed: Boolean = false
 )
+
+/** JSON body only: Jellyfin gives query duplicates precedence over these fields. */
+@Serializable
+data class OpenLiveStreamRequest(
+    @SerialName("OpenToken") val openToken: String,
+    @SerialName("DirectPlayProtocols") val directPlayProtocols: List<String> = listOf("Http"),
+    @SerialName("ItemId") val itemId: String,
+    @SerialName("UserId") val userId: String,
+    @SerialName("PlaySessionId") val playSessionId: String?,
+    @SerialName("DeviceProfile") val deviceProfile: DeviceProfile?,
+    @SerialName("MaxStreamingBitrate") val maxStreamingBitrate: Int,
+    @SerialName("StartTimeTicks") val startTimeTicks: Long? = null,
+    @SerialName("AudioStreamIndex") val audioStreamIndex: Int? = null,
+    @SerialName("SubtitleStreamIndex") val subtitleStreamIndex: Int? = null,
+    @SerialName("MaxAudioChannels") val maxAudioChannels: Int? = null,
+    @SerialName("EnableDirectPlay") val enableDirectPlay: Boolean = true,
+    @SerialName("EnableDirectStream") val enableDirectStream: Boolean = true,
+    @SerialName("AlwaysBurnInSubtitleWhenTranscoding") val alwaysBurnInSubtitleWhenTranscoding: Boolean = false
+) {
+    override fun toString(): String = "OpenLiveStreamRequest(itemId=$itemId, openToken=[redacted], playSessionId=$playSessionId)"
+}
+
+@Serializable
+data class OpenLiveStreamResponse(@SerialName("MediaSource") val mediaSource: MediaSourceInfo)

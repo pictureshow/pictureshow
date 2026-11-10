@@ -518,28 +518,33 @@ internal fun PlayerItemScreen(
                         // ends at "no next item". There TalkBack scrolls a focused scrollable node in the
                         // arrow's direction, so the arrows keep their meaning: Left/Right seek 10 s and land
                         // on the position control, Up/Down show the controls. Keys without a reader are unchanged.
-                        horizontalScrollAxisRange = ReaderArrowRange
+                        val canSeekHere = !host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)
+                        if (canSeekHere) horizontalScrollAxisRange = ReaderArrowRange
                         verticalScrollAxisRange = ReaderArrowRange
                         scrollBy { x, y ->
                             // Compose mirrors horizontal scroll amounts in RTL; the remote's Right still means forward.
                             val forward = if (layoutDirection == LayoutDirection.Rtl) x < 0f else x > 0f
                             when {
-                                x != 0f -> readerSeek(if (forward) 10_000L else -10_000L, arrow = true)
+                                x != 0f && canSeekHere -> readerSeek(if (forward) 10_000L else -10_000L, arrow = true)
                                 y != 0f -> readerShowControls()
                                 else -> return@scrollBy false
                             }
                             true
                         }
-                        customActions = listOf(
-                            CustomAccessibilityAction("Back 10 seconds") {
-                                readerSeek(-10_000L)
-                                true
-                            },
-                            CustomAccessibilityAction("Forward 10 seconds") {
-                                readerSeek(10_000L)
-                                true
-                            }
-                        )
+                        customActions = if (canSeekHere) {
+                            listOf(
+                                CustomAccessibilityAction("Back 10 seconds") {
+                                    readerSeek(-10_000L)
+                                    true
+                                },
+                                CustomAccessibilityAction("Forward 10 seconds") {
+                                    readerSeek(10_000L)
+                                    true
+                                }
+                            )
+                        } else {
+                            emptyList()
+                        }
                     } else {
                         hideFromAccessibility()
                     }
@@ -669,7 +674,12 @@ internal fun PlayerItemScreen(
                         modifier = Modifier.focusRequester(timelineFocus).then(readerOpenerOnly("player:position")),
                         paused = paused,
                         ended = ended,
-                        arrowsSeek = rootFocused && !restoringSeekFocus,
+                        arrowsSeek = rootFocused && !restoringSeekFocus && (!host.isLive || host.liveCanTimeShift),
+                        live = host.isLive,
+                        liveCanTimeShift = host.liveCanTimeShift,
+                        liveExpired = host.liveBufferExpired,
+                        liveEdgeAvailable = host.liveWindow?.goLivePosition() != null,
+                        onGoLive = host::goLive,
                         onOpenSeek = {
                             seekOpen = true
                         }
@@ -687,7 +697,8 @@ internal fun PlayerItemScreen(
                             paused,
                             showPlayButton,
                             Modifier.focusRequester(playFocus).then(readerOpenerOnly("player:play")),
-                            ended
+                            ended,
+                            enabled = !host.isLive || host.liveCanTimeShift
                         ) {
                             val pending = deferredNext
                             if (pending != null) finish(pending) else player?.togglePlayback()

@@ -426,3 +426,13 @@ apart from what the OS did. `music-reports` gives one viewing per time a track i
 ceilings, the audio profile and the lossless claim. `music-playlists` refuses to send an edit again after an ambiguous
 answer until the list has been read back, and pins the create body: `IsPublic` is always sent and false unless the viewer chose
 otherwise, since the server's own default is public.
+
+## Live TV and DVR
+
+`live-guide.json`, `live-dvr.json` and `live-source.json` are schema-version-1 suites with the same per-case `id`,
+`operation`, `input`, `expected` contract. Android's `LiveVectorsTest` and `LiveSourceVectorsTest` execute them from
+`live-vectors`. Guide/DVR inputs use Jellyfin PascalCase DTO fields for programs/channels/provider defaults;
+normalized operation arguments use lower camel case. `create-trace` supplies a fake viewer policy and a server
+write/disconnect outcome, then checks production client outcomes and the exact number and resource of POSTs.
+It must never turn an accepted-but-lost response into a duplicate recording request. No mock trace proves a real
+tuner or recorder works. Apple, web and desktop owe equivalent runners and device/server evidence.

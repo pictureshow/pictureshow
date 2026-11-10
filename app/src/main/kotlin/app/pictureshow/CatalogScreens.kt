@@ -167,7 +167,8 @@ fun CatalogHome(
     onResume: () -> Unit = {},
     onSearch: () -> Unit = {},
     onSettings: () -> Unit = {},
-    serverLabel: String = account.server.name
+    serverLabel: String = account.server.name,
+    onLiveTv: () -> Unit = {}
 ) {
     val homeLifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     // Navigation supplies this destination's lifecycle, so Back refreshes without restarting the Activity.
@@ -187,7 +188,7 @@ fun CatalogHome(
             android.util.Log.d(
                 "CatalogFocus",
                 "home-entry saved=${selectedRow.isNotEmpty()} " +
-                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "profile") } ?: "card"} " +
+                    "header=${selectedRow.takeIf { it in listOf("search", "settings", "live-tv", "profile") } ?: "card"} " +
                     "rowIndex=$selectedRowIndex rows=${rows.size} loading=${state.loading}"
             )
         }
@@ -202,13 +203,14 @@ fun CatalogHome(
     }
     val restoreAction = when {
         state.busy && selectedRow in listOf("settings", "profile") -> "search"
-        selectedRow in listOf("search", "settings", "profile") -> selectedRow
+        selectedRow in listOf("search", "settings", "live-tv", "profile") -> selectedRow
         rows.isEmpty() && !state.loading -> if (state.error != null) "retry" else "profile"
         else -> null
     }
     val restoreTarget = when (restoreAction) {
         "search" -> "Search"
         "settings" -> "Settings"
+        "live-tv" -> "Live TV"
         "profile" -> "Switch user"
         "retry" -> "Retry"
         else -> restoreItem?.let(::catalogAnnouncement)
@@ -238,6 +240,7 @@ fun CatalogHome(
     }
     val profile = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
+    val liveFocus = remember { FocusRequester() }
     val retry = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     var movement by remember { mutableStateOf<Job?>(null) }
@@ -328,7 +331,8 @@ fun CatalogHome(
             false
         }
     // Back below the first shelf returns to the top of home, where it opened; Back at the top leaves the app.
-    val belowTop = rows.isNotEmpty() && selectedRow.isNotEmpty() && selectedRow !in listOf("search", "settings", rows.first().key)
+    val belowTop =
+        rows.isNotEmpty() && selectedRow.isNotEmpty() && selectedRow !in listOf("search", "settings", "live-tv", rows.first().key)
     val pendingReturn = returning && !restored
     var entryBackSwallowed by remember { mutableStateOf(false) }
     BackHandler(enabled = if (pendingReturn) !entryBackSwallowed else belowTop && homeLifecycle == Lifecycle.State.RESUMED) {
@@ -403,10 +407,20 @@ fun CatalogHome(
                             },
                             enabled = !state.busy,
                             modifier = target(Modifier, restoreAction == "settings").focusRequester(settingsFocus).testTag("home:settings")
-                                .staysInRow(first = false, last = true)
+                                .staysInRow(first = false, last = false)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "settings" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Settings") }
+                        Button(
+                            onClick = {
+                                selectedRow = "live-tv"
+                                onLiveTv()
+                            },
+                            modifier = target(Modifier, restoreAction == "live-tv").focusRequester(liveFocus).testTag("home:live-tv")
+                                .staysInRow(first = false, last = true)
+                                .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "live-tv" }
+                                .onPreviewKeyEvent { headerDown(it) }
+                        ) { Text("Live TV") }
                     }
                     Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CatalogHeading("Pictureshow")
@@ -559,8 +573,16 @@ fun CatalogHome(
             // card intent pending until a real row arrives, unless the user deliberately chose profile.
             withFrameNanos { }
             val focused = when {
-                restoreAction == "search" || restoreAction == "settings" -> {
-                    focusAction("header", 0, if (restoreAction == "settings") settingsFocus else search)
+                restoreAction == "search" || restoreAction == "settings" || restoreAction == "live-tv" -> {
+                    focusAction(
+                        "header",
+                        0,
+                        when (restoreAction) {
+                            "settings" -> settingsFocus
+                            "live-tv" -> liveFocus
+                            else -> search
+                        }
+                    )
                 }
 
                 restoreAction == "profile" -> {
@@ -589,7 +611,7 @@ fun CatalogHome(
             }
         } else if (!state.loading &&
             restored &&
-            savedRow !in listOf("profile", "search", "settings") &&
+            savedRow !in listOf("profile", "search", "settings", "live-tv") &&
             savedItem.isNotEmpty() &&
             rows.none { row -> row.key == savedRow && row.items.any { it.id == savedItem } }
         ) {

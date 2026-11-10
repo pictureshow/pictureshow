@@ -122,6 +122,7 @@ internal fun PlaybackToggle(
     showPlayButton: Boolean,
     modifier: Modifier = Modifier,
     ended: Boolean = false,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     val current = playbackToggleState(paused, showPlayButton)
@@ -134,6 +135,7 @@ internal fun PlaybackToggle(
     var focused by remember { mutableStateOf(false) }
     Button(
         onClick = onClick,
+        enabled = enabled,
         scale = playerButtonScale(),
         modifier = modifier.onFocusChanged { focused = it.isFocused }.semantics {
             stateDescription = if (ended && focused) beforeEnd[0] else current

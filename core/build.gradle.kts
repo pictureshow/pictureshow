@@ -74,11 +74,17 @@ tasks.named<ProcessResources>("jvmTestProcessResources") {
         "remote-reconnect.json",
         "remote-queue.json"
     )
+    val liveSuites = listOf("live-guide.json", "live-dvr.json", "live-source.json")
     from(rootProject.file("spec/vectors")) {
+        exclude(liveSuites)
         exclude(controlSuites)
         exclude(remoteSuites)
         exclude("grid-navigation.json")
         into("parity-vectors")
+    }
+    from(rootProject.file("spec/vectors")) {
+        include(liveSuites)
+        into("live-vectors")
     }
     from(rootProject.file("spec/vectors")) {
         include("grid-navigation.json")

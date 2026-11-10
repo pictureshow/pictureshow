@@ -1,0 +1,477 @@
+{
+  "schemaVersion": 1,
+  "suite": "live-dvr",
+  "sources": [
+    "core/src/commonMain/kotlin/app/pictureshow/core/livetv/LiveRules.kt",
+    "core/src/commonMain/kotlin/app/pictureshow/core/livetv/LiveTvClient.kt"
+  ],
+  "cases": [
+    {
+      "id": "live-dvr.oneoff-projects-series-defaults-with-provider-common-fields",
+      "operation": "draft",
+      "input": {
+        "defaults": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "program": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "series": false
+      },
+      "expected": {
+        "ProgramId": "p",
+        "ChannelId": "c",
+        "Name": "Program",
+        "StartDate": "2030-11-03T05:00:00Z",
+        "EndDate": "2030-11-03T07:00:00Z",
+        "ServiceName": "Emby",
+        "ExternalProgramId": "provider-id",
+        "PrePaddingSeconds": 20,
+        "PostPaddingSeconds": 30,
+        "Priority": 2,
+        "KeepUntil": "UntilDeleted"
+      }
+    },
+    {
+      "id": "live-dvr.series-keeps-unrecognized-provider-defaults",
+      "operation": "draft",
+      "input": {
+        "defaults": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "program": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "series": true
+      },
+      "expected": {
+        "ProgramId": "p",
+        "ChannelId": "c",
+        "Name": "Program",
+        "StartDate": "2030-11-03T05:00:00Z",
+        "EndDate": "2030-11-03T07:00:00Z",
+        "ServiceName": "Emby",
+        "ExternalProgramId": "provider-id",
+        "PrePaddingSeconds": 20,
+        "PostPaddingSeconds": 30,
+        "Priority": 2,
+        "KeepUntil": "UntilDeleted",
+        "RecordNewOnly": true,
+        "RecordAnyChannel": false,
+        "Days": [
+          "Monday"
+        ],
+        "ProviderExtension": {
+          "keep": true
+        }
+      }
+    },
+    {
+      "id": "live-dvr.edit-does-not-replace-unedited-defaults",
+      "operation": "edit",
+      "input": {
+        "original": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "edits": {
+          "Priority": 9
+        },
+        "series": true
+      },
+      "expected": {
+        "Id": "default",
+        "ProgramId": "old",
+        "ChannelId": "old",
+        "Name": "Default",
+        "StartDate": "old",
+        "EndDate": "old",
+        "ServiceName": "Emby",
+        "ExternalProgramId": "provider-id",
+        "PrePaddingSeconds": 20,
+        "PostPaddingSeconds": 30,
+        "Priority": 9,
+        "KeepUntil": "UntilDeleted",
+        "RecordNewOnly": true,
+        "RecordAnyChannel": false,
+        "Days": [
+          "Monday"
+        ],
+        "ProviderExtension": {
+          "keep": true
+        }
+      }
+    },
+    {
+      "id": "live-dvr.missing-provider-retention-is-disabled",
+      "operation": "edit",
+      "input": {
+        "original": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "edits": {
+          "KeepUpTo": 9
+        },
+        "series": true
+      },
+      "expected": {
+        "error": true
+      }
+    },
+    {
+      "id": "live-dvr.oneoff-cannot-silently-become-series",
+      "operation": "edit",
+      "input": {
+        "original": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "edits": {
+          "RecordNewOnly": false
+        },
+        "series": false
+      },
+      "expected": {
+        "error": true
+      }
+    },
+    {
+      "id": "live-dvr.negative-padding-rejected",
+      "operation": "edit",
+      "input": {
+        "original": {
+          "Id": "default",
+          "ProgramId": "old",
+          "ChannelId": "old",
+          "Name": "Default",
+          "StartDate": "old",
+          "EndDate": "old",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "RecordNewOnly": true,
+          "RecordAnyChannel": false,
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "edits": {
+          "PrePaddingSeconds": -1
+        },
+        "series": false
+      },
+      "expected": {
+        "error": true
+      }
+    },
+    {
+      "id": "live-dvr.statuses-are-server-facts",
+      "operation": "statuses",
+      "input": {
+        "statuses": [
+          "New",
+          "InProgress",
+          "Completed",
+          "Cancelled",
+          "ConflictedOk",
+          "ConflictedNotOk",
+          "Error",
+          "FutureState"
+        ]
+      },
+      "expected": [
+        "Scheduled",
+        "Recording now",
+        "Completed",
+        "Cancelled",
+        "Conflict accepted by server",
+        "Conflict rejected by server",
+        "Recording error",
+        "Unknown status (FutureState)"
+      ]
+    },
+    {
+      "id": "live-dvr.ambiguous-accepted-create-is-read-back",
+      "operation": "create-trace",
+      "input": {
+        "draft": {
+          "ProgramId": "p",
+          "ChannelId": "c",
+          "Name": "Program",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted"
+        },
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": true,
+          "EnableContentDeletion": true,
+          "EnableUserPreferenceAccess": true
+        },
+        "applied": true,
+        "disconnect": true,
+        "series": false
+      },
+      "expected": {
+        "first": "ok",
+        "second": "ok",
+        "postCount": 1,
+        "posts": [
+          "POST /LiveTv/Timers"
+        ]
+      }
+    },
+    {
+      "id": "live-dvr.unresolved-create-is-never-blindly-resubmitted",
+      "operation": "create-trace",
+      "input": {
+        "draft": {
+          "ProgramId": "p",
+          "ChannelId": "c",
+          "Name": "Program",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted"
+        },
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": true,
+          "EnableContentDeletion": true,
+          "EnableUserPreferenceAccess": true
+        },
+        "applied": false,
+        "disconnect": true,
+        "series": false
+      },
+      "expected": {
+        "first": "unknown",
+        "second": "unknown",
+        "postCount": 1,
+        "posts": [
+          "POST /LiveTv/Timers"
+        ]
+      }
+    },
+    {
+      "id": "live-dvr.readonly-viewer-no-post",
+      "operation": "create-trace",
+      "input": {
+        "draft": {
+          "ProgramId": "p",
+          "ChannelId": "c",
+          "Name": "Program",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted"
+        },
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": false,
+          "EnableContentDeletion": true,
+          "EnableUserPreferenceAccess": true
+        },
+        "applied": false,
+        "disconnect": false,
+        "series": false
+      },
+      "expected": {
+        "first": "denied",
+        "second": "denied",
+        "postCount": 0,
+        "posts": []
+      }
+    },
+    {
+      "id": "live-dvr.live-access-revoked-no-post",
+      "operation": "create-trace",
+      "input": {
+        "draft": {
+          "ProgramId": "p",
+          "ChannelId": "c",
+          "Name": "Program",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted"
+        },
+        "policy": {
+          "EnableLiveTvAccess": false,
+          "EnableLiveTvManagement": true,
+          "EnableContentDeletion": true,
+          "EnableUserPreferenceAccess": true
+        },
+        "applied": false,
+        "disconnect": false,
+        "series": false
+      },
+      "expected": {
+        "first": "denied",
+        "second": "denied",
+        "postCount": 0,
+        "posts": []
+      }
+    },
+    {
+      "id": "live-dvr.series-routes-to-series-resource",
+      "operation": "create-trace",
+      "input": {
+        "draft": {
+          "ProgramId": "p",
+          "ChannelId": "c",
+          "Name": "Program",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted"
+        },
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": true,
+          "EnableContentDeletion": true,
+          "EnableUserPreferenceAccess": true
+        },
+        "applied": true,
+        "disconnect": false,
+        "series": true
+      },
+      "expected": {
+        "first": "ok",
+        "second": "ok",
+        "postCount": 1,
+        "posts": [
+          "POST /LiveTv/SeriesTimers"
+        ]
+      }
+    }
+  ]
+}

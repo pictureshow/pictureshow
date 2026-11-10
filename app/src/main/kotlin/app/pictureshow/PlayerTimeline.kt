@@ -46,8 +46,24 @@ internal fun PlayerTimeline(
     paused: Boolean = false,
     ended: Boolean = false,
     arrowsSeek: Boolean = false,
+    live: Boolean = false,
+    liveCanTimeShift: Boolean = false,
+    liveExpired: Boolean = false,
+    liveEdgeAvailable: Boolean = false,
+    onGoLive: () -> Unit = {},
     onOpenSeek: () -> Unit = {}
 ) {
+    if (live) {
+        Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(liveTimelineLabel(paused, liveCanTimeShift, liveExpired))
+            androidx.tv.material3.Button(
+                onClick = onGoLive,
+                enabled = liveEdgeAvailable,
+                modifier = Modifier.testTag("player:position").semantics { contentDescription = "Go live" }
+            ) { Text("Go live") }
+        }
+        return
+    }
     CurrentPositionAccessibility(setOf("player:position")) {
         spokenPlaybackPosition(if (ended) completedPlaybackPosition(positionMs, durationMs) else positionMs, durationMs)
     }
@@ -120,4 +136,11 @@ private class SeekCount {
 @Composable
 internal fun PlaybackStatus(label: String, modifier: Modifier = Modifier) {
     Text(label, modifier = modifier.background(Color(0xEE10131C)).padding(16.dp))
+}
+
+internal fun liveTimelineLabel(paused: Boolean, canTimeShift: Boolean, expired: Boolean): String = when {
+    expired -> "Live · Buffer expired. Play or Go live to resume at the live edge."
+    !canTimeShift -> "Live · Time shift is unavailable for this stream."
+    paused -> "Live · Paused within the available buffer"
+    else -> "Live · Seeking is limited to the available buffer"
 }

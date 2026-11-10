@@ -855,8 +855,17 @@ internal fun Pictureshow(
                     onSignOut = profile::signOut,
                     onSearch = { nav.navigate(searchRoute()) },
                     onResume = vm::resumed,
-                    onSettings = { nav.navigate("settings") }
+                    onSettings = { nav.navigate("settings") },
+                    onLiveTv = { nav.navigate("live-tv") }
                 )
+            }
+        }
+        composable("live-tv") {
+            state.snapshot.currentAccount?.takeUnless { it.expired }?.let { account ->
+                val vm: LiveTvViewModel = koinViewModel(key = "live:${account.key}", parameters = { parametersOf(account) })
+                LiveTvScreen(vm, account, tv = true, onPlay = {
+                    nav.navigate(playerRoute(it, true))
+                }, onRecording = { nav.navigate(itemRoute(it)) }, onBack = { nav.popBackStack() })
             }
         }
         aboutScreens(nav)

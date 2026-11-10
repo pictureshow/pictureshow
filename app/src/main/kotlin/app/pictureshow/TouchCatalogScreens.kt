@@ -111,7 +111,8 @@ internal fun TouchCatalogHome(
     onOpen: (MediaItem) -> Unit,
     onRetry: () -> Unit,
     onResume: () -> Unit = {},
-    librariesOnly: Boolean = false
+    librariesOnly: Boolean = false,
+    onLiveTv: () -> Unit = {}
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     val shortWindow = isShortTouchWindow()
@@ -129,6 +130,7 @@ internal fun TouchCatalogHome(
         item(key = "heading") {
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TouchCatalogHeading("Pictureshow")
+                TextButton(onClick = onLiveTv, modifier = Modifier.heightIn(min = 48.dp).testTag("home:live-tv")) { Text("Live TV") }
                 if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.loading) TouchCatalogLoading("Loading your library…")
                 TouchCatalogError(state.error, onRetry)

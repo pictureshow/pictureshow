@@ -1,0 +1,160 @@
+{
+  "suite": "live-source",
+  "schemaVersion": 1,
+  "description": "Live playback uses observed player windows, never scheduled program durations. Pause expiry does not imply a resume.",
+  "cases": [
+    {
+      "id": "actual-edge",
+      "window": {
+        "offsetMs": 100000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 30000,
+      "pausedAbsoluteMs": null,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000
+      }
+    },
+    {
+      "id": "reject-guide-duration",
+      "window": {
+        "offsetMs": 100000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 1800000,
+      "pausedAbsoluteMs": null,
+      "expected": {
+        "canTimeShift": true,
+        "contains": false,
+        "expired": false,
+        "goLiveMs": 27000
+      }
+    },
+    {
+      "id": "expired-pause",
+      "window": {
+        "offsetMs": 120000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 0,
+      "pausedAbsoluteMs": 119999,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": true,
+        "goLiveMs": 27000
+      }
+    },
+    {
+      "id": "pause-at-start",
+      "window": {
+        "offsetMs": 120000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 0,
+      "pausedAbsoluteMs": 120000,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000
+      }
+    },
+    {
+      "id": "pause-at-end",
+      "window": {
+        "offsetMs": 120000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 30000,
+      "pausedAbsoluteMs": 150000,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": 27000
+      }
+    },
+    {
+      "id": "future-invalid-pause",
+      "window": {
+        "offsetMs": 120000,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": true
+      },
+      "positionMs": 30001,
+      "pausedAbsoluteMs": 150001,
+      "expected": {
+        "canTimeShift": true,
+        "contains": false,
+        "expired": true,
+        "goLiveMs": 27000
+      }
+    },
+    {
+      "id": "nonseekable",
+      "window": {
+        "offsetMs": 0,
+        "durationMs": 30000,
+        "defaultPositionMs": 27000,
+        "seekable": false
+      },
+      "positionMs": 1000,
+      "pausedAbsoluteMs": null,
+      "expected": {
+        "canTimeShift": false,
+        "contains": false,
+        "expired": false,
+        "goLiveMs": 27000
+      }
+    },
+    {
+      "id": "unknown-window",
+      "window": {
+        "offsetMs": 0,
+        "durationMs": 0,
+        "defaultPositionMs": 0,
+        "seekable": true
+      },
+      "positionMs": 0,
+      "pausedAbsoluteMs": null,
+      "expected": {
+        "canTimeShift": false,
+        "contains": false,
+        "expired": false,
+        "goLiveMs": null
+      }
+    },
+    {
+      "id": "bad-live-target",
+      "window": {
+        "offsetMs": 0,
+        "durationMs": 30000,
+        "defaultPositionMs": 30001,
+        "seekable": true
+      },
+      "positionMs": 1,
+      "pausedAbsoluteMs": null,
+      "expected": {
+        "canTimeShift": true,
+        "contains": true,
+        "expired": false,
+        "goLiveMs": null
+      }
+    }
+  ]
+}

@@ -415,13 +415,22 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     ended = host.ended,
                     positionMs = host.position
                 )
-                TouchPlayerScrubber(host.position, host.duration, ui.scrubMs, ended = host.ended, spokenMs = spoken, onPreview = {
-                    ui.scrubMs = it
-                    ui.interact()
-                }, onSeek = {
-                    ui.scrubMs?.let(host::seekTo)
-                    ui.scrubMs = null
-                })
+                if (host.isLive) {
+                    Text(liveTimelineLabel(paused, host.liveCanTimeShift, host.liveBufferExpired), color = Color.White)
+                    Button(
+                        onClick = host::goLive,
+                        enabled = host.liveWindow?.goLivePosition() != null,
+                        modifier = Modifier.testTag("touch:go-live")
+                    ) { Text("Go live") }
+                } else {
+                    TouchPlayerScrubber(host.position, host.duration, ui.scrubMs, ended = host.ended, spokenMs = spoken, onPreview = {
+                        ui.scrubMs = it
+                        ui.interact()
+                    }, onSeek = {
+                        ui.scrubMs?.let(host::seekTo)
+                        ui.scrubMs = null
+                    })
+                }
                 val toggle: @Composable () -> Unit = {
                     Button(
                         onClick = {
@@ -431,7 +440,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         },
                         Modifier.testTag("touch:toggle").semantics {
                             stateDescription = playbackToggleState(paused, playback.showPlayButton)
-                        }
+                        },
+                        enabled = !host.isLive || host.liveCanTimeShift
                     ) { TouchReservedLabel(if (playback.showPlayButton) "Play" else "Pause", "Pause") }
                 }
                 val back: @Composable () -> Unit = {
@@ -521,8 +531,10 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     FlowRow(Modifier.fillMaxWidth()) {
                         toggle()
                         Spacer(Modifier.width(8.dp))
-                        back()
-                        forward()
+                        if (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)) {
+                            back()
+                            forward()
+                        }
                         exit(Modifier.weight(1f))
                     }
                     TouchOptionGrid(options)
@@ -532,8 +544,10 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 toggle()
                                 Spacer(Modifier.width(8.dp))
-                                back()
-                                forward()
+                                if (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)) {
+                                    back()
+                                    forward()
+                                }
                             }
                         },
                         options = options,
