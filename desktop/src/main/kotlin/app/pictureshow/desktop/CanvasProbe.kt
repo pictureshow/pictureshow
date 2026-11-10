@@ -24,11 +24,14 @@ import javax.swing.SwingUtilities
 
 /** Linux GLX presentation experiment. Xvfb runs prove no physical display or HDR capability. */
 fun canvasMain(args: Array<String>) {
+    require(com.sun.jna.Platform.isLinux()) {"The GLX canvas probe requires Linux"}
     require(args.size >= 2) { "Usage: canvas MEDIA EVIDENCE [--auto] [--sustain=125]" }
     val media=File(args[0]).absolutePath
     val out=File(args[1]).apply { mkdirs() }
     val sustain=args.firstOrNull {it.startsWith("--sustain=")}?.substringAfter('=')?.toInt() ?: 0
+    val auto=args.contains("--auto")
     require(sustain == 0 || sustain >= 125)
+    require(sustain == 0 || auto) {"A sustained probe requires --auto"}
     val mpv=Mpv(out)
     mpv.option("loop-file", "no")
     val failure=AtomicReference<Throwable?>(null)
@@ -41,7 +44,6 @@ fun canvasMain(args: Array<String>) {
         var clicks by remember { mutableStateOf(0) }
         var fullscreen by remember { mutableStateOf(false) }
         var floating:Rectangle?=null
-        val popup=AtomicReference<java.awt.Window?>(null)
         fun stop(code:Int=0) {
             if (!stopping.compareAndSet(false,true)) return
             Thread {
@@ -73,11 +75,11 @@ fun canvasMain(args: Array<String>) {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
                     SwingPanel(factory={GlCanvasSurface(mpv,media,{failure.compareAndSet(null,it)}).also{video=it}.panel},modifier=Modifier.fillMaxSize())
                     Popup(alignment=Alignment.TopEnd,offset=IntOffset(-16,16),properties=PopupProperties(focusable=false)) {
-                        Button(onClick={clicks++;mpv.command("cycle","pause")}) {Text("COMPOSE OVER VIDEO · $clicks")}
+                        Button(onClick={if(!stopping.get()){clicks++;mpv.command("cycle","pause")}}) {Text("COMPOSE OVER VIDEO · $clicks")}
                     }
                     Popup(alignment=Alignment.BottomCenter,offset=IntOffset(0,-16),properties=PopupProperties(focusable=false)) {
                         Row(Modifier.background(Color(0xDD141820)).padding(8.dp)) {
-                            Button(onClick={mpv.command("cycle","pause")}) {Text("Pause / play")}
+                            Button(onClick={if(!stopping.get()) mpv.command("cycle","pause")}) {Text("Pause / play")}
                             Spacer(Modifier.width(8.dp))
                             Button(onClick={toggleFullscreen()}) {Text("Fullscreen")}
                             Spacer(Modifier.width(8.dp))
@@ -87,6 +89,7 @@ fun canvasMain(args: Array<String>) {
                 }
             }
             LaunchedEffect(Unit) {
+                if(!auto) return@LaunchedEffect
                 val thread=Thread {
                     try {
                         fun alive(){check(!stopping.get()){ "Probe is stopping" };failure.get()?.let {throw it}}
@@ -110,7 +113,7 @@ fun canvasMain(args: Array<String>) {
                         SwingUtilities.invokeAndWait {
                             val candidates=java.awt.Window.getWindows().filter {it!==window && it.isVisible && it.width>50 && it.width<window.width}
                             check(candidates.size==2){"Expected two Compose control popups; found ${candidates.size}"}
-                            val p=candidates.minBy {it.locationOnScreen.y};popup.set(p)
+                            val p=candidates.minBy {it.locationOnScreen.y}
                             val origin=p.locationOnScreen
                             Robot().apply {mouseMove(origin.x+p.width/2,origin.y+p.height/2);mousePress(InputEvent.BUTTON1_DOWN_MASK);mouseRelease(InputEvent.BUTTON1_DOWN_MASK)}
                         }

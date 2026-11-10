@@ -25,7 +25,6 @@ class CanvasFrameInfo : Structure() {
 }
 private interface CanvasRenderApi : Library {
     fun mpv_render_context_get_info(ctx:Pointer,param:CanvasFrameParam):Int
-    fun mpv_render_context_report_swap(ctx:Pointer)
 }
 
 /** Application-owned GLX window. LGPL mpv does not own or implement the X11 VO.
