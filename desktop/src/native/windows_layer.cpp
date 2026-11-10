@@ -2,6 +2,7 @@
  * Copyright (c) Legitimate LLC.
  * libmpv D3D11 -> FP16 scRGB flip swapchain. No staging texture, Map or CPU frame copy.
  */
+#define NOMINMAX
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi1_6.h>
