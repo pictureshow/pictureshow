@@ -130,7 +130,12 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(listOf("nextup", "resume", "libraries"), preferences.order) }
         compose.onNodeWithTag("home:reorder:nextup").assertIsEnabled()
-            .assert(SemanticsMatcher("Enabled rows regain movement actions") { it.config[SemanticsActions.CustomActions].isNotEmpty() })
+            .assert(
+                SemanticsMatcher("Top row regains only the valid movement direction") {
+                    val labels = it.config[SemanticsActions.CustomActions].map { action -> action.label }
+                    "Move down" in labels && "Move up" !in labels
+                }
+            )
     }
 
     @Test fun pickedPinKeepsVisibilityAndUnpinDisabledUntilDrop() {
