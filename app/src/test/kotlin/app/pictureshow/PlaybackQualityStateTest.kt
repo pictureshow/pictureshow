@@ -70,8 +70,11 @@ class PlaybackQualityStateTest {
             assertEquals("Auto", anotherViewing.qualityLabel)
             assertEquals(20_000_000, anotherViewing.effectiveSettings.maxStreamingBitrate)
             assertEquals(74_000L, host.position)
-            assertFailsWith<IllegalArgumentException> { host.setQualityOverride(80) }
-            assertEquals(40, host.qualityOverrideMbps)
+            host.setQualityOverride(80)
+            assertEquals(80, host.qualityOverrideMbps)
+            assertEquals(80_000_000, host.effectiveSettings.maxStreamingBitrate)
+            assertFailsWith<IllegalArgumentException> { host.setQualityOverride(81) }
+            assertEquals(80, host.qualityOverrideMbps)
         } finally {
             host.reportScope.cancel()
             anotherViewing.reportScope.cancel()

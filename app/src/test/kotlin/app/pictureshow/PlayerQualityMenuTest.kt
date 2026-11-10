@@ -48,7 +48,7 @@ class PlayerQualityMenuTest {
         }
         compose.runOnIdle { assertEquals(0, selections) }
         compose.onNodeWithTag("player:quality-choice:auto").assertIsSelected()
-        listOf("Auto", "4 Mbps", "10 Mbps", "20 Mbps", "40 Mbps", "120 Mbps").forEach {
+        listOf("Auto", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps").forEach {
             compose.onNodeWithText(it).assertExists()
         }
         compose.onNodeWithTag("player:quality-choice:40").performScrollTo().performClick()
@@ -58,10 +58,17 @@ class PlayerQualityMenuTest {
         }
         compose.onNodeWithText("Open quality").performClick()
         compose.onNodeWithTag("player:quality-choice:40").assertIsSelected()
+        compose.onNodeWithTag("player:quality-choice:80").performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals(80, value)
+            assertEquals(2, selections)
+        }
+        compose.onNodeWithText("Open quality").performClick()
+        compose.onNodeWithTag("player:quality-choice:80").assertIsSelected()
         compose.onNodeWithTag("player:quality-choice:auto").performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(null, value)
-            assertEquals(2, selections)
+            assertEquals(3, selections)
         }
     }
 
@@ -74,6 +81,9 @@ class PlayerQualityMenuTest {
             }
         }
         compose.onNodeWithText("40 Mbps").assertIsFocused().assertIsSelected()
+        listOf("Auto", "120 Mbps", "80 Mbps", "40 Mbps", "20 Mbps", "10 Mbps", "4 Mbps").forEach {
+            compose.onNodeWithText(it).assertExists()
+        }
         compose.onNodeWithText("Auto").performScrollTo().performSemanticsAction(SemanticsActions.OnClick) { check(it()) }
         compose.runOnIdle {
             assertEquals(null, selected)

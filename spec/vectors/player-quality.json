@@ -8,11 +8,12 @@
       "input": {},
       "expected": [
         "Auto",
-        "4 Mbps",
-        "10 Mbps",
-        "20 Mbps",
+        "120 Mbps",
+        "80 Mbps",
         "40 Mbps",
-        "120 Mbps"
+        "20 Mbps",
+        "10 Mbps",
+        "4 Mbps"
       ]
     },
     {
@@ -136,6 +137,14 @@
         "overrideMbps": 120,
         "estimatedBandwidth": null
       }
+    },
+    {
+      "id": "player-quality.manual-eighty",
+      "operation": "label",
+      "input": {
+        "overrideMbps": 80
+      },
+      "expected": "80 Mbps"
     }
   ]
 }
