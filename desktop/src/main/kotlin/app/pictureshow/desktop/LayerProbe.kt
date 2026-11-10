@@ -59,6 +59,8 @@ fun layerMain(args: Array<String>) {
     application {
         val state=rememberWindowState(width=960.dp,height=640.dp)
         var clicks by remember { mutableStateOf(0) }
+        var full by remember { mutableStateOf(false) }
+        var restoreBounds:java.awt.Rectangle?=null
         fun stop(code:Int=0) {
             if(!stopping.compareAndSet(false,true)) return
             val workerInitiated=Thread.currentThread()===worker.get()
@@ -78,8 +80,16 @@ fun layerMain(args: Array<String>) {
         }
         Window(onCloseRequest={stop()},state=state,title="Pictureshow native HDR surface",undecorated=true,transparent=true) {
             fun toggleFullscreen() {
-                val enabled=state.placement!=WindowPlacement.Fullscreen
-                state.placement=if(enabled) WindowPlacement.Fullscreen else WindowPlacement.Floating
+                val enabled=!full
+                run {
+                    // Borderless desktop fullscreen. Native window/screen bounds prove it;
+                    // it deliberately does not depend on the failing AppKit Space request.
+                    val bounds=if(enabled) { restoreBounds=java.awt.Rectangle(window.bounds); window.graphicsConfiguration.bounds } else requireNotNull(restoreBounds)
+                    state.placement=WindowPlacement.Floating
+                    state.position=WindowPosition.Absolute(bounds.x.dp,bounds.y.dp)
+                    state.size=androidx.compose.ui.unit.DpSize(bounds.width.dp,bounds.height.dp)
+                }
+                full=enabled
                 surface?.let { bridge.ps_fullscreen(it,if(enabled) 1 else 0) }
             }
             MaterialTheme(colors=darkColors()) {
@@ -130,7 +140,7 @@ fun layerMain(args: Array<String>) {
                         }
                         sync()
                         tick=executor.scheduleWithFixedDelay({try {
-                            val size=pixels.get(); check(bridge.ps_frame(surface!!,size.width,size.height)>=0) {"Native frame failed"}
+                            val size=pixels.get(); val rc=bridge.ps_frame(surface!!,size.width,size.height); check(rc>=0) {"Native frame failed: $rc"}
                         }catch(e:Throwable){failure.compareAndSet(null,e); tick?.cancel(false)}},0,1,TimeUnit.MILLISECONDS)
                         mpv.command("loadfile",media)
                         Thread.sleep(4500)
@@ -169,6 +179,7 @@ fun layerMain(args: Array<String>) {
                         stage("03-resize")
                         SwingUtilities.invokeAndWait {toggleFullscreen()}
                         Thread.sleep(2500); stage("04-fullscreen")
+                        SwingUtilities.invokeAndWait { check(window.isUndecorated && window.bounds==window.graphicsConfiguration.bounds) {"Actual fullscreen bounds differ from screen"} }
                         SwingUtilities.invokeAndWait {toggleFullscreen()}
                         Thread.sleep(2000); stage("05-restored")
                         val tracks=mpv.get("track-list/count")!!.toInt()
