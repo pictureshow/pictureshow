@@ -52,21 +52,32 @@ import kotlinx.coroutines.ensureActive
 private fun CatalogEditor(title: String, close: () -> Unit, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
     val tv = usesTvInterface(LocalContext.current)
     val first = remember { FocusRequester() }
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().testTag("catalog:editor"),
-                contentPadding = PaddingValues(horizontal = if (tv) 48.dp else 24.dp, vertical = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    EditorAction("Back", close, Modifier.focusRequester(first))
-                    Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-                }
-                content()
-            }
+    MaterialTheme(
+        colorScheme = if (tv) {
+            androidx.compose.material3.darkColorScheme(
+                background = CatalogBackground,
+                surface = CatalogBackground
+            )
+        } else {
+            MaterialTheme.colorScheme
         }
-        LaunchedEffect(Unit) { if (tv) first.requestFocus() }
+    ) {
+        Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().testTag("catalog:editor"),
+                    contentPadding = PaddingValues(horizontal = if (tv) 48.dp else 24.dp, vertical = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        EditorAction("Back", close, Modifier.focusRequester(first))
+                        Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+                    }
+                    content()
+                }
+            }
+            LaunchedEffect(Unit) { if (tv) first.requestFocus() }
+        }
     }
 }
 
@@ -74,7 +85,12 @@ private fun CatalogEditor(title: String, close: () -> Unit, content: androidx.co
 internal fun EditorAction(label: String, action: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val tv = usesTvInterface(LocalContext.current)
     if (tv) {
-        androidx.tv.material3.Button(onClick = action, enabled = enabled, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        androidx.tv.material3.Button(
+            onClick = action,
+            enabled = enabled,
+            scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1f),
+            modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)
+        ) {
             androidx.tv.material3.Text(label)
         }
     } else {

@@ -296,6 +296,13 @@ internal class PersistentIdentityService(
     override suspend fun personItems(account: Account, personId: String, startIndex: Int, limit: Int) =
         call(account.deviceId) { it.personItems(account, personId, startIndex, limit) }
 
+    override suspend fun displayPreferences(account: Account) = call(account.deviceId) { it.displayPreferences(account) }
+    override suspend fun saveDisplayPreferences(account: Account, document: kotlinx.serialization.json.JsonObject) =
+        call(account.deviceId) { it.saveDisplayPreferences(account, document) }
+    override suspend fun facets(account: Account, parentId: String) = call(account.deviceId) { it.facets(account, parentId) }
+    override suspend fun namedItems(account: Account, kind: String, parentId: String, term: String, startIndex: Int) =
+        call(account.deviceId) { it.namedItems(account, kind, parentId, term, startIndex) }
+
     override suspend fun views(account: Account) = call(account.deviceId) { it.views(account) }
     override suspend fun resume(account: Account) = call(account.deviceId) { it.resume(account) }
     override suspend fun nextUp(account: Account, seriesId: String?) = call(account.deviceId) { it.nextUp(account, seriesId) }
