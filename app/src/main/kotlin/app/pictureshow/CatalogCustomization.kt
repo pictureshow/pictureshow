@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -106,34 +107,36 @@ private fun CatalogEditor(
     MaterialTheme(
         colorScheme = if (tv) darkColorScheme(background = CatalogBackground, surface = CatalogBackground) else MaterialTheme.colorScheme
     ) {
-        if (tv) {
-            TvSettingsPanel(title, close, first, scrollContent = false, footer = footer, lazyState = list) {
-                LazyColumn(
-                    state = list,
-                    modifier = Modifier.fillMaxSize().testTag("catalog:editor"),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    content = content
-                )
-            }
-        } else {
-            Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        TopAppBar(title = { Text(title) }, navigationIcon = {
-                            IconButton(onClick = close, modifier = Modifier.testTag("catalog:back")) {
-                                Icon(touchActionIcon("back"), "Back")
+        CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            if (tv) {
+                TvSettingsPanel(title, close, first, scrollContent = false, footer = footer, lazyState = list) {
+                    LazyColumn(
+                        state = list,
+                        modifier = Modifier.fillMaxSize().testTag("catalog:editor"),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        content = content
+                    )
+                }
+            } else {
+                Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            TopAppBar(title = { Text(title) }, navigationIcon = {
+                                IconButton(onClick = close, modifier = Modifier.testTag("catalog:back")) {
+                                    Icon(touchActionIcon("back"), "Back")
+                                }
+                            })
+                            LazyColumn(
+                                state = list,
+                                modifier = Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().testTag("catalog:editor"),
+                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                content = content
+                            )
+                            footer?.let {
+                                Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) { it() }
                             }
-                        })
-                        LazyColumn(
-                            state = list,
-                            modifier = Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().testTag("catalog:editor"),
-                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            content = content
-                        )
-                        footer?.let {
-                            Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) { it() }
                         }
                     }
                 }
