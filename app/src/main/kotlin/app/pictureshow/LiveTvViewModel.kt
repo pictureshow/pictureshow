@@ -9,6 +9,7 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.ClientResult
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.livetv.LiveChannel
+import app.pictureshow.core.livetv.LiveGuideCache
 import app.pictureshow.core.livetv.LivePolicy
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
@@ -240,8 +241,11 @@ private fun <T> ClientResult<T>.required(): T = when (this) {
 }
 
 /** Cached data stays readable while a refresh is pending, but only a current authoritative snapshot can act. */
-internal fun LiveTvState.actionsAvailable(now: Long): Boolean = !loading &&
-    !offline &&
-    fetchedAt?.let {
-        now >= it && now - it <= 300_000
-    } == true
+internal fun LiveTvState.actionsAvailable(now: Long): Boolean = LiveGuideCache(
+    accountKey = "",
+    generation = 0,
+    channelIds = emptySet(),
+    fetchedAtMillis = fetchedAt,
+    offline = offline,
+    refreshing = loading
+).snapshotFresh(now)

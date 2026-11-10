@@ -11,10 +11,10 @@ import app.pictureshow.core.User
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
+import io.ktor.client.request.HttpRequestData
+import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -31,14 +31,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 class LivePlaybackClientTest {
-    private fun TestScope.mockClient(
-        handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData
-    ): HttpClient = HttpClient(MockEngine) {
-        engine {
-            dispatcher = StandardTestDispatcher(testScheduler)
-            addHandler(handler)
+    private fun TestScope.mockClient(handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData): HttpClient =
+        HttpClient(MockEngine) {
+            engine {
+                dispatcher = StandardTestDispatcher(testScheduler)
+                addHandler(handler)
+            }
         }
-    }
 
     private val account = Account(Server("server", "Demo", "https://example.test/base", "12"), User("viewer", "Viewer"), "token")
     private val identity = ClientIdentity("TV", "device")

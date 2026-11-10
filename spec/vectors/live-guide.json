@@ -398,6 +398,52 @@
         ],
         "actionAllowed": false
       }
+    },
+    {
+      "id": "live-guide.cache-refreshing",
+      "operation": "cache",
+      "input": {
+        "account": "viewer-a",
+        "generation": 2,
+        "responseAccount": "viewer-a",
+        "responseGeneration": 2,
+        "channels": [
+          "c"
+        ],
+        "programs": [
+          {
+            "Id": "p",
+            "Name": "Program",
+            "ChannelId": "c",
+            "StartDate": "2030-11-03T05:00:00Z",
+            "EndDate": "2030-11-03T07:00:00Z"
+          },
+          {
+            "Id": "hidden",
+            "Name": "Program",
+            "ChannelId": "blocked",
+            "StartDate": "2030-11-03T05:00:00Z",
+            "EndDate": "2030-11-03T07:00:00Z"
+          }
+        ],
+        "candidate": {
+          "Id": "p",
+          "Name": "Program",
+          "ChannelId": "c",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z"
+        },
+        "offline": false,
+        "fetchedAt": 1919912400000,
+        "now": 1919912400000,
+        "refreshing": true
+      },
+      "expected": {
+        "ids": [
+          "p"
+        ],
+        "actionAllowed": false
+      }
     }
   ]
 }

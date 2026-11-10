@@ -109,7 +109,10 @@ class LiveVectorsTest {
                 input.getValue("responseGeneration").jsonPrimitive.long,
                 json.decodeFromJsonElement(input.getValue("programs")),
                 input.getValue("fetchedAt").jsonPrimitive.long
-            ).copy(offline = input.getValue("offline").jsonPrimitive.boolean)
+            ).copy(
+                offline = input.getValue("offline").jsonPrimitive.boolean,
+                refreshing = input["refreshing"]?.jsonPrimitive?.boolean ?: false
+            )
             buildJsonObject {
                 put("ids", JsonArray(after.programs.map { JsonPrimitive(it.id) }))
                 val candidate = json.decodeFromJsonElement<LiveProgram>(input.getValue("candidate"))

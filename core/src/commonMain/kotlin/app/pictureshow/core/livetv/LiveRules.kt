@@ -136,7 +136,8 @@ data class LiveGuideCache(
     val channelIds: Set<String>,
     val programs: List<LiveProgram> = emptyList(),
     val fetchedAtMillis: Long? = null,
-    val offline: Boolean = false
+    val offline: Boolean = false,
+    val refreshing: Boolean = false
 ) {
     fun page(account: String, requestGeneration: Long, incoming: List<LiveProgram>, fetchedAt: Long): LiveGuideCache =
         if (account != accountKey || requestGeneration != generation) {
