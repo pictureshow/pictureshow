@@ -61,8 +61,13 @@ int main(int argc,const char **argv) { @autoreleasepool {
                 NSString *prim=meta[(__bridge NSString*)kCVImageBufferColorPrimariesKey] ?: formatMeta[(__bridge NSString*)kCMFormatDescriptionExtension_ColorPrimaries];
                 NSString *transfer=meta[(__bridge NSString*)kCVImageBufferTransferFunctionKey] ?: formatMeta[(__bridge NSString*)kCMFormatDescriptionExtension_TransferFunction];
                 CGColorSpaceRef actualCS=(__bridge CGColorSpaceRef)meta[(__bridge NSString*)kCVImageBufferCGColorSpaceKey];
+                NSData *actualICC=meta[@"CVImageBufferICCProfile"] ?: formatMeta[@"CVImageBufferICCProfile"];
+                CGColorSpaceRef knownCS=CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearITUR_2020);
+                NSData *knownICC=CFBridgingRelease(CGColorSpaceCopyICCData(knownCS));
+                BOOL exactICC=actualICC && [actualICC isEqualToData:knownICC];
+                CGColorSpaceRelease(knownCS);
                 NSString *csName=actualCS?(__bridge NSString*)CGColorSpaceGetName(actualCS):@"";
-                BOOL actualColorProven=(!prim || [prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020]) && (!transfer || [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) && (([prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020] && [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) || [csName isEqualToString:(__bridge NSString*)kCGColorSpaceExtendedLinearITUR_2020]);
+                BOOL actualColorProven=(!prim || [prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020]) && (!transfer || [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) && (([prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020] && [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) || exactICC || [csName isEqualToString:(__bridge NSString*)kCGColorSpaceExtendedLinearITUR_2020]);
                 if(!actualColorProven) {writeJSON(@{@"pass":@NO,@"error":@"Actual capture color attachments do not establish linear BT2020",@"actualPrimaries":prim?:@"",@"actualTransfer":transfer?:@"",@"actualColorSpace":csName?:@"",@"attachments":meta.description,@"formatAttachments":formatMeta.description?:@""},out);done=YES;return;}
                 NSNumber *captureHeadroom=@0;
                 for(NSScreen *screen in NSScreen.screens) if([screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue]==display.displayID) captureHeadroom=@(screen.maximumExtendedDynamicRangeColorComponentValue);
@@ -87,7 +92,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
                 NSMutableData *raw=[NSMutableData new];for(size_t y=0;y<h;y++) [raw appendBytes:base+y*stride length:w*8];
                 [raw writeToFile:[out stringByAppendingString:@".rgba16f"] atomically:YES];
                 CVPixelBufferUnlockBaseAddress(pixels,kCVPixelBufferLock_ReadOnly);
-                writeJSON(@{@"boundary":@"ScreenCaptureKit display including app windows, sourceRect cropped",@"encoding":@"linear",@"primaries":@"bt2020",@"referenceWhiteNits":@203,@"actualColorProven":@YES,@"actualPrimaries":prim?:@"",@"actualTransfer":transfer?:@"",@"actualColorSpace":csName?:@"",@"captureHeadroom":captureHeadroom,@"samples":samples,@"format":@"RGhA",@"width":@(w),@"height":@(h),@"attachments":meta.description,@"mode":canonical?@"canonical":@"local",@"displayID":@(display.displayID),@"windows":winreceipt,@"preflight":preflight},out);
+                writeJSON(@{@"boundary":@"ScreenCaptureKit display including app windows, sourceRect cropped",@"encoding":@"linear",@"primaries":@"bt2020",@"referenceWhiteNits":@203,@"actualColorProven":@YES,@"actualICCMatchesExtendedLinear2020":@(exactICC),@"actualPrimaries":prim?:@"",@"actualTransfer":transfer?:@"",@"actualColorSpace":csName?:@"",@"captureHeadroom":captureHeadroom,@"samples":samples,@"format":@"RGhA",@"width":@(w),@"height":@(h),@"attachments":meta.description,@"mode":canonical?@"canonical":@"local",@"displayID":@(display.displayID),@"windows":winreceipt,@"preflight":preflight},out);
                 rc=0;done=YES;
             }];
         }];

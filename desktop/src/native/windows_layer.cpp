@@ -65,8 +65,34 @@ API void ps_destroy(Layer *s) {
     if(s->lib)FreeLibrary(s->lib);
     delete s;
 }
+// Test-only placement chooses an actually enabled HDR desktop, never a guessed
+// display index. Ordinary app placement is untouched when diagnostic is absent.
+static void placeHdrDiagnostic(HWND window) {
+    if(!std::getenv("SPIKE_HDR_READBACK_DIR"))return;
+    IDXGIFactory1 *factory=nullptr;
+    if(FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1),(void**)&factory)))return;
+    bool placed=false;
+    for(UINT a=0;!placed;++a){
+        IDXGIAdapter1 *adapter=nullptr;if(factory->EnumAdapters1(a,&adapter)==DXGI_ERROR_NOT_FOUND)break;
+        if(!adapter)break;
+        for(UINT b=0;!placed;++b){
+            IDXGIOutput *output=nullptr;if(adapter->EnumOutputs(b,&output)==DXGI_ERROR_NOT_FOUND)break;
+            if(!output)break;IDXGIOutput6 *o6=nullptr;DXGI_OUTPUT_DESC1 d={};
+            if(SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6),(void**)&o6))){
+                if(SUCCEEDED(o6->GetDesc1(&d))&&d.AttachedToDesktop&&d.ColorSpace==DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020){
+                    SetWindowPos(window,nullptr,d.DesktopCoordinates.left+16,d.DesktopCoordinates.top+16,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);placed=true;
+                }
+                o6->Release();
+            }
+            output->Release();
+        }
+        adapter->Release();
+    }
+    factory->Release();
+}
 API Layer *ps_create(void *window,void *mpv) {
     Layer *s=new Layer(); s->overlay=(HWND)window;
+    placeHdrDiagnostic(s->overlay);
     s->lib=LoadLibraryA(std::getenv("MPV_LIBRARY"));
     if(!s->lib){delete s;return nullptr;}
     s->create=(decltype(s->create))GetProcAddress(s->lib,"mpv_render_context_create");

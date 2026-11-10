@@ -120,13 +120,15 @@ fun layerMain(args: Array<String>) {
                         SwingUtilities.invokeAndWait { if (Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true); window.toFront(); window.requestFocus() }
                         mpv.option("vo","libmpv")
                         if(System.getenv("SPIKE_LEGACY_PACING")==null) mpv.option("video-timing-offset","0")
-                        // Render linear BT.2020 into a float target. 1.0 is the SDR reference white.
-                        mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak","1000")
+                        // Preserve the full PQ domain in linear BT.2020. WindowServer/DWM owns display adaptation.
+                        // A 1000-nit target invokes mpv tone mapping when mastering peak is absent (assumed 10000).
+                        mpv.option("target-prim","bt.2020"); mpv.option("target-trc","linear"); mpv.option("target-peak","10000")
                         mpv.option("fbo-format",if(Platform.isMac()) "rgba16f" else "rgba16hf")
                         mpv.option("dither-depth","no") // Float output must not be quantized as an 8-bit window framebuffer.
                         if(Platform.isWindows()) {
+                            // Convert AFTER mpv gamut handling; negative scRGB channels preserve wide gamut.
                             val shader=File(out,"scrgb-reference.glsl")
-                            shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / 80.0), c.a); }\n")
+                            shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4((mat3(1.660491,-0.124550,-0.018151, -0.587641,1.132900,-0.100579, -0.072850,-0.008349,1.118730) * c.rgb) * (203.0 / 80.0), c.a); }\n")
                             mpv.option("glsl-shaders",shader.absolutePath)
                         }
                         mpv.initialize()
