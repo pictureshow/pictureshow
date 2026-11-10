@@ -76,40 +76,44 @@ internal fun HomeReorderRow(
         } else {
             "Hidden"
         }
-        customActions = buildList {
-            if (!moving) {
-                add(
-                    CustomAccessibilityAction(if (shown) "Hide row" else "Show row") {
-                        toggle()
-                        true
-                    }
-                )
-            }
-            if (canMoveUp) {
-                add(
-                    CustomAccessibilityAction("Move up") {
-                        move(-1)
-                        endDrag()
-                        true
-                    }
-                )
-            }
-            if (canMoveDown) {
-                add(
-                    CustomAccessibilityAction("Move down") {
-                        move(1)
-                        endDrag()
-                        true
-                    }
-                )
-            }
-            if (unpin != null && !moving) {
-                add(
-                    CustomAccessibilityAction("Unpin") {
-                        unpin()
-                        true
-                    }
-                )
+        customActions = if (!enabled) {
+            emptyList()
+        } else {
+            buildList {
+                if (!moving) {
+                    add(
+                        CustomAccessibilityAction(if (shown) "Hide row" else "Show row") {
+                            toggle()
+                            true
+                        }
+                    )
+                }
+                if (canMoveUp) {
+                    add(
+                        CustomAccessibilityAction("Move up") {
+                            move(-1)
+                            endDrag()
+                            true
+                        }
+                    )
+                }
+                if (canMoveDown) {
+                    add(
+                        CustomAccessibilityAction("Move down") {
+                            move(1)
+                            endDrag()
+                            true
+                        }
+                    )
+                }
+                if (unpin != null && !moving) {
+                    add(
+                        CustomAccessibilityAction("Unpin") {
+                            unpin()
+                            true
+                        }
+                    )
+                }
             }
         }
     }

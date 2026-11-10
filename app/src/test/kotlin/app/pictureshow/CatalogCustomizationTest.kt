@@ -122,6 +122,8 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Moving · Up/Down · OK to drop").assertIsDisplayed()
         compose.onNodeWithTag("home:visibility:resume").assertIsNotEnabled()
+        compose.onNodeWithTag("home:reorder:nextup").assertIsNotEnabled()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.CustomActions, emptyList()))
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithTag("home:reorder:resume").performKeyInput { pressKey(Key.DirectionDown) }
         compose.runOnIdle { assertTrue(preferences.order.isEmpty(), "Moving a row must not save until drop") }
@@ -165,6 +167,8 @@ class CatalogCustomizationTest {
         }
         compose.onNodeWithTag("catalog:editor").performScrollToIndex(0)
         compose.onNodeWithText("Saving layout…").assertIsDisplayed()
+        compose.onNodeWithTag("home:reorder:resume")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.CustomActions, emptyList()))
         compose.onNodeWithTag("home:retry-save").assertDoesNotExist()
     }
 
