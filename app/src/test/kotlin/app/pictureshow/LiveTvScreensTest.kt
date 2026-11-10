@@ -5,14 +5,18 @@ package app.pictureshow
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import app.pictureshow.core.Account
 import app.pictureshow.core.Server
 import app.pictureshow.core.User
@@ -49,7 +53,9 @@ class LiveTvScreensTest {
         compose.runOnIdle { assertEquals(0, tuned) }
         // The screen samples its action clock once a second; loading can finish after the first sample.
         compose.mainClock.advanceTimeBy(1_100)
-        compose.onNodeWithTag("live:c:c").assertIsEnabled().performClick()
+        // TV Material buttons activate through remote keys; a synthetic touch click is not a D-pad press.
+        compose.onNodeWithTag("live:c:c").assertIsEnabled().assertIsFocused()
+        compose.onNodeWithTag("live:c:c").performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle { assertEquals(1, tuned) }
     }
 
