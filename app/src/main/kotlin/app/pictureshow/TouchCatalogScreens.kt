@@ -873,7 +873,10 @@ internal fun TouchCatalogCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     artHeight: Dp? = null,
-    reserveLines: Boolean = true
+    reserveLines: Boolean = true,
+    caption: (@Composable () -> Unit)? = null,
+    artworkProgress: Float? = null,
+    showProgress: Boolean = true
 ) {
     Card(
         onClick = onClick,
@@ -896,32 +899,37 @@ internal fun TouchCatalogCard(
         )
         // Always 4 dp tall, so progress on one card doesn't step it out of its row.
         Box(Modifier.fillMaxWidth().height(4.dp)) {
-            if (progress(item) > 0 && !item.isWatched) {
-                LinearProgressIndicator(progress = { progress(item) }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
+            val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
+            if (showProgress && fraction > 0 && (artworkProgress != null || !item.isWatched)) {
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics {})
             }
         }
-        Column(Modifier.padding(12.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Two title lines and a subtitle line are always reserved: cards in a row share one height whatever the data.
-            Text(
-                item.name,
-                style = MaterialTheme.typography.titleSmall,
-                minLines = if (reserveLines) 2 else 1,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val subtitle = if (item.type == "Episode") {
-                listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · ")
-            } else {
-                listOfNotNull(item.productionYear?.toString(), if (item.isWatched) "Watched" else null).joinToString(" · ")
-            }
-            if (reserveLines || subtitle.isNotBlank()) {
+        if (caption != null) {
+            caption()
+        } else {
+            Column(Modifier.padding(12.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Two title lines and a subtitle line are always reserved: cards in a row share one height whatever the data.
                 Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    item.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    minLines = if (reserveLines) 2 else 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                val subtitle = if (item.type == "Episode") {
+                    listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · ")
+                } else {
+                    listOfNotNull(item.productionYear?.toString(), if (item.isWatched) "Watched" else null).joinToString(" · ")
+                }
+                if (reserveLines || subtitle.isNotBlank()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

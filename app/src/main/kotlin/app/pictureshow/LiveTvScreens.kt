@@ -43,7 +43,6 @@ import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
-import app.pictureshow.core.livetv.recordingStatus
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -531,75 +530,17 @@ internal fun LiveTvScreen(
                             }
                         }
                         tab == "Recordings" -> {
-                            if (!state.loading && state.recordings.isEmpty()) item { LiveText("No recordings available.", tv) }
-                            state.recordings.groupBy { it.seriesName ?: "Recordings" }.forEach { (group, recordings) ->
-                                item("recording-heading:$group") { LiveText(group, tv, heading = true) }
-                                item("recording-cards:$group") {
-                                    LazyRow(contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                                        itemsIndexed(recordings, key = { _, item -> item.id }) { index, item ->
-                                            val key = "r:${item.id}"
-                                            Column(
-                                                Modifier.width(if (tv) 240.dp else 244.dp),
-                                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                val target = Modifier.liveFocus(
-                                                    key,
-                                                    tv &&
-                                                        !state.loading &&
-                                                        (
-                                                            restoreFocus &&
-                                                                returnFocus == key ||
-                                                                returnFocus == null &&
-                                                                index == 0 &&
-                                                                group ==
-                                                                state.recordings.firstOrNull()?.let {
-                                                                    it.seriesName ?: "Recordings"
-                                                                }
-                                                            )
-                                                ) { focused(key) }
-                                                if (tv) {
-                                                    CatalogCard(item, account, true, { onRecording(item) }, target)
-                                                } else {
-                                                    TouchCatalogCard(item, account, true, { onRecording(item) }, target)
-                                                }
-                                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                                    LiveStatus(
-                                                        if (item.isInProgress) {
-                                                            "● Recording now"
-                                                        } else {
-                                                            item.recordingStatus?.let(::recordingStatus)
-                                                                ?: "Completed"
-                                                        },
-                                                        tv
-                                                    )
-                                                    Box(Modifier.weight(1f)) { }
-                                                    if (item.canDelete == true ||
-                                                        state.policy?.deleteContent == true &&
-                                                        item.canDelete != false
-                                                    ) {
-                                                        LiveIcon("more", "Recording options for ${item.name}", tv) {
-                                                            recordingMenu =
-                                                                item
-                                                        }
-                                                    }
-                                                }
-                                                LiveText(
-                                                    listOfNotNull(
-                                                        item.premiereDate?.let {
-                                                            time.day(liveInstant(it))
-                                                        },
-                                                        item.runTimeTicks?.let {
-                                                            "${it / 600_000_000} min"
-                                                        }
-                                                    ).joinToString(" · "),
-                                                    tv,
-                                                    small = true
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            liveRecordingShelves(
+                                state,
+                                account,
+                                tv,
+                                restoreFocus,
+                                returnFocus,
+                                now,
+                                ::focused,
+                                onRecording,
+                                onOptions = { recordingMenu = it }
+                            )
                         }
                         tab == "Schedules" -> {
                             if (state.policy?.manage !=

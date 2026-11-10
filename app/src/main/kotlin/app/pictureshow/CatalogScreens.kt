@@ -3286,7 +3286,11 @@ internal fun CatalogCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Dp? = if (wide) 240.dp else 144.dp,
-    selected: Boolean? = null
+    selected: Boolean? = null,
+    onLongClick: (() -> Unit)? = null,
+    caption: (@Composable () -> Unit)? = null,
+    artworkProgress: Float? = null,
+    showProgress: Boolean = true
 ) {
     var focused by remember { mutableStateOf(false) }
     val selection = Modifier.semantics {
@@ -3308,6 +3312,7 @@ internal fun CatalogCard(
     // focused card's badge and under its label.
     Card(
         onClick = onClick,
+        onLongClick = onLongClick,
         border = if (selected == true) {
             // tv-material's card shape is 8dp rounded corners; the resting outline follows it.
             CardDefaults.border(border = Border(BorderStroke(2.dp, SelectedSeasonOutline), shape = RoundedCornerShape(8.dp)))
@@ -3355,28 +3360,32 @@ internal fun CatalogCard(
                 if (item.userData.isFavorite) {
                     Text("♥", modifier = Modifier.align(Alignment.TopStart).background(Color(0xDD202635)).padding(5.dp))
                 }
-                val fraction = progress(item).coerceIn(0f, 1f)
-                if (fraction > 0f && !item.isWatched && !item.isEmptyContainer) {
+                val fraction = (artworkProgress ?: progress(item)).coerceIn(0f, 1f)
+                if (showProgress && fraction > 0f && (artworkProgress != null || !item.isWatched) && !item.isEmptyContainer) {
                     Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp).background(Color(0xFF505969))) {
                         Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Color(0xFFB8C4FF)))
                     }
                 }
             }
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    item.name,
-                    maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleSmall
-                )
-                if (item.type == "Episode") {
+            if (caption != null) {
+                caption()
+            } else {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
-                        maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
+                        item.name,
+                        maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
-                        color = CatalogMuted,
-                        style = MaterialTheme.typography.labelSmall
+                        style = MaterialTheme.typography.titleSmall
                     )
+                    if (item.type == "Episode") {
+                        Text(
+                            listOfNotNull(item.seriesName, episodeLabel(item)).joinToString(" · "),
+                            maxLines = if (LocalDensity.current.fontScale > UNBOUNDED_TITLE_FONT_SCALE) Int.MAX_VALUE else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = CatalogMuted,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
         }
