@@ -29,6 +29,10 @@ static void output_frame(struct wl_listener *l, void *damage) {
  }
  char path[4096];snprintf(path,sizeof(path),"%s/direct-compositor-%u.json",root,capture_number);
  FILE *out=fopen(path,"w");if(!out)return;
+ const GLenum packNames[]={0x0D02,0x0D03,0x0D04,GL_PACK_ALIGNMENT};
+ GLint packValues[4];
+ for(int i=0;i<4;i++){glGetIntegerv(packNames[i],&packValues[i]);glPixelStorei(packNames[i],i==3?1:0);}
+ weston_log("HDR_NUMERIC_PACK rowLength=%d skipRows=%d skipPixels=%d alignment=%d\n",packValues[0],packValues[1],packValues[2],packValues[3]);
  glBindFramebuffer(0x8CA8,fbo); // Explicit READ_FRAMEBUFFER = the actual output DRAW_FRAMEBUFFER.
  bool pq=weston_output_get_eotf_mode(observed_output)==WESTON_EOTF_MODE_ST2084;
  const char *names[]={"black","gray100","gray203","gray1000","red100","green100","blue100","gray50"};
@@ -43,6 +47,7 @@ static void output_frame(struct wl_listener *l, void *damage) {
  unsigned char ui[4];glReadPixels(viewport[2]-140,viewport[3]-32,1,1,GL_RGBA,GL_UNSIGNED_BYTE,ui);
  GLenum error=glGetError();fprintf(out,"],\"diagnosticUiRGBA8\":[%u,%u,%u,%u],\"glError\":%u}\n",ui[0],ui[1],ui[2],ui[3],error);fclose(out);
  glBindFramebuffer(0x8CA8,readFbo);
+ for(int i=0;i<4;i++)glPixelStorei(packNames[i],packValues[i]);
  weston_log("HDR_NUMERIC_DIRECT captured=%u FBO=%d GLerror=%u\n",capture_number,fbo,error);
 }
 static void authorize(struct wl_listener *l, struct weston_output_capture_attempt *a) {

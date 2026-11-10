@@ -131,6 +131,10 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
       auto bindFramebuffer=(void(*)(GLenum,GLuint))eglGetProcAddress("glBindFramebuffer");
       if(!bindFramebuffer){fclose(out);s->renderFailure=-6;break;}
       bindFramebuffer(0x8CA8,0);glReadBuffer(GL_BACK);
+      const GLenum packNames[]={GL_PACK_ROW_LENGTH,GL_PACK_SKIP_ROWS,GL_PACK_SKIP_PIXELS,GL_PACK_ALIGNMENT};
+      GLint packValues[4];
+      for(int i=0;i<4;i++){glGetIntegerv(packNames[i],&packValues[i]);glPixelStorei(packNames[i],i==3?1:0);}
+      fprintf(s->log,"HDR_NUMERIC_PACK frame=%u rowLength=%d skipRows=%d skipPixels=%d alignment=%d\n",s->frames,packValues[0],packValues[1],packValues[2],packValues[3]);fflush(s->log);
       fprintf(out,"{\"encoding\":\"%s\",\"primaries\":\"%s\",\"referenceWhiteNits\":203,\"boundary\":\"app explicit EGL default GL_BACK BEFORE compositor\",\"readFbo\":0,\"previousReadFbo\":%d,\"drawFbo\":%d,\"previousReadBuffer\":%d,\"drawBuffer\":%d,\"doubleBuffered\":%s,\"eglRenderBuffer\":%d,\"eglRGBABits\":[%d,%d,%d,%d],\"frame\":%u,\"mediaTime\":%.9g,\"eof\":%s,\"width\":%d,\"height\":%d,\"samples\":[",s->hdr?"pq":"gamma2.2",s->hdr?"bt2020":"bt709",readFbo,drawFbo,readBuffer,drawBuffer,doubleBuffered?"true":"false",eglRenderBuffer,s->redBits,s->greenBits,s->blueBits,s->alphaBits,s->frames,mediaTime,eof?"true":"false",w,h);
       GLenum diagnosticError=GL_NO_ERROR;
       for(int n=0;n<8;n++) {
@@ -155,6 +159,7 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
       if(source&&snapshot){char bytes[4096];size_t count;while((count=fread(bytes,1,sizeof(bytes),source)))fwrite(bytes,1,count,snapshot);}
       if(source)fclose(source);if(snapshot)fclose(snapshot);
       bindFramebuffer(0x8CA8,readFbo);glReadBuffer(readBuffer);
+      for(int i=0;i<4;i++)glPixelStorei(packNames[i],packValues[i]);
       if(glGetError()!=GL_NO_ERROR || diagnosticError!=GL_NO_ERROR){s->renderFailure=-5;break;}
      }
      if(!eglSwapBuffers(s->ed,s->es)){s->renderFailure=-2;break;}double c=seconds();mpv_render_context_report_swap(s->render);
