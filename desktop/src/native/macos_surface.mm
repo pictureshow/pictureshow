@@ -46,7 +46,9 @@ extern "C" void ps_destroy(void *ptr);
 extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     Surface *s = new Surface();
     mainCall(^{
-        s->overlay = [(__bridge NSView*)viewPtr window];
+        s->overlay = (__bridge NSWindow*)viewPtr;
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        [s->overlay makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
         s->device = MTLCreateSystemDefaultDevice(); s->queue = [s->device newCommandQueue];
         s->layer = [CAMetalLayer layer]; s->layer.device=s->device;
         s->layer.pixelFormat=MTLPixelFormatRGBA16Float;
@@ -127,7 +129,8 @@ extern "C" void ps_sync(void *ptr) {
 }
 extern "C" void ps_fullscreen(void *ptr, int enabled) {
     Surface *s=(Surface*)ptr;
-    mainCall(^{NSApp.presentationOptions=enabled ? NSApplicationPresentationAutoHideDock|NSApplicationPresentationAutoHideMenuBar : NSApplicationPresentationDefault;});
+    CFRunLoopPerformBlock(CFRunLoopGetMain(),kCFRunLoopCommonModes, ^{NSApp.presentationOptions=enabled ? NSApplicationPresentationAutoHideDock|NSApplicationPresentationAutoHideMenuBar : NSApplicationPresentationDefault;});
+    CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 extern "C" void ps_destroy(void *ptr) {
     Surface *s=(Surface*)ptr; CGLSetCurrentContext(s->gl);
@@ -148,4 +151,10 @@ extern "C" void ps_click(void *ptr, int x, int y) {
             [NSApp postEvent:event atStart:NO];
         }
     });
+}
+
+extern "C" void *ps_find_window(const char *title) {
+    __block NSWindow *found=nil;
+    mainCall(^{for(NSWindow *w in NSApp.windows) if([w.title isEqualToString:[NSString stringWithUTF8String:title]]) {found=w;break;}});
+    return (__bridge void*)found;
 }

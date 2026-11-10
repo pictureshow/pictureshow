@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.swing.SwingUtilities
 
 interface NativeLayer : Library {
+    fun ps_find_window(title: String): Pointer?
     fun ps_create(view: Pointer, mpv: Pointer): Pointer?
     fun ps_frame(surface: Pointer, width: Int, height: Int): Int
     fun ps_receipt(surface: Pointer): String
@@ -60,10 +61,11 @@ fun layerMain(args: Array<String>) {
         var clicks by remember { mutableStateOf(0) }
         fun stop(code:Int=0) {
             if(!stopping.compareAndSet(false,true)) return
+            val workerInitiated=Thread.currentThread()===worker.get()
             Thread {
                 var rc=code
                 try {
-                    worker.get()?.let { it.interrupt(); it.join(35000); check(!it.isAlive) { "Probe worker failed to stop" } }
+                    worker.get()?.let { if(!workerInitiated) it.interrupt(); it.join(35000); check(!it.isAlive) { "Probe worker failed to stop" } }
                     tick?.cancel(false)
                     executor.submit { surface?.let(bridge::ps_destroy); surface=null }.get(30,TimeUnit.SECONDS)
                     executor.shutdown(); mpv.close()
@@ -108,7 +110,7 @@ fun layerMain(args: Array<String>) {
                             mpv.option("fbo-format","rgba16f"); mpv.option("glsl-shaders",shader.absolutePath)
                         }
                         mpv.initialize()
-                        val view=Native.getWindowPointer(window)
+                        val view=if(Platform.isMac()) requireNotNull(bridge.ps_find_window("Pictureshow native HDR surface")) else Native.getWindowPointer(window)
                         executor.submit { surface=requireNotNull(bridge.ps_create(view,mpv.handle)) {"Native layer creation failed"} }.get(40,TimeUnit.SECONDS)
                         fun sync() {
                             val update=Runnable {
@@ -194,7 +196,7 @@ fun layerMain(args: Array<String>) {
                         }
                         stop()
                     } catch(e:Throwable) {if(!stopping.get()) {failure.compareAndSet(null,e); e.printStackTrace(); stop(2)}}
-                    finally { SwingUtilities.invokeAndWait {geometryListener?.let(window::removeComponentListener)} }
+                    finally { SwingUtilities.invokeLater {geometryListener?.let(window::removeComponentListener)} }
                 }.also {worker.set(it);it.start()}
             }
         }

@@ -30,8 +30,10 @@ struct Layer {
 };
 #define API extern "C" __declspec(dllexport)
 API void ps_sync(Layer *s) {
+    // Renderer owns this HWND and pumps it in ps_frame. Never block the EDT
+    // waiting for that thread, especially before the first frame has started.
     RECT r;GetWindowRect(s->overlay,&r);
-    SetWindowPos(s->video,s->overlay,r.left,r.top,r.right-r.left,r.bottom-r.top,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+    SetWindowPos(s->video,s->overlay,r.left,r.top,r.right-r.left,r.bottom-r.top,SWP_NOACTIVATE|SWP_SHOWWINDOW|SWP_ASYNCWINDOWPOS);
 }
 API void ps_destroy(Layer *s) {
     if(!s)return;
