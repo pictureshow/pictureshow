@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "suite": "player-overlay-layout",
+  "sources": [
+    "app/src/main/kotlin/app/pictureshow/TouchTransportPlacement.kt"
+  ],
+  "description": "Native pixel coordinates after density conversion; x is offset from viewport horizontal center and y is the row top. The native Android runner executes every case. Ports translate to their own measured coordinate space.",
+  "cases": [
+    {
+      "id": "player-overlay-layout.center-without-overlays",
+      "operation": "transport-placement",
+      "input": {
+        "width": 780,
+        "height": 360,
+        "panelHeight": 180,
+        "video": [
+          0,
+          0,
+          780,
+          360
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "blockers": []
+      },
+      "expected": {
+        "x": 0,
+        "y": 58
+      }
+    },
+    {
+      "id": "player-overlay-layout.next-card-on-right",
+      "operation": "transport-placement",
+      "input": {
+        "width": 780,
+        "height": 360,
+        "panelHeight": 180,
+        "video": [
+          0,
+          0,
+          780,
+          360
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "blockers": [
+          [
+            404,
+            16,
+            764,
+            150
+          ]
+        ]
+      },
+      "expected": {
+        "x": -90,
+        "y": 58
+      }
+    },
+    {
+      "id": "player-overlay-layout.notice-on-left",
+      "operation": "transport-placement",
+      "input": {
+        "width": 780,
+        "height": 360,
+        "panelHeight": 180,
+        "video": [
+          0,
+          0,
+          780,
+          360
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "blockers": [
+          [
+            16,
+            16,
+            376,
+            130
+          ]
+        ]
+      },
+      "expected": {
+        "x": 90,
+        "y": 58
+      }
+    },
+    {
+      "id": "player-overlay-layout.card-above-row-does-not-move-it",
+      "operation": "transport-placement",
+      "input": {
+        "width": 780,
+        "height": 360,
+        "panelHeight": 180,
+        "video": [
+          0,
+          0,
+          780,
+          360
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "blockers": [
+          [
+            404,
+            0,
+            764,
+            40
+          ]
+        ]
+      },
+      "expected": {
+        "x": 0,
+        "y": 58
+      }
+    },
+    {
+      "id": "player-overlay-layout.portrait-fitted-video",
+      "operation": "transport-placement",
+      "input": {
+        "width": 400,
+        "height": 800,
+        "panelHeight": 180,
+        "video": [
+          0,
+          288,
+          400,
+          512
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "blockers": []
+      },
+      "expected": {
+        "x": 0,
+        "y": 368
+      }
+    },
+    {
+      "id": "player-overlay-layout.letterbox-when-video-covered",
+      "operation": "transport-placement",
+      "input": {
+        "width": 400,
+        "height": 800,
+        "panelHeight": 180,
+        "video": [
+          0,
+          300,
+          400,
+          500
+        ],
+        "transportWidth": 208,
+        "transportHeight": 64,
+        "blockers": [
+          [
+            0,
+            250,
+            400,
+            540
+          ]
+        ]
+      },
+      "expected": {
+        "x": 0,
+        "y": 540
+      }
+    }
+  ]
+}
