@@ -16,6 +16,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -27,13 +28,48 @@ class LivePresentationVectorsTest {
     @Test fun everyPresentationVector() {
         val file = listOf(File("../spec/vectors/live-presentation.json"), File("spec/vectors/live-presentation.json")).first { it.exists() }
         val cases = Json.parseToJsonElement(file.readText()).jsonObject.getValue("cases").jsonArray
-        assertEquals(30, cases.size)
+        assertEquals(44, cases.size)
         for (element in cases) {
             val envelope = element.jsonObject
             val c = envelope.getValue("input").jsonObject
             fun value(key: String) = c.getValue(key).jsonPrimitive.content
             val id = envelope.getValue("id").jsonPrimitive.content
             when (envelope.getValue("operation").jsonPrimitive.content) {
+                "focus-shift" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.float,
+                    liveGuideFocusShift(
+                        c.getValue("x").jsonPrimitive.float,
+                        c.getValue("width").jsonPrimitive.float,
+                        c.getValue("viewportLeft").jsonPrimitive.float,
+                        c.getValue("viewportWidth").jsonPrimitive.float
+                    ),
+                    0.001f,
+                    id
+                )
+                "schedule-status" -> assertEquals(
+                    envelope.getValue("expected").jsonPrimitive.content,
+                    liveScheduleStatus(
+                        app.pictureshow.core.livetv.LiveSchedule(c.getValue("fields").jsonObject),
+                        c.getValue("series").jsonPrimitive.boolean
+                    ),
+                    id
+                )
+                "initial-focus" -> {
+                    val programs = c.getValue("programs").jsonArray.map {
+                        val p = it.jsonObject
+                        app.pictureshow.core.livetv.LiveProgram(
+                            p.getValue("id").jsonPrimitive.content,
+                            startDate = Instant.ofEpochMilli(p.getValue("start").jsonPrimitive.long).toString(),
+                            endDate = Instant.ofEpochMilli(p.getValue("end").jsonPrimitive.long).toString()
+                        )
+                    }
+                    val cells = liveGuideCells(programs, c.getValue("start").jsonPrimitive.long, c.getValue("end").jsonPrimitive.long)
+                    assertEquals(
+                        envelope.getValue("expected").jsonPrimitive.contentOrNull,
+                        liveGuideInitialFocus(cells, c.getValue("now").jsonPrimitive.long),
+                        id
+                    )
+                }
                 "window-start" -> assertEquals(
                     envelope.getValue("expected").jsonPrimitive.content,
                     Instant.ofEpochMilli(

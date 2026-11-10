@@ -226,7 +226,8 @@ class LiveTvClient(
                 "startIndex" to startIndex.toString(),
                 "limit" to limit.toString(),
                 "enableImages" to "true",
-                "enableUserData" to "true"
+                "enableUserData" to "true",
+                "fields" to "Overview"
             )
         ) { json.decodeFromString<LivePage<LiveProgram>>(it) }
     }

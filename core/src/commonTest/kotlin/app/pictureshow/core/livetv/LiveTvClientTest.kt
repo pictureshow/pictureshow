@@ -156,6 +156,7 @@ class LiveTvClientTest {
         assertEquals(listOf("2030-01-01T00:00:00Z"), query.last()["minEndDate"])
         assertEquals(listOf("2030-01-01T02:00:00Z"), query.last()["maxStartDate"])
         assertFalse("minStartDate" in query.last())
+        assertEquals(listOf("Overview"), query.last()["fields"])
         assertEquals(listOf("100"), query.last()["startIndex"])
     }
 

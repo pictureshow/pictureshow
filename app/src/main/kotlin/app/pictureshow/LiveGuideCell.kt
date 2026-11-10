@@ -4,6 +4,7 @@
 package app.pictureshow
 
 import app.pictureshow.core.livetv.LiveProgram
+import app.pictureshow.core.livetv.canTune
 import app.pictureshow.core.livetv.liveInstant
 
 internal data class LiveGuideCell(val program: LiveProgram, val startFraction: Float, val widthFraction: Float, val lane: Int)
@@ -26,3 +27,9 @@ internal fun liveGuideCells(programs: List<LiveProgram>, start: Long, end: Long)
         LiveGuideCell(program, (from - start).toFloat() / (end - start), (to - from).toFloat() / (end - start), lane)
     }
 }
+
+/** Enter at what is on now; elapsed slots remain browsable without becoming the initial selection. */
+internal fun liveGuideInitialFocus(cells: List<LiveGuideCell>, now: Long): String? =
+    cells.firstOrNull { canTune(it.program, now) }?.program?.id
+        ?: cells.firstOrNull { liveInstant(it.program.startDate)?.let { start -> start > now } == true }?.program?.id
+        ?: cells.lastOrNull()?.program?.id

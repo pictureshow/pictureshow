@@ -83,3 +83,28 @@ neighboring broadcast. The focused TV preview and touch program detail/List alte
 Full-width TV list rows keep a stable scale1 focus fill within the safe margin. Progress derives from the focused content colour.
 Touch guide channel labels include number and name even when artwork is present. Scheduled occurrence state is explicit text in the linear
 reader view. Phone tabs fit at360dp standard scale and become scrollable at larger font scales. Live TV retains Home as its bottom-navigation parent.
+
+Entering a rounded guide window focuses the first channel with guide data's currently airing program, then its nearest future program in a gap,
+or its most recent retained program when the whole window is past. Overlaps use the stable displayed order. Elapsed slots remain
+browsable; rounding the ruler must not silently make an ended show the initial selection. Exact saved Back focus takes precedence.
+
+Program pages request the optional Overview field explicitly. Jellyfin12 can omit it from a default Programs page while the same
+program's direct response or fields=Overview page contains it; missing descriptions must not be mistaken for an empty provider guide.
+The shared wire vector checks authorized user, half-open bounds, paging, artwork/user-data flags and Overview decoding together.
+
+A series rule without an occurrence Status is labeled Series rule. An occurrence with no status says Status unavailable; neither case
+invents an unknown enum. Explicit known statuses keep their standard labels and explicit unrecognized statuses retain the supplied text.
+
+EPG navigation keeps Favorites and the native Grid/List choice together. Time travel has a separate compact date control:
+TV uses the pinned channel-column ruler header; touch has a date bar above the ruler. Earlier, day selection, and Later are
+visible together at360dp. Now appears only when the window differs from the current local half-hour. The day opens a
+seven-day picker. TV tab/preview height is stable across destinations and grows with font scale; phone channel labels use
+two lines without the redundant channel-number prefix while their complete accessible label keeps both number and name.
+
+TV guide focus preserves the native1.1 scale and fill. An8dp canvas inset and a viewport-dependent paint translation keep
+its growing leading/trailing edge visible when the complete focused cell can fit; an oversized cell anchors its leading
+edge. The unselected cells, ruler and now-line retain exact shared time coordinates. Vertical4dp insets keep scaled focus
+inside each56dp lane. Focus-shift vectors include either edge, scrolling, the interior and a cell wider than the viewport.
+TV wide list/settings rows use fill atscale1, preserving safe margins and stable label keylines. Touch program detail has
+one full-width Watch primary, with equally sized outlined recording actions below; without Watch, Record is the primary.
+TV program details use the program title as the heading and hardware Back; explicit Cancel remains on destructive dialogs.

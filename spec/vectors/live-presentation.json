@@ -3,7 +3,9 @@
   "suite": "live-presentation",
   "sources": [
     "app/src/main/kotlin/app/pictureshow/LiveGuide.kt",
-    "app/src/main/kotlin/app/pictureshow/LiveTime.kt"
+    "app/src/main/kotlin/app/pictureshow/LiveTime.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveGuideCell.kt",
+    "app/src/main/kotlin/app/pictureshow/LiveTvRows.kt"
   ],
   "cases": [
     {
@@ -294,6 +296,205 @@
         "zone": "UTC"
       },
       "expected": "1969-12-31T23:30:00Z"
+    },
+    {
+      "id": "live-presentation.initial-current-not-elapsed",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "elapsed",
+            "start": 0,
+            "end": 600000
+          },
+          {
+            "id": "current",
+            "start": 600000,
+            "end": 1800000
+          },
+          {
+            "id": "future",
+            "start": 1800000,
+            "end": 3600000
+          }
+        ]
+      },
+      "expected": "current"
+    },
+    {
+      "id": "live-presentation.initial-gap-next",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "elapsed",
+            "start": 0,
+            "end": 600000
+          },
+          {
+            "id": "future",
+            "start": 1800000,
+            "end": 3600000
+          }
+        ]
+      },
+      "expected": "future"
+    },
+    {
+      "id": "live-presentation.initial-past-nearest",
+      "operation": "initial-focus",
+      "input": {
+        "now": 4000000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "old",
+            "start": 0,
+            "end": 600000
+          },
+          {
+            "id": "last",
+            "start": 1800000,
+            "end": 3600000
+          }
+        ]
+      },
+      "expected": "last"
+    },
+    {
+      "id": "live-presentation.initial-overlap-stable",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": [
+          {
+            "id": "earlier",
+            "start": 0,
+            "end": 1800000
+          },
+          {
+            "id": "later",
+            "start": 600000,
+            "end": 1200000
+          }
+        ]
+      },
+      "expected": "earlier"
+    },
+    {
+      "id": "live-presentation.initial-empty",
+      "operation": "initial-focus",
+      "input": {
+        "now": 900000,
+        "start": 0,
+        "end": 10800000,
+        "programs": []
+      },
+      "expected": null
+    },
+    {
+      "id": "live-presentation.series-no-occurrence-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": true,
+        "fields": {}
+      },
+      "expected": "Series rule"
+    },
+    {
+      "id": "live-presentation.occurrence-no-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": false,
+        "fields": {}
+      },
+      "expected": "Status unavailable"
+    },
+    {
+      "id": "live-presentation.explicit-progress-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": true,
+        "fields": {
+          "Status": "InProgress"
+        }
+      },
+      "expected": "Recording now"
+    },
+    {
+      "id": "live-presentation.unknown-provided-status",
+      "operation": "schedule-status",
+      "input": {
+        "series": true,
+        "fields": {
+          "Status": "ProviderFuture"
+        }
+      },
+      "expected": "Unknown status (ProviderFuture)"
+    },
+    {
+      "id": "focus-paint-left-edge",
+      "operation": "focus-shift",
+      "input": {
+        "x": 8,
+        "width": 180,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": 9
+    },
+    {
+      "id": "focus-paint-middle",
+      "operation": "focus-shift",
+      "input": {
+        "x": 250,
+        "width": 180,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": 0
+    },
+    {
+      "id": "focus-paint-right-edge",
+      "operation": "focus-shift",
+      "input": {
+        "x": 510,
+        "width": 180,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": -11
+    },
+    {
+      "id": "focus-paint-scrolled-left",
+      "operation": "focus-shift",
+      "input": {
+        "x": 188,
+        "width": 180,
+        "viewportLeft": 180,
+        "viewportWidth": 696
+      },
+      "expected": 9
+    },
+    {
+      "id": "focus-paint-wider-than-viewport",
+      "operation": "focus-shift",
+      "input": {
+        "x": 8,
+        "width": 900,
+        "viewportLeft": 0,
+        "viewportWidth": 696
+      },
+      "expected": 45
     }
   ]
 }

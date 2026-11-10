@@ -235,7 +235,8 @@ class LiveTvScreensTest {
         compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.onNodeWithTag("live:p:p").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
         compose.onNodeWithTag("live:p:p").performKeyInput { pressKey(Key.DirectionCenter) }
-        compose.onNodeWithText("Program details").assertIsDisplayed()
+        compose.onNodeWithTag("live:program:watch").assertIsDisplayed()
+        compose.onNodeWithText("Back").assertDoesNotExist()
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithTag("live:p:p").assertIsDisplayed().assertIsFocused()
         compose.runOnIdle { assertEquals(0, tuned) }
@@ -343,5 +344,32 @@ class LiveTvScreensTest {
         assertEquals("home", touchTabFor("live-tv"))
         assertEquals("search", touchTabFor("search?query={query}&keyboard={keyboard}"))
         assertEquals("settings", touchTabFor("settings"))
+    }
+
+    @Test
+    fun initialGuideFocusSkipsAnElapsedSlotInTheRoundedWindow() {
+        val start = 1_800_000L
+        fun program(id: String, from: Long, until: Long) = app.pictureshow.core.livetv.LiveProgram(
+            id,
+            id,
+            "c",
+            startDate = java.time.Instant.ofEpochMilli(from).toString(),
+            endDate = java.time.Instant.ofEpochMilli(until).toString()
+        )
+        compose.setContent {
+            androidx.tv.material3.MaterialTheme {
+                LiveGuide(
+                    listOf(
+                        app.pictureshow.core.livetv.LiveChannel("empty", "No guide data", "1"),
+                        app.pictureshow.core.livetv.LiveChannel("c", "Generated", "2")
+                    ),
+                    listOf(program("elapsed", start, start + 300_000), program("current", start + 300_000, start + 1_800_000)),
+                    account, true, start, start + 900_000,
+                    androidx.compose.foundation.rememberScrollState(), androidx.compose.foundation.lazy.rememberLazyListState(),
+                    null, false, {}, onOpen = {}
+                )
+            }
+        }
+        compose.onNodeWithTag("live:p:current").assertIsFocused()
     }
 }

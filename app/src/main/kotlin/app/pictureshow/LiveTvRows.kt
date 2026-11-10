@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +34,8 @@ import app.pictureshow.core.livetv.canTune
 import app.pictureshow.core.livetv.recordingStatus
 import coil3.compose.AsyncImage
 import java.time.Instant
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 internal fun LiveChannel.mediaItem() = MediaItem(id, name, type = "TvChannel", imageTags = imageTags, userData = userData)
 internal fun LiveProgram.hasRecordingTimer(): Boolean = !timerId.isNullOrBlank()
@@ -39,20 +43,36 @@ internal fun LiveProgram.hasRecordingTimer(): Boolean = !timerId.isNullOrBlank()
 internal fun liveInstant(value: String?): Long = runCatching { Instant.parse(value).toEpochMilli() }.getOrDefault(Long.MIN_VALUE)
 
 @Composable
-internal fun LiveChannelMark(channel: LiveChannel, account: Account, tv: Boolean, compact: Boolean = false) {
+internal fun LiveChannelMark(channel: LiveChannel, account: Account, tv: Boolean, compact: Boolean = false, showNumber: Boolean = true) {
     val art = imageUrl(account.server, channel.mediaItem(), 96)
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Box(
-            Modifier.size(if (compact) 32.dp else 44.dp).clip(RoundedCornerShape(6.dp)).background(LiveAccent.copy(alpha = .12f)),
+            Modifier.size(
+                if (compact) {
+                    if (tv) 32.dp else 28.dp
+                } else {
+                    44.dp
+                }
+            ).clip(RoundedCornerShape(6.dp)).background(LiveAccent.copy(alpha = .12f)),
             Alignment.Center
         ) {
             if (art != null) {
-                AsyncImage(art, null, Modifier.size(if (compact) 32.dp else 44.dp))
+                AsyncImage(
+                    art,
+                    null,
+                    Modifier.size(
+                        if (compact) {
+                            if (tv) 32.dp else 28.dp
+                        } else {
+                            44.dp
+                        }
+                    )
+                )
             } else {
                 LiveText(channel.name.take(1).uppercase(), tv)
             }
         }
-        LiveText(channel.number.orEmpty(), tv, small = true, maxLines = 1)
+        if (showNumber) LiveText(channel.number.orEmpty(), tv, small = true, maxLines = 1)
     }
 }
 
@@ -139,7 +159,7 @@ internal fun LiveChannelRow(
 }
 
 @Composable
-internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modifier, onClick: () -> Unit) {
+internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modifier, seriesRule: Boolean = false, onClick: () -> Unit) {
     val time = liveTime()
     val supporting: @Composable () -> Unit = {
         LiveText(
@@ -149,7 +169,7 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
         )
     }
     val badge: @Composable () -> Unit = {
-        LiveStatus(recordingStatus(schedule.status), tv)
+        LiveStatus(liveScheduleStatus(schedule, seriesRule), tv)
     }
     if (tv) {
         androidx.tv.material3.ListItem(
@@ -172,6 +192,11 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
     }
 }
 
+/** Series rules have no per-airing Status on Jellyfin; a missing field is not an unknown server enum. */
+internal fun liveScheduleStatus(schedule: LiveSchedule, seriesRule: Boolean): String =
+    schedule.fields["Status"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.let(::recordingStatus)
+        ?: if (seriesRule) "Series rule" else "Status unavailable"
+
 @Composable
 internal fun LiveStatus(label: String, tv: Boolean) {
     LiveText(
@@ -188,14 +213,31 @@ internal fun LiveStatus(label: String, tv: Boolean) {
 internal fun LiveMenu(title: String, tv: Boolean, onDismiss: () -> Unit, actions: List<Pair<String, () -> Unit>>) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
-            Modifier.clip(RoundedCornerShape(12.dp)).background(LiveBackground).padding(24.dp),
+            Modifier.heightIn(max = if (tv) 460.dp else 640.dp).clip(RoundedCornerShape(12.dp)).background(LiveBackground)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             LiveText(title, tv, heading = true)
             actions.forEachIndexed { index, action ->
-                LiveAction(action.first, tv, Modifier.liveFocus("menu:$index", index == 0), onClick = action.second)
+                if (tv) {
+                    androidx.tv.material3.ListItem(
+                        selected = false,
+                        onClick = action.second,
+                        headlineContent = { LiveText(action.first, true) },
+                        modifier = Modifier.fillMaxWidth().liveFocus("menu:$index", index == 0),
+                        colors = androidx.tv.material3.ListItemDefaults.colors(
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent
+                        ),
+                        scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
+                    )
+                } else {
+                    androidx.compose.material3.ListItem(
+                        headlineContent = { LiveText(action.first, false) },
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = action.second)
+                    )
+                }
             }
-            LiveAction("Close", tv, onClick = onDismiss)
+            LiveQuietAction("Close", tv, onClick = onDismiss)
         }
     }
 }

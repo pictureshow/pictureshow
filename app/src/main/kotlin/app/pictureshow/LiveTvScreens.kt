@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -45,8 +44,6 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
 import app.pictureshow.core.livetv.recordingStatus
-import java.time.Instant
-import java.time.ZoneId
 import kotlinx.coroutines.delay
 
 /** Platform components share one destination and the same policy/write owner. */
@@ -121,8 +118,11 @@ internal fun LiveTvScreen(
         recording != null -> "Delete recording?"
         else -> "Live TV"
     }
-    val guideHeader = tv && !detail && tab == "Guide" && !linear
-    val preview = state.programs.firstOrNull { "p:${it.id}" == returnFocus } ?: state.programs.firstOrNull()
+    val guideHeader = tv && !detail && tab in listOf("Channels", "Guide")
+    val preview = state.programs.firstOrNull { "p:${it.id}" == returnFocus }
+        ?: state.programs.firstOrNull { "c:${it.channelId}" == returnFocus && app.pictureshow.core.livetv.canTune(it, now) }
+        ?: state.programs.firstOrNull { app.pictureshow.core.livetv.canTune(it, now) }
+        ?: state.programs.firstOrNull()
     val canAct = state.actionsAvailable(now)
     val channels = state.channels.filter {
         (!favorites || it.userData.isFavorite) &&
@@ -132,9 +132,9 @@ internal fun LiveTvScreen(
         Modifier.fillMaxSize().background(LiveBackground).padding(horizontal = if (tv) 32.dp else 0.dp, vertical = if (tv) 16.dp else 0.dp)
             .testTag(if (tv) "live:tv" else "live:touch")
     ) {
-        if (tv) {
+        if (tv && program == null) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = if (guideHeader) 64.dp else 40.dp),
+                Modifier.fillMaxWidth().heightIn(min = if (!detail) (64 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp else 24.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -144,7 +144,9 @@ internal fun LiveTvScreen(
                         preview?.let { show ->
                             LiveText(
                                 "${show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name.orEmpty()} · " +
-                                    time.range(show.startDate, show.endDate) + show.episodeTitle?.let { " · $it" }.orEmpty(),
+                                    time.range(show.startDate, show.endDate) +
+                                    show.seasonNumber?.let { season -> show.episodeNumber?.let { " · S$season E$it" } }.orEmpty() +
+                                    show.episodeTitle?.let { " · $it" }.orEmpty(),
                                 true,
                                 small = true,
                                 maxLines = 1
@@ -153,7 +155,14 @@ internal fun LiveTvScreen(
                         }
                     }
                 } else {
-                    LiveText(title, true, Modifier.weight(1f), heading = true, maxLines = 1)
+                    LiveText(
+                        title,
+                        true,
+                        Modifier.weight(1f).padding(start = if (detail) 16.dp else 0.dp),
+                        heading = !detail,
+                        small = detail,
+                        maxLines = 1
+                    )
                 }
                 if (!detail) {
                     state.fetchedAt?.let {
@@ -163,9 +172,9 @@ internal fun LiveTvScreen(
                     LiveIcon("refresh", "Refresh", true, !state.loading && !state.writing) { vm.refresh() }
                 }
             }
-        } else {
+        } else if (!tv) {
             androidx.compose.material3.TopAppBar(
-                title = { LiveText(title, false, heading = true, maxLines = 1) },
+                title = { androidx.compose.material3.Text(title, maxLines = 1) },
                 navigationIcon = { LiveIcon("back", "Back", false) { if (detail) closeDetail() else onBack() } },
                 actions = {
                     if (!detail) {
@@ -186,9 +195,22 @@ internal fun LiveTvScreen(
                 if (tv) {
                     androidx.tv.material3.TabRow(tabs.indexOf(tab)) {
                         tabs.forEach { next ->
-                            TvTab(tab == next, onFocus = {
-                            }, onClick = { select(next) }, modifier = Modifier.testTag("live:tab:$next")) {
-                                androidx.tv.material3.Text(next, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+                            TvTab(
+                                tab == next,
+                                onFocus = {
+                                },
+                                onClick = {
+                                    select(next)
+                                },
+                                modifier = Modifier.height(
+                                    (36 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
+                                ).testTag("live:tab:$next")
+                            ) {
+                                androidx.tv.material3.Text(
+                                    next,
+                                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    style = androidx.tv.material3.MaterialTheme.typography.labelLarge
+                                )
                             }
                         }
                     }
@@ -202,7 +224,8 @@ internal fun LiveTvScreen(
                             ) {
                                 androidx.compose.material3.Text(
                                     next,
-                                    Modifier.padding(horizontal = 8.dp),
+                                    Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     style = androidx.compose.material3.MaterialTheme.typography.labelLarge
@@ -235,51 +258,36 @@ internal fun LiveTvScreen(
             val filters: @Composable () -> Unit = {
                 if (tab in listOf("Channels", "Guide")) {
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = if (tv) 0.dp else 12.dp),
+                        contentPadding = PaddingValues(horizontal = if (tv) 0.dp else 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         item {
-                            LiveChip("Favorites", favorites, tv) {
+                            LiveChip(
+                                "Favorites",
+                                favorites,
+                                tv,
+                                modifier = if (tv) {
+                                    Modifier.height(
+                                        (
+                                            36 *
+                                                LocalDensity.current.fontScale.coerceAtLeast(1f)
+                                            ).dp
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            ) {
                                 favorites = !favorites
                                 returnFocus = null
                             }
                         }
                         if (tab == "Guide") {
                             item {
-                                LiveChip("Grid", !linear, tv) {
-                                    linear = false
+                                LiveGuideViewMode(linear, tv) {
+                                    linear = it
                                     returnFocus = null
                                 }
-                            }
-                            item {
-                                LiveChip("List", linear, tv) {
-                                    linear = true
-                                    returnFocus = null
-                                }
-                            }
-                            item {
-                                LiveIcon("earlier", "Earlier", tv, !state.loading) {
-                                    vm.refresh(state.windowStart - LiveTvViewModel.WINDOW)
-                                }
-                            }
-                            item {
-                                LiveChip("Now", false, tv, !state.loading) { vm.refresh(liveGuideWindowStart(System.currentTimeMillis())) }
-                            }
-                            item {
-                                LiveIcon("later", "Later", tv, !state.loading) { vm.refresh(state.windowStart + LiveTvViewModel.WINDOW) }
-                            }
-                            items((0L..6L).toList()) { day ->
-                                val date = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate().plusDays(day)
-                                val start = if (day ==
-                                    0L
-                                ) {
-                                    liveGuideWindowStart(now)
-                                } else {
-                                    date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                                }
-                                val selected = Instant.ofEpochMilli(state.windowStart).atZone(ZoneId.systemDefault()).toLocalDate() == date
-                                LiveChip(time.day(start), selected, tv, !state.loading) { vm.refresh(start) }
                             }
                         } else if (!tv) {
                             item {
@@ -301,7 +309,7 @@ internal fun LiveTvScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Box(Modifier.width(410.dp)) { navigation() }
+                    Box(Modifier.width((410 * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp)) { navigation() }
                     Box(Modifier.weight(1f)) { filters() }
                 }
             } else {
@@ -329,26 +337,27 @@ internal fun LiveTvScreen(
         }
         val body: @Composable () -> Unit = {
             if (!detail && tab == "Guide" && !linear && state.policy?.access != false && channels.isNotEmpty()) {
-                Column(Modifier.padding(horizontal = if (tv) 0.dp else 12.dp)) {
+                Column(Modifier.padding(horizontal = if (tv) 0.dp else 16.dp)) {
+                    if (!tv) LiveGuideDateBar(state.windowStart, now, false, !state.loading, vm::refresh)
                     if (state.programs.isEmpty() && !state.loading) LiveText(NO_LIVE_GUIDE, tv, small = true)
                     LiveGuide(
                         channels, state.programs, account, tv, state.windowStart, now, guideScroll, guideList,
-                        returnFocus, restoreFocus, ::focused
+                        returnFocus, restoreFocus, ::focused,
+                        channelHeader = { LiveGuideDateBar(state.windowStart, now, true, !state.loading, vm::refresh) }
                     ) {
                         selectedProgram =
                             it
                     }
                 }
             } else {
+                if (!detail && tab == "Guide") LiveGuideDateBar(state.windowStart, now, tv, !state.loading, vm::refresh)
                 LazyColumn(
                     state = if (detail) rememberLazyListState() else list,
-                    contentPadding = PaddingValues(horizontal = if (tv) 4.dp else 16.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(horizontal = if (tv || !detail) 0.dp else 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    if (detail &&
-                        tv
-                    ) {
+                    if (tv && (recording != null || cancelling)) {
                         item {
                             LiveAction(
                                 if (recording != null ||
@@ -400,7 +409,7 @@ internal fun LiveTvScreen(
                                     }
                                 }
                                 item {
-                                    LiveStatus(recordingStatus(schedule.status), tv)
+                                    LiveStatus(liveScheduleStatus(schedule, selectedSeries), tv)
                                     schedule.errorMessage?.let { LiveText(it, tv, warning = true) }
                                 }
                                 item {
@@ -615,7 +624,8 @@ internal fun LiveTvScreen(
                                                             index == 0 &&
                                                             (group == "Series rules" || state.series.isEmpty())
                                                         )
-                                            ) { focused(key) }
+                                            ) { focused(key) },
+                                            seriesRule = group == "Series rules"
                                         ) {
                                             if (canAct &&
                                                 !state.writing

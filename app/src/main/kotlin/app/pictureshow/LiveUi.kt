@@ -110,11 +110,20 @@ internal fun LiveAction(label: String, tv: Boolean, modifier: Modifier = Modifie
 
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun LiveChip(label: String, selected: Boolean, tv: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun LiveChip(
+    label: String,
+    selected: Boolean,
+    tv: Boolean,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
     if (tv) {
-        androidx.tv.material3.FilterChip(selected, onClick, enabled = enabled) { androidx.tv.material3.Text(label) }
+        androidx.tv.material3.FilterChip(selected, onClick, modifier = modifier, enabled = enabled) { androidx.tv.material3.Text(label) }
     } else {
-        androidx.compose.material3.FilterChip(selected, onClick, label = { androidx.compose.material3.Text(label) }, enabled = enabled)
+        androidx.compose.material3.FilterChip(selected, onClick, label = {
+            androidx.compose.material3.Text(label)
+        }, modifier = modifier, enabled = enabled)
     }
 }
 
@@ -131,7 +140,7 @@ internal fun LiveIcon(kind: String, description: String, tv: Boolean, enabled: B
     }
 }
 
-private fun liveIcon(kind: String): ImageVector {
+internal fun liveIcon(kind: String): ImageVector {
     if (kind == "search") return touchNavIcon("search")
     return ImageVector.Builder(kind, 24.dp, 24.dp, 24f, 24f).apply {
         path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {

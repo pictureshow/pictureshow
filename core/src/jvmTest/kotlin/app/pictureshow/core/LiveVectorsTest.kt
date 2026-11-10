@@ -5,6 +5,7 @@ package app.pictureshow.core
 
 import app.pictureshow.core.livetv.LiveChannel
 import app.pictureshow.core.livetv.LiveGuideCache
+import app.pictureshow.core.livetv.LivePage
 import app.pictureshow.core.livetv.LiveProgram
 import app.pictureshow.core.livetv.LiveSchedule
 import app.pictureshow.core.livetv.LiveTvClient
@@ -23,6 +24,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -77,6 +79,7 @@ class LiveVectorsTest {
                 input.text("end")
             ).map { JsonPrimitive(it.id) }
         )
+        "program-query" -> programQuery(input)
         "delete-trace" -> deleteTrace(input)
         "guide-metadata" -> JsonArray(
             guidePrograms(
@@ -137,6 +140,48 @@ class LiveVectorsTest {
         }
         "create-trace" -> createTrace(input)
         else -> error("Unhandled Live TV vector operation $operation")
+    }
+
+    private suspend fun TestScope.programQuery(input: JsonObject): JsonObject {
+        var query = JsonObject(emptyMap())
+        val transport = HttpClient(
+            MockEngine { request ->
+                query = buildJsonObject {
+                    put("path", request.url.encodedPath)
+                    request.url.parameters.entries().forEach { (key, values) -> put(key, values.single()) }
+                }
+                val metadata = buildJsonObject {
+                    put("Id", "p")
+                    put("Name", "Generated programme")
+                    if (request.url.parameters["fields"] == "Overview") put("Overview", input.text("overview"))
+                }
+                respond(
+                    buildJsonObject {
+                        put("Items", JsonArray(listOf(metadata)))
+                        put("TotalRecordCount", 1)
+                    }.toString(),
+                    headers = headersOf(HttpHeaders.ContentType, "application/json")
+                )
+            }
+        )
+        try {
+            val account = Account(Server("s", "Fixture", "https://media.example.test", "12"), User("viewer", "Viewer"), "fixture-token")
+            val result = LiveTvClient(transport, ClientIdentity("Fixture", "device")).programs(
+                account,
+                input.getValue("channels").jsonArray.map { it.jsonPrimitive.content },
+                input.text("start"),
+                input.text("end"),
+                input.getValue("startIndex").jsonPrimitive.int,
+                input.getValue("limit").jsonPrimitive.int
+            )
+            val page = assertIs<ClientResult.Success<LivePage<LiveProgram>>>(result).value
+            return buildJsonObject {
+                put("query", query)
+                put("overview", page.items.single().overview)
+            }
+        } finally {
+            transport.close()
+        }
     }
 
     private suspend fun TestScope.createTrace(input: JsonObject): JsonObject {
