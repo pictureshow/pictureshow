@@ -118,6 +118,9 @@ API int ps_frame(Layer *s,int w,int h) {
     if(FAILED(hr))return -3;
     s->report(s->render);s->frames++;s->frameTime.add(elapsedMs(started));return 0;
 }
+// D3D resources remain owned by the device until queued commands retire.
+// Surface teardown checks device failure without claiming physical presentation.
+API int ps_finish(Layer *s) { return static_cast<int>(s->device->GetDeviceRemovedReason()); }
 API const char *ps_receipt(Layer *s) {
     RECT r,vr;GetWindowRect(s->overlay,&r);GetWindowRect(s->video,&vr);
     MONITORINFO mi={sizeof(mi)};GetMonitorInfo(MonitorFromWindow(s->overlay,MONITOR_DEFAULTTONEAREST),&mi);
