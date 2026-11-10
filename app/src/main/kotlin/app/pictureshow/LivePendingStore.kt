@@ -16,6 +16,7 @@ internal class LivePendingStore(context: Context) : LivePendingWrites {
     private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
         .joinToString("") { "%02x".format(it) }
     override suspend fun contains(key: String): Boolean = withContext(Dispatchers.IO) { preferences.getBoolean(hash(key), false) }
+
     // KTX edit returns Unit; this journal must check the synchronous commit result before transport.
     @SuppressLint("UseKtx")
     override suspend fun add(key: String) {
@@ -23,6 +24,7 @@ internal class LivePendingStore(context: Context) : LivePendingWrites {
             check(preferences.edit().putBoolean(hash(key), true).commit()) { "Could not save recording reconciliation state." }
         }
     }
+
     // Do not acknowledge reconciliation removal unless its durable commit succeeded.
     @SuppressLint("UseKtx")
     override suspend fun remove(key: String) {

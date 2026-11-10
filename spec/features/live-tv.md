@@ -25,7 +25,6 @@
 | LIVE-PD02 | Web HLS/MSE, server auth, trusted origin and CORS differ by browser. | Unsupported live format uses a negotiated compatible stream or clear unsupported reason. Browser suspension follows playback-mode policy; no closed-tab recording control promise. |
 | LIVE-PD03 | TV guide grid and touch layouts use different navigation/geometry. | Same channel/time/program/record actions, linear reader alternative and exact Back selection restore; no missing schedule management on TV. Server owns tuner/storage, so no local device tuner is required. |
 
-
 All native platforms use their existing video engine/profile with live HLS/direct-stream support measured on that engine. Web needs native HLS or hls.js/MSE with working CORS/auth and a trusted media origin. No platform needs local tuner hardware: Jellyfin server owns the tuner and DVR storage. Guide grid may be a touch list or TV grid, but channel/time/program/detail/schedule actions and reader alternatives stay equivalent. Real TV remote channel-repeat cadence, Fire codecs, Apple live ranges and browser tab suspension require their own acceptance.
 
 ## Executable reference rules (2026-11-10)
