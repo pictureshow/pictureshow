@@ -19,6 +19,8 @@
 #include <condition_variable>
 #include <mutex>
 #include <cstdlib>
+#include <array>
+#include <deque>
 
 @interface PSMainCall : NSObject
 @property(copy) void (^block)(void);
@@ -36,8 +38,17 @@ static void mainCall(void (^block)(void)) {
 using Clock = std::chrono::steady_clock;
 static double ms(Clock::time_point a) { return std::chrono::duration<double,std::milli>(Clock::now()-a).count(); }
 struct Timing { std::atomic<double> total{0}, maximum{0}; void add(double v) { total.store(total.load()+v); maximum.store(std::max(maximum.load(),v)); } };
+struct FrameSlot {
+    IOSurfaceRef io=nullptr;
+    id<MTLTexture> shared;
+    id<MTLCommandBuffer> inflight;
+    GLuint texture=0, fbo=0;
+    GLsync ready=nullptr;
+    int64_t targetTime=0;
+};
 struct Surface {
     NSWindow *overlay, *video;
+    mpv_handle *mpv=nullptr;
     CAMetalLayer *layer;
     id<MTLDevice> device;
     id<MTLCommandQueue> queue;
@@ -57,13 +68,26 @@ struct Surface {
     // Diagnostic ablation uses the same rendering path and retains all GPU ownership waits.
     bool paced = std::getenv("SPIKE_LEGACY_PACING")==nullptr;
     std::string glRenderer;
+    // GL -> fence-ready -> Metal -> completed -> reusable. All slot transitions
+    // occur on the one render thread; callbacks only wake it.
+    std::array<FrameSlot,3> slots;
+    std::deque<int> pending;
+    unsigned cursor=0;
+    bool buffered=std::getenv("SPIKE_MAC_SINGLE_SURFACE")==nullptr && std::getenv("SPIKE_LEGACY_PACING")==nullptr;
+    std::atomic<unsigned long> rendered{0}, retiredOnResize{0}, fencePolls{0};
+    Timing fenceLatency, targetLead;
+    // Metal owns target-time presentation; LayerProbe supplies render headroom.
+    bool renderAhead=buffered && std::getenv("SPIKE_MAC_IMMEDIATE")==nullptr;
+    std::atomic<unsigned long> timedPresents{0}, latePresents{0};
+    std::array<Clock::time_point,3> issued;
+
     std::mutex updateMutex; std::condition_variable updateWake;
     std::atomic<bool> updatePending{true};
 };
 static void *getProc(void *, const char *name) { return dlsym(RTLD_DEFAULT,name); }
 extern "C" void ps_destroy(void *ptr);
 extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
-    Surface *s = new Surface();
+    Surface *s = new Surface(); s->mpv=(mpv_handle*)mpvPtr;
     s->qosResult=pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE,0);
     mainCall(^{
         s->overlay = (__bridge NSWindow*)viewPtr;
@@ -102,6 +126,134 @@ extern "C" void *ps_create(void *viewPtr, void *mpvPtr) {
     },s);
     return s;
 }
+// A GLsync is not a Metal event. Submit a consumer only after the GL fence
+// signals; glFlush alone does not establish cross-API completion.
+static int presentReady(Surface *s) {
+    while(!s->pending.empty()) {
+        int index=s->pending.front(); auto &slot=s->slots[index];
+        s->fencePolls++;
+        GLenum state=glClientWaitSync(slot.ready,0,0);
+        if(state==GL_WAIT_FAILED) return -7;
+        if(state==GL_TIMEOUT_EXPIRED) break;
+        s->fenceLatency.add(ms(s->issued[index]));
+        glDeleteSync(slot.ready); slot.ready=nullptr; s->pending.pop_front();
+        auto t=Clock::now(); id<CAMetalDrawable> drawable=[s->layer nextDrawable];
+        s->drawableWait.add(ms(t)); if(!drawable) return -5;
+        id<MTLCommandBuffer> cmd=[s->queue commandBuffer];
+        id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
+        [blit copyFromTexture:slot.shared sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0)
+            sourceSize:MTLSizeMake(s->w,s->h,1) toTexture:drawable.texture destinationSlice:0
+            destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
+        [blit endEncoding];
+        if(s->renderAhead && slot.targetTime>0) {
+            // In pinned mpv 0.42 the implementation assigns vo_frame::pts (ns)
+            // to target_time, despite the public header's stale microsecond text.
+            // Fail on a clock/unit mismatch instead of queuing a distant drawable.
+            int64_t remaining=slot.targetTime-mpv_get_time_ns(s->mpv);
+            // Past deadlines can occur across seek/pause or host stalls. Present
+            // them immediately and count them as late; only a far future time
+            // could pin a drawable indefinitely.
+            if(remaining>1000000000LL) return -8;
+            s->targetLead.add(remaining/1e6);
+            if(remaining>0) [cmd presentDrawable:drawable atTime:CACurrentMediaTime()+remaining/1e9];
+            else { [cmd presentDrawable:drawable]; s->latePresents++; }
+            s->timedPresents++;
+        } else [cmd presentDrawable:drawable];
+        [cmd commit]; slot.inflight=cmd;
+        mpv_render_context_report_swap(s->render); s->frames++;
+    }
+    return 0;
+}
+static int drainSlots(Surface *s) {
+    glFinish();
+    int result=0;
+    for(auto &slot:s->slots) {
+        if(slot.ready) {glDeleteSync(slot.ready); slot.ready=nullptr; s->retiredOnResize++;}
+        if(slot.inflight) {
+            [slot.inflight waitUntilCompleted];
+            if(slot.inflight.status==MTLCommandBufferStatusError) result=-6;
+            slot.inflight=nil;
+        }
+    }
+    s->pending.clear(); return result;
+}
+static void releaseSlots(Surface *s) {
+    for(auto &slot:s->slots) {
+        if(slot.texture) glDeleteTextures(1,&slot.texture);
+        if(slot.fbo) glDeleteFramebuffers(1,&slot.fbo);
+        slot.texture=slot.fbo=0; slot.shared=nil;
+        if(slot.io) { CFRelease(slot.io); slot.io=nullptr; }
+    }
+}
+static int sizeSlots(Surface *s,int w,int h) {
+    int rc=drainSlots(s); if(rc<0) return rc;
+    releaseSlots(s);
+    for(auto &slot:s->slots) {
+        NSDictionary *props=@{(id)kIOSurfaceWidth:@(w),(id)kIOSurfaceHeight:@(h),
+            (id)kIOSurfaceBytesPerElement:@8,(id)kIOSurfaceBytesPerRow:@(w*8),
+            (id)kIOSurfacePixelFormat:@((uint32_t)'RGhA')};
+        slot.io=IOSurfaceCreate((__bridge CFDictionaryRef)props); if(!slot.io) return -2;
+        glGenTextures(1,&slot.texture); glBindTexture(GL_TEXTURE_RECTANGLE,slot.texture);
+        if(CGLTexImageIOSurface2D(s->gl,GL_TEXTURE_RECTANGLE,GL_RGBA16F,w,h,GL_RGBA,GL_HALF_FLOAT,slot.io,0)!=kCGLNoError) return -2;
+        glGenFramebuffers(1,&slot.fbo); glBindFramebuffer(GL_FRAMEBUFFER,slot.fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_RECTANGLE,slot.texture,0);
+        if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) return -3;
+        MTLTextureDescriptor *desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float width:w height:h mipmapped:NO];
+        desc.usage=MTLTextureUsageShaderRead; desc.storageMode=MTLStorageModeShared;
+        slot.shared=[s->device newTextureWithDescriptor:desc iosurface:slot.io plane:0];
+        if(!slot.shared) return -4;
+    }
+    glBindTexture(GL_TEXTURE_RECTANGLE,0); glBindFramebuffer(GL_FRAMEBUFFER,0);
+    s->w=w; s->h=h; s->cursor=0;
+    mainCall(^{s->layer.drawableSize=CGSizeMake(w,h);}); return 0;
+}
+static int bufferedFrame(Surface *s,int w,int h) {
+    if(w<1||h<1) return -1;
+    auto started=Clock::now();
+    bool resized=s->w!=w || s->h!=h;
+    if(resized) {int rc=sizeSlots(s,w,h); if(rc<0) return rc;}
+    int rc=presentReady(s); if(rc<0) return rc;
+    int freeSlot=-1;
+    for(unsigned n=0;n<s->slots.size();n++) {
+        unsigned i=(s->cursor+n)%s->slots.size(); auto &slot=s->slots[i];
+        if(slot.inflight && slot.inflight.status==MTLCommandBufferStatusError) return -6;
+        if(slot.ready) continue;
+        if(slot.inflight && slot.inflight.status!=MTLCommandBufferStatusCompleted) continue;
+        slot.inflight=nil; freeSlot=(int)i; break;
+    }
+    // Never consume an mpv update if no target can be acquired. Backpressure
+    // remains bounded and mpv's own VO counters account for missed deadlines.
+    if(freeSlot<0) {std::unique_lock<std::mutex> lock(s->updateMutex);
+        s->updateWake.wait_for(lock,std::chrono::milliseconds(1)); return 0;}
+    if(!resized) {
+        std::unique_lock<std::mutex> lock(s->updateMutex);
+        auto timeout=s->pending.empty()?std::chrono::milliseconds(20):std::chrono::milliseconds(1);
+        s->updateWake.wait_for(lock,timeout,[s]{return s->updatePending.load();});
+        s->updatePending=false;
+    }
+    rc=presentReady(s); if(rc<0) return rc;
+    uint64_t update=mpv_render_context_update(s->render);
+    if(!(update & MPV_RENDER_UPDATE_FRAME) && !resized) return 0;
+    auto &slot=s->slots[freeSlot];
+    slot.targetTime=0;
+    if(s->renderAhead) {
+        mpv_render_frame_info info={};
+        mpv_render_param query={MPV_RENDER_PARAM_NEXT_FRAME_INFO,&info};
+        if(mpv_render_context_get_info(s->render,query)<0) return -8;
+        if((info.flags&MPV_RENDER_FRAME_INFO_PRESENT) && !(info.flags&MPV_RENDER_FRAME_INFO_REDRAW))
+            slot.targetTime=info.target_time;
+    }
+    mpv_opengl_fbo fbo={(int)slot.fbo,w,h,GL_RGBA16F}; int flip=0, block=0;
+    mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},
+        {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
+    auto t=Clock::now(); rc=mpv_render_context_render(s->render,params);
+    s->renderTime.add(ms(t)); if(rc<0) return rc;
+    slot.ready=glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0); if(!slot.ready) return -7;
+    s->issued[freeSlot]=Clock::now(); glFlush();
+    s->pending.push_back(freeSlot); s->cursor=(freeSlot+1)%s->slots.size();
+    s->rendered++; s->frameTime.add(ms(started)); return 0;
+}
+
 extern "C" int ps_frame(void *ptr, int w, int h) {
     @autoreleasepool {
     Surface *s=(Surface*)ptr; CGLSetCurrentContext(s->gl);
@@ -109,6 +261,7 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
     auto frameStarted=Clock::now();
     if(s->polls.fetch_add(1)>0) s->pollGap.add(ms(s->previousPollEnd));
     struct PollEnd { Surface *s; ~PollEnd() { s->previousPollEnd=Clock::now(); } } pollEnd{s};
+    if(s->buffered) return bufferedFrame(s,w,h);
     bool resized=s->w!=w || s->h!=h;
     if(s->paced && !resized) {
         std::unique_lock<std::mutex> lock(s->updateMutex);
@@ -163,7 +316,7 @@ extern "C" const char *ps_receipt(void *ptr) {
     Surface *s=(Surface*)ptr;
     mainCall(^{
         NSScreen *screen=s->overlay.screen; NSRect a=s->overlay.frame,b=screen.frame,c=s->video.frame;
-        NSDictionary *d=@{@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"updateDrivenNonblocking":@(s->paced),@"callbackWake":@(s->paced),@"renderThreadQosResult":@(s->qosResult),@"polls":@(s->polls.load()),@"pollGapMsTotal":@(s->pollGap.total.load()),@"pollGapMsMax":@(s->pollGap.maximum.load()),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
+        NSDictionary *d=@{@"applicationActive":@(NSApp.active),@"overlayVisible":@(s->overlay.visible),@"onActiveSpace":@(s->overlay.onActiveSpace),@"occlusionVisible":@((s->overlay.occlusionState&NSWindowOcclusionStateVisible)!=0),@"layer":@"CAMetalLayer",@"format":@"RGBA16Float",@"colorspace":@"extendedLinearITUR_2020",@"wantsEDR":@(s->layer.wantsExtendedDynamicRangeContent),@"screenMaxEDR":@(screen.maximumExtendedDynamicRangeColorComponentValue),@"screenPotentialEDR":@(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),@"overlayFrame":NSStringFromRect(a),@"screenFrame":NSStringFromRect(b),@"videoFrame":NSStringFromRect(c),@"borderless":@((s->overlay.styleMask&NSWindowStyleMaskTitled)==0),@"device":s->device.name,@"submittedFrames":@(s->frames.load()),@"perFrameCPUReadbacks":@0,@"renderAhead":@(s->renderAhead),@"timedPresents":@(s->timedPresents.load()),@"latePresents":@(s->latePresents.load()),@"targetLeadMsTotal":@(s->targetLead.total.load()),@"targetLeadMsMax":@(s->targetLead.maximum.load()),@"bufferedIOSurfaces":@(s->buffered?3:1),@"renderedFrames":@(s->rendered.load()),@"retiredOnResize":@(s->retiredOnResize.load()),@"fencePolls":@(s->fencePolls.load()),@"fenceLatencyMsTotal":@(s->fenceLatency.total.load()),@"fenceLatencyMsMax":@(s->fenceLatency.maximum.load()),@"updateDrivenNonblocking":@(s->paced),@"callbackWake":@(s->paced),@"renderThreadQosResult":@(s->qosResult),@"polls":@(s->polls.load()),@"pollGapMsTotal":@(s->pollGap.total.load()),@"pollGapMsMax":@(s->pollGap.maximum.load()),@"glRenderer":[NSString stringWithUTF8String:s->glRenderer.c_str()],@"renderMsTotal":@(s->renderTime.total.load()),@"renderMsMax":@(s->renderTime.maximum.load()),@"glWaitMsTotal":@(s->glWait.total.load()),@"glWaitMsMax":@(s->glWait.maximum.load()),@"drawableMsTotal":@(s->drawableWait.total.load()),@"drawableMsMax":@(s->drawableWait.maximum.load()),@"metalWaitMsTotal":@(s->metalWait.total.load()),@"metalWaitMsMax":@(s->metalWait.maximum.load()),@"frameMsTotal":@(s->frameTime.total.load()),@"frameMsMax":@(s->frameTime.maximum.load())};
         NSData *data=[NSJSONSerialization dataWithJSONObject:d options:NSJSONWritingPrettyPrinted error:nil];
         s->receipt.assign((const char*)data.bytes,data.length);
     });
@@ -181,7 +334,10 @@ extern "C" void ps_fullscreen(void *ptr, int enabled) {
 // Drain deferred work before the caller declares teardown successful.
 extern "C" int ps_finish(void *ptr) {
     Surface *s=(Surface*)ptr;
-    if(!s || !s->inflight) return 0;
+    if(!s) return 0;
+    CGLSetCurrentContext(s->gl);
+    if(s->buffered) return drainSlots(s);
+    if(!s->inflight) return 0;
     [s->inflight waitUntilCompleted];
     bool failed=s->inflight.status==MTLCommandBufferStatusError;
     s->inflight=nil; return failed?-6:0;
@@ -189,6 +345,7 @@ extern "C" int ps_finish(void *ptr) {
 extern "C" void ps_destroy(void *ptr) {
     Surface *s=(Surface*)ptr; CGLSetCurrentContext(s->gl);
     if(s->inflight) { [s->inflight waitUntilCompleted]; s->inflight=nil; }
+    if(s->gl) { drainSlots(s); releaseSlots(s); }
     if(s->render) { mpv_render_context_set_update_callback(s->render,nullptr,nullptr); mpv_render_context_free(s->render); }
     if(s->texture) glDeleteTextures(1,&s->texture); if(s->fbo) glDeleteFramebuffers(1,&s->fbo);
     s->shared=nil; if(s->io) CFRelease(s->io); CGLSetCurrentContext(nullptr); if(s->gl) CGLDestroyContext(s->gl);

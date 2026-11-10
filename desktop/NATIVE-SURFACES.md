@@ -17,18 +17,30 @@ The older `render` path still reads RGBA8 pixels; it is not this candidate's fra
 macOS: libmpv's public OpenGL render API renders RGBA16F into an IOSurface. The same
 storage is wrapped as a Metal texture and GPU-blitted into a CAMetalLayer drawable.
 The layer requests extended linear ITU-R BT.2020 and extended dynamic range. A native
-borderless child window sits below the transparent Compose window. GPU completion
-waits establish cross-API ownership; there is no per-frame CPU pixel transfer.
-Rendering is update-driven and target-time blocking is disabled with a zero video
-timing offset. A bounded native condition wait is signaled by mpv update callbacks;
-the Mac executor loops without a JVM timer between frames. Callbacks only signal
-local state and are unregistered before render-context destruction. GL completion still establishes GL-to-Metal ownership; Metal completion
-is awaited at IOSurface reuse and final drain. Native receipts separate render, GL wait,
-drawable wait, Metal reuse wait and scheduler poll gaps. A user-interactive render-thread
-QoS request is recorded. In callback mode total frame duration includes notification
-idle wait; render/GL/Metal timings remain separate. These changes have not qualified
-smooth 60 fps on the measured
-shared Mac; retaining all ownership waits is necessary for correctness.
+borderless child window sits below the transparent Compose window. Three FP16
+IOSurfaces form a bounded producer/consumer pool. A flushed GL fence must signal
+before Metal reads a slot, and its Metal command buffer must complete before GL
+reuses it. The render thread polls these fences/statuses without synchronous GPU
+completion waits in steady playback; resize and teardown explicitly drain the pool.
+There is no per-frame CPU pixel transfer.
+
+Rendering is update-driven. A bounded native condition wait is signaled by mpv
+update callbacks; the Mac executor loops without a JVM timer between frames.
+Callbacks only signal local state and are unregistered before context destruction.
+The Mac probe requests 50 ms of audio-clock render headroom and passes each frame's
+mpv target time to Metal timed presentation. For pinned mpv 0.42, source inspection
+establishes nanosecond target times despite stale microsecond text in render.h;
+the adapter subtracts mpv_get_time_ns and maps the interval to CACurrentMediaTime.
+Past deadlines present immediately and are counted; implausible future deadlines
+fail rather than retaining a drawable indefinitely. This clock contract must be
+rechecked when upgrading mpv.
+
+SPIKE_MAC_IMMEDIATE retains the ring without headroom/timed presentation;
+SPIKE_MAC_SINGLE_SURFACE retains the synchronous comparison path. Receipts separate
+render, fence latency, drawable acquisition, completion waits, target lead/late
+counts and scheduler gaps. Submitted commands and submission-time report_swap do
+not establish physical scanout timing. A user-interactive render-thread QoS request
+is recorded. Total frame duration includes notification idle wait.
 Window bounds, layer state and the presenting NSScreen's actual/potential EDR limits
 are recorded. A float format and EDR request do not prove physical HDR brightness.
 The prototype resolves its own NSWindow by exact title; production needs explicit
@@ -92,8 +104,21 @@ This isolates the nested GLX/Xwayland/Weston vblank presentation chain as the ol
 limiter; the exact internal driver wait was not isolated. The chosen Wayland route
 passes without that diagnostic environment override.
 
-Measured two-minute playback retains material frame loss on the tested Mac and WARP
-runner. Zero application pixel readbacks is not enough if the decoder uses `vaapi-copy`,
+On 2026-11-10, the M2 Max passes the native 1080p60 Main10 counter gate with
+50 ms render headroom: 22 VO drops over 125.552 seconds (0.292%), zero decoder
+drops, real-time playback and no EOF. A second normal app launch passes with
+55 drops over 125.485 seconds (0.731%). A direct-worker launch at the same recorded
+process nice value fails with 109 drops over 125.997 seconds (1.442%); the host
+subsequently reports load average 723 with concurrent GPU work. These observations
+do not isolate load or launch context as the cause and do not establish a reliable
+pacing margin under arbitrary contention. Its synchronous comparison also passes
+(13 drops over 125.561 seconds, 0.173%); these results do not establish a speedup
+from buffering. Earlier low-priority launches failed, so record the actual GUI
+process priority and avoid attributing launch-context differences to the GPU path.
+The prior Intel/Radeon result remains 33.54% VO loss under a 35–33% CPU speed
+limit; an unthrottled Intel soak is still required. WARP also remains unqualified.
+
+Zero application pixel readbacks is not enough if the decoder uses `vaapi-copy`,
 which downloads GPU-decoded frames to CPU. The separately measured Linux `hwdec=no`
 route has CPU decode plus native upload and must be described separately from direct
 EGL VAAPI diagnostic samples. Do not promote any of these experiments as launch-ready.
@@ -129,13 +154,17 @@ exception notices must be checked with the experiment report. Fixture-generation
 is a tool, excluded from the playback runtime PATH. Workflows have cancellation, time
 limits and finite artifact retention.
 
-The macOS qualification build uses shared FFmpeg 8.0 with `--disable-gpl --disable-nonfree`,
+The earlier Intel macOS qualification build uses shared FFmpeg 8.0 with `--disable-gpl --disable-nonfree`,
 libdav1d, VideoToolbox and normal x86 assembly; mpv v0.42.0 with `-Dgpl=false`, shared
 libmpv, OpenGL/Cocoa/CoreAudio and VideoToolbox GL interop; and libplacebo v7.387.0
 with its unused GPU backends disabled. libass, font libraries and dav1d must come from
 LGPL/permissive builds. A minimal upstream Swift conditional fix is needed when
 Vulkan is disabled: guard `view.swift`'s `MetalLayer` branch with `#if HAVE_VULKAN`.
-Do not reuse a GPL development libmpv/FFmpeg as evidence for this runtime.
+The Apple silicon experiment uses shared FFmpeg 9.0.2 from an explicitly LGPL
+build and a render-only mpv recipe in [tools/macos](tools/macos/README.md), with
+OpenGL/VideoToolbox/CoreAudio and explicit framework linkage, without Cocoa VO or
+Swift glue. Neither architecture's build should be replaced with a GPL development
+libmpv/FFmpeg as evidence for this runtime.
 
 A distributable release still needs complete matching source offers, build recipes,
 notices, architecture-specific dependency closure, dynamic replacement and signatures.

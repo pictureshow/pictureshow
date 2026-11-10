@@ -118,7 +118,12 @@ fun layerMain(args: Array<String>) {
                         Thread.sleep(1800)
                         SwingUtilities.invokeAndWait { if (Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true); window.toFront(); window.requestFocus() }
                         mpv.option("vo","libmpv")
-                        if(System.getenv("SPIKE_LEGACY_PACING")==null) mpv.option("video-timing-offset","0")
+                        if(System.getenv("SPIKE_LEGACY_PACING")==null) {
+                            // Render ahead of the audio-clock deadline; the Mac adapter gives
+                            // Metal the matching target time rather than presenting early.
+                            val ahead=Platform.isMac() && System.getenv("SPIKE_MAC_IMMEDIATE")==null && System.getenv("SPIKE_MAC_SINGLE_SURFACE")==null
+                            mpv.option("video-timing-offset",if(ahead) (System.getenv("SPIKE_MAC_HEADROOM") ?: "0.050") else "0")
+                        }
                         // Render linear BT.2020 into a float target. 1.0 is the SDR reference white.
                         mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak","1000")
                         mpv.option("fbo-format",if(Platform.isMac()) "rgba16f" else "rgba16hf")
@@ -241,6 +246,11 @@ fun layerMain(args: Array<String>) {
                             check(mpv.get("eof-reached")!="yes") {"Fixture ended during sustained playback"}
                             File(out,"sustained-seconds.txt").writeText(((System.nanoTime()-started)/1e9).toString())
                             stage("08-sustain-end")
+                            if(Platform.isMac()) {
+                                val dropPercent=100.0*(endVo-startVo)/(elapsed*mpv.get("container-fps")!!.toDouble())
+                                check(dropPercent<1.0) {"Mac VO drop gate failed: $dropPercent% (must be <1%)"}
+                                check(endDecoder==startDecoder) {"Mac decoder dropped frames during soak"}
+                            }
                         }
                         stop()
                     } catch(e:Throwable) {if(!stopping.get()) {failure.compareAndSet(null,e); e.printStackTrace(); stop(2)}}
