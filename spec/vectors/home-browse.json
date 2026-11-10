@@ -534,6 +534,123 @@
         ],
         "failed": true
       }
+    },
+    {
+      "id": "home-config-independent-exclusions",
+      "operation": "home-user-configuration",
+      "input": {
+        "libraries": [
+          {
+            "Id": "b",
+            "Name": "Second",
+            "CollectionType": "movies"
+          },
+          {
+            "Id": "a",
+            "Name": "First",
+            "CollectionType": "tvshows"
+          }
+        ],
+        "latest": {
+          "b": [
+            {
+              "Id": "played",
+              "UserData": {
+                "Played": true
+              }
+            },
+            {
+              "Id": "unplayed"
+            }
+          ],
+          "a": [
+            {
+              "Id": "series"
+            }
+          ]
+        },
+        "configuration": {
+          "MyMediaExcludes": [
+            "b"
+          ],
+          "LatestItemsExcludes": [
+            "a"
+          ],
+          "HidePlayedInLatest": true
+        }
+      },
+      "expected": [
+        {
+          "key": "libraries",
+          "ids": [
+            "a"
+          ]
+        },
+        {
+          "key": "latest:b",
+          "ids": [
+            "unplayed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-config-default-keeps-server-order-and-played",
+      "operation": "home-user-configuration",
+      "input": {
+        "libraries": [
+          {
+            "Id": "b",
+            "Name": "Second",
+            "CollectionType": "movies"
+          },
+          {
+            "Id": "a",
+            "Name": "First",
+            "CollectionType": "tvshows"
+          }
+        ],
+        "latest": {
+          "b": [
+            {
+              "Id": "played",
+              "UserData": {
+                "Played": true
+              }
+            },
+            {
+              "Id": "unplayed"
+            }
+          ],
+          "a": [
+            {
+              "Id": "series"
+            }
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "libraries",
+          "ids": [
+            "b",
+            "a"
+          ]
+        },
+        {
+          "key": "latest:b",
+          "ids": [
+            "played",
+            "unplayed"
+          ]
+        },
+        {
+          "key": "latest:a",
+          "ids": [
+            "series"
+          ]
+        }
+      ]
     }
   ]
 }

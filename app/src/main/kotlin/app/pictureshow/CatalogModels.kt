@@ -12,7 +12,6 @@ import app.pictureshow.core.ErrorKind
 import app.pictureshow.core.HomeRow
 import app.pictureshow.core.ItemUserData
 import app.pictureshow.core.MediaItem
-import app.pictureshow.core.assembleHome
 import app.pictureshow.core.isEmptyContainer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -328,8 +327,6 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                 val preferences = session.homePreferences.read(account)
                 val configuration = (session.service as? app.pictureshow.core.UserConfigurationService)?.configuration(account)
                 val config = (configuration as? ClientResult.Success)?.value?.fields
-                fun excluded(key: String): Set<String> = (config?.get(key) as? kotlinx.serialization.json.JsonArray)
-                    ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }?.toSet().orEmpty()
                 val resume = async { session.call(account) { resume(account) } }
                 val next = async { session.call(account) { nextUp(account) } }
                 val views = session.call(account) { views(account) }
@@ -367,18 +364,13 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                     }
                 }
                 val failures = listOf(views, resumed, upcoming) + latest.values + pinFailures
-                val rows = assembleHome(
+                val rows = app.pictureshow.core.configuredHome(
                     libraries,
                     (resumed as? ClientResult.Success)?.value?.items.orEmpty(),
                     (upcoming as? ClientResult.Success)?.value?.items.orEmpty(),
-                    latest.filterKeys { it !in excluded("LatestItemsExcludes") }.mapValues { (_, result) ->
-                        (result as? ClientResult.Success)?.value.orEmpty().filterNot {
-                            (config?.get("HidePlayedInLatest") as? kotlinx.serialization.json.JsonPrimitive)?.content == "true" &&
-                                it.userData.played
-                        }
-                    }
-                ).map { row -> if (row.library) row.copy(items = row.items.filterNot { it.id in excluded("MyMediaExcludes") }) else row } +
-                    pins
+                    latest.mapValues { (_, result) -> (result as? ClientResult.Success)?.value.orEmpty() },
+                    config
+                ) + pins
                 currentCoroutineContext().ensureActive()
                 mutableState.update {
                     it.copy(

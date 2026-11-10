@@ -49,6 +49,19 @@ class HomeBrowseVectorsTest {
                         }
                     )
                 }
+                "home-user-configuration" -> {
+                    val libraries = Json.decodeFromJsonElement<List<MediaItem>>(input.getValue("libraries"))
+                    val latest = Json.decodeFromJsonElement<Map<String, List<MediaItem>>>(input.getValue("latest"))
+                    Json.encodeToJsonElement(
+                        configuredHome(libraries, emptyList(), emptyList(), latest, input["configuration"] as? JsonObject)
+                            .map { row ->
+                                buildJsonObject {
+                                    put("key", row.key)
+                                    put("ids", Json.encodeToJsonElement(row.items.map { it.id }))
+                                }
+                            }
+                    )
+                }
                 "library-filter-parameters" -> parameters(Json.decodeFromJsonElement<LibraryFilters>(input))
                 "home-pin-query" -> {
                     val query = Json.decodeFromJsonElement<HomePin>(input).query()

@@ -121,3 +121,24 @@ data class LibraryFacets(
     @kotlinx.serialization.SerialName("Years") val years: List<Int> = emptyList(),
     @kotlinx.serialization.SerialName("OfficialRatings") val ratings: List<String> = emptyList()
 )
+
+/** User configuration exclusions affect only their respective rows, never the separate library route. */
+fun configuredHome(
+    libraries: List<MediaItem>,
+    resume: List<MediaItem>,
+    next: List<MediaItem>,
+    latest: Map<String, List<MediaItem>>,
+    configuration: JsonObject?
+): List<HomeRow> {
+    fun excluded(key: String): Set<String> = (configuration?.get(key) as? kotlinx.serialization.json.JsonArray)
+        ?.mapNotNull { (it as? JsonPrimitive)?.content }?.toSet().orEmpty()
+    val hidePlayed = (configuration?.get("HidePlayedInLatest") as? JsonPrimitive)?.content == "true"
+    return assembleHome(
+        libraries,
+        resume,
+        next,
+        latest.filterKeys { it !in excluded("LatestItemsExcludes") }.mapValues { (_, items) ->
+            items.filterNot { hidePlayed && it.userData.played }
+        }
+    ).map { row -> if (row.library) row.copy(items = row.items.filterNot { it.id in excluded("MyMediaExcludes") }) else row }
+}
