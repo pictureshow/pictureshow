@@ -364,12 +364,15 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
         item { Text("Genre: ${draft.genre ?: "Any"}", modifier = Modifier.semantics { heading() }) }
         item { EditorAction("Any genre", { draft = draft.copy(genre = null) }) }
         items(facets.genres.distinct()) { genre ->
+            // A semantics callback may outlive its lazy item. Read snapshot state during
+            // composition so a later draft edit cannot invalidate a detached Material node.
+            val selected = draft.genre == genre
             EditorAction(
                 genre,
                 { draft = draft.copy(genre = genre) },
                 Modifier.semantics {
                     stateDescription =
-                        if (draft.genre == genre) "Selected" else ""
+                        if (selected) "Selected" else ""
                 }
             )
         }

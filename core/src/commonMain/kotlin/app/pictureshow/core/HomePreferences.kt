@@ -45,6 +45,16 @@ data class HomePreferences(
     val libraries: Map<String, LibraryDisplay> = emptyMap()
 )
 
+/** Null waits or preserves an already consumed landing; "home" consumes a safe fallback. */
+fun homeLanding(ready: Boolean, applied: Boolean, selection: String, libraryIds: Set<String>): String? {
+    if (!ready || applied) return null
+    return when {
+        selection == "libraries" -> selection
+        selection.startsWith("library:") && selection.removePrefix("library:") in libraryIds -> selection
+        else -> "home"
+    }
+}
+
 /** Unknown fields and other clients' custom values survive every save. */
 fun homePreferencesDocument(before: JsonObject, preferences: HomePreferences): JsonObject {
     val custom = (before["CustomPrefs"] as? JsonObject).orEmpty()

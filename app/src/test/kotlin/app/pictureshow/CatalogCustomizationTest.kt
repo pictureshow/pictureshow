@@ -8,6 +8,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasSetTextAction
@@ -101,6 +104,24 @@ class CatalogCustomizationTest {
         compose.runOnIdle { assertEquals(LibraryFilters(), applied) }
     }
 
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-port")
+    fun selectedGenreSurvivesLazyDisposalAndOtherFacetEdits() {
+        service.facet = { ClientResult.Success(LibraryFacets(genres = (1..60).map { "Genre $it" }, years = listOf(2026))) }
+        var applied: LibraryFilters? = null
+        compose.setContent { MaterialTheme { LibraryFilterEditor(CatalogGridState(account, library), service, { applied = it }, {}) } }
+        repeat(3) {
+            compose.onNodeWithTag("catalog:editor").performScrollToNode(hasText("Genre 1"))
+            compose.onNodeWithText("Genre 1").performClick()
+            compose.onNodeWithText("Genre 1").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+            compose.onNodeWithTag("catalog:editor").performScrollToNode(hasText("2026"))
+            compose.onNodeWithText("2026").performClick()
+            compose.onNodeWithTag("catalog:editor").performScrollToNode(hasText("Apply filters"))
+            compose.onNodeWithText("Apply filters").performClick()
+            compose.runOnIdle { assertEquals(LibraryFilters(genre = "Genre 1", year = 2026), applied) }
+        }
+    }
+
     @Test fun lateFailedChoiceCannotReplaceNewSuccessfulSearch() {
         val old = CompletableDeferred<ClientResult<ItemPage>>()
         service.named = { term ->
@@ -138,6 +159,8 @@ class CatalogCustomizationTest {
         compose.onNodeWithText("New library genre").assertIsDisplayed()
         compose.runOnIdle { old.complete(ClientResult.Failure(ClientError(ErrorKind.SERVER, "Old facets failed"))) }
         compose.onNodeWithText("New library genre").assertIsDisplayed()
+        compose.onNodeWithTag("catalog:editor").performScrollToNode(hasText("Back"))
+        compose.onNodeWithText("Back").assertIsDisplayed()
         compose.onNodeWithText("Old facets failed").assertDoesNotExist()
     }
 }

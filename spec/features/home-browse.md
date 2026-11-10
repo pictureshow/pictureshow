@@ -1,6 +1,6 @@
 # Viewer home and library browsing
 
-Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 31 cases including HTTP authority guards). A logic-vector pass does not qualify the UI, account persistence or server access controls.
+Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 38 cases including HTTP authority guards). A logic-vector pass does not qualify the UI, account persistence or server access controls.
 
 | ID | Viewer behavior | Acceptance |
 |---|---|---|

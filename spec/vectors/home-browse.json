@@ -694,6 +694,97 @@
         "serverSaved": true,
         "pending": true
       }
+    },
+    {
+      "id": "home-landing-waits-for-preferences",
+      "operation": "home-landing",
+      "input": {
+        "ready": false,
+        "applied": false,
+        "selection": "libraries",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "home-landing-applies-only-once",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": true,
+        "selection": "libraries",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "home-landing-explicit-home",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "home",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "home"
+    },
+    {
+      "id": "home-landing-libraries-route",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "libraries",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "libraries"
+    },
+    {
+      "id": "home-landing-permitted-library",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "library:one",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "library:one"
+    },
+    {
+      "id": "home-landing-denied-library-fallback",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "library:one",
+        "libraryIds": [
+          "other"
+        ]
+      },
+      "expected": "home"
+    },
+    {
+      "id": "home-landing-unknown-choice-fallback",
+      "operation": "home-landing",
+      "input": {
+        "ready": true,
+        "applied": false,
+        "selection": "future-route",
+        "libraryIds": [
+          "one"
+        ]
+      },
+      "expected": "home"
     }
   ]
 }

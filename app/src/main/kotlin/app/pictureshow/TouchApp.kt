@@ -319,9 +319,14 @@ internal fun TouchPictureshow(
                         var editing by remember { mutableStateOf(false) }
                         var landed by rememberSaveable { mutableStateOf(false) }
                         LaunchedEffect(screen.preferencesReady) {
-                            if (screen.preferencesReady && !landed && destination == "home") {
+                            val landing = app.pictureshow.core.homeLanding(
+                                screen.preferencesReady,
+                                landed,
+                                screen.preferences.landing,
+                                screen.libraries.map { it.id }.toSet()
+                            )
+                            if (landing != null && destination == "home") {
                                 landed = true
-                                val landing = screen.preferences.landing
                                 if (landing == "libraries") nav.navigate("libraries")
                                 if (landing.startsWith("library:")) {
                                     screen.libraries.firstOrNull { it.id == landing.removePrefix("library:") }

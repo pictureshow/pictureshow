@@ -62,6 +62,14 @@ class HomeBrowseVectorsTest {
                             }
                     )
                 }
+                "home-landing" -> Json.encodeToJsonElement(
+                    homeLanding(
+                        input.getValue("ready").jsonPrimitive.content == "true",
+                        input.getValue("applied").jsonPrimitive.content == "true",
+                        input.getValue("selection").jsonPrimitive.content,
+                        Json.decodeFromJsonElement<Set<String>>(input.getValue("libraryIds"))
+                    )
+                )
                 "library-filter-parameters" -> parameters(Json.decodeFromJsonElement<LibraryFilters>(input))
                 "home-pin-query" -> {
                     val query = Json.decodeFromJsonElement<HomePin>(input).query()
