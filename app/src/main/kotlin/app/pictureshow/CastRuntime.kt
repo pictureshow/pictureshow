@@ -163,7 +163,7 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
     private val liveSources = mutableMapOf<Account, MutableList<CastLiveSource>>()
     private val retired = mutableSetOf<Account>()
     private val restoredSources = mutableMapOf<Account, List<CastViewedItem>>()
-    private val closedSources = mutableMapOf<Account, MutableSet<String>>()
+    private val closedSources = mutableMapOf<Account, MutableSet<CastLiveOwnership>>()
     private val activeReports = mutableMapOf<Account, CastReport>()
 
     private class CastLiveSource(val decision: PlayDecision)
@@ -192,7 +192,7 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
         restoredSources[session] = items
     }
 
-    override suspend fun takeClosedLiveSources(session: Account): Set<String> = liveLock.withLock {
+    override suspend fun takeClosedLiveSources(session: Account): Set<CastLiveOwnership> = liveLock.withLock {
         closedSources.remove(session).orEmpty()
     }
 
@@ -266,7 +266,14 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
             val id = source.decision.ownedLiveStreamId
             if (id == null || client().closeLiveStream(account, id) is ClientResult.Success) {
                 liveSources[account]?.remove(source)
-                if (id != null) closedSources.getOrPut(account) { mutableSetOf() } += id
+                if (id != null) {
+                    closedSources.getOrPut(account) { mutableSetOf() } += CastLiveOwnership(
+                        source.decision.itemId,
+                        source.decision.mediaSourceId,
+                        source.decision.playSessionId,
+                        id
+                    )
+                }
             } else {
                 closed = false
             }
@@ -274,7 +281,14 @@ internal class ClientCastGateway(private val http: HttpClient, private val ident
         // A reattached viewing carries ownership from app-private storage after process death.
         if (sources.isEmpty() && report?.ownedLiveStreamId != null) {
             closed = client().closeLiveStream(account, report.ownedLiveStreamId) is ClientResult.Success
-            if (closed) closedSources.getOrPut(account) { mutableSetOf() } += report.ownedLiveStreamId
+            if (closed) {
+                closedSources.getOrPut(account) { mutableSetOf() } += CastLiveOwnership(
+                    report.itemId,
+                    report.mediaSourceId,
+                    report.playSessionId,
+                    report.ownedLiveStreamId
+                )
+            }
         }
         if (liveSources[account]?.isEmpty() == true) liveSources.remove(account)
         return closed

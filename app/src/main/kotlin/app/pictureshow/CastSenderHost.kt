@@ -135,7 +135,7 @@ internal interface CastMediaGateway {
     suspend fun provisionSession(account: Account, deviceId: String): CastSessionIssue
 
     /** True once the session is gone, including when the server says it already was. */
-    suspend fun takeClosedLiveSources(session: Account): Set<String> = emptySet()
+    suspend fun takeClosedLiveSources(session: Account): Set<CastLiveOwnership> = emptySet()
     suspend fun restoreLiveSources(session: Account, items: List<CastViewedItem>) = Unit
     suspend fun revokeSession(session: Account): Boolean
     suspend fun prepare(account: Account, itemId: String, request: CastPlayRequest, startMs: Long): ClientResult<PlayOutcome>
@@ -155,6 +155,9 @@ internal data class CastReport(
     val liveStreamId: String? = null,
     val ownedLiveStreamId: String? = null
 )
+
+/** A server may reuse a live id; retiring one channel must not forget a later acquisition. */
+internal data class CastLiveOwnership(val itemId: String, val mediaSourceId: String?, val playSessionId: String?, val liveStreamId: String?)
 
 /** Everything device-specific. The link is built on first need, so nothing before that touches the Cast SDK. */
 internal interface CastEnvironment {
@@ -431,7 +434,13 @@ internal class CastSenderHost(
         if (closed.isEmpty()) return
         val refs = sessions.secrets.filterValues { it == session }.keys
         val sources = sessions.liveSources.mapValues { (ref, items) ->
-            if (ref in refs) items.filterNot { it.ownedLiveStreamId in closed } else items
+            if (ref in
+                refs
+            ) {
+                items.filterNot { CastLiveOwnership(it.itemId, it.mediaSourceId, it.playSessionId, it.ownedLiveStreamId) in closed }
+            } else {
+                items
+            }
         }.filterValues { it.isNotEmpty() }
         sessions = sessions.copy(liveSources = sources)
         environment.saveSessions(sessions)

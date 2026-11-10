@@ -163,6 +163,7 @@ class CastGatewayTest {
         val close = paths.indexOfFirst { it.endsWith("LiveStreams/Close") }
         val progress = paths.indexOfFirst { it.endsWith("Progress") }
         assertTrue(stopped >= 0 && close > stopped && progress > close, paths.toString())
+        assertEquals(setOf(CastLiveOwnership("channel", "source", "cast-play", "live")), gateway.takeClosedLiveSources(account))
         assertTrue(gateway.revokeSession(account))
         assertEquals(2, requests.count { it.url.encodedPath.endsWith("LiveStreams/Close") })
     }
