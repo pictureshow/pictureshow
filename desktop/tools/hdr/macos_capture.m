@@ -53,6 +53,15 @@ int main(int argc,const char **argv) { @autoreleasepool {
                 OSType fmt=CVPixelBufferGetPixelFormatType(pixels);size_t w=CVPixelBufferGetWidth(pixels),h=CVPixelBufferGetHeight(pixels);
                 CFDictionaryRef attachments=CVBufferCopyAttachments(pixels,kCVAttachmentMode_ShouldPropagate);
                 NSDictionary *meta=attachments?CFBridgingRelease(attachments):@{};
+                NSDictionary *formatMeta=(__bridge NSDictionary*)CMFormatDescriptionGetExtensions(CMSampleBufferGetFormatDescription(sample));
+                NSString *prim=meta[(__bridge NSString*)kCVImageBufferColorPrimariesKey] ?: formatMeta[(__bridge NSString*)kCMFormatDescriptionExtension_ColorPrimaries];
+                NSString *transfer=meta[(__bridge NSString*)kCVImageBufferTransferFunctionKey] ?: formatMeta[(__bridge NSString*)kCMFormatDescriptionExtension_TransferFunction];
+                CGColorSpaceRef actualCS=(__bridge CGColorSpaceRef)meta[(__bridge NSString*)kCVImageBufferCGColorSpaceKey];
+                NSString *csName=actualCS?(__bridge NSString*)CGColorSpaceGetName(actualCS):@"";
+                BOOL actualColorProven=([prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020] && [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) || [csName isEqualToString:(__bridge NSString*)kCGColorSpaceExtendedLinearITUR_2020];
+                if(!actualColorProven) {writeJSON(@{@"pass":@NO,@"error":@"Actual capture color attachments do not establish linear BT2020",@"actualPrimaries":prim?:@"",@"actualTransfer":transfer?:@"",@"actualColorSpace":csName?:@"",@"attachments":meta.description,@"formatAttachments":formatMeta.description?:@""},out);done=YES;return;}
+                NSNumber *captureHeadroom=@0;
+                for(NSScreen *screen in NSScreen.screens) if([screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue]==display.displayID) captureHeadroom=@(screen.maximumExtendedDynamicRangeColorComponentValue);
                 if(fmt!=kCVPixelFormatType_64RGBAHalf) {writeJSON(@{@"pass":@NO,@"error":@"Capture is not RGBA half float",@"format":@(fmt),@"attachments":meta.description},out);done=YES;return;}
                 CVPixelBufferLockBaseAddress(pixels,kCVPixelBufferLock_ReadOnly);
                 size_t stride=CVPixelBufferGetBytesPerRow(pixels);uint8_t *base=CVPixelBufferGetBaseAddress(pixels);
@@ -74,7 +83,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
                 NSMutableData *raw=[NSMutableData new];for(size_t y=0;y<h;y++) [raw appendBytes:base+y*stride length:w*8];
                 [raw writeToFile:[out stringByAppendingString:@".rgba16f"] atomically:YES];
                 CVPixelBufferUnlockBaseAddress(pixels,kCVPixelBufferLock_ReadOnly);
-                writeJSON(@{@"boundary":@"ScreenCaptureKit display including app windows, sourceRect cropped",@"encoding":@"linear",@"primaries":@"bt2020",@"referenceWhiteNits":@203,@"samples":samples,@"format":@"RGhA",@"width":@(w),@"height":@(h),@"attachments":meta.description,@"mode":canonical?@"canonical":@"local",@"displayID":@(display.displayID),@"windows":winreceipt,@"preflight":preflight},out);
+                writeJSON(@{@"boundary":@"ScreenCaptureKit display including app windows, sourceRect cropped",@"encoding":@"linear",@"primaries":@"bt2020",@"referenceWhiteNits":@203,@"actualColorProven":@YES,@"actualPrimaries":prim?:@"",@"actualTransfer":transfer?:@"",@"actualColorSpace":csName?:@"",@"captureHeadroom":captureHeadroom,@"samples":samples,@"format":@"RGhA",@"width":@(w),@"height":@(h),@"attachments":meta.description,@"mode":canonical?@"canonical":@"local",@"displayID":@(display.displayID),@"windows":winreceipt,@"preflight":preflight},out);
                 rc=0;done=YES;
             }];
         }];

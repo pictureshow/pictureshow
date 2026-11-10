@@ -62,8 +62,8 @@ for kind in ['pq','sdr']:
                 app.terminate()
                 try:app.wait(timeout=10)
                 except subprocess.TimeoutExpired:app.kill();app.wait()
-headroom=all(s['headroom']>1 for s in preflight['screens'])
-result={'pass':headroom and all(rows[k+'-local']['pass'] for k in ['pq','sdr']),
+headroom=all(json.loads((a.output/k/'local.json').read_text()).get('captureHeadroom',0)>1 for k in ['pq','sdr'])
+result={'pass':headroom and all(rows[k+'-'+boundary]['pass'] for k in ['pq','sdr'] for boundary in ['local','drawable']),
         'capturePasses':{k:v['pass'] for k,v in rows.items()},'captures':rows,
         'headroomAboveOne':headroom,'preflight':preflight,
         'claim':'OS capture boundary, no physical signal or photometric proof'}
