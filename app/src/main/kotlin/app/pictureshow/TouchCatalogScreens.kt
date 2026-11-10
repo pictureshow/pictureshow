@@ -112,7 +112,8 @@ internal fun TouchCatalogHome(
     onRetry: () -> Unit,
     onResume: () -> Unit = {},
     librariesOnly: Boolean = false,
-    onLiveTv: () -> Unit = {}
+    onLiveTv: () -> Unit = {},
+    onWatchDownloads: (() -> Unit)? = null
 ) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onResume() }
     val shortWindow = isShortTouchWindow()
@@ -133,7 +134,11 @@ internal fun TouchCatalogHome(
                 TextButton(onClick = onLiveTv, modifier = Modifier.heightIn(min = 48.dp).testTag("home:live-tv")) { Text("Live TV") }
                 if (!shortWindow) Text("What would you like to watch?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.loading) TouchCatalogLoading("Loading your library…")
-                TouchCatalogError(state.error, onRetry)
+                if (onWatchDownloads != null) {
+                    TouchDownloadsOffer(onWatchDownloads, onRetry)
+                } else {
+                    TouchCatalogError(state.error, onRetry)
+                }
                 if (!state.loading && rows.isEmpty() && state.error == null) {
                     Text("Your library is ready for something new.")
                     TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Refresh") }
@@ -360,6 +365,7 @@ internal fun TouchCatalogDetail(
     onAddToQueue: (MediaItem) -> Unit = {},
     origin: MediaItem? = null,
     onPlayedRequest: () -> Unit = {},
+    onDownload: ((MediaItem, String?, String?) -> Unit)? = null,
     offerTvQueue: Boolean = true
 ) {
     val page = rememberTouchDetailPresentation(
@@ -419,6 +425,21 @@ internal fun TouchCatalogDetail(
                                     }
                                     if (item.type in listOf("Movie", "Episode", "Video", "Series", "Season")) {
                                         TouchDetailActionGrid(page.actions)
+                                        // Under the grid, so it moves none of the actions the grid holds still.
+                                        if (onDownload != null) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val season = if (item.type == "Season") {
+                                                        item
+                                                    } else {
+                                                        state.seasons.firstOrNull { it.id == state.selectedSeasonId }
+                                                    }
+                                                    onDownload(item, season?.id, season?.name)
+                                                },
+                                                enabled = !state.busy && !state.loading,
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("touch:detail:download")
+                                            ) { Text("Download") }
+                                        }
                                     }
                                     item.overview?.takeIf(String::isNotBlank)?.let { Text(it, Modifier.widthIn(max = 640.dp)) }
                                     if (item.genres.isNotEmpty()) {
@@ -955,6 +976,22 @@ internal fun TouchCatalogLoading(label: String) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Home's error when the server is out of reach and saved films aren't: the way to them comes first. */
+@Composable
+private fun TouchDownloadsOffer(onWatchDownloads: () -> Unit, onRetry: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            OFFLINE_UNREACHABLE_TEXT,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        Button(onClick = onWatchDownloads, modifier = Modifier.heightIn(min = 48.dp).testTag("home:watch-downloads")) {
+            Text("Watch downloads")
+        }
+        TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp).testTag("home:retry")) { Text("Retry") }
     }
 }
 

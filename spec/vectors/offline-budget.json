@@ -1,0 +1,1405 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-budget",
+ "cases": [
+  {
+   "id": "offline-budget.reserve-to-the-exact-cap",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 40,
+    "reservations": {
+     "a": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "b",
+      "bytes": 50,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 40,
+       "reservations": {
+        "a": 10,
+        "b": 50
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.reserve-one-past-the-cap",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 40,
+    "reservations": {
+     "a": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "b",
+      "bytes": 51,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 40,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": false,
+      "reason": "cap",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.reserve-adds-to-own-reservation",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 0,
+    "reservations": {
+     "a": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 5,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 0,
+       "reservations": {
+        "a": 15
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.two-final-chunks-only-one-fits",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 90,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 10,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 90,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "b",
+      "bytes": 1,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 90,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": false,
+      "reason": "cap",
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 10
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 100,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "b",
+      "bytes": 1,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 100,
+       "reservations": {}
+      },
+      "granted": false,
+      "reason": "cap",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.unknown-total-reserves-chunk-by-chunk",
+   "operation": "budget",
+   "state": {
+    "capBytes": 30,
+    "usedBytes": 0,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 10,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 0,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 10
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 10,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 10,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 10,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 10
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 20,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 10,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 20,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 10
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 30,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 1,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 30,
+       "reservations": {}
+      },
+      "granted": false,
+      "reason": "cap",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.unknown-quota-needs-a-cap",
+   "operation": "budget",
+   "state": {
+    "capBytes": null,
+    "usedBytes": 0,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 1,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": null,
+       "usedBytes": 0,
+       "reservations": {}
+      },
+      "granted": false,
+      "reason": "cap-required",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.unknown-quota-picked-cap-then-reserves",
+   "operation": "budget",
+   "state": {
+    "capBytes": null,
+    "usedBytes": 0,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 5,
+      "jobNewestFirst": []
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 5,
+       "usedBytes": 0,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 5,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 5,
+       "usedBytes": 0,
+       "reservations": {
+        "a": 5
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.zero-bytes-is-a-granted-no-op-even-capless",
+   "operation": "budget",
+   "state": {
+    "capBytes": null,
+    "usedBytes": 0,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 0,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": null,
+       "usedBytes": 0,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 0
+     },
+     "expected": {
+      "budget": {
+       "capBytes": null,
+       "usedBytes": 0,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.disk-edge-exactly-the-reserve-left",
+   "operation": "budget",
+   "state": {
+    "capBytes": 107374182400,
+    "usedBytes": 0,
+    "reservations": {
+     "o": 1000
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 500,
+      "freeBytes": 536872412
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 107374182400,
+       "usedBytes": 0,
+       "reservations": {
+        "o": 1000,
+        "a": 500
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.disk-edge-one-byte-short",
+   "operation": "budget",
+   "state": {
+    "capBytes": 107374182400,
+    "usedBytes": 0,
+    "reservations": {
+     "o": 1000
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 500,
+      "freeBytes": 536872411
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 107374182400,
+       "usedBytes": 0,
+       "reservations": {
+        "o": 1000
+       }
+      },
+      "granted": false,
+      "reason": "disk",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.disk-counts-own-earlier-reservation",
+   "operation": "budget",
+   "state": {
+    "capBytes": 107374182400,
+    "usedBytes": 0,
+    "reservations": {
+     "a": 1000
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 500,
+      "freeBytes": 536872411
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 107374182400,
+       "usedBytes": 0,
+       "reservations": {
+        "a": 1000
+       }
+      },
+      "granted": false,
+      "reason": "disk",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.disk-unknown-free-is-not-checked",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 0,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 100,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 0,
+       "reservations": {
+        "a": 100
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-wins-over-disk",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 0,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 101,
+      "freeBytes": 0
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 0,
+       "reservations": {}
+      },
+      "granted": false,
+      "reason": "cap",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.commit-beyond-reservation-changes-nothing",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 5,
+    "reservations": {
+     "a": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 11
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 5,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": false,
+      "reason": "unreserved",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.commit-without-reservation",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 5,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 1
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 5,
+       "reservations": {}
+      },
+      "granted": false,
+      "reason": "unreserved",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.commit-moves-bytes-exactly",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 5,
+    "reservations": {
+     "a": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 4
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 9,
+       "reservations": {
+        "a": 6
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 6
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 15,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.release-after-partial-commit-keeps-committed",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 0,
+    "reservations": {
+     "a": 100,
+     "b": 1
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "commit",
+      "job": "a",
+      "bytes": 40
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 40,
+       "reservations": {
+        "a": 60,
+        "b": 1
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "release",
+      "job": "a"
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 40,
+       "reservations": {
+        "b": 1
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.release-unknown-job-is-a-no-op",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 40,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "release",
+      "job": "z"
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 40,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.discard-gives-back-committed-and-reservation",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 80,
+    "reservations": {
+     "a": 20
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "discard",
+      "job": "a",
+      "committedBytes": 30
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 50,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.discard-floors-at-zero",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 10,
+    "reservations": {}
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "discard",
+      "job": "a",
+      "committedBytes": 30
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 0,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.discard-leaves-other-jobs",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 50,
+    "reservations": {
+     "a": 1,
+     "b": 2
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "discard",
+      "job": "a",
+      "committedBytes": 10
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 40,
+       "reservations": {
+        "b": 2
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-cut-pauses-nothing-when-it-fits",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 10,
+    "reservations": {
+     "a": 10,
+     "b": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 30,
+      "jobNewestFirst": [
+       "b",
+       "a"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 30,
+       "usedBytes": 10,
+       "reservations": {
+        "a": 10,
+        "b": 10
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-cut-pauses-newest-only",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 10,
+    "reservations": {
+     "a": 10,
+     "b": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 29,
+      "jobNewestFirst": [
+       "b",
+       "a"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 29,
+       "usedBytes": 10,
+       "reservations": {
+        "a": 10
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": [
+       "b"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-cut-pauses-two",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 10,
+    "reservations": {
+     "a": 10,
+     "b": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 10,
+      "jobNewestFirst": [
+       "b",
+       "a"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 10,
+       "usedBytes": 10,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": [
+       "b",
+       "a"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-cut-order-is-the-callers",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 10,
+    "reservations": {
+     "a": 10,
+     "b": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 29,
+      "jobNewestFirst": [
+       "a",
+       "b"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 29,
+       "usedBytes": 10,
+       "reservations": {
+        "b": 10
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": [
+       "a"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-cut-skips-named-jobs-without-reservation",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 10,
+    "reservations": {
+     "a": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 10,
+      "jobNewestFirst": [
+       "z",
+       "a"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 10,
+       "usedBytes": 10,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": [
+       "a"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-cut-releases-jobs-the-caller-did-not-name",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 10,
+    "reservations": {
+     "a": 10,
+     "b": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 10,
+      "jobNewestFirst": [
+       "b"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 10,
+       "usedBytes": 10,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": [
+       "b",
+       "a"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-below-used-keeps-bytes-and-reports",
+   "operation": "budget",
+   "state": {
+    "capBytes": 100,
+    "usedBytes": 50,
+    "reservations": {
+     "a": 10
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 40,
+      "jobNewestFirst": [
+       "a"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 40,
+       "usedBytes": 50,
+       "reservations": {}
+      },
+      "granted": true,
+      "reason": "used-over-cap",
+      "pauseJobs": [
+       "a"
+      ]
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "b",
+      "bytes": 1,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 40,
+       "usedBytes": 50,
+       "reservations": {}
+      },
+      "granted": false,
+      "reason": "cap",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-raise-keeps-everything",
+   "operation": "budget",
+   "state": {
+    "capBytes": 10,
+    "usedBytes": 5,
+    "reservations": {
+     "a": 5
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": 100,
+      "jobNewestFirst": [
+       "a"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": 100,
+       "usedBytes": 5,
+       "reservations": {
+        "a": 5
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.cap-cleared-keeps-reservations-and-denies-new",
+   "operation": "budget",
+   "state": {
+    "capBytes": 10,
+    "usedBytes": 5,
+    "reservations": {
+     "a": 5
+    }
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "setCap",
+      "capBytes": null,
+      "jobNewestFirst": [
+       "a"
+      ]
+     },
+     "expected": {
+      "budget": {
+       "capBytes": null,
+       "usedBytes": 5,
+       "reservations": {
+        "a": 5
+       }
+      },
+      "granted": true,
+      "reason": null,
+      "pauseJobs": []
+     }
+    },
+    {
+     "event": {
+      "op": "reserve",
+      "job": "a",
+      "bytes": 1,
+      "freeBytes": null
+     },
+     "expected": {
+      "budget": {
+       "capBytes": null,
+       "usedBytes": 5,
+       "reservations": {
+        "a": 5
+       }
+      },
+      "granted": false,
+      "reason": "cap-required",
+      "pauseJobs": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-None",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": null
+     },
+     "expected": {
+      "cap": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-0",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 0
+     },
+     "expected": {
+      "cap": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-4",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 4
+     },
+     "expected": {
+      "cap": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-49",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 49
+     },
+     "expected": {
+      "cap": 9
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-10737418240",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 10737418240
+     },
+     "expected": {
+      "cap": 2147483648
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-53687091200",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 53687091200
+     },
+     "expected": {
+      "cap": 10737418240
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-53687091205",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 53687091205
+     },
+     "expected": {
+      "cap": 10737418240
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-53687091195",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 53687091195
+     },
+     "expected": {
+      "cap": 10737418239
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap-107374182400",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": 107374182400
+     },
+     "expected": {
+      "cap": 10737418240
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-budget.default-cap--1",
+   "operation": "default-cap",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "quotaBytes": -1
+     },
+     "expected": {
+      "cap": null
+     }
+    }
+   ]
+  }
+ ]
+}

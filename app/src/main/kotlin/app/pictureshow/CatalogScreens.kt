@@ -167,6 +167,8 @@ fun CatalogHome(
     onResume: () -> Unit = {},
     onSearch: () -> Unit = {},
     onSettings: () -> Unit = {},
+    onDownloads: (() -> Unit)? = null,
+    onWatchDownloads: (() -> Unit)? = null,
     serverLabel: String = account.server.name,
     onLiveTv: () -> Unit = {}
 ) {
@@ -212,7 +214,7 @@ fun CatalogHome(
         "settings" -> "Settings"
         "live-tv" -> "Live TV"
         "profile" -> "Switch user"
-        "retry" -> "Retry"
+        "retry" -> if (onWatchDownloads != null) "Watch downloads" else "Retry"
         else -> restoreItem?.let(::catalogAnnouncement)
     }
     var openerHasInput by remember { mutableStateOf(false) }
@@ -417,10 +419,18 @@ fun CatalogHome(
                                 onLiveTv()
                             },
                             modifier = target(Modifier, restoreAction == "live-tv").focusRequester(liveFocus).testTag("home:live-tv")
-                                .staysInRow(first = false, last = true)
+                                .staysInRow(first = false, last = onDownloads == null)
                                 .onFocusChanged { if (it.isFocused && (restored || initialNavigation)) selectedRow = "live-tv" }
                                 .onPreviewKeyEvent { headerDown(it) }
                         ) { Text("Live TV") }
+                        // Reachable with the server down: the home error above never hides the way to saved media.
+                        if (onDownloads != null) {
+                            Button(
+                                onClick = onDownloads,
+                                modifier = Modifier.testTag("home:downloads").staysInRow(first = false, last = true)
+                                    .onPreviewKeyEvent { headerDown(it) }
+                            ) { Text("Downloads") }
+                        }
                     }
                     Column(Modifier.catalogFocusTarget(!handoff), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CatalogHeading("Pictureshow")
@@ -428,7 +438,7 @@ fun CatalogHome(
                     }
                     if (state.loading) Text("Loading your home…", modifier = Modifier.catalogFocusTarget(!handoff))
                     CatalogError(
-                        state.error,
+                        if (onWatchDownloads != null) OFFLINE_UNREACHABLE_TEXT else state.error,
                         onRetry,
                         target(Modifier, restoreAction == "retry").focusRequester(retry).onPreviewKeyEvent {
                             if (it.key == Key.DirectionDown && it.type == KeyEventType.KeyDown && rows.isNotEmpty()) {
@@ -438,7 +448,9 @@ fun CatalogHome(
                                 false
                             }
                         },
-                        announceMessage = !handoff
+                        announceMessage = !handoff,
+                        onWatchDownloads = onWatchDownloads,
+                        secondary = target(Modifier, false)
                     )
                     if (!state.loading && rows.isEmpty() && state.error == null) {
                         Text(
@@ -556,6 +568,13 @@ fun CatalogHome(
                     ) { Text(if (state.busy) "Please wait…" else "Sign out") }
                 }
             }
+        }
+    }
+    // The offer comes and goes with each load. Each return puts the remote on it, unless the viewer went to another action.
+    val offered = onWatchDownloads != null
+    LaunchedEffect(offered) {
+        if (offered && homeLifecycle == Lifecycle.State.RESUMED && selectedRow !in listOf("search", "settings", "profile")) {
+            focusAction("header", 0, retry)
         }
     }
     LaunchedEffect(homeLifecycle, state.loading, state.busy, state.error, rows.map { it.key to it.items.map(MediaItem::id) }) {
@@ -1230,7 +1249,8 @@ fun CatalogDetail(
     onPendingControlsReady: (Boolean) -> Unit = {},
     onPendingQueueNeeded: () -> Unit = {},
     onPendingQueueExpired: (() -> Boolean)? = null,
-    onPlayedRequest: () -> Unit = {}
+    onPlayedRequest: () -> Unit = {},
+    onDownload: ((MediaItem, String?, String?) -> Unit)? = null
 ) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     DisposableEffect(Unit) {
@@ -2189,6 +2209,18 @@ fun CatalogDetail(
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
+                                        onDownload = onDownload?.let { open ->
+                                            {
+                                                open(
+                                                    item,
+                                                    state.selectedSeasonId,
+                                                    state.seasons.firstOrNull {
+                                                        it.id ==
+                                                            state.selectedSeasonId
+                                                    }?.name
+                                                )
+                                            }
+                                        },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null)
                                     ) {
                                         if (trackSelection) selectedSection = "header"
@@ -2229,6 +2261,18 @@ fun CatalogDetail(
                                         readyCancelled =
                                         state.error != null || waitHadRequest || readyQueuedTargets.isNotEmpty() || state.busy,
                                         fromStartFocus = fromStartFocus,
+                                        onDownload = onDownload?.let { open ->
+                                            {
+                                                open(
+                                                    item,
+                                                    state.selectedSeasonId,
+                                                    state.seasons.firstOrNull {
+                                                        it.id ==
+                                                            state.selectedSeasonId
+                                                    }?.name
+                                                )
+                                            }
+                                        },
                                         blocked = recoveryActive || (playbackWaiting && pendingActions == null)
                                     ) {
                                         if (trackSelection) selectedSection = "header"
@@ -2789,6 +2833,7 @@ private fun DetailActions(
     readyCancelled: Boolean = false,
     fromStartFocus: FocusRequester? = null,
     blocked: Boolean = false,
+    onDownload: (() -> Unit)? = null,
     onFocus: () -> Unit
 ) {
     val bringIntoView = remember { BringIntoViewRequester() }
@@ -3079,6 +3124,13 @@ private fun DetailActions(
                         Modifier.testTag("detail:favorite$suffix-label").then(labelSemantics("favorite"))
                     )
                 }
+            }
+        }
+        if (onDownload != null && pending == null) {
+            key("download") {
+                Button(onClick = {
+                    if (!blocked) onDownload()
+                }, enabled = !blocked, modifier = Modifier.testTag("detail:download")) { Text("Download") }
             }
         }
         if (stableLayout) {
@@ -3384,11 +3436,26 @@ private fun GridPageFailure(message: String?, onRetry: () -> Unit, modifier: Mod
 }
 
 @Composable
-private fun CatalogError(message: String?, onRetry: () -> Unit, modifier: Modifier = Modifier, announceMessage: Boolean = true) {
+private fun CatalogError(
+    message: String?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    announceMessage: Boolean = true,
+    onWatchDownloads: (() -> Unit)? = null,
+    secondary: Modifier = Modifier
+) {
     if (message != null) {
         Column(modifier = Modifier.accessibilityGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(message, color = Color(0xFFFFCCB8), modifier = Modifier.catalogFocusTarget(announceMessage))
-            Button(onClick = onRetry, modifier = modifier) { Text("Retry") }
+            if (onWatchDownloads != null) {
+                // The focused action takes Home's error focus target, so everything that lands on Retry lands here.
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(onClick = onWatchDownloads, modifier = modifier.testTag("home:watch-downloads")) { Text("Watch downloads") }
+                    Button(onClick = onRetry, modifier = secondary.testTag("home:retry")) { Text("Retry") }
+                }
+            } else {
+                Button(onClick = onRetry, modifier = modifier) { Text("Retry") }
+            }
         }
     }
 }

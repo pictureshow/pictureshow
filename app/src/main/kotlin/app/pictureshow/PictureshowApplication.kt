@@ -63,6 +63,22 @@ class PictureshowApplication : Application() {
                     single { AccountStore(AccountPersistence(get())) }
                     single { DeviceIdentityStore(get()) }
                     single { PlaybackPreferencesStore(get()) }
+                    single { AndroidOfflineForeground(this@PictureshowApplication) }
+                    single {
+                        val store = get<DeviceIdentityStore>()
+                        OfflineEngine(
+                            this@PictureshowApplication,
+                            get(),
+                            {
+                                app.pictureshow.core.ClientIdentity(
+                                    deviceDisplayName(this@PictureshowApplication),
+                                    store.getOrCreate(),
+                                    BuildConfig.VERSION_NAME
+                                )
+                            },
+                            get<AndroidOfflineForeground>()
+                        )
+                    }
                     single<ServerDiscovery> { JvmServerDiscovery() }
                     // Lazy on purpose: only the touch interface ever resolves it, and it reaches the Cast SDK later still.
                     single { castSenderHost(this@PictureshowApplication, get(), get()) }

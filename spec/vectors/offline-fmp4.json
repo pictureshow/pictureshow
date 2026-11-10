@@ -1,0 +1,1055 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-fmp4",
+ "cases": [
+  {
+   "id": "offline-fmp4.header-plain",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000106d6f6f660000000000000000",
+      "length": 16
+     },
+     "expected": {
+      "header": {
+       "type": "moof",
+       "size": 16
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-only-the-8-byte-header",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000003e86d646174",
+      "length": 8
+     },
+     "expected": {
+      "header": {
+       "type": "mdat",
+       "size": 1000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-incomplete",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000106d6f6f",
+      "length": 7
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-length-limits-what-is-read",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000106d6f6f66",
+      "length": 7
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-size-0-runs-to-eof",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000006d646174",
+      "length": 8
+     },
+     "expected": {
+      "header": {
+       "type": "mdat",
+       "size": -1
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-size-1-64-bit",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000016d6461740000000200000000",
+      "length": 16
+     },
+     "expected": {
+      "header": {
+       "type": "mdat",
+       "size": 8589934592
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-size-1-needs-16-bytes",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000016d64617400000002000000",
+      "length": 15
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-size-1-with-impossible-large-size",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000016d646174000000000000000f",
+      "length": 16
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.header-impossible-small-size",
+   "operation": "box-header",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000076d646174",
+      "length": 8
+     },
+     "expected": {
+      "header": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-per-sample-durations",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000886d6f6f66000000106d666864000000000000000100000070747261660000001074666864000200000000000100000010746664740000000000000384000000487472756e00000f050000000300000007000000050000000a000000010000000200000003000000140000000100000002000000030000001e000000010000000200000003",
+      "trackId": 1,
+      "trexDefaultDuration": 999
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 136,
+       "durationInTimescale": 60,
+       "earliestTime": 900
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-tfhd-default",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000586d6f6f66000000106d66686400000000000000010000004074726166000000147466686400020008000000010000002800000010746664740000000000000384000000147472756e000000010000000300000007",
+      "trackId": 1,
+      "trexDefaultDuration": 999
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 88,
+       "durationInTimescale": 120,
+       "earliestTime": 900
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-tfhd-default-after-optional-fields",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000606d6f6f66000000106d6668640000000000000001000000487472616600000020746668640002000b000000010000000000000009000000010000002800000010746664740000000000000384000000107472756e0000000000000003",
+      "trackId": 1,
+      "trexDefaultDuration": 999
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 96,
+       "durationInTimescale": 120,
+       "earliestTime": 900
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-trex-default",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000546d6f6f66000000106d66686400000000000000010000003c747261660000001074666864000200000000000100000010746664740000000000000384000000147472756e000000010000000300000007",
+      "trackId": 1,
+      "trexDefaultDuration": 50
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 84,
+       "durationInTimescale": 150,
+       "earliestTime": 900
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-tfdt-version-1",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "0000005c6d6f6f66000000106d66686400000000000000010000004474726166000000107466686400020000000000010000001474666474010000000000000200000000000000187472756e00000101000000010000000700000005",
+      "trackId": 1,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 92,
+       "durationInTimescale": 5,
+       "earliestTime": 8589934592
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-chooses-the-track-and-sums-truns",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000b46d6f6f66000000106d66686400000000000000010000004074726166000000147466686400020008000000020000000700000010746664740000000000000064000000147472756e0000000100000001000000070000005c747261660000001074666864000200000000000100000010746664740000000000000384000000187472756e0000010100000001000000070000000a0000001c7472756e0000010100000002000000070000000b0000000c",
+      "trackId": 1,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 180,
+       "durationInTimescale": 33,
+       "earliestTime": 900
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-other-track-in-same-moof",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000b46d6f6f66000000106d66686400000000000000010000004074726166000000147466686400020008000000020000000700000010746664740000000000000064000000147472756e0000000100000001000000070000005c747261660000001074666864000200000000000100000010746664740000000000000384000000187472756e0000010100000001000000070000000a0000001c7472756e0000010100000002000000070000000b0000000c",
+      "trackId": 2,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 180,
+       "durationInTimescale": 7,
+       "earliestTime": 100
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-two-trafs-keep-first-time",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000986d6f6f66000000106d666864000000000000000100000040747261660000001074666864000200000000000100000010746664740000000000000384000000187472756e0000010100000001000000070000000a000000407472616600000010746668640002000000000001000000107466647400000000000003b6000000187472756e00000101000000010000000700000005",
+      "trackId": 1,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 152,
+       "durationInTimescale": 15,
+       "earliestTime": 900
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-track-absent",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000586d6f6f66000000106d666864000000000000000100000040747261660000001074666864000200000000000100000010746664740000000000000384000000187472756e0000010100000001000000070000000a",
+      "trackId": 3,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-payload-without-header",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000106d666864000000000000000100000040747261660000001074666864000200000000000100000010746664740000000000000384000000187472756e0000010100000001000000070000000a",
+      "trackId": 1,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": {
+       "moofOffset": 0,
+       "totalSize": 80,
+       "durationInTimescale": 10,
+       "earliestTime": 900
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-no-tfdt",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000486d6f6f66000000106d6668640000000000000001000000307472616600000010746668640002000000000001000000187472756e0000010100000001000000070000000a",
+      "trackId": 1,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-trun-claims-more-samples-than-it-holds",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000000446d6f6f660000003c747261660000001074666864000200000000000100000010746664740000000000000384000000147472756e000001000000000500000001",
+      "trackId": 1,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moof-empty",
+   "operation": "parse-moof",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "",
+      "trackId": 1,
+      "trexDefaultDuration": 0
+     },
+     "expected": {
+      "fragment": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moov-first-video",
+   "operation": "parse-moov",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000002b76d6f6f760000006c6d76686400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a97472616b00000058746b68640000000000000001000000020000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000496d646961000000206d6468640000000000000001000000020000bb8000000009000000000000002168646c720000000000000000736f756e00000000000000000000000000000000a97472616b00000058746b68640000000000000001000000020000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000496d646961000000206d64686400000000000000010000000200015f9000000009000000000000002168646c7200000000000000007669646500000000000000000000000000000000a97472616b00000058746b68640000000000000001000000020000000300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000496d646961000000206d64686400000000000000010000000200005dc000000009000000000000002168646c7200000000000000007669646500000000000000000000000000000000486d7665780000002074726578000000000000000200000001000004000000000000000000000000207472657800000000000000010000000100000bb80000000000000000"
+     },
+     "expected": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 3000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moov-audio-if-no-video",
+   "operation": "parse-moov",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000001456d6f6f760000006c6d76686400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a97472616b00000058746b68640000000000000001000000020000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000496d646961000000206d6468640000000000000001000000020000bb8000000009000000000000002168646c720000000000000000736f756e00000000000000000000000000000000286d7665780000002074726578000000000000000200000001000004000000000000000000"
+     },
+     "expected": {
+      "track": {
+       "id": 2,
+       "timescale": 48000,
+       "trexDefaultDuration": 1024
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moov-subtitle-only-is-nothing",
+   "operation": "parse-moov",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "0000011d6d6f6f760000006c6d76686400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a97472616b00000058746b68640000000000000001000000020000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000496d646961000000206d646864000000000000000100000002000003e800000009000000000000002168646c7200000000000000007465787400000000000000000000000000"
+     },
+     "expected": {
+      "track": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moov-no-trex-default-is-zero",
+   "operation": "parse-moov",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "0000011d6d6f6f760000006c6d76686400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a97472616b00000058746b68640000000000000001000000020000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000496d646961000000206d64686400000000000000010000000200015f9000000009000000000000002168646c7200000000000000007669646500000000000000000000000000"
+     },
+     "expected": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moov-version-1-boxes",
+   "operation": "parse-moov",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "000001316d6f6f760000006c6d76686400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000bd7472616b00000060746b686401000000000000000000000100000000000000020000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000556d6469610000002c6d646864010000000000000000000001000000000000000200015f900000000000000009000000000000002168646c7200000000000000007669646500000000000000000000000000"
+     },
+     "expected": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moov-payload-without-header",
+   "operation": "parse-moov",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": "0000006c6d76686400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a97472616b00000058746b68640000000000000001000000020000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000496d646961000000206d64686400000000000000010000000200015f9000000009000000000000002168646c7200000000000000007669646500000000000000000000000000"
+     },
+     "expected": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.moov-empty",
+   "operation": "parse-moov",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "hex": ""
+     },
+     "expected": {
+      "track": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-one-reference-per-fragment",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 256
+     },
+     "expected": {
+      "hex": "000000b466726565000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004c73696478010000000000000100015f9000000000000001f4000000000000000000000003000000640000000a90000000000000c800000014900000000000012c0000001e90000000",
+      "bytes": 256
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-remainder-exactly-zero-has-no-free",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 76
+     },
+     "expected": {
+      "hex": "0000004c73696478010000000000000100015f9000000000000001f4000000000000000000000003000000640000000a90000000000000c800000014900000000000012c0000001e90000000",
+      "bytes": 76
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-remainder-exactly-8-is-the-smallest-free",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 84
+     },
+     "expected": {
+      "hex": "00000008667265650000004c73696478010000000000000100015f9000000000000001f4000000000000000000000003000000640000000a90000000000000c800000014900000000000012c0000001e90000000",
+      "bytes": 84
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-remainder-under-8-gives-up-a-reference",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 83
+     },
+     "expected": {
+      "hex": "000000136672656500000000000000000000000000004073696478010000000000000100015f9000000000000001f40000000000000000000000020000012c0000001e900000000000012c0000001e90000000",
+      "bytes": 83
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-remainder-1",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 77
+     },
+     "expected": {
+      "hex": "0000000d6672656500000000000000004073696478010000000000000100015f9000000000000001f40000000000000000000000020000012c0000001e900000000000012c0000001e90000000",
+      "bytes": 77
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-remainder-9-keeps-all",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 85
+     },
+     "expected": {
+      "hex": "0000000966726565000000004c73696478010000000000000100015f9000000000000001f4000000000000000000000003000000640000000a90000000000000c800000014900000000000012c0000001e90000000",
+      "bytes": 85
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-coalesces-adjacent-to-two",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 64
+     },
+     "expected": {
+      "hex": "0000004073696478010000000000000100015f9000000000000001f40000000000000000000000020000012c0000001e900000000000012c0000001e90000000",
+      "bytes": 64
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-coalesces-all-to-one",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 52
+     },
+     "expected": {
+      "hex": "0000003473696478010000000000000100015f9000000000000001f4000000000000000000000001000002580000003c90000000",
+      "bytes": 52
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-single-fragment",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       }
+      ],
+      "maxBytes": 128
+     },
+     "expected": {
+      "hex": "0000004c6672656500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003473696478010000000000000100015f9000000000000001f4000000000000000000000001000000640000000a90000000",
+      "bytes": 128
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-no-fragments-is-only-free",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [],
+      "maxBytes": 64
+     },
+     "expected": {
+      "hex": "00000040667265650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "bytes": 64
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-too-small-for-one-reference",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1100,
+        "totalSize": 200,
+        "durationInTimescale": 20,
+        "earliestTime": 510
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 51
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-too-small-for-a-box",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [],
+      "maxBytes": 7
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-gap-between-fragments-is-refused",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 1000,
+        "totalSize": 100,
+        "durationInTimescale": 10,
+        "earliestTime": 500
+       },
+       {
+        "moofOffset": 1300,
+        "totalSize": 300,
+        "durationInTimescale": 30,
+        "earliestTime": 530
+       }
+      ],
+      "maxBytes": 256
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-fmp4.index-reference-size-limit",
+   "operation": "index-boxes",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "track": {
+       "id": 1,
+       "timescale": 90000,
+       "trexDefaultDuration": 0
+      },
+      "fragments": [
+       {
+        "moofOffset": 0,
+        "totalSize": 2147483648,
+        "durationInTimescale": 1,
+        "earliestTime": 0
+       }
+      ],
+      "maxBytes": 64
+     },
+     "expected": {
+      "error": true
+     }
+    }
+   ]
+  }
+ ]
+}

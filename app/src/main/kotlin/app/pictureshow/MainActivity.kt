@@ -363,6 +363,8 @@ internal fun Pictureshow(
     val context = LocalContext.current
     val catalogService: CatalogService = koinInject()
     val accounts: AccountStore = koinInject()
+    val offlineEngine = org.koin.mp.KoinPlatform.getKoinOrNull()?.getOrNull<OfflineEngine>()
+    LaunchedEffect(offlineEngine) { offlineEngine?.start() }
     val catalog =
         remember(state.snapshot.currentKey, state.snapshot.currentAccount?.accessToken) {
             CatalogSession(catalogService, accounts) {
@@ -392,7 +394,7 @@ internal fun Pictureshow(
         installedKey = key
         installedExpired = expired
         accountInstalled = true
-        val destination = accountDestination(state.snapshot)
+        val destination = offlineStartRoute(accountDestination(state.snapshot), offlineEngine, state.snapshot.currentKey, context)
         nav.navigate(destination) {
             popUpTo(nav.graph.id) { inclusive = true }
             launchSingleTop = true
@@ -477,7 +479,7 @@ internal fun Pictureshow(
     val accessibleNavigation = rememberAssistiveServiceInUse()
     val musicState by music.state.collectAsStateWithLifecycle()
     val tvRoute = backStackEntry?.destination?.route
-    val musicBarShown = musicState.visible && tvRoute?.startsWith("player?") != true && tvRoute != MUSIC_NOW_ROUTE
+    val musicBarShown = tvShowsMusicBar(musicState.visible, tvRoute)
     var musicBarHeight by remember { mutableIntStateOf(0) }
     NavHost(
         navController = nav,
@@ -649,6 +651,12 @@ internal fun Pictureshow(
                                     hideFromAccessibility()
                                 }
                             )
+                            Text(
+                                "Downloads saved for it on this device are deleted.",
+                                modifier = Modifier.semantics {
+                                    hideFromAccessibility()
+                                }
+                            )
                             Message(screen.error)
                             val question = if (removingAccount != null) "Remove remembered account?" else "Remove server?"
                             Action(
@@ -657,7 +665,8 @@ internal fun Pictureshow(
                                 enabled = !screen.busy,
                                 modifier = Modifier.semantics {
                                     contentDescription =
-                                        "$question $description Other accounts stay signed in. You can add it again later."
+                                        "$question $description Other accounts stay signed in. You can add it again later. " +
+                                        "Downloads saved for it on this device are deleted."
                                 }
                             ) { cancelRemoval() }
                             Action(if (removingAccount != null) "Remove account" else "Remove server", enabled = !screen.busy) {
@@ -842,6 +851,7 @@ internal fun Pictureshow(
                 val vm: CatalogHomeViewModel = koinViewModel(parameters = { parametersOf(account, catalog) })
                 val screen by vm.state.collectAsStateWithLifecycle()
                 val profileState by profile.state.collectAsStateWithLifecycle()
+                val watchDownloads = rememberHomeDownloadsOffer(screen, account.key) { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) }
                 CatalogHome(
                     screen.copy(busy = profileState.busy, error = screen.error ?: profileState.error),
                     profileState.account.copy(server = account.server),
@@ -856,7 +866,9 @@ internal fun Pictureshow(
                     onSearch = { nav.navigate(searchRoute()) },
                     onResume = vm::resumed,
                     onSettings = { nav.navigate("settings") },
-                    onLiveTv = { nav.navigate("live-tv") }
+                    onLiveTv = { nav.navigate("live-tv") },
+                    onDownloads = { nav.navigate(OFFLINE_DOWNLOADS_ROUTE) },
+                    onWatchDownloads = watchDownloads
                 )
             }
         }
@@ -868,6 +880,7 @@ internal fun Pictureshow(
                 }, onRecording = { nav.navigate(itemRoute(it)) }, onBack = { nav.popBackStack() })
             }
         }
+        offlineTvScreens(nav, { state.snapshot.currentAccount }, { catalog }, music::beforeVideo)
         aboutScreens(nav)
         supporterScreen(nav)
         composable("this-tv") {
@@ -1023,7 +1036,10 @@ internal fun Pictureshow(
                         onPendingControlsReady = { exitHandoff?.live(entry.id, it) },
                         onPendingQueueExpired = { exitHandoff?.expired(entry.id) == true },
                         onPlayedRequest = vm::playedRequested,
-                        origin = item
+                        origin = item,
+                        onDownload = { shown, season, seasonName ->
+                            offlineDownloadRoute(shown, season, seasonName)?.let { nav.navigate(it) }
+                        }
                     )
                 }
             }
