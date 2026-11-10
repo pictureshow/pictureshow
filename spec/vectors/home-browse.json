@@ -651,6 +651,21 @@
           ]
         }
       ]
+    },
+    {
+      "id": "home-views-retain-display-hidden-libraries",
+      "operation": "catalog-views-display-hidden",
+      "input": {
+        "kind": "views",
+        "allowed": true
+      },
+      "expected": {
+        "paths": [
+          "/UserViews"
+        ],
+        "failed": false,
+        "includeHidden": "true"
+      }
     }
   ]
 }

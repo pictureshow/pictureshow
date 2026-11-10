@@ -54,6 +54,9 @@
               ],
               "fields": [
                 "Overview,Genres,PrimaryImageAspectRatio,ChildCount,RecursiveItemCount"
+              ],
+              "includeHidden": [
+                "true"
               ]
             },
             "authorization": "MediaBrowser Client=\"Pictureshow\", Device=\"Fixture%20TV\", DeviceId=\"account-device\", Version=\"0.1.0\", Token=\"fixture-token\"",

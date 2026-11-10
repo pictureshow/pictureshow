@@ -105,7 +105,14 @@ internal class CatalogClient(private val client: HttpClient, private val identit
         )
     }
 
-    override suspend fun views(account: Account): ClientResult<ItemPage> = request(account, "UserViews", mapOf("fields" to CARD_FIELDS))
+    override suspend fun views(account: Account): ClientResult<ItemPage> = request(
+        account,
+        "UserViews",
+        mapOf(
+            "fields" to CARD_FIELDS,
+            "includeHidden" to "true"
+        )
+    )
 
     override suspend fun resume(account: Account): ClientResult<ItemPage> = request(
         account,

@@ -55,8 +55,8 @@ private fun CatalogEditor(title: String, close: () -> Unit, content: androidx.co
     MaterialTheme(
         colorScheme = if (tv) {
             androidx.compose.material3.darkColorScheme(
-                background = CatalogBackground,
-                surface = CatalogBackground
+                background = androidx.compose.ui.graphics.Color(0xFF10131C),
+                surface = androidx.compose.ui.graphics.Color(0xFF10131C)
             )
         } else {
             MaterialTheme.colorScheme

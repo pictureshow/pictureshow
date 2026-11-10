@@ -84,8 +84,9 @@ class HomeBrowseVectorsTest {
                         put("roundtrip", readHomePreferences(after) == prefs)
                     }
                 }
-                "catalog-parent-guard", "catalog-latest-authority" -> {
+                "catalog-parent-guard", "catalog-latest-authority", "catalog-views-display-hidden" -> {
                     val paths = mutableListOf<String>()
+                    var includeHidden: String? = null
                     val allowed = input["allowed"]?.jsonPrimitive?.content == "true"
                     val http = HttpClient(
                         MockEngine(
@@ -94,6 +95,7 @@ class HomeBrowseVectorsTest {
                                 addHandler { request ->
                                     val path = request.url.encodedPath
                                     paths += path
+                                    includeHidden = request.url.parameters["includeHidden"]
                                     when {
                                         path == "/Items/library" && !allowed -> respond("{}", HttpStatusCode.NotFound)
                                         path == "/Items/library" -> respond("""{"Id":"library","Type":"CollectionFolder"}""")
@@ -109,6 +111,7 @@ class HomeBrowseVectorsTest {
                         val service = CatalogClient(it, ClientIdentity("Vectors", "vector-device"))
                         val viewer = Account(Server("s", "Cinema", "https://media.example.test", "12.0.0"), User("v", "Viewer"), "fake")
                         val result = when (input.getValue("kind").jsonPrimitive.content) {
+                            "views" -> service.views(viewer)
                             "facets" -> service.facets(viewer, "library")
                             "latest" -> service.latest(viewer, "library")
                             else -> service.namedItems(viewer, input.getValue("kind").jsonPrimitive.content, "library")
@@ -116,6 +119,7 @@ class HomeBrowseVectorsTest {
                         buildJsonObject {
                             put("paths", Json.encodeToJsonElement(paths))
                             put("failed", result is ClientResult.Failure)
+                            if (input.getValue("kind").jsonPrimitive.content == "views") put("includeHidden", includeHidden)
                         }
                     }
                 }

@@ -840,7 +840,7 @@ export class ParityCatalogClient {
         }
     }
     views() {
-        return this.request("UserViews", { fields: CARD_FIELDS });
+        return this.request("UserViews", { fields: CARD_FIELDS, includeHidden: "true" });
     }
     resume() {
         return this.request("UserItems/Resume", {
