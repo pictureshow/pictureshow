@@ -86,7 +86,8 @@ internal class SyncPlayHost(
     private val scope: CoroutineScope,
     private val gateway: SyncPlayGateway,
     private val wall: () -> Long = System::currentTimeMillis,
-    private val monotonic: () -> Long = android.os.SystemClock::elapsedRealtime
+    private val monotonic: () -> Long = android.os.SystemClock::elapsedRealtime,
+    private val diagnosticSink: (String) -> Unit = {}
 ) {
     private val mutable = MutableStateFlow(SyncPlayPresentation())
     val state = mutable.asStateFlow()
@@ -731,7 +732,7 @@ internal class SyncPlayHost(
     /** Debug evidence counts transitions and corrections without viewer names, ids or server locations. */
     private fun diagnostic(event: String, fields: String) {
         if (BuildConfig.DEBUG) {
-            android.util.Log.d("PictureshowSync", "$event uptimeMs=${android.os.SystemClock.elapsedRealtime()} $fields")
+            diagnosticSink("$event uptimeMs=${monotonic()} $fields")
         }
     }
     private fun note(text: String) {

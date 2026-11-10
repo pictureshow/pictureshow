@@ -120,7 +120,8 @@ class PictureshowApplication : Application() {
                                 override suspend fun time(account: Account) = client().utcTime(account)
                                 override suspend fun send(account: Account, request: app.pictureshow.core.sync.SyncRequest) =
                                     client().send(account, request)
-                            }
+                            },
+                            diagnosticSink = { line -> android.util.Log.d("PictureshowSync", line) }
                         )
                     }
                     single {
