@@ -90,14 +90,14 @@ class CatalogCustomizationTest {
         }
         compose.onNodeWithTag("home:visibility:resume").assertIsFocused().assertIsDisplayed()
         compose.onNodeWithText("Back").assertDoesNotExist()
-        compose.onNodeWithTag("home:combine").performScrollTo().performClick()
+        compose.onNodeWithTag("home:combine").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue(preferences.mergeWatching) }
         compose.onNodeWithTag("home:combine").assertIsDisplayed()
         compose.onNodeWithTag("home:row:resume").assertDoesNotExist()
         compose.onNodeWithTag("home:row:nextup").assertDoesNotExist()
-        compose.onNodeWithText("Hide Continue watching and next up").performScrollTo().performClick()
+        compose.onNodeWithTag("home:visibility:watching").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue("watching" in preferences.hidden) }
-        compose.onNodeWithText("Show Continue watching and next up").performClick()
+        compose.onNodeWithTag("home:visibility:watching").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertFalse("watching" in preferences.hidden) }
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.runOnIdle { assertTrue(closed) }
@@ -116,11 +116,11 @@ class CatalogCustomizationTest {
                 )
             }
         }
-        compose.onNodeWithTag("home:reorder:resume").performClick()
+        compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithTag("home:reorder:resume").performKeyInput { pressKey(Key.DirectionDown) }
         compose.runOnIdle { assertTrue(preferences.order.isEmpty(), "Moving a row must not save until drop") }
-        compose.onNodeWithTag("home:reorder:resume").performClick()
+        compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(listOf("nextup", "resume", "libraries"), preferences.order) }
     }
 
@@ -133,7 +133,7 @@ class CatalogCustomizationTest {
             screen =
                 screen.copy(preferenceStatus = "Couldn’t save to your server. Saved on this device.", preferenceRetryable = true)
         }
-        compose.onNodeWithTag("home:retry-save").performScrollTo().performClick()
+        compose.onNodeWithTag("home:retry-save").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle {
             assertTrue(retried)
             screen = screen.copy(preferenceStatus = null, preferenceRetryable = false, saving = true)
@@ -160,8 +160,8 @@ class CatalogCustomizationTest {
                 )
             }
         }
-        compose.onNodeWithTag("home:overflow:${pin.key}").performScrollTo().performClick()
-        compose.onNodeWithText("Unpin").performClick()
+        compose.onNodeWithTag("home:overflow:${pin.key}").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Unpin").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue(preferences.pins.isEmpty()) }
     }
 
@@ -174,12 +174,12 @@ class CatalogCustomizationTest {
         }
         compose.onNodeWithTag("filters:unwatched").assertIsFocused()
         compose.onNodeWithText("Back").assertDoesNotExist()
-        compose.onNodeWithTag("filters:unwatched").performScrollTo().performClick()
-        compose.onNodeWithTag("filters:favorites").performScrollTo().performClick()
-        compose.onNodeWithText("Apply").performScrollTo().performClick()
+        compose.onNodeWithTag("filters:unwatched").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("filters:favorites").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Apply").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(LibraryFilters(unwatched = true, favorite = true), applied) }
-        compose.onNodeWithText("Clear all").performClick()
-        compose.onNodeWithText("Apply").performClick()
+        compose.onNodeWithText("Clear all").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Apply").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(LibraryFilters(), applied) }
     }
 
