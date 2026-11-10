@@ -47,6 +47,8 @@ CONFIG
  for n in $(seq 1 100); do [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && break; kill -0 "$compositor_pid"; sleep .1; done
  [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]
  for media in pq sdr; do
+  mkdir -p "$out/$media"
+  export SPIKE_HDR_APP_SAMPLES="$out/$media/app-backbuffer.json"
   java -Djava.awt.headless=true --enable-native-access=ALL-UNNAMED -cp 'desktop/build/spike-runtime/lib/*' app.pictureshow.desktop.MainKt wayland "desktop-fixtures/hdr/$media.mkv" "$out/$media" --hdr-numeric
  done
  kill "$compositor_pid"; wait "$compositor_pid" || true; compositor_pid=''

@@ -101,7 +101,7 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
  eglGetConfigAttrib(s->ed,config,EGL_RED_SIZE,&s->redBits);eglGetConfigAttrib(s->ed,config,EGL_GREEN_SIZE,&s->greenBits);eglGetConfigAttrib(s->ed,config,EGL_BLUE_SIZE,&s->blueBits);
  EGLint context[]={EGL_CONTEXT_MAJOR_VERSION,3,EGL_CONTEXT_MINOR_VERSION,3,EGL_NONE};s->ec=eglCreateContext(s->ed,config,EGL_NO_CONTEXT,context);check(s->ec!=EGL_NO_CONTEXT,"eglCreateContext");
  s->ew=wl_egl_window_create(s->video,s->width,s->height);s->es=eglCreateWindowSurface(s->ed,config,(EGLNativeWindowType)s->ew,nullptr);check(s->es!=EGL_NO_SURFACE,"eglCreateWindowSurface");check(eglMakeCurrent(s->ed,s->es,s->es,s->ec),"eglMakeCurrent");eglSwapInterval(s->ed,1);
- fprintf(s->log,"GL_VENDOR=%s\nGL_RENDERER=%s\nGL_VERSION=%s\nEGL_RGB_BITS=%d,%d,%d\nvideoReadbacks=0\nUI=Compose ImageComposeScene -> SDR wl_shm subsurface\n",glGetString(GL_VENDOR),glGetString(GL_RENDERER),glGetString(GL_VERSION),s->redBits,s->greenBits,s->blueBits);fflush(s->log);
+ fprintf(s->log,"GL_VENDOR=%s\nGL_RENDERER=%s\nGL_VERSION=%s\nEGL_RGB_BITS=%d,%d,%d\nvideoReadbacks=regular-path-zero; explicit-HDR-diagnostic=%d\nUI=Compose ImageComposeScene -> SDR wl_shm subsurface\n",glGetString(GL_VENDOR),glGetString(GL_RENDERER),glGetString(GL_VERSION),s->redBits,s->greenBits,s->blueBits,getenv("SPIKE_HDR_APP_SAMPLES")?1:0);fflush(s->log);
  mpv_opengl_drm_params_v2 drm={};drm.fd=-1;s->renderFd=drm.render_fd=open("/dev/dri/renderD128",O_RDWR);check(s->renderFd>=0 || getenv("SPIKE_SOFTWARE_GPU"),"render node required unless explicit software diagnostic");
  mpv_opengl_init_params init={getproc,nullptr};const char*api=MPV_RENDER_API_TYPE_OPENGL;mpv_render_param params[]={{MPV_RENDER_PARAM_API_TYPE,(void*)api},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_WL_DISPLAY,s->d},{MPV_RENDER_PARAM_DRM_DISPLAY_V2,s->renderFd>=0?&drm:nullptr},{MPV_RENDER_PARAM_INVALID,nullptr}};
  if(s->renderFd<0) params[3]={MPV_RENDER_PARAM_INVALID,nullptr};
@@ -116,6 +116,22 @@ void*ps_wayland_create(mpv_handle*mpv,const char*receipt,int hdr){
      if(w!=lastw||h!=lasth){wl_egl_window_resize(s->ew,w,h,0,0);lastw=w;lasth=h;}
      mpv_opengl_fbo fbo{0,w,h,s->hdr?GL_RGB10_A2:GL_RGBA8};int flip=1,block=s->legacy?1:0;mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME,&block},{MPV_RENDER_PARAM_INVALID,nullptr}};
      double a=seconds();int rc=mpv_render_context_render(s->render,params);double b=seconds();if(rc<0){s->renderFailure=rc;break;}
+     if(const char *path=getenv("SPIKE_HDR_APP_SAMPLES")) {
+      // Explicit finite diagnostic only: this boundary precedes Wayland composition.
+      FILE *out=fopen(path,"w");
+      if(!out){s->renderFailure=-4;break;}
+      const char *names[]={"black","gray100","gray203","gray1000","red100","green100","blue100","gray50"};
+      fprintf(out,"{\"encoding\":\"%s\",\"primaries\":\"%s\",\"referenceWhiteNits\":203,\"boundary\":\"app GL backbuffer BEFORE compositor\",\"width\":%d,\"height\":%d,\"samples\":[",s->hdr?"pq":"gamma2.2",s->hdr?"bt2020":"bt709",w,h);
+      for(int n=0;n<8;n++) {
+       float pixels[75];glReadPixels((int)((n+0.5)*w/8)-2,h/2-2,5,5,GL_RGB,GL_FLOAT,pixels);
+       float channels[3][25];
+       for(int k=0;k<25;k++)for(int c=0;c<3;c++)channels[c][k]=pixels[k*3+c];
+       for(int c=0;c<3;c++)std::sort(channels[c],channels[c]+25);
+       fprintf(out,"%s{\"name\":\"%s\",\"rgb\":[%.9g,%.9g,%.9g]}",n?",":"",names[n],channels[0][12],channels[1][12],channels[2][12]);
+      }
+      fprintf(out,"]}\n");fclose(out);
+      if(glGetError()!=GL_NO_ERROR){s->renderFailure=-5;break;}
+     }
      if(!eglSwapBuffers(s->ed,s->es)){s->renderFailure=-2;break;}double c=seconds();mpv_render_context_report_swap(s->render);
      {std::lock_guard<std::mutex> lock(s->metrics);s->frames++;s->renderMs+=(b-a)*1000;s->swapMs+=(c-b)*1000;}
     }
@@ -161,6 +177,9 @@ int ps_wayland_capture(void*p,const char*path){auto*s=(Surface*)p;if(!s->capture
   fprintf(s->log,"captureSource=Weston composited FRAMEBUFFER; captureFourCC=0x%08x; width=%d; height=%d; bitsPerChannel=8\n",s->capformat,s->capw,s->caph);fflush(s->log);
   // Reject an unsupported layout rather than interpreting packed 10-bit/float as bytes.
   if(s->capformat!=0x34325258 && s->capformat!=0x34325241 && s->capformat!=0x34324258 && s->capformat!=0x34324241) {s->capdone=-3;}
+ }
+ if(s->capdone==1){
+  std::string rawPath=std::string(path)+".raw";FILE*raw=fopen(rawPath.c_str(),"wb");if(raw){fwrite(b->data,1,b->n,raw);fclose(raw);}
  }
  if(s->capdone==1){FILE*out=fopen(path,"wb");fprintf(out,"P6\n%d %d\n255\n",s->capw,s->caph);auto*bytes=(unsigned char*)b->data;for(int n=0;n<s->capw*s->caph;n++){bool rgbOrder=s->capformat==0x34324258||s->capformat==0x34324241;unsigned char rgb[3]={bytes[n*4+(rgbOrder?0:2)],bytes[n*4+1],bytes[n*4+(rgbOrder?2:0)]};fwrite(rgb,1,3,out);}fclose(out);}
  weston_capture_source_v1_destroy(s->shot);s->shot=nullptr;

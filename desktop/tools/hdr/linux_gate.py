@@ -11,6 +11,14 @@ from analyze import analyze
 manifest=json.loads(Path(sys.argv[1]).read_text())
 root=Path(sys.argv[2])
 results={}
+# Separate diagnostic receipts. These never substitute for compositor captures.
+for mode in ('hdr','sdr'):
+ for media in ('pq','sdr'):
+  folder=root/(mode+'-output')/media
+  app_path=folder/'app-backbuffer.json'
+  if app_path.exists():
+   verdict=analyze(manifest,media,json.loads(app_path.read_text()))
+   (folder/'app-backbuffer-verdict.json').write_text(json.dumps(verdict,indent=2)+'\n')
 for mode in ('hdr','sdr'):
  log=(root/(mode+'-output')/'weston.log').read_text()
  # Values come from weston_output_get_eotf_mode/get_colorimetry_mode at capture time.
