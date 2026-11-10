@@ -43,7 +43,7 @@ fun canvasMain(args: Array<String>) {
         val state=rememberWindowState(width=960.dp,height=640.dp)
         var clicks by remember { mutableStateOf(0) }
         var fullscreen by remember { mutableStateOf(false) }
-        var floating:Rectangle?=null
+        var floating by remember { mutableStateOf<Rectangle?>(null) }
         fun stop(code:Int=0) {
             if (!stopping.compareAndSet(false,true)) return
             Thread {
