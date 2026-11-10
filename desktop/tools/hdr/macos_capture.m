@@ -8,6 +8,7 @@
 #import <CoreVideo/CoreVideo.h>
 #include <sys/utsname.h>
 #include <math.h>
+#include <dlfcn.h>
 static void writeJSON(NSDictionary *obj, NSString *path) {
     NSData *d=[NSJSONSerialization dataWithJSONObject:obj options:NSJSONWritingPrettyPrinted error:nil];
     if(path) [d writeToFile:path atomically:YES]; else {fwrite(d.bytes,1,d.length,stdout);puts("");}
@@ -20,8 +21,11 @@ static float half(uint16_t h) {
 static int compareFloat(const void *a,const void *b) {float x=*(float*)a,y=*(float*)b;return (x>y)-(x<y);}
 int main(int argc,const char **argv) { @autoreleasepool {
     struct utsname machine;uname(&machine);
+    void *sky=dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",RTLD_LAZY);
+    bool (*hdrEnabled)(uint32_t)=(bool(*)(uint32_t))dlsym(sky,"SLSDisplayIsHDRModeEnabled");
+    bool (*hdrSupported)(uint32_t)=(bool(*)(uint32_t))dlsym(sky,"SLSDisplaySupportsHDRMode");
     NSMutableArray *screens=[NSMutableArray new];
-    for(NSScreen *s in NSScreen.screens) [screens addObject:@{@"id":s.deviceDescription[@"NSScreenNumber"],@"name":s.localizedName,@"frame":NSStringFromRect(s.frame),@"headroom":@(s.maximumExtendedDynamicRangeColorComponentValue),@"potentialHeadroom":@(s.maximumPotentialExtendedDynamicRangeColorComponentValue)}];
+    for(NSScreen *s in NSScreen.screens) [screens addObject:@{@"id":s.deviceDescription[@"NSScreenNumber"],@"name":s.localizedName,@"hdrModeEnabled":hdrEnabled?@(hdrEnabled([s.deviceDescription[@"NSScreenNumber"] unsignedIntValue])):@"unknown",@"hdrSupported":hdrSupported?@(hdrSupported([s.deviceDescription[@"NSScreenNumber"] unsignedIntValue])):@"unknown",@"frame":NSStringFromRect(s.frame),@"headroom":@(s.maximumExtendedDynamicRangeColorComponentValue),@"potentialHeadroom":@(s.maximumPotentialExtendedDynamicRangeColorComponentValue)}];
     NSDictionary *preflight=@{@"architecture":[NSString stringWithUTF8String:machine.machine],@"screenRecordingPreflight":@(CGPreflightScreenCaptureAccess()),@"screens":screens};
     if(argc<2 || strcmp(argv[1],"preflight")==0) {writeJSON(preflight,nil);return 0;}
     if(strcmp(machine.machine,"arm64")!=0) {writeJSON(@{@"pass":@NO,@"error":@"ScreenCaptureKit HDR capture requires Apple Silicon",@"preflight":preflight},nil);return 2;}
@@ -58,7 +62,7 @@ int main(int argc,const char **argv) { @autoreleasepool {
                 NSString *transfer=meta[(__bridge NSString*)kCVImageBufferTransferFunctionKey] ?: formatMeta[(__bridge NSString*)kCMFormatDescriptionExtension_TransferFunction];
                 CGColorSpaceRef actualCS=(__bridge CGColorSpaceRef)meta[(__bridge NSString*)kCVImageBufferCGColorSpaceKey];
                 NSString *csName=actualCS?(__bridge NSString*)CGColorSpaceGetName(actualCS):@"";
-                BOOL actualColorProven=([prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020] && [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) || [csName isEqualToString:(__bridge NSString*)kCGColorSpaceExtendedLinearITUR_2020];
+                BOOL actualColorProven=(!prim || [prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020]) && (!transfer || [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) && (([prim isEqualToString:(__bridge NSString*)kCVImageBufferColorPrimaries_ITU_R_2020] && [transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_Linear]) || [csName isEqualToString:(__bridge NSString*)kCGColorSpaceExtendedLinearITUR_2020]);
                 if(!actualColorProven) {writeJSON(@{@"pass":@NO,@"error":@"Actual capture color attachments do not establish linear BT2020",@"actualPrimaries":prim?:@"",@"actualTransfer":transfer?:@"",@"actualColorSpace":csName?:@"",@"attachments":meta.description,@"formatAttachments":formatMeta.description?:@""},out);done=YES;return;}
                 NSNumber *captureHeadroom=@0;
                 for(NSScreen *screen in NSScreen.screens) if([screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue]==display.displayID) captureHeadroom=@(screen.maximumExtendedDynamicRangeColorComponentValue);

@@ -28,6 +28,9 @@ HDR on the intended output before running; the test fails closed if the actual
 app lands on another SDR monitor. Keep a single intended test display active, or
 place the app on it before capture. The host needs an unlocked interactive
 Windows desktop, capture support, the dependencies above and an HDR output.
+The script refuses existing per-media evidence directories, so a repeated local
+run cannot accidentally accept stale successful pixels. Preserve the previous
+`desktop-evidence/hdr-pq` and `hdr-sdr` directories elsewhere before a fresh run.
 The script exits the app normally, checks teardown, and stops only its own PID
 on failure. Generated patterns are CC0; results can be reviewed without asking a
 person to judge a screen.

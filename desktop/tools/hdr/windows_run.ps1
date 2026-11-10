@@ -9,12 +9,14 @@ $env:PATH = "$($dll.DirectoryName);C:\Windows\System32;$env:JAVA_HOME\bin"
 $env:SPIKE_NULL_AUDIO = '1'
 if ($HardwareGpu) { Remove-Item Env:SPIKE_SOFTWARE_GPU -ErrorAction SilentlyContinue } else { $env:SPIKE_SOFTWARE_GPU = '1' }
 $env:SPIKE_LAYER_BRIDGE = (Resolve-Path desktop/build/pictureshow-layer.dll).Path
-$env:SPIKE_HDR_HOLD_SECONDS = '20'
+$env:SPIKE_HDR_HOLD_SECONDS = '35'
 $env:SKIKO_RENDER_API = 'SOFTWARE'
 $captures = @()
 foreach ($media in @('pq', 'sdr')) {
   $out = "desktop-evidence/hdr-$media"
-  New-Item -ItemType Directory -Force $out | Out-Null
+  # A reused directory could let an old successful capture mask a current failure.
+  if (Test-Path $out) { throw "Refusing stale HDR evidence directory: $out. Preserve it elsewhere before a fresh run." }
+  New-Item -ItemType Directory $out | Out-Null
   $env:SPIKE_HDR_READBACK_DIR = (Resolve-Path $out).Path
   $log = Join-Path (Resolve-Path $out) 'app.stdout.log'
   $err = Join-Path (Resolve-Path $out) 'app.stderr.log'

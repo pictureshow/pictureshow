@@ -56,11 +56,11 @@ int wmain(int argc,wchar_t **argv) {
   if(!frame)throw hresult_error(E_FAIL,L"No WGC frame in 10 seconds");
   auto access=frame.Surface().as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();com_ptr<ID3D11Texture2D> texture;check_hresult(access->GetInterface(__uuidof(ID3D11Texture2D),texture.put_void()));
   D3D11_TEXTURE2D_DESC desc={};texture->GetDesc(&desc);if(desc.Format!=DXGI_FORMAT_R16G16B16A16_FLOAT)throw hresult_error(E_FAIL,L"Capture lost FP16 format");
-  auto size=frame.ContentSize();desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.MiscFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;com_ptr<ID3D11Texture2D> staging;check_hresult(device->CreateTexture2D(&desc,nullptr,staging.put()));context->CopyResource(staging.get(),texture.get());D3D11_MAPPED_SUBRESOURCE map={};check_hresult(context->Map(staging.get(),0,D3D11_MAP_READ,0,&map));
-  std::ofstream raw(std::filesystem::path(std::wstring(argv[2])+L".rgba16f"),std::ios::binary);for(int y=0;y<size.Height;++y)raw.write((char*)map.pData+y*map.RowPitch,size.Width*8);context->Unmap(staging.get(),0);raw.close();
+  auto size=frame.ContentSize();if(size.Width<1||size.Height<1||size.Width>(int)desc.Width||size.Height>(int)desc.Height)throw hresult_error(E_FAIL,L"Capture content bounds exceed texture");desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.MiscFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;com_ptr<ID3D11Texture2D> staging;check_hresult(device->CreateTexture2D(&desc,nullptr,staging.put()));context->CopyResource(staging.get(),texture.get());D3D11_MAPPED_SUBRESOURCE map={};check_hresult(context->Map(staging.get(),0,D3D11_MAP_READ,0,&map));
+  std::ofstream raw(std::filesystem::path(std::wstring(argv[2])+L".rgba16f"),std::ios::binary);for(int y=0;y<size.Height;++y)raw.write((char*)map.pData+y*map.RowPitch,size.Width*8);context->Unmap(staging.get(),0);raw.close();if(!raw)throw hresult_error(E_FAIL,L"Raw capture file write failed");
   RECT r={};GetWindowRect(window,&r);MONITORINFO mi={sizeof(mi)};GetMonitorInfo(MonitorFromWindow(window,MONITOR_DEFAULTTONEAREST),&mi);
   int x=mode==L"display"?r.left-mi.rcMonitor.left:0,y=mode==L"display"?r.top-mi.rcMonitor.top:0;
   std::ofstream meta(std::filesystem::path(std::wstring(argv[2])+L".json"));meta<<"{\"captureAPI\":\"Windows.Graphics.Capture\",\"mode\":\""<<(mode==L"display"?"display":"window")<<"\",\"format\":\"RGBA16Float\",\"encoding\":\"linear\",\"primaries\":\"bt709\",\"referenceWhiteNits\":80,\"width\":"<<size.Width<<",\"height\":"<<size.Height<<",\"videoBounds\":["<<x<<","<<y<<","<<r.right-r.left<<","<<r.bottom-r.top<<"]}\n";
-  frame.Close();session.Close();pool.Close();displays(false);return 0;
+  meta.close();if(!meta)throw hresult_error(E_FAIL,L"Capture metadata file write failed");frame.Close();session.Close();pool.Close();displays(false);return 0;
  }catch(hresult_error const&e){std::wcerr<<L"HRESULT "<<std::hex<<e.code()<<L": "<<e.message().c_str()<<L"\n";return 2;}
 }
