@@ -17,3 +17,12 @@ fun showDetailEmptyState(
     !readFailed &&
     episodeCount == 0 &&
     seasonCount == 0
+
+/** Keep a reader's season target only while that exact card remains mounted on the page. */
+fun detailRetainsSeasonFocus(
+    selectedSection: String,
+    restored: Boolean,
+    semanticsRevealed: Boolean,
+    selectedId: String,
+    seasonIds: List<String>
+): Boolean = selectedSection == "seasons" && restored && semanticsRevealed && selectedId in seasonIds

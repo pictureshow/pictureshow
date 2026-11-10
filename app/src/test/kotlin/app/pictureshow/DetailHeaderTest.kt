@@ -375,6 +375,77 @@ class DetailHeaderTest {
     }
 
     @Test
+    fun pageRefreshWithASeasonFocusedRestoresItAfterItsShelfIsReplaced() {
+        var state by mutableStateOf(
+            CatalogDetailState(
+                account,
+                series,
+                loading = false,
+                seasons = listOf(season),
+                selectedSeasonId = season.id,
+                episodes = listOf(episode)
+            )
+        )
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        compose.setContent { PictureshowTheme { CatalogDetail(state, {}, {}, {}, {}, {}) } }
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("detail:seasons:season").assertIsFocused()
+        // A full refresh can remove and republish Seasons, unlike an episode-only season read.
+        compose.runOnIdle { state = state.copy(loading = true, seasons = emptyList(), episodes = emptyList()) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.runOnIdle { state = state.copy(loading = false, seasons = listOf(season), episodes = listOf(episode)) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("detail:seasons:season").assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    fun pageRefreshKeepingTheSeasonCardKeepsItRevealedAndFocused() {
+        var state by mutableStateOf(
+            CatalogDetailState(
+                account,
+                series,
+                loading = false,
+                seasons = listOf(season),
+                selectedSeasonId = season.id,
+                episodes = listOf(episode)
+            )
+        )
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        compose.setContent { PictureshowTheme { CatalogDetail(state, {}, {}, {}, {}, {}) } }
+        key(Key.DirectionDown)
+        compose.runOnIdle { state = state.copy(loading = true, episodes = emptyList()) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithTag("detail:seasons:season").assertIsFocused()
+        compose.runOnIdle { state = state.copy(loading = false, episodes = listOf(episode)) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("detail:seasons:season").assertIsFocused().assertIsDisplayed()
+    }
+
+    @Test
+    fun anotherItemLoadingWhileSeasonsHeldFocusRestoresItsOwnPrimaryAction() {
+        var state by mutableStateOf(
+            CatalogDetailState(
+                account,
+                series,
+                loading = false,
+                seasons = listOf(season),
+                selectedSeasonId = season.id,
+                episodes = listOf(episode)
+            )
+        )
+        shadowOf(compose.activity.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        compose.setContent { PictureshowTheme { CatalogDetail(state, {}, {}, {}, {}, {}) } }
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("detail:seasons:season").assertIsFocused()
+        val movie = MediaItem("other", "Another title", "Movie")
+        compose.runOnIdle { state = CatalogDetailState(account, movie, loading = true) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.runOnIdle { state = state.copy(loading = false) }
+        compose.waitForIdle()
+        assertHeader(movie.name)
+    }
+
+    @Test
     fun allWatchedSeasonOffersRewatchFromFirstEpisode() {
         var target: String? = null
         var resumed = true

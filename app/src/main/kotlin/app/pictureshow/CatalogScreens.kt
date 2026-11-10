@@ -2565,7 +2565,15 @@ fun CatalogDetail(
         // A season chosen in the Seasons row reloads only the Episodes shelf under it: the focused season card stays, so
         // the page isn't an arrival. Hiding it from TalkBack for the read dropped the reader's focus from the card, and
         // TalkBack put it on Next up; the viewer's next Right then left the row (rc33, fast walks across 32 seasons).
-        val seasonSwitchInPlace = selectedSection == "seasons" && restored && semanticsRevealed
+        // A full refresh or item replacement can remove that card. Then reset and restore normally; a remembered
+        // section name alone is not evidence that its focus target survived the load.
+        val seasonSwitchInPlace = app.pictureshow.core.detailRetainsSeasonFocus(
+            selectedSection,
+            restored,
+            semanticsRevealed,
+            selectedId,
+            state.seasons.map(MediaItem::id)
+        )
         if (state.loading && selectedSection != "header" && !seasonSwitchInPlace) {
             restored = false
             semanticsRevealed = false
