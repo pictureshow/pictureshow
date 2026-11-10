@@ -99,7 +99,7 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
         s->w=w; s->h=h;
         mainCall(^{ s->layer.drawableSize=CGSizeMake(w,h); });
     }
-    mpv_opengl_fbo fbo={(int)s->fbo,w,h,GL_RGBA16F}; int flip=1;
+    mpv_opengl_fbo fbo={(int)s->fbo,w,h,GL_RGBA16F}; int flip=0; // IOSurface rows are consumed by Metal in top-left order.
     mpv_render_param params[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_INVALID,nullptr}};
     int rc=mpv_render_context_render(s->render,params); if(rc<0) return rc;
     // Synchronize cross-API ownership; this waits for the GPU, never reads frame pixels.
