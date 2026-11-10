@@ -181,7 +181,7 @@ private fun SyncPlayGroups(state: SyncPlayPresentation, onAction: (String, Strin
         Text("Create a group", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         OutlinedTextField(
             value = name,
-            onValueChange = { name = it },
+            onValueChange = { name = it.take(200) },
             label = { Text("Group name") },
             singleLine = true,
             enabled = !state.busy,

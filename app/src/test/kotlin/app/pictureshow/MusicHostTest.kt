@@ -1075,7 +1075,10 @@ class MusicHostTest {
             os.stop()
             until("the OS commands to dispatch to SyncPlay") { rig.controls().size >= 11 }
             assertEquals(
-                listOf("Unpause", "Pause", "Seek", "Seek", "Seek", "Seek", "NextItem", "PreviousItem", "SetRepeatMode", "SetShuffleMode", "Stop"),
+                listOf(
+                    "Unpause", "Pause", "Seek", "Seek", "Seek", "Seek", "NextItem", "PreviousItem",
+                    "SetRepeatMode", "SetShuffleMode", "Stop"
+                ),
                 rig.controls().map { it.operation }
             )
             assertEquals(before, music.state.value.queue)

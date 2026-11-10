@@ -597,4 +597,98 @@ class SyncPlayHostTest {
             assertFalse(rig.host.transport("play"), "status=$status")
         }
     }
+
+    @Test fun anAbsentRendererConsumesSeekWithoutSendingAZeroPositionToTheGroup() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.host.clearRenderer(rig.renderer)
+        assertTrue(rig.host.transport("seek", 45_000))
+        runCurrent()
+        assertTrue(rig.host.participating)
+        assertFalse(rig.operations().contains("Seek"))
+        assertTrue(rig.sent.isEmpty())
+    }
+
+    @Test fun anUnknownOrNegativeDurationConsumesSeekWithoutMutatingTheGroup() = runTest {
+        for (duration in listOf(0L, -1L)) {
+            val rig = Rig(this)
+            rig.join()
+            rig.snapshot()
+            rig.sent.clear()
+            rig.renderer.value = rig.renderer.value.copy(durationTicks = duration)
+            val before = rig.renderer.value
+            rig.renderer.applied.clear()
+            assertTrue(rig.host.transport("seek", 45_000), "duration=$duration")
+            runCurrent()
+            assertTrue(rig.host.participating, "duration=$duration")
+            assertTrue(rig.sent.isEmpty(), "duration=$duration")
+            assertEquals(before, rig.renderer.value, "duration=$duration")
+            assertTrue(rig.renderer.applied.isEmpty(), "duration=$duration")
+        }
+    }
+
+    @Test fun aKnownPositiveDurationBoundsTheGroupSeekWithoutMovingLocalOutputFirst() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.renderer.value = rig.renderer.value.copy(durationTicks = 123_456_789L)
+        val before = rig.renderer.value
+        rig.renderer.applied.clear()
+        assertTrue(rig.host.transport("seek", 45_000))
+        assertTrue(rig.host.transport("seek", 5_000))
+        runCurrent()
+        val positions = rig.sent.filter { it.second.operation == "Seek" }.map {
+            it.second.body!!.getValue("PositionTicks").jsonPrimitive.long
+        }
+        assertEquals(listOf(123_456_789L, 50_000_000L), positions)
+        assertEquals(before, rig.renderer.value)
+        assertTrue(rig.renderer.applied.isEmpty())
+    }
+
+    @Test fun ignoreWaitPresentationChangesOnlyAfterItsSuccessfulHttpReply() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.sendGate = CompletableDeferred()
+        rig.host.action("ignore-wait", "true")
+        runCurrent()
+        assertEquals(listOf("SetIgnoreWait"), rig.operations())
+        assertFalse(rig.host.state.value.ignoreWait)
+        rig.sendGate!!.complete(Unit)
+        runCurrent()
+        assertTrue(rig.host.state.value.ignoreWait)
+        rig.sendGate = CompletableDeferred()
+        rig.host.action("ignore-wait", "false")
+        runCurrent()
+        assertTrue(rig.host.state.value.ignoreWait)
+        rig.sendGate!!.complete(Unit)
+        runCurrent()
+        assertFalse(rig.host.state.value.ignoreWait)
+    }
+
+    @Test fun deniedOrUnconfirmedIgnoreWaitKeepsTheLastConfirmedPresentation() = runTest {
+        for (status in listOf(0, 403, 503)) {
+            val rig = Rig(this)
+            rig.join()
+            rig.snapshot()
+            rig.sent.clear()
+            rig.httpStatus = status
+            rig.host.action("ignore-wait", "true")
+            runCurrent()
+            assertFalse(rig.host.state.value.ignoreWait, "status=$status")
+            rig.httpStatus = 204
+            rig.host.action("ignore-wait", "true")
+            runCurrent()
+            assertTrue(rig.host.state.value.ignoreWait, "status=$status")
+            rig.httpStatus = status
+            rig.host.action("ignore-wait", "false")
+            runCurrent()
+            assertTrue(rig.host.state.value.ignoreWait, "status=$status")
+            assertEquals(listOf("SetIgnoreWait", "SetIgnoreWait", "SetIgnoreWait"), rig.operations())
+        }
+    }
 }

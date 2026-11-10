@@ -238,9 +238,8 @@ internal class SyncPlayHost(
             requestedOpen = null
         }
         val entryChanged = entry?.playlistItemId != before.queue?.current?.playlistItemId
-        if (entry != null && (renderer?.snapshot()?.itemId != entry.itemId || entryChanged) &&
-            requestedOpen != entry.playlistItemId
-        ) {
+        val needsOpen = entry != null && (renderer?.snapshot()?.itemId != entry.itemId || entryChanged)
+        if (entry != null && needsOpen && requestedOpen != entry.playlistItemId) {
             renderer?.apply(playing = false)
             requestedOpen = entry.playlistItemId
             opening.tryEmit(SyncOpen(after.generation, entry.playlistItemId, entry.itemId, requireNotNull(after.queue).startPositionTicks))
@@ -410,8 +409,10 @@ internal class SyncPlayHost(
             )
 
             "seek" -> if (positionMs != null && positionMs >= 0) {
-                val duration = renderer?.snapshot()?.durationTicks ?: 0
-                millisecondsToSyncTicks(positionMs)?.coerceAtMost(duration)?.let { send(syncTransport("Seek", it)) }
+                val duration = renderer?.snapshot()?.durationTicks?.takeIf { it > 0 }
+                if (duration != null) {
+                    millisecondsToSyncTicks(positionMs)?.coerceAtMost(duration)?.let { send(syncTransport("Seek", it)) }
+                }
             }
 
             "next", "previous" -> if (entry !=
@@ -438,9 +439,11 @@ internal class SyncPlayHost(
             "play", "pause", "next", "previous" -> transport(action)
 
             "ignore-wait" -> {
-                ignoreWait = value == "true"
-                send(syncIgnoreWait(ignoreWait))
-                publish()
+                val requested = value == "true"
+                send(syncIgnoreWait(requested)) {
+                    ignoreWait = requested
+                    publish()
+                }
             }
 
             "repeat" -> value?.let { send(syncRepeat(it)) }
@@ -459,7 +462,7 @@ internal class SyncPlayHost(
         return true
     }
 
-    private fun send(request: SyncRequest) {
+    private fun send(request: SyncRequest, confirmed: (() -> Unit)? = null) {
         val target = account ?: return
         if (!connected || membership.group == null || membership.phase in setOf("Error", "Reconnecting")) {
             note("Group controls are unavailable until membership and synchronization are refreshed.")
@@ -468,6 +471,7 @@ internal class SyncPlayHost(
         val version = sequence
         scope.launch {
             val status = gateway.send(target, request)
+            if (current(target, version) && status in 200..299) confirmed?.invoke()
             if (current(target, version) && status !in 200..299) {
                 note(
                     if (status == 401 || status == 403) {
