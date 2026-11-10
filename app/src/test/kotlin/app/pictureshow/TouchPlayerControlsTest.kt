@@ -1155,7 +1155,7 @@ class TouchPlayerControlsTest {
         compose.onNodeWithTag("touch:more").performClick()
         compose.onNodeWithTag("touch:stop").assertIsDisplayed().assertHasClickAction()
         val stop = bounds("touch:stop")
-        assertTrue(stop.bottom - stop.top >= 48.dp)
+        assertTrue(stop.bottom - stop.top >= 48.dp - 0.001.dp)
         back()
         compose.onNodeWithTag("touch:stop").assertDoesNotExist()
         compose.onNodeWithTag("touch:toggle").assertIsDisplayed()
@@ -1236,16 +1236,18 @@ class TouchPlayerControlsTest {
             .assertHasClickAction()
     }
 
-    /** Three transport targets over the frame; native, named secondary targets on a single separate row. */
+    /** Three transport targets over the frame; native, named secondary targets on a single separate row.
+     * Pixel-to-dp subtraction can round just below an integer; 0.001 dp admits only that numerical noise.
+     */
     private fun assertIconLayout() {
         val transport = listOf("touch:back10", "touch:toggle", "touch:forward10").map(::bounds)
         val center = transport[1].let { (it.top + it.bottom) / 2 }
         transport.forEach {
             assertEquals(center.value, ((it.top + it.bottom) / 2).value, 1f)
-            assertTrue(it.right - it.left >= 48.dp && it.bottom - it.top >= 48.dp, "whole transport target: $it")
+            assertTrue(it.right - it.left >= 48.dp - 0.001.dp && it.bottom - it.top >= 48.dp - 0.001.dp, "whole transport target: $it")
             assertInsideTheWindow(it)
         }
-        assertTrue(transport[1].right - transport[1].left >= 64.dp)
+        assertTrue(transport[1].right - transport[1].left >= 64.dp - 0.001.dp)
         transport.zipWithNext { a, b -> assertTrue(a.right <= b.left, "separate transport: $a $b") }
         val window = bounds("touch:player")
         assertEquals(((window.left + window.right) / 2).value, ((transport[1].left + transport[1].right) / 2).value, 1f)
@@ -1257,7 +1259,7 @@ class TouchPlayerControlsTest {
         val boxes = tags.map(::bounds)
         boxes.forEachIndexed { index, box ->
             assertEquals(boxes.first().top.value, box.top.value, 1f, "one secondary row")
-            assertTrue(box.right - box.left >= 48.dp && box.bottom - box.top >= 48.dp, "whole secondary target: $box")
+            assertTrue(box.right - box.left >= 48.dp - 0.001.dp && box.bottom - box.top >= 48.dp - 0.001.dp, "whole secondary target: $box")
             assertInsideTheWindow(box)
             compose.onNodeWithTag(tags[index]).assertHasClickAction()
         }
