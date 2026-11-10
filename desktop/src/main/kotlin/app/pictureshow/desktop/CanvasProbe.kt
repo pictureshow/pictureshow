@@ -147,6 +147,7 @@ fun canvasMain(args: Array<String>) {
                             check(kotlin.math.abs(mpv.get("container-fps")!!.toDouble()-60.0)<0.01){"Expected 60fps fixture"}
                             val startFrames=video!!.newVideoFrames.get();val start=System.nanoTime()
                             val first=mpv.get("time-pos")!!.toDouble()
+                            check(first<1.0){"Seek to soak origin did not complete: $first"}
                             mpv.set("pause","no")
                             File(out,"progress.tsv").bufferedWriter().use {log ->
                                 log.write("elapsed\ttime-pos\tnewVideoFrames\trenderCalls\tvoDrops\tdecoderDrops\n")
