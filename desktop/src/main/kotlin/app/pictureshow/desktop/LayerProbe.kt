@@ -107,7 +107,7 @@ fun layerMain(args: Array<String>) {
                         if(Platform.isWindows()) {
                             val shader=File(out,"scrgb-reference.glsl")
                             shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / 80.0), c.a); }\n")
-                            mpv.option("fbo-format","rgba16f"); mpv.option("glsl-shaders",shader.absolutePath)
+                            mpv.option("fbo-format","rgba16hf"); mpv.option("glsl-shaders",shader.absolutePath)
                         }
                         mpv.initialize()
                         val view=if(Platform.isMac()) requireNotNull(bridge.ps_find_window("Pictureshow native HDR surface")) else Native.getWindowPointer(window)
