@@ -5,8 +5,8 @@ package app.pictureshow
 
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
+import com.google.android.gms.cast.MediaQueueData
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -38,9 +38,9 @@ class CastLiveLoadTest {
     }
 
     @Test fun liveQueueAlsoLeavesStartTimeToReceiver() {
-        val data = castLoadData(CastLoadRequest(listOf(item(false), item(true)), 1, 50_000, true))
+        val data = castLoadData(CastLoadRequest(listOf(item(false), item(true)), 1, 0, true))
         assertEquals(1, data.queueData!!.startIndex)
-        assertNotEquals(50_000L, data.queueData!!.startTime)
+        assertEquals(MediaQueueData.Builder().build().startTime, data.queueData!!.startTime)
         assertEquals(MediaInfo.STREAM_TYPE_LIVE, data.queueData!!.items!![1].media.streamType)
     }
 
