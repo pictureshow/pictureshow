@@ -114,10 +114,12 @@ fun layerMain(args: Array<String>) {
                         mpv.option("vo","libmpv")
                         // Render linear BT.2020 into a float target. 1.0 is the SDR reference white.
                         mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak","1000")
+                        mpv.option("fbo-format",if(Platform.isMac()) "rgba16f" else "rgba16hf")
+                        mpv.option("dither-depth","no") // Float output must not be quantized as an 8-bit window framebuffer.
                         if(Platform.isWindows()) {
                             val shader=File(out,"scrgb-reference.glsl")
                             shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / 80.0), c.a); }\n")
-                            mpv.option("fbo-format","rgba16hf"); mpv.option("glsl-shaders",shader.absolutePath)
+                            mpv.option("glsl-shaders",shader.absolutePath)
                         }
                         mpv.initialize()
                         val view=if(Platform.isMac()) requireNotNull(bridge.ps_find_window("Pictureshow native HDR surface")) else Native.getWindowPointer(window)
