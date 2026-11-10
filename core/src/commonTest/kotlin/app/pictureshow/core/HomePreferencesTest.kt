@@ -83,7 +83,10 @@ class HomePreferencesTest {
                         assertTrue(request.headers[HttpHeaders.Authorization].orEmpty().contains("viewer-token"))
                         val p = request.url.parameters
                         mapOf(
-                            "genres" to "Animation & stories", "years" to "2025", "officialRatings" to "PG-13", "isPlayed" to "false",
+                            "genres" to "Animation & stories",
+                            "years" to "2025",
+                            "officialRatings" to "PG-13",
+                            "isPlayed" to "false",
                             "isFavorite" to "true", "minWidth" to "1920", "maxWidth" to "3839", "personIds" to "person",
                             "studios" to "Studio & Co",
                             "sortBy" to "DateCreated", "sortOrder" to "Descending", "startIndex" to "60", "parentId" to "library"
