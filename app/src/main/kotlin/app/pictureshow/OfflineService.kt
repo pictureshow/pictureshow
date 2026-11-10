@@ -315,7 +315,9 @@ internal class OfflineForegroundGate(private val start: (List<String>) -> Boolea
 
 internal class AndroidOfflineForeground(
     private val context: Context,
-    private val bookRecovery: (Int?) -> Boolean = { owner -> offlineBookRecovery(context, owner = owner) }
+    private val bookRecovery: (Int?, Boolean) -> Boolean = { owner, refreshUnknown ->
+        offlineBookRecovery(context, owner = owner, refreshUnknown = refreshUnknown)
+    }
 ) : OfflineForeground {
     val recovery = OfflineRecoveryGate()
     private val main = Handler(Looper.getMainLooper())
@@ -390,10 +392,13 @@ internal class AndroidOfflineForeground(
     private fun maintainRecovery() {
         main.removeCallbacks(recoveryRetry)
         if (!hasUnfinished || !userInitiatedBooked()) {
+            recovery.timerKnown = false
             offlineCancelRecovery(context)
-        } else if (!bookRecovery(recovery.owner)) {
+        } else if (!bookRecovery(recovery.owner, !recovery.timerKnown)) {
             // A rejected booking remains owed. Retry once later, without spinning or moving an accepted deadline.
             main.postDelayed(recoveryRetry, OFFLINE_RECOVERY_RETRY_MS)
+        } else {
+            recovery.timerKnown = true
         }
     }
 

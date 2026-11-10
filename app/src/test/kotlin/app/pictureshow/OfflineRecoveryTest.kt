@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,9 +29,9 @@ class OfflineRecoveryTest {
     fun `a rejected watchdog booking stays owed and retries later without spinning`() {
         offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
         var calls = 0
-        val foreground = AndroidOfflineForeground(app) { owner ->
+        val foreground = AndroidOfflineForeground(app) { owner, refreshUnknown ->
             calls++
-            if (calls == 1) false else offlineBookRecovery(app, owner = owner)
+            if (calls == 1) false else offlineBookRecovery(app, owner = owner, refreshUnknown = refreshUnknown)
         }
         foreground.jobStarted(true)
         foreground.unfinished(true)
@@ -48,7 +49,7 @@ class OfflineRecoveryTest {
     fun `ending work cancels a rejected watchdog booking retry`() {
         offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
         var calls = 0
-        val foreground = AndroidOfflineForeground(app) {
+        val foreground = AndroidOfflineForeground(app) { _, _ ->
             calls++
             false
         }
@@ -74,6 +75,34 @@ class OfflineRecoveryTest {
         foreground.unfinished(false)
         ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
         assertEquals(null, scheduler.getPendingJob(OFFLINE_RECOVERY_A))
+    }
+
+    @Test
+    fun `a fired timer replaces a stale retry record with a fresh future timer`() {
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        offlineBookRecovery(app)
+        val stale = scheduler.getPendingJob(OFFLINE_RECOVERY_A)
+        assertTrue(offlineBookRecovery(app, OFFLINE_RECOVERY_B))
+        val future = scheduler.getPendingJob(OFFLINE_RECOVERY_A)!!
+        assertNotSame(stale, future)
+        assertEquals(OFFLINE_JOB_TRANSFER_MS, future.minLatencyMillis)
+        assertEquals(OFFLINE_JOB_TRANSFER_MS * 2, future.maxExecutionDelayMillis)
+    }
+
+    @Test
+    fun `a fresh process refreshes an unknown timer once while later live updates keep its deadline`() {
+        offlineScheduleJob(app, OFFLINE_JOB_TRANSFER_MS)
+        offlineBookRecovery(app)
+        val unknown = scheduler.getPendingJob(OFFLINE_RECOVERY_A)
+        val foreground = AndroidOfflineForeground(app)
+        foreground.jobStarted(true)
+        foreground.unfinished(true)
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        val known = scheduler.getPendingJob(OFFLINE_RECOVERY_A)
+        assertNotSame(unknown, known)
+        foreground.unfinished(true)
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        assertSame(known, scheduler.getPendingJob(OFFLINE_RECOVERY_A))
     }
 
     @Test

@@ -28,6 +28,7 @@ internal class OfflineRecoveryGate {
     var owner: Int? = null
         private set
     var primaryRunning = false
+    var timerKnown = false
 
     fun claim(id: Int, serviceUp: Boolean): Boolean {
         if (primaryRunning || serviceUp || owner != null) return false
@@ -48,7 +49,12 @@ internal fun offlineRecoveryNextId(current: Int, owner: Int?): Int {
 }
 
 /** A READY UIDT retry can have no timer after a disconnected host. Keep a separate timed request. */
-internal fun offlineBookRecovery(context: Context, current: Int? = null, owner: Int? = null): Boolean {
+internal fun offlineBookRecovery(
+    context: Context,
+    current: Int? = null,
+    owner: Int? = null,
+    refreshUnknown: Boolean = false
+): Boolean {
     if (Build.VERSION.SDK_INT < 34) return false
     val scheduler = context.getSystemService(JobScheduler::class.java) ?: return false
     // Task Manager Stop removes user-visible work. A watchdog must not create a replacement request.
@@ -57,13 +63,14 @@ internal fun offlineBookRecovery(context: Context, current: Int? = null, owner: 
         return false
     }
     val id = if (current == null) {
-        if (recoveryIds.any { it != owner && scheduler.getPendingJob(it) != null }) return true
+        if (!refreshUnknown && recoveryIds.any { it != owner && scheduler.getPendingJob(it) != null }) return true
         if (owner == OFFLINE_RECOVERY_A) OFFLINE_RECOVERY_B else OFFLINE_RECOVERY_A
     } else {
         offlineRecoveryNextId(current, owner)
     }
-    // Keep an already pending timer's original deadline. Never replace the job holding transfer IO.
-    if (id != current && id != owner && scheduler.getPendingJob(id) != null) return true
+    // JobInfo survives a crash even when the retry has lost its actual timing constraint.
+    // A fired timer always books a fresh successor; only repeated live-process updates preserve a known timer.
+    // The selection above never replaces the job holding transfer IO.
     return runCatching {
         scheduler.schedule(
             JobInfo.Builder(id, ComponentName(context, OfflineRecoveryJobService::class.java))
@@ -101,6 +108,7 @@ class OfflineRecoveryJobService : JobService() {
         val recovery = foreground.recovery
         // Book before waking the engine: another process death must leave a future timer intact.
         if (!offlineBookRecovery(this, params.jobId, recovery.owner)) {
+            recovery.timerKnown = false
             if (getSystemService(JobScheduler::class.java)?.getPendingJob(OFFLINE_JOB)?.isUserInitiated == true) {
                 // A failed timer booking is not completion. Request a timed system retry too.
                 jobFinished(params, true)
@@ -108,6 +116,7 @@ class OfflineRecoveryJobService : JobService() {
             }
             return false
         }
+        recovery.timerKnown = true
         if (!recovery.claim(params.jobId, foreground.serviceUp())) return false
         ownerId = params.jobId
         val owner = Any()
