@@ -18,6 +18,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -1074,12 +1075,83 @@ class TouchPlayerControlsTest {
         var smallestWidth by mutableStateOf(smallestWidth)
     }
 
-    @Test fun aPhonePlayerRequestsLandscapeAndGivesBackWhatWasThereOnExit() {
-        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_SENSOR)
+    @Test fun aPhonePlayerRequestsLandscapeAndLeavesNoLockOnExit() {
+        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
         compose.runOnIdle { probe.showing = false }
         compose.waitForIdle()
-        assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR, compose.activity.requestedOrientation)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    private class OverlappingPlayers {
+        var first by mutableStateOf(true)
+        var second by mutableStateOf(false)
+    }
+
+    private fun overlappingPlayers(before: Int): OverlappingPlayers {
+        compose.runOnIdle { compose.activity.requestedOrientation = before }
+        val players = OverlappingPlayers()
+        compose.setContent {
+            val base = LocalConfiguration.current
+            val phone = remember(base) { Configuration(base).apply { smallestScreenWidthDp = 360 } }
+            CompositionLocalProvider(LocalConfiguration provides phone) {
+                if (players.first) key("first") { TouchPlayerWindow() }
+                if (players.second) key("second") { TouchPlayerWindow() }
+            }
+        }
+        compose.waitForIdle()
+        return players
+    }
+
+    private fun show(change: () -> Unit) {
+        compose.runOnIdle(change)
+        compose.waitForIdle()
+    }
+
+    /** The next episode's route composes while the last one is still leaving; the phone stayed landscape until a force-stop. */
+    @Test fun theNextEpisodeTakingOverLeavesNoLockBehindOnceTheLastPlayerGoes() {
+        val players = overlappingPlayers(ActivityInfo.SCREEN_ORIENTATION_SENSOR)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        show { players.second = true }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        // The one leaving mustn't rotate the one playing.
+        show { players.first = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        show { players.second = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    /** Android keeps the lock across a process death; the player that comes back must not take it for what was there before. */
+    @Test fun aLockLeftOverFromBeforeARestartIsNotGivenBack() {
+        val probe = playerWindow(360, ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE)
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE, compose.activity.requestedOrientation)
+        compose.runOnIdle { probe.showing = false }
+        compose.waitForIdle()
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    @Test fun theViewersPortraitChoiceCarriesIntoTheNextEpisode() {
+        val players = overlappingPlayers(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+        show { compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT }
+        show { players.second = true }
+        show { players.first = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT, compose.activity.requestedOrientation)
+        show { players.second = false }
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, compose.activity.requestedOrientation)
+    }
+
+    @Test fun aHoldGivesBackOnlyWhenTheLastHolderLeaves() {
+        val hold = TouchPlayerWindowHold<String>()
+        val restored = mutableListOf<String>()
+        hold.acquire({ "before" }) {}
+        hold.acquire({ "locked" }) { error("the first holder already took it") }
+        hold.release(restored::add)
+        assertEquals(emptyList<String>(), restored)
+        hold.release(restored::add)
+        assertEquals(listOf("before"), restored)
+        hold.acquire({ "again" }) {}
+        hold.release(restored::add)
+        assertEquals(listOf("before", "again"), restored)
     }
 
     @Test fun aLargeScreenPlayerRequestsNothingOnTheWayInOrOut() {

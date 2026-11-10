@@ -274,6 +274,7 @@ internal fun TouchAccounts(
                                 "You can add it again later."
                         }
                     )
+                    Text("Downloads saved for it on this device are deleted.")
                     TouchMessage(state.error)
                     if (state.busy) Text("Removing…")
                 }

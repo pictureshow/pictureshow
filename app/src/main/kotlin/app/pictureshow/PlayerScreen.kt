@@ -133,14 +133,19 @@ internal fun PlayerViewing(
     val entryOrigin = LocalPlaybackStartOrigin.current
     var current by remember(account.key, item.id) { mutableStateOf(item) }
     var start by remember(account.key, item.id) { mutableLongStateOf(startMs) }
+    val offline = LocalOfflinePlayback.current
     LaunchedEffect(current) { onCurrentItem(current) }
     key(current.id) {
         androidx.compose.runtime.CompositionLocalProvider(
             LocalPlaybackStartOrigin provides if (current.id == item.id) entryOrigin else PlaybackStartOrigin.SavedResume
         ) {
             content(current, start) { next ->
-                start = app.pictureshow.core.resumeStartPositionMs(next.userData.playbackPositionTicks)
-                current = next
+                if (offline != null) {
+                    offline.next?.advance(next)
+                } else {
+                    start = app.pictureshow.core.resumeStartPositionMs(next.userData.playbackPositionTicks)
+                    current = next
+                }
             }
         }
     }
@@ -193,7 +198,12 @@ internal fun PlayerItemScreen(
     var controlsTop by remember { mutableStateOf<Int?>(null) }
     var actionsTop by remember { mutableStateOf<Int?>(null) }
     var playerTop by remember { mutableIntStateOf(0) }
-    val trackMenus = rememberPlayerTrackMenus(state.decision?.mediaSourceId, state.decision?.mediaSource?.mediaStreams.orEmpty())
+    val offline = LocalOfflinePlayback.current
+    val trackMenus = rememberPlayerTrackMenus(
+        state.decision?.mediaSourceId,
+        state.decision?.mediaSource?.mediaStreams.orEmpty(),
+        offline?.undownloaded.orEmpty()
+    )
     var chooserRequest by remember { mutableStateOf<PlayerTrackChooserRequest?>(null) }
     val chooser = chooserRequest?.type
     var interaction by remember { mutableLongStateOf(0) }
@@ -839,10 +849,29 @@ internal fun PlayerItemScreen(
                         returnFocus = if (type == MediaStreamType.Audio) audioFocus else subtitleFocus
                     }
                 }
-                PlayerPanel(title, closeChooser, scrollable = false) {
+                val reconnect = offline?.reconnect
+                // Saying no closes the panel; the rows don't come back for the moment the window takes to go.
+                var offerClosing by remember(request) { mutableStateOf(false) }
+                PlayerPanel(title, closeChooser, scrollable = false, onHandoff = {
+                    if (reconnect != null && reconnect.state != OfflineReconnectState.Idle) offerClosing = true
+                    reconnect?.stay()
+                }) {
                     // Retain the captured rows while the existing native-window focus handoff completes.
                     LaunchedEffect(trackMenus) {
                         if (request.preparation !== trackMenus) close(closeChooser)
+                    }
+                    if (reconnect != null) OfflineReconnectLifetime(reconnect)
+                    if (reconnect != null && (reconnect.state != OfflineReconnectState.Idle || offerClosing)) {
+                        OfflineReconnectTvContent(reconnect.state, title, onStream = {
+                            reconnect.accept(
+                                OutputReconnectPlayer(output, { state.audioIndex to state.subtitleIndex }) { next ->
+                                    extraPanel = null
+                                    chooserRequest = null
+                                    host.closeForStream(next)
+                                }
+                            )
+                        }, onClose = { close(closeChooser) })
+                        return@PlayerPanel
                     }
                     TrackChoices(
                         menu.choices,
@@ -860,6 +889,10 @@ internal fun PlayerItemScreen(
                                 setupError == null &&
                                 active?.error == null
                             ) {
+                                if (index in menu.needsConnection && reconnect != null) {
+                                    reconnect.pick(type, index)
+                                    return@TrackChoices
+                                }
                                 select({
                                     controller?.select(type, index)
                                     interaction++

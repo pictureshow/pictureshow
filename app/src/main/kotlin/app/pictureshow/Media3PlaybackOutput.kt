@@ -35,7 +35,10 @@ internal class Media3PlaybackOutput(
     private val title: String? = null,
     private val upstream: androidx.media3.datasource.DataSource.Factory? = null,
     private val renderersFactory: RenderersFactory? = null,
-    private val subtitleDelay: SubtitleDelay = SubtitleDelay()
+    private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
+    private val sourceWrapper: (
+        (androidx.media3.exoplayer.source.MediaSource.Factory) -> androidx.media3.exoplayer.source.MediaSource.Factory
+    )? = null
 ) : PlaybackOutput {
     private val viewingSpeed = ViewingPlaybackSpeed()
     val speed = viewingSpeed.state
@@ -268,7 +271,7 @@ internal class Media3PlaybackOutput(
             ExoPlayer.Builder(context, renderers)
                 .setPlaybackLooper(playbackThread.looper)
                 .setTrackSelector(selector)
-                .setMediaSourceFactory(sourceFactory)
+                .setMediaSourceFactory(sourceWrapper?.invoke(sourceFactory) ?: sourceFactory)
                 .setLoadControl(createPictureshowLoadControl())
                 .setSeekBackIncrementMs(10_000)
                 .setSeekForwardIncrementMs(10_000)

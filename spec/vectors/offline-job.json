@@ -1,0 +1,8844 @@
+{
+ "schemaVersion": 1,
+ "suite": "offline-job",
+ "cases": [
+  {
+   "id": "offline-job.matrix-admit-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "start-attempt"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-admit-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-prepared-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "verify"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-transfer-complete-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "commit-ready"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verified-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "publish"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-committed-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "hash",
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-verify-failed-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 1,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-restart-transfer-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-lost-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-network-back-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-denied-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-storage-available-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-pause-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-resume-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer",
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer",
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer",
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-delete-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-deleted-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": null,
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "server-500",
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "server-500",
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "server-500",
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-fail-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 1,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-retry-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-process-restart-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-missing-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "missing"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-redownload-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-queued",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-waitingNetwork",
+   "operation": "job",
+   "state": {
+    "phase": "waitingNetwork",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-waitingStorage",
+   "operation": "job",
+   "state": {
+    "phase": "waitingStorage",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-ready",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-paused",
+   "operation": "job",
+   "state": {
+    "phase": "paused",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": true
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-failed",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "old",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "failed",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": "old",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-missing",
+   "operation": "job",
+   "state": {
+    "phase": "missing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "missing",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.matrix-set-cellular-deleting",
+   "operation": "job",
+   "state": {
+    "phase": "deleting",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-committed-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-committed-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-committed-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.no-attempt-is-stale-committed",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-fail-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 99,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-fail-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 99,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-fail-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "attempt": 99,
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.no-attempt-is-stale-fail",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "fail",
+      "reason": "server-500"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-prepared-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-prepared-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-prepared-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.no-attempt-is-stale-prepared",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-restart-transfer-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-restart-transfer-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-restart-transfer-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.no-attempt-is-stale-restart-transfer",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-transfer-complete-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-transfer-complete-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-transfer-complete-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.no-attempt-is-stale-transfer-complete",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "transfer-complete"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-verified-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-verified-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-verified-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 99
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.no-attempt-is-stale-verified",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verified"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-verify-failed-preparing",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 99,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-verify-failed-transferring",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 99,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.stale-verify-failed-verifying",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 99,
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.no-attempt-is-stale-verify-failed",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "reason": "hash"
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.happy-path-reaches-ready-only-through-committed",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 0,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "start-attempt"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "verify"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "verified",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "commit-ready"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "publish"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.duplicate-callbacks",
+   "operation": "job",
+   "state": {
+    "phase": "preparing",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    },
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "verify"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "verifying",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.committed-clears-failure",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "hash",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "publish"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.cancelled-late-success-is-ignored",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer",
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    },
+    {
+     "event": {
+      "op": "delete"
+     },
+     "expected": {
+      "job": {
+       "phase": "deleting",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "delete-owned"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "deleted"
+     },
+     "expected": {
+      "job": null,
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.attempt-stale-after-pause-then-resume",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    },
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    },
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 3,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "start-attempt"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 2
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 3,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    },
+    {
+     "event": {
+      "op": "prepared",
+      "attempt": 3
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 3,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.pause-for-cap-sets-flag-and-resume-clears-it",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause",
+      "reason": "cap"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": true
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    },
+    {
+     "event": {
+      "op": "resume"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.viewer-pause-is-not-a-cap-pause",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "pause",
+      "reason": "cap"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.ready-cannot-pause",
+   "operation": "job",
+   "state": {
+    "phase": "ready",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "ready",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.kill-mid-transfer-then-restart-goes-back-through-admit",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "process-restart"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "transfer-complete",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "stale-attempt"
+     }
+    },
+    {
+     "event": {
+      "op": "admit"
+     },
+     "expected": {
+      "job": {
+       "phase": "preparing",
+       "attempt": 3,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "start-attempt"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.network-lost-never-publishes-and-keeps-attempt",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "network-lost"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingNetwork",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    },
+    {
+     "event": {
+      "op": "network-back"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "committed",
+      "attempt": 1
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": "wrong-phase"
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.storage-denied-from-queued-stops-nothing",
+   "operation": "job",
+   "state": {
+    "phase": "queued",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "storage-denied"
+     },
+     "expected": {
+      "job": {
+       "phase": "waitingStorage",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "storage-available"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.verify-failed-keeps-attempt-and-reason",
+   "operation": "job",
+   "state": {
+    "phase": "verifying",
+    "attempt": 4,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "verify-failed",
+      "attempt": 4,
+      "reason": "length"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 4,
+       "cellularAllowed": false,
+       "failure": "length",
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.restart-transfer-keeps-attempt",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 4,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "restart-transfer",
+      "attempt": 4
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 4,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.set-cellular-can-turn-off",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": true,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": false
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.set-cellular-survives-pause-and-restart",
+   "operation": "job",
+   "state": {
+    "phase": "transferring",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": null,
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "set-cellular",
+      "cellularAllowed": true
+     },
+     "expected": {
+      "job": {
+       "phase": "transferring",
+       "attempt": 1,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    },
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": true,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "stop-transfer"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.retry-clears-failure",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "server-500",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "retry"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.redownload-clears-failure",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "server-500",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "redownload"
+     },
+     "expected": {
+      "job": {
+       "phase": "queued",
+       "attempt": 1,
+       "cellularAllowed": false,
+       "failure": null,
+       "pausedByCap": false
+      },
+      "effects": [
+       "discard-partial"
+      ],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.pause-from-failed-keeps-failure",
+   "operation": "job",
+   "state": {
+    "phase": "failed",
+    "attempt": 1,
+    "cellularAllowed": false,
+    "failure": "gone",
+    "pausedByCap": false
+   },
+   "steps": [
+    {
+     "event": {
+      "op": "pause"
+     },
+     "expected": {
+      "job": {
+       "phase": "paused",
+       "attempt": 2,
+       "cellularAllowed": false,
+       "failure": "gone",
+       "pausedByCap": false
+      },
+      "effects": [],
+      "ignored": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.admit-0-active-3-queued",
+   "operation": "admit",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "activeCount": 0,
+      "queued": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "expected": {
+      "start": [
+       "a",
+       "b"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.admit-1-active-3-queued",
+   "operation": "admit",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "activeCount": 1,
+      "queued": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "expected": {
+      "start": [
+       "a"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.admit-2-active-3-queued",
+   "operation": "admit",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "activeCount": 2,
+      "queued": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "expected": {
+      "start": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.admit-3-active-1-queued",
+   "operation": "admit",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "activeCount": 3,
+      "queued": [
+       "a"
+      ]
+     },
+     "expected": {
+      "start": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.admit-0-active-1-queued",
+   "operation": "admit",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "activeCount": 0,
+      "queued": [
+       "a"
+      ]
+     },
+     "expected": {
+      "start": [
+       "a"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "offline-job.admit-0-active-0-queued",
+   "operation": "admit",
+   "state": {},
+   "steps": [
+    {
+     "event": {
+      "activeCount": 0,
+      "queued": []
+     },
+     "expected": {
+      "start": []
+     }
+    }
+   ]
+  }
+ ]
+}

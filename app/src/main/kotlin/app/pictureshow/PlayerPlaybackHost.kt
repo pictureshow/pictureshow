@@ -117,6 +117,9 @@ internal class PlaybackHostState(
     var metadata by mutableStateOf(item)
     var segments by mutableStateOf(emptyList<MediaSegment>())
     internal var nextLookup by mutableStateOf<EpisodeLookup?>(null)
+
+    /** What the server said, before a local viewing's download rule: asked again at the end, because a season may still be downloading. */
+    internal var nextAnswer: ClientResult<MediaItem?>? = null
     var nextRetry by mutableIntStateOf(0)
 
     /** A title queued from a controller goes first. With no controller this is always null, and nothing below changes. */
@@ -216,6 +219,14 @@ internal class PlaybackHostState(
         if (advanceReported) finish(reason = "natural-end")
     }
 
+    /** The offline handoff's exit: this session ends and something other than the usual back navigation follows. */
+    fun closeForStream(next: () -> Unit) {
+        if (exitRequested) return
+        PlaybackDiagnostics.write(PlaybackDiagnostics.line(state.decision, "exit-request", "itemId=${item.id} reason=offline-handoff"))
+        exitRequested = true
+        if (advanceReported) next() else finishPlayback(controller, next)
+    }
+
     fun applyPendingSeek() {
         val active = player ?: return
         val requested = pendingSeek ?: return
@@ -278,7 +289,11 @@ internal fun rememberPlaybackHostState(
     remote: RemoteTargetHost? = null
 ): PlaybackHostState {
     val context = LocalContext.current
-    val output = remember { providedOutput ?: Media3PlaybackOutput(context, account.server, item.name) }
+    val offline = LocalOfflinePlayback.current
+    val output = remember {
+        providedOutput ?: offline?.output(context, account.server, item.name)
+            ?: Media3PlaybackOutput(context, account.server, item.name)
+    }
     val latestNext by rememberUpdatedState(onNext)
     val latestExit by rememberUpdatedState(onExit)
     val startOrigin = LocalPlaybackStartOrigin.current
@@ -395,6 +410,8 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
     val http: HttpClient = koinInject()
     val identity: DeviceIdentityStore = koinInject()
     val preferences: PlaybackPreferencesStore = koinInject()
+    val offline = LocalOfflinePlayback.current
+    val handoff = LocalOfflineHandoff.current?.takeIf { it.itemId == host.item.id }
     val output = host.output
     val foreground by output.foreground.collectAsState()
     val pauseIntent by output.pauseIntent.collectAsState()
@@ -428,7 +445,8 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                 val client = PlaybackClient(http, clientIdentity)
                 extras = PlaybackExtrasClient(http, clientIdentity) { message -> Log.i("NextEpisode", message) }
                 tiles = TrickplayCache(http, account, clientIdentity, item.id)
-                val captionsEnabled = (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
+                val captionsEnabled =
+                    offline == null && (context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager)?.isEnabled == true
                 val configuration = if (captionsEnabled) {
                     (UserConfigurationClient(http, clientIdentity).configuration(account) as? ClientResult.Success)?.value
                 } else {
@@ -444,10 +462,12 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                         java.util.UUID.randomUUID().toString(),
                         0
                     ),
-                    ServerPlaybackGateway(client, account, item.id, {
+                    offline?.gateway ?: ServerPlaybackGateway(client, account, item.id, {
                         activeProbe.snapshot().copy(settings = effectiveSettings)
                     }, captionLanguage) {
                         catalog.completePlayback(account, item.id, report)
+                    }.let { server ->
+                        handoff?.gateway?.invoke(server) ?: offlineAwareGateway(context, account, item.id, identity, server)
                     },
                     MetadataPlaybackOutput(output) { playbackMetadata(metadata) },
                     item.id
@@ -496,7 +516,7 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
                     { estimate, bytes -> bandwidthSample(estimate, bytes, android.os.SystemClock.elapsedRealtime()) }
                 activeProbe.start { session.routeChanged() }
                 PlaybackDiagnostics.write("start-request item=${item.id} requestedMs=$startMs")
-                session.start(initialPositionMs)
+                session.start(initialPositionMs, handoff?.tracks)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -516,12 +536,22 @@ internal fun PlaybackHostEffects(host: PlaybackHostState, account: Account, cata
         LaunchedEffect(extras, metadata.id, metadata.type, metadata.seriesId, nextRetry) {
             val client = extras ?: return@LaunchedEffect
             nextLookup = null
-            nextLookup = EpisodeLookup(nextRetry, client.nextEpisode(account, metadata))
+            val answer = client.nextEpisode(account, metadata)
+            nextAnswer = answer
+            nextLookup = EpisodeLookup(nextRetry, offline?.next?.after(answer) ?: answer)
         }
         val upcoming = remote?.upcoming
         LaunchedEffect(ended, nextLookup, nextCancelled, foreground, pauseIntent, remoteNext, upcoming, remoteNextResolving) {
             if (!ended || !foreground || pauseIntent) return@LaunchedEffect
             val lookup = nextLookup
+            // The next episode may have finished downloading during this one. A nothing that's still nothing ends the viewing below.
+            if ((lookup?.result as? ClientResult.Success)?.value == null && lookup != null) {
+                val now = nextAnswer?.let { offline?.next?.after(it) }
+                if ((now as? ClientResult.Success)?.value != null) {
+                    nextLookup = lookup.copy(result = now)
+                    return@LaunchedEffect
+                }
+            }
             if (nextCancelled) {
                 finish(reason = "natural-end")
             } else if (!remoteQueueHoldsEnd(upcoming, remoteNext, remoteNextResolving)) {

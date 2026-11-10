@@ -54,6 +54,7 @@ internal fun TouchSettings(
     onBack: (() -> Unit)? = null,
     onRemote: () -> Unit = {},
     onThisDevice: () -> Unit = {},
+    onDownloads: () -> Unit = {},
     /** Null where Cast can't be used on this device. */
     castEnabled: Boolean? = null,
     onCastEnabled: (Boolean) -> Unit = {},
@@ -69,6 +70,7 @@ internal fun TouchSettings(
         TouchSection {
             TouchNavRow("Accounts", onClick = onAccounts)
             TouchNavRow("Remote for a TV", onClick = onRemote)
+            TouchNavRow("Downloads", onClick = onDownloads)
             castEnabled?.let {
                 TouchSwitchRow(
                     "Google Cast",
