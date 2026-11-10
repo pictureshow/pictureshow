@@ -81,7 +81,7 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
         if(s->texture) glDeleteTextures(1,&s->texture);
         if(s->fbo) glDeleteFramebuffers(1,&s->fbo);
         s->shared=nil; if(s->io) CFRelease(s->io);
-        NSDictionary *props=@{(id)kIOSurfaceWidth:@(w),(id)kIOSurfaceHeight:@(h),(id)kIOSurfaceBytesPerElement:@8,(id)kIOSurfaceBytesPerRow:@(w*8),(id)kIOSurfacePixelFormat:@('RGhA')};
+        NSDictionary *props=@{(id)kIOSurfaceWidth:@(w),(id)kIOSurfaceHeight:@(h),(id)kIOSurfaceBytesPerElement:@8,(id)kIOSurfaceBytesPerRow:@(w*8),(id)kIOSurfacePixelFormat:@((uint32_t)'RGhA')};
         s->io=IOSurfaceCreate((__bridge CFDictionaryRef)props);
         glGenTextures(1,&s->texture); glBindTexture(GL_TEXTURE_RECTANGLE,s->texture);
         if(CGLTexImageIOSurface2D(s->gl,GL_TEXTURE_RECTANGLE,GL_RGBA16F,w,h,GL_RGBA,GL_HALF_FLOAT,s->io,0)!=kCGLNoError) return -2;

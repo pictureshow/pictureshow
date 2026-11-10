@@ -89,7 +89,7 @@ fun layerMain(args: Array<String>) {
                 Thread {
                     try {
                         Thread.sleep(1800)
-                        SwingUtilities.invokeAndWait { java.awt.Desktop.getDesktop().requestForeground(true); window.toFront(); window.requestFocus() }
+                        SwingUtilities.invokeAndWait { if (Platform.isMac()) java.awt.Desktop.getDesktop().requestForeground(true); window.toFront(); window.requestFocus() }
                         mpv.option("vo","libmpv")
                         // Render linear BT.2020 into a float target. 1.0 is the SDR reference white.
                         mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak","1000")
