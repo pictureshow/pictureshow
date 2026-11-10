@@ -207,15 +207,13 @@ internal class OfflineEngine(
         }
     }
 
-    fun releaseJobNetwork(owner: Any) {
-        scope.launch {
-            mutex.withLock {
-                // A late stop from the previous run cannot clear the new run's route or cancel its IO.
-                if (jobNetwork.owner !== owner) return@withLock
-                suspendTransfersLocked()
-                jobNetwork.owner = null
-                jobNetwork.network = null
-            }
+    fun releaseJobNetwork(owner: Any, suspendTransfers: Boolean = true): Job = scope.launch {
+        mutex.withLock {
+            // A late stop from the previous run cannot clear the new run's route or cancel its IO.
+            if (jobNetwork.owner !== owner) return@withLock
+            if (suspendTransfers) suspendTransfersLocked()
+            jobNetwork.owner = null
+            jobNetwork.network = null
         }
     }
 

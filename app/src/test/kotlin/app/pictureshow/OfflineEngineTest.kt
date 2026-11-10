@@ -343,6 +343,51 @@ class OfflineEngineTest {
     }
 
     @Test
+    fun `a stopped job suspends its transfer and wake resumes the saved work`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        val owner = Any()
+        engine.useJobNetwork(owner, null)
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        engine.releaseJobNetwork(owner).join()
+        assertEquals(OfflinePhase.waitingNetwork, engine.entry(viewerA, "1")!!.job.phase)
+        hold = false
+        engine.wake()
+        engine.awaitPhase(viewerA, "1", OfflinePhase.ready)
+    }
+
+    @Test
+    fun `a late stop from an older job cannot suspend its replacement`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        val old = Any()
+        engine.useJobNetwork(old, null)
+        engine.useJobNetwork(Any(), null)
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        engine.releaseJobNetwork(old).join()
+        assertEquals(OfflinePhase.transferring, engine.entry(viewerA, "1")!!.job.phase)
+        engine.delete(viewerA.key, entryId("1"))
+    }
+
+    @Test
+    fun `ending a watchdog does not pause work still owned by the foreground service`() = runBlocking<Unit> {
+        signIn(viewerA)
+        hold = true
+        val engine = started()
+        val owner = Any()
+        engine.useJobNetwork(owner, null)
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        engine.awaitPhase(viewerA, "1", OfflinePhase.transferring)
+        engine.releaseJobNetwork(owner, suspendTransfers = false).join()
+        assertEquals(OfflinePhase.transferring, engine.entry(viewerA, "1")!!.job.phase)
+        engine.delete(viewerA.key, entryId("1"))
+    }
+
+    @Test
     fun `no more than two transfer at once and the rest wait their turn`() = runBlocking<Unit> {
         signIn(viewerA)
         hold = true

@@ -135,7 +135,7 @@ class OfflineJobService : JobService() {
             // from the background, where a new UIDT would be refused. Backoff prevents an idle retry loop.
             val retry = userInitiated && foreground.hasUnfinished
             jobFinished(params, retry)
-            engine.releaseJobNetwork(owner)
+            engine.releaseJobNetwork(owner, suspendTransfers = false)
             networkOwner = null
             foreground.jobEnded(retry)
         }
@@ -153,6 +153,7 @@ class OfflineJobService : JobService() {
         }
     }
 
+    @androidx.annotation.RequiresApi(28)
     override fun onNetworkChanged(params: JobParameters) {
         val owner = networkOwner ?: return
         val job = holding ?: return
@@ -165,7 +166,7 @@ class OfflineJobService : JobService() {
     override fun onStopJob(params: JobParameters): Boolean {
         holding?.cancel()
         // A stopped job no longer licenses background network IO. Keep the partial and let the system retry.
-        networkOwner?.let(engine::releaseJobNetwork)
+        networkOwner?.let { engine.releaseJobNetwork(it, suspendTransfers = foreground.transferringUnderJobOnly()) }
         networkOwner = null
         foreground.jobEnded(true)
         return true
