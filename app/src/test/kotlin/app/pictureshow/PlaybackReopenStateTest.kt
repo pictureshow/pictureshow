@@ -94,7 +94,7 @@ class PlaybackReopenStateTest {
                 true
             }
             if (progressive) {
-                assertIs<TranscodeSeekPlayer>(output.player.value)
+                assertIs<TranscodeSeekPlayer>(assertIs<SyncTransportPlayer>(output.player.value).wrappedPlayer)
                 session.player.seekForward()
                 session.player.seekForward()
                 assertEquals(60_000, output.position().milliseconds)

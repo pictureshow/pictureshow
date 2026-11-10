@@ -150,6 +150,8 @@ class TouchNavigationTest {
         startKoin {
             modules(
                 module {
+                    syncPlayFixture()
+                    single { inertRemoteTarget() }
                     single { inertRemoteController() }
                     single { inertCastSender() }
                     single { inertMusicHost(get()).also { it.castAttached = { "never replaced" } } }

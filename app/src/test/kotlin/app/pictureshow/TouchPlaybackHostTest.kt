@@ -285,6 +285,7 @@ class TouchPlaybackHostTest {
         startKoin {
             modules(
                 module {
+                    syncPlayFixture()
                     single { http }
                     single { DeviceIdentityStore(store) }
                     single { PlaybackPreferencesStore(store) }

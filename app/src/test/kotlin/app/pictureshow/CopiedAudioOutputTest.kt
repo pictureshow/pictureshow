@@ -34,6 +34,7 @@ import java.time.Duration
 import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -139,7 +140,7 @@ class CopiedAudioOutputTest {
         try {
             output.open(decision, target, 1, -1, false)
             val player = assertNotNull(output.player.value)
-            assertTrue(player is TranscodeSeekPlayer)
+            assertIs<TranscodeSeekPlayer>(assertIs<SyncTransportPlayer>(player).wrappedPlayer)
             val deadline = System.nanoTime() + 15_000_000_000L
             while (!ended && player.playerError == null && System.nanoTime() < deadline) {
                 shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20))

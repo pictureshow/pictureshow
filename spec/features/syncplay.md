@@ -16,7 +16,7 @@
 | SYN-10 | Native Jellyfin TV and remote control support groups; external casting requires leaving at launch. | Phone controlling a group TV sends to that TV, which makes group requests. Selecting Cast Connect, Web Receiver or AirPlay requires explicit Leave group before casting; cancel keeps current membership/output. SyncPlay over these external routes is later improvement work under SYN-PD03, not a launch gate. A TV joining directly as a native Jellyfin participant remains supported. |
 | SYN-11 | Live/infinite streams and offline copies do not pretend to be common VOD. | Group VOD and music are launch paths. Live TV lacks a shared guaranteed seek origin; display unavailable Watch together for live/infinite sources unless an independently qualified common recording timeline exists. Offline cannot join a server group; reconnect and validate the same media source/timeline first. |
 
-## Clock policy and planned vectors
+## Clock policy and executable vectors
 
 Use exact signed 64-bit 100 ns ticks with overflow checks. If local request send/receive times are t0/t3 and server reception/transmission t1/t2, offset is `((t1−t0)+(t2−t3))/2`, network RTT is `(t3−t0)−(t2−t1)`. Keep five valid samples, initially sample five times, select the lowest-RTT sample, refresh every 30 s while active and immediately after foreground/reconnect. These are finite session tasks, not standing polling. Reject negative RTT and samples >1 s; if none valid, stay paused and show unavailable synchronization. Map server UTC onto a monotonic local anchor; a wall-clock jump >100 ms invalidates calibration. Target ticks at local execution time are commanded PositionTicks plus elapsed server time since When only for a playing command, clamped to the actual media bounds.
 

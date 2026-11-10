@@ -147,6 +147,7 @@ class QuickConnectNavigationTest {
         startKoin {
             modules(
                 module {
+                    syncPlayFixture()
                     single { inertRemoteTarget() }
                     single { inertMusicHost(get()) }
                     single { inertRemoteController() }

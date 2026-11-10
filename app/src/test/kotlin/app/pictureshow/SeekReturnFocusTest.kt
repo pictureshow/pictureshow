@@ -783,6 +783,7 @@ class SeekReturnFocusTest {
         startKoin {
             modules(
                 module {
+                    syncPlayFixture()
                     single { inertRemoteTarget() }
                     single { http }
                     single { DeviceIdentityStore(store) }
