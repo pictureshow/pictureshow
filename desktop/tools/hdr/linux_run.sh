@@ -44,7 +44,9 @@ colorimetry-mode=$gamut
 color-profile=auto:
 CONFIG
  export SPIKE_HDR_COMPOSITOR_SAMPLES="$out"
- "$prefix/bin/weston" -B headless --renderer=gl --width=640 --height=360 --socket="$WAYLAND_DISPLAY" --config="$out/weston.ini" --modules="$build/native/capture-authority.so" --logger-scopes=log,gl-renderer-paint-nodes --log="$out/weston.log" > "$out/weston-console.log" 2>&1 &
+ # Select stock Weston's FP16 shadow-buffer path rather than Mesa's framebuffer
+ # fetch extension; this isolates the software compositor's blending implementation.
+ env MESA_EXTENSION_OVERRIDE=-GL_EXT_shader_framebuffer_fetch_non_coherent "$prefix/bin/weston" -B headless --renderer=gl --width=640 --height=360 --socket="$WAYLAND_DISPLAY" --config="$out/weston.ini" --modules="$build/native/capture-authority.so" --logger-scopes=log,gl-renderer-paint-nodes --log="$out/weston.log" > "$out/weston-console.log" 2>&1 &
  compositor_pid=$!
  # Mesa software initialization on a busy hosted runner can exceed ten seconds.
  for n in $(seq 1 600); do [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && break; kill -0 "$compositor_pid"; sleep .1; done
