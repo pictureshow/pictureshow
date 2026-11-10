@@ -119,10 +119,15 @@ internal fun LiveTvScreen(
         else -> "Live TV"
     }
     val guideHeader = tv && !detail && tab in listOf("Channels", "Guide")
-    val preview = state.programs.firstOrNull { "p:${it.id}" == returnFocus }
-        ?: state.programs.firstOrNull { "c:${it.channelId}" == returnFocus && app.pictureshow.core.livetv.canTune(it, now) }
-        ?: state.programs.firstOrNull { app.pictureshow.core.livetv.canTune(it, now) }
-        ?: state.programs.firstOrNull()
+    val focusedChannel = state.channels.firstOrNull { "c:${it.id}" == returnFocus }
+    val preview = if (focusedChannel != null) {
+        state.programs.firstOrNull { it.channelId == focusedChannel.id && app.pictureshow.core.livetv.canTune(it, now) }
+            ?: focusedChannel.currentProgram?.takeIf { app.pictureshow.core.livetv.canTune(it, now) }
+    } else {
+        state.programs.firstOrNull { "p:${it.id}" == returnFocus }
+            ?: state.programs.firstOrNull { app.pictureshow.core.livetv.canTune(it, now) }
+            ?: state.programs.firstOrNull()
+    }
     val canAct = state.actionsAvailable(now)
     val channels = state.channels.filter {
         (!favorites || it.userData.isFavorite) &&
@@ -140,7 +145,8 @@ internal fun LiveTvScreen(
             ) {
                 if (guideHeader) {
                     Column(Modifier.weight(1f).testTag("live:guide-preview")) {
-                        LiveText(preview?.name ?: "Live TV guide", true, heading = true, maxLines = 1)
+                        LiveText(preview?.name ?: focusedChannel?.name ?: "Live TV guide", true, heading = true, maxLines = 1)
+                        if (preview == null && focusedChannel != null) LiveText("No guide data", true, small = true)
                         preview?.let { show ->
                             LiveText(
                                 "${show.channelName ?: state.channels.firstOrNull { it.id == show.channelId }?.name.orEmpty()} · " +

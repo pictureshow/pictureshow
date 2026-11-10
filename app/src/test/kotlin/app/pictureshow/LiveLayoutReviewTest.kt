@@ -53,6 +53,30 @@ class LiveLayoutReviewTest {
     private val account = Account(Server("s", "Demo", "https://demo.example.test", "12"), User("v", "Viewer"), "token")
 
     @Test
+    fun channelWithoutGuideDoesNotPreviewAnotherChannelsProgramAndTabsStayOnTheirKeyline() {
+        val now = Instant.now()
+        val fake = LiveFake().apply {
+            channelRows = listOf(LiveChannel("c", "With guide", "1"), LiveChannel("empty", "No programme channel", "2"))
+            show = show.copy(startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1800).toString())
+        }
+        compose.setContent {
+            androidx.tv.material3.MaterialTheme {
+                LiveTvScreen(androidx.compose.runtime.remember { LiveTvViewModel(account, fake) }, account, true, {}, {}, {})
+            }
+        }
+        val channels = compose.onNodeWithTag("live:tab:Channels").getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("live:c:empty").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
+        listOf("No programme channel", "No guide data").forEach { label ->
+            compose.onNode(
+                androidx.compose.ui.test.hasText(label) and
+                    androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("live:guide-preview"))
+            ).assertIsDisplayed()
+        }
+        compose.onNodeWithTag("live:tab:Guide").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        assertEquals(channels.top, compose.onNodeWithTag("live:tab:Guide").getUnclippedBoundsInRoot().top)
+    }
+
+    @Test
     @Config(qualifiers = "w360dp-h800dp-mdpi")
     fun bothTimeDirectionsAndDayPickerAreVisibleAt360dp() {
         val now = System.currentTimeMillis()
