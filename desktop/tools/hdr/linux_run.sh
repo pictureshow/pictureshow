@@ -46,3 +46,4 @@ CONFIG
  [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] || python3 -c 'import os;os.unlink(os.environ["XDG_RUNTIME_DIR"]+"/"+os.environ["WAYLAND_DISPLAY"])'
 done
 python3 desktop/tools/hdr/linux_samples.py desktop-fixtures/hdr/manifest.json desktop-evidence/hdr-linux
+python3 desktop/tools/hdr/linux_gate.py desktop-fixtures/hdr/manifest.json desktop-evidence/hdr-linux

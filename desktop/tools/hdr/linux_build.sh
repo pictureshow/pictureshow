@@ -8,7 +8,7 @@ mkdir -p desktop/build/hdr-linux/source desktop-evidence/hdr-linux
 build="$root/desktop/build/hdr-linux"
 prefix="$build/prefix"
 mkdir -p "$prefix"
-export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
+export PKG_CONFIG_PATH="$prefix/share/pkgconfig:$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
 export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 fetch() {
  local url=$1 digest=$2 name=$3

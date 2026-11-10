@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) Legitimate LLC.
+param([switch]$HardwareGpu)
 $ErrorActionPreference = 'Stop'
 $py = (Get-Command python).Source
 $dll = Get-ChildItem native -Recurse -Filter '*mpv*.dll' | Select-Object -First 1
 $env:MPV_LIBRARY = $dll.FullName
 $env:PATH = "$($dll.DirectoryName);C:\Windows\System32;$env:JAVA_HOME\bin"
 $env:SPIKE_NULL_AUDIO = '1'
-$env:SPIKE_SOFTWARE_GPU = '1'
+if ($HardwareGpu) { Remove-Item Env:SPIKE_SOFTWARE_GPU -ErrorAction SilentlyContinue } else { $env:SPIKE_SOFTWARE_GPU = '1' }
 $env:SPIKE_LAYER_BRIDGE = (Resolve-Path desktop/build/pictureshow-layer.dll).Path
 $env:SPIKE_HDR_HOLD_SECONDS = '20'
 $env:SKIKO_RENDER_API = 'SOFTWARE'

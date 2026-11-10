@@ -21,6 +21,6 @@ for mode in ('hdr','sdr'):
    x,y=[int(v*n) for v,n in zip(patch['center'],[width,height])]
    channels=[[pixels[(yy*width+xx)*3+c]/255 for yy in range(y-2,y+3) for xx in range(x-2,x+3)] for c in range(3)]
    samples.append({'name':patch['name'],'rgb':[statistics.median(v) for v in channels]})
-  result={'encoding':'pq' if mode=='hdr' else 'gamma2.2','primaries':'bt2020' if mode=='hdr' else 'bt709','referenceWhiteNits':203 if mode=='hdr' else 80,'capture':'Weston composited FRAMEBUFFER, stock 8-bit RGB; quantized PQ, not 10-bit output proof','width':width,'height':height,'samples':samples}
+  result={'encoding':'pq' if mode=='hdr' else 'gamma2.2','primaries':'bt2020' if mode=='hdr' else 'bt709','referenceWhiteNits':203 if mode=='hdr' else 80,'boundary':'stock Weston FRAMEBUFFER after composition', 'capture':'Weston composited FRAMEBUFFER, stock 8-bit RGB; quantized PQ, not 10-bit output proof','width':width,'height':height,'samples':samples}
   (folder/'samples.json').write_text(json.dumps(result,indent=2)+'\n')
   print(json.dumps({'output':mode,'media':media,'samples':samples}))
