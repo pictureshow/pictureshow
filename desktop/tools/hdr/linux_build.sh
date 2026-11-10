@@ -43,4 +43,4 @@ meson install -C "$build/mpv-build"
 meson introspect "$build/mpv-build" --buildoptions > desktop-evidence/hdr-linux/mpv-build-options.json
 cp "$build/source/ffmpeg-8.0/config.h" desktop-evidence/hdr-linux/ffmpeg-config.h
 bash desktop/tools/linux-wayland/build.sh "$prefix" "$build/source/weston-16.0.2" "$build/native"
-cc -fPIC -shared desktop/tools/hdr/linux_authority.c -o "$build/native/capture-authority.so" $(pkg-config --cflags --libs libweston-16)
+cc -fPIC -shared desktop/tools/hdr/linux_authority.c -o "$build/native/capture-authority.so" $(pkg-config --cflags --libs libweston-16 glesv2)

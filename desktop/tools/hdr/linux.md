@@ -4,7 +4,14 @@
 mpv 0.41/FFmpeg 8 stack on a disposable Ubuntu 24.04 runner. It uses llvmpipe,
 preserves the full PQ domain (`target-peak=10000`) for the compositor to adapt,
 plays the generated CC0 PQ and SDR HEVC fixtures through Pictureshow's actual
-Compose/Wayland app, and captures Weston's composited framebuffer.
+Compose/Wayland app, and captures Weston's composited framebuffer. An isolated diagnostic module also
+observes `output.frame_signal`, emitted by stock Weston's GL renderer after it
+paints the final output FBO. That observer samples the bound output FBO
+synchronously and records its handle, viewport and GL error state. It changes no
+compositor color or presentation code. When present, that independent output
+readback is the gate's pixel boundary; the protocol/PBO screenshot is retained
+for comparison. App GL backbuffer samples are auxiliary diagnostics and never
+substitute for a compositor output measurement.
 
 The gate compares eight patch medians, including a 1000-nit gray, against the
 source's quantized expected linear values without fitted normalization. It

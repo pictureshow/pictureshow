@@ -42,6 +42,7 @@ eotf-mode=$eotf
 colorimetry-mode=$gamut
 color-profile=auto:
 CONFIG
+ export SPIKE_HDR_COMPOSITOR_SAMPLES="$out"
  "$prefix/bin/weston" -B headless --renderer=gl --width=640 --height=360 --socket="$WAYLAND_DISPLAY" --config="$out/weston.ini" --modules="$build/native/capture-authority.so" --log="$out/weston.log" > "$out/weston-console.log" 2>&1 &
  compositor_pid=$!
  for n in $(seq 1 100); do [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && break; kill -0 "$compositor_pid"; sleep .1; done

@@ -13,8 +13,16 @@ root=Path(sys.argv[2])
 results={}
 # Separate diagnostic receipts. These never substitute for compositor captures.
 for mode in ('hdr','sdr'):
- for media in ('pq','sdr'):
+ for index,media in enumerate(('pq','sdr'),1):
   folder=root/(mode+'-output')/media
+  direct_path=root/(mode+'-output')/f'direct-compositor-{index}.json'
+  if direct_path.exists():
+   direct=json.loads(direct_path.read_text())
+   if mode=='sdr':
+    direct['samples']=[{'name':v['name'],'rgb':[80*max(c,0)**2.2 for c in v['rgb']]} for v in direct['samples']]
+    direct['encoding']='nits'
+   verdict=analyze(manifest,media,direct)
+   (folder/'direct-compositor-verdict.json').write_text(json.dumps(verdict,indent=2)+'\n')
   app_path=folder/'app-backbuffer.json'
   if app_path.exists():
    verdict=analyze(manifest,media,json.loads(app_path.read_text()))
@@ -31,7 +39,16 @@ for mode in ('hdr','sdr'):
   raise RuntimeError('Unexpected compositor output encoding')
  for media in ('pq','sdr'):
   folder=root/(mode+'-output')/media
-  capture=json.loads((folder/'samples.json').read_text())
+  protocol_capture=json.loads((folder/'samples.json').read_text())
+  # The independent frame-signal observer reads the stock compositor's actual
+  # final FBO synchronously. Protocol/PBO screenshots remain retained evidence.
+  direct_path=root/(mode+'-output')/f'direct-compositor-{1 if media=="pq" else 2}.json'
+  capture=json.loads(direct_path.read_text()) if direct_path.exists() else protocol_capture
+  if direct_path.exists():
+   if capture.get('glError')!=0 or not isinstance(capture.get('fbo'),int) or capture['fbo']<=0 or capture.get('width')!=640 or capture.get('height')!=360:
+    raise RuntimeError('Direct output FBO observer returned invalid graphics state')
+   if capture.get('encoding')!=('pq' if mode=='hdr' else 'gamma2.2') or capture.get('primaries')!=('bt2020' if mode=='hdr' else 'bt709'):
+    raise RuntimeError('Direct output FBO observer encoding differs from actual output profile')
   if mode=='sdr':
    capture['samples']=[{'name':s['name'],'rgb':[80*max(v,0)**2.2 for v in s['rgb']]} for s in capture['samples']]
    capture['encoding']='nits'
@@ -54,5 +71,5 @@ for mode in ('hdr','sdr'):
    raise RuntimeError('HDR output numeric gate failed: '+json.dumps(verdict))
   (folder/'verdict.json').write_text(json.dumps(verdict,indent=2)+'\n')
   results[mode+'-output/'+media]=verdict
-(root/'gate.json').write_text(json.dumps({'pass':True,'boundary':'Stock Weston headless composited framebuffer, 8-bit PQ output; llvmpipe','results':results},indent=2)+'\n')
+(root/'gate.json').write_text(json.dumps({'pass':True,'boundary':'Stock Weston headless final output framebuffer, synchronous FBO observer when available; 8-bit PQ; llvmpipe','results':results},indent=2)+'\n')
 print(json.dumps({'pass':True,'positive':['hdr-output/pq','hdr-output/sdr','sdr-output/sdr'],'expectedRejection':['sdr-output/pq']}))
