@@ -184,7 +184,7 @@ class TvSettingsComponentsTest {
         }
         val panel = compose.onNodeWithTag("tv-settings:panel")
         val bounds = panel.getUnclippedBoundsInRoot()
-        assertEquals(420.dp, bounds.width)
+        assertEquals(420.dp, bounds.right - bounds.left)
         val node = panel.fetchSemanticsNode()
         val root = generateSequence(node) { it.parent }.last()
         assertEquals(root.boundsInRoot.height, node.boundsInRoot.height, .5f, "The panel fills available window height")
