@@ -460,6 +460,15 @@ for (const file of files) {
                             i.failed,
                         );
                         break;
+                    case "detail-retain-season-focus":
+                        value = rc26.detailRetainsSeasonFocus(
+                            i.selectedSection,
+                            i.restored,
+                            i.semanticsRevealed,
+                            i.selectedId,
+                            i.seasonIds,
+                        );
+                        break;
                     case "detail-host-focus-handoff":
                         value = rc26.detailSuppressesEmptyHostFocus(
                             i.ordinaryArrivalWithActions,

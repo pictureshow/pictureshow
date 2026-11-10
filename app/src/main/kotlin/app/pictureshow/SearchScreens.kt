@@ -523,77 +523,80 @@ fun SearchScreen(
                             )
                             // Only the outer vertical list keeps a whole card; shelves retain platform scrolling.
                             CompositionLocalProvider(LocalBringIntoViewSpec provides platformBringIntoView) {
-                                ShelfWithEnds(row.title, rowStates.getValue(row.key), row.items.lastIndex) { endCard ->
+                                ShelfWithEnds(row.title, rowStates.getValue(row.key), row.items.lastIndex) { endCard, rowSemantics ->
                                     LazyRow(
+                                        modifier = rowSemantics,
                                         state = rowStates.getValue(row.key),
                                         contentPadding = PaddingValues(16.dp),
                                         horizontalArrangement = Arrangement.spacedBy(18.dp)
                                     ) {
                                         itemsIndexed(row.items, key = { _, item -> item.id }) { itemIndex, item ->
                                             val target = "${row.key}:${item.id}"
-                                            CatalogCard(
-                                                item,
-                                                account,
-                                                row.wide,
-                                                onClick = {
-                                                    editing = false
-                                                    keyboard?.hide()
-                                                    selected = target
-                                                    selections = selections + (row.key to target)
-                                                    focusResults = false
-                                                    onOpen(item)
-                                                },
-                                                modifier = arrivalTarget(Modifier, target == returnTarget)
-                                                    .focusRequester(requests.getValue(target)).testTag("search:$target")
-                                                    .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
-                                                    .then(endCard(itemIndex))
-                                                    .onGloballyPositioned { focusedResult.cards[target] = it }
-                                                    .onFocusChanged {
-                                                        if (it.isFocused) {
-                                                            focusedResult.row = section.row
-                                                            focusedResult.titleHeight = section.titleHeight
-                                                            focusedResult.target = target
-                                                        }
-                                                        if (it.isFocused && (!returning || (restored && !handoff) || interacted)) {
-                                                            selected = target
-                                                            selections =
-                                                                selections + (row.key to target)
-                                                        }
-                                                    }
-                                                    .onPreviewKeyEvent {
-                                                        if (it.type != KeyEventType.KeyDown) {
-                                                            false
-                                                        } else {
-                                                            when (it.key) {
-                                                                Key.DirectionUp -> {
-                                                                    if (rowIndex ==
-                                                                        0
-                                                                    ) {
-                                                                        if (state.someFailed || state.allFailed) {
-                                                                            focusInHead(retry)
-                                                                        } else {
-                                                                            focusField()
-                                                                        }
-                                                                    } else {
-                                                                        scope.launch { focusRow(rowIndex - 1) }
-                                                                    }
-                                                                    true
-                                                                }
-
-                                                                Key.DirectionDown -> {
-                                                                    if (rowIndex <
-                                                                        state.rows.lastIndex
-                                                                    ) {
-                                                                        scope.launch { focusRow(rowIndex + 1) }
-                                                                    }
-                                                                    true
-                                                                }
-
-                                                                else -> false
+                                            endCard(itemIndex) { endModifier ->
+                                                CatalogCard(
+                                                    item,
+                                                    account,
+                                                    row.wide,
+                                                    onClick = {
+                                                        editing = false
+                                                        keyboard?.hide()
+                                                        selected = target
+                                                        selections = selections + (row.key to target)
+                                                        focusResults = false
+                                                        onOpen(item)
+                                                    },
+                                                    modifier = arrivalTarget(Modifier, target == returnTarget)
+                                                        .focusRequester(requests.getValue(target)).testTag("search:$target")
+                                                        .staysInRow(itemIndex == 0, itemIndex == row.items.lastIndex)
+                                                        .then(endModifier)
+                                                        .onGloballyPositioned { focusedResult.cards[target] = it }
+                                                        .onFocusChanged {
+                                                            if (it.isFocused) {
+                                                                focusedResult.row = section.row
+                                                                focusedResult.titleHeight = section.titleHeight
+                                                                focusedResult.target = target
+                                                            }
+                                                            if (it.isFocused && (!returning || (restored && !handoff) || interacted)) {
+                                                                selected = target
+                                                                selections =
+                                                                    selections + (row.key to target)
                                                             }
                                                         }
-                                                    }
-                                            )
+                                                        .onPreviewKeyEvent {
+                                                            if (it.type != KeyEventType.KeyDown) {
+                                                                false
+                                                            } else {
+                                                                when (it.key) {
+                                                                    Key.DirectionUp -> {
+                                                                        if (rowIndex ==
+                                                                            0
+                                                                        ) {
+                                                                            if (state.someFailed || state.allFailed) {
+                                                                                focusInHead(retry)
+                                                                            } else {
+                                                                                focusField()
+                                                                            }
+                                                                        } else {
+                                                                            scope.launch { focusRow(rowIndex - 1) }
+                                                                        }
+                                                                        true
+                                                                    }
+
+                                                                    Key.DirectionDown -> {
+                                                                        if (rowIndex <
+                                                                            state.rows.lastIndex
+                                                                        ) {
+                                                                            scope.launch { focusRow(rowIndex + 1) }
+                                                                        }
+                                                                        true
+                                                                    }
+
+                                                                    else -> false
+                                                                }
+                                                            }
+                                                        }
+                                                )
+                                            }
                                         }
                                     }
                                 }

@@ -48,6 +48,14 @@ data class CommandEvent(
     val authorized: Boolean = true
 )
 
+/**
+ * How long a sent command may take to show on the target before it reads as unconfirmed. A transport change shows within
+ * a report or two. Starting a title also waits for the target to wake, negotiate playback and buffer before its start
+ * report reaches the server: on a real TV the start alone took up to 6.2 s (rc33, 53 starts), and a 5 s window read a
+ * title already playing as "didn't confirm".
+ */
+fun confirmWindowMs(operation: String): Long = if (operation == "play-now") 12_000 else 5_000
+
 /** One caller serializes events. Effects describe one dispatch, never a retry queue. */
 fun reduceCommand(state: CommandState, event: CommandEvent): CommandState {
     val s = state.copy(effect = "none", rejection = null)
@@ -82,7 +90,7 @@ fun reduceCommand(state: CommandState, event: CommandEvent): CommandState {
             if (event.id != pending.id ||
                 pending.result != "sent" ||
                 event.nowMs < pending.sentAtMs ||
-                event.nowMs - pending.sentAtMs < 5_000
+                event.nowMs - pending.sentAtMs < confirmWindowMs(pending.operation)
             ) {
                 return s
             }
@@ -93,7 +101,7 @@ fun reduceCommand(state: CommandState, event: CommandEvent): CommandState {
             val ticks = event.value?.let(::exactLong) ?: return rejected("invalid-ticks")
             if (ticks < 0 || ticks > s.durationTicks) return rejected("invalid-ticks")
             if (event.id != pending.id || pending.result != "sent") return s
-            if (event.nowMs < pending.sentAtMs || event.nowMs - pending.sentAtMs >= 5_000) {
+            if (event.nowMs < pending.sentAtMs || event.nowMs - pending.sentAtMs >= confirmWindowMs(pending.operation)) {
                 return s.copy(pending = pending.copy(result = "unknown"), fresh = false, seekTarget = null, effect = "refresh")
             }
             val matches = (pending.paused == null || event.paused == pending.paused) &&

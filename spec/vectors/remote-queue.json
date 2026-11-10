@@ -1047,6 +1047,135 @@
           }
         }
       ]
+    },
+    {
+      "id": "remote-queue.play-next-episode-after-an-added-movie-keeps-the-series-after-the-movie",
+      "operation": "queue",
+      "state": {
+        "queue": {
+          "server": "s",
+          "viewer": "v"
+        }
+      },
+      "steps": [
+        {
+          "event": {
+            "op": "open",
+            "items": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7"
+            ]
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-last",
+            "items": [
+              "m"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "m",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "add-next",
+            "items": [
+              "e5",
+              "e6",
+              "e7"
+            ],
+            "watching": "e1"
+          },
+          "expected": {
+            "current": "e1",
+            "upNext": [
+              "e5",
+              "m",
+              "e2",
+              "e3",
+              "e4",
+              "e6",
+              "e7"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "e5"
+          },
+          "expected": {
+            "current": "e5",
+            "upNext": [
+              "m",
+              "e2",
+              "e3",
+              "e4",
+              "e6",
+              "e7"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "m"
+          },
+          "expected": {
+            "current": "m",
+            "upNext": [
+              "e2",
+              "e3",
+              "e4",
+              "e6",
+              "e7"
+            ]
+          }
+        },
+        {
+          "event": {
+            "op": "observed",
+            "item": "e2"
+          },
+          "expected": {
+            "current": "e2",
+            "upNext": [
+              "e3",
+              "e4",
+              "e6",
+              "e7"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

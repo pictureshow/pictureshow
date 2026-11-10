@@ -424,10 +424,20 @@ internal class RemoteTargetHost(
         if (playerToken !== token) return
         playerToken = null
         player = null
-        report(null)
+        observe(null)
     }
 
-    fun report(next: RemoteViewing?) {
+    /**
+     * What [from]'s player shows now. Only the mounted player speaks for the target: a title being replaced keeps
+     * reporting until it is disposed, and its last word arriving after the new title's first would read as the queue
+     * moving on to the old title and then away from it, which ends the queue (rc33, Play while another title plays).
+     */
+    fun report(from: Any, next: RemoteViewing?) {
+        if (from !== playerToken) return
+        observe(next)
+    }
+
+    private fun observe(next: RemoteViewing?) {
         if (next == viewing) return
         val itemChanged = next?.item != viewing?.item
         viewing = next

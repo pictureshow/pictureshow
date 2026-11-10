@@ -413,6 +413,22 @@ internal fun PlayerItemScreen(
             focusControls = true
         }
     }
+    // PLAY-24: back from the background the player is still paused with its controls up, but focus sits on the
+    // hidden surface, so the first OK only moved focus to Play and a second one resumed. Put focus on Play when
+    // the viewer returns, so the paused state shows a focused Play and the first OK plays.
+    var stoppedWhileShown by remember { mutableStateOf(false) }
+    LaunchedEffect(foreground) {
+        if (!foreground) {
+            stoppedWhileShown = true
+        } else if (stoppedWhileShown) {
+            stoppedWhileShown = false
+            if (paused && rootFocused && !accessibleControls) {
+                controls = true
+                focusControls = true
+                interaction++
+            }
+        }
+    }
     val openerReturnGone = !openerShown && (returnFocus == speedFocus || returnFocus == infoFocus)
     LaunchedEffect(openerReturnGone) {
         if (openerReturnGone) {
