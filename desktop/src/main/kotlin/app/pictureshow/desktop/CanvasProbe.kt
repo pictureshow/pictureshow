@@ -145,7 +145,12 @@ fun canvasMain(args: Array<String>) {
                             mpv.set("pause","yes");mpv.command("seek","0","absolute+exact");Thread.sleep(500)
                             check(mpv.get("video-params/w")=="1920" && mpv.get("video-params/h")=="1080"){"Expected 1920x1080 fixture"}
                             check(kotlin.math.abs(mpv.get("container-fps")!!.toDouble()-60.0)<0.01){"Expected 60fps fixture"}
-                            val startFrames=video!!.queuedNewFrameObservations.get();val start=System.nanoTime()
+                            fun counter(name:String)=checkNotNull(mpv.get(name)?.toLongOrNull()) {"Missing drop counter: $name"}
+                            val startFrames=video!!.queuedNewFrameObservations.get()
+                            val startRenders=video!!.renderCalls.get()
+                            val startVoDrops=counter("frame-drop-count")
+                            val startDecoderDrops=counter("decoder-frame-drop-count")
+                            val start=System.nanoTime()
                             val first=mpv.get("time-pos")!!.toDouble()
                             check(first<1.0){"Seek to soak origin did not complete: $first"}
                             mpv.set("pause","no")
@@ -153,12 +158,12 @@ fun canvasMain(args: Array<String>) {
                                 log.write("elapsed\ttime-pos\tqueuedNewFrameObservations\trenderCalls\tvoDrops\tdecoderDrops\n")
                                 repeat(sustain) {
                                     Thread.sleep(1000);alive();check(mpv.get("eof-reached")!="yes"){"EOF during soak"}
-                                    log.write("${(System.nanoTime()-start)/1e9}\t${mpv.get("time-pos")}\t${video!!.queuedNewFrameObservations.get()-startFrames}\t${video!!.renderCalls.get()}\t${mpv.get("frame-drop-count")}\t${mpv.get("decoder-frame-drop-count")}\n");log.flush()
+                                    log.write("${(System.nanoTime()-start)/1e9}\t${mpv.get("time-pos")}\t${video!!.queuedNewFrameObservations.get()-startFrames}\t${video!!.renderCalls.get()-startRenders}\t${counter("frame-drop-count")-startVoDrops}\t${counter("decoder-frame-drop-count")-startDecoderDrops}\n");log.flush()
                                 }
                             }
                             val elapsed=(System.nanoTime()-start)/1e9;val advanced=mpv.get("time-pos")!!.toDouble()-first
                             check(elapsed>=125 && advanced>=elapsed-3){"Playback stalled: elapsed=$elapsed advanced=$advanced"}
-                            File(out,"sustain.txt").writeText("seconds=$elapsed\nmediaAdvance=$advanced\nqueuedNewFrameObservations=${video!!.queuedNewFrameObservations.get()-startFrames}\n")
+                            File(out,"sustain.txt").writeText("seconds=$elapsed\nmediaAdvance=$advanced\nqueuedNewFrameObservations=${video!!.queuedNewFrameObservations.get()-startFrames}\nrenderCalls=${video!!.renderCalls.get()-startRenders}\nvoDrops=${counter("frame-drop-count")-startVoDrops}\ndecoderDrops=${counter("decoder-frame-drop-count")-startDecoderDrops}\n")
                             stage("07-sustain-end")
                         }
                         // Run shutdown off the worker so it can join this thread before freeing native objects.

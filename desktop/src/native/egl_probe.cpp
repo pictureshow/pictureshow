@@ -22,7 +22,7 @@
 static void *proc(void*,const char *name){void *p=(void*)eglGetProcAddress(name);return p?p:dlsym(RTLD_DEFAULT,name);}
 static void check(int rc){if(rc<0){std::cerr<<mpv_error_string(rc)<<std::endl;std::exit(2);}}
 int main(int argc,char**argv){
-    if(argc<3){std::cerr<<"egl_probe MEDIA OUTPUT.ppm [fbo-format] [vd-lavc-dr] [hwdec]\n";return 2;}
+    if(argc<3){std::cerr<<"egl_probe MEDIA OUTPUT.ppm [fbo-format] [vd-lavc-dr] [hwdec] [gpu-dumb-mode]\n";return 2;}
     setlocale(LC_NUMERIC,"C");
     auto platform=(PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
     if(!platform)return 3;
@@ -51,13 +51,14 @@ int main(int argc,char**argv){
     opt("terminal","yes");opt("msg-level","all=warn,vd=info,vo=info");
     if(argc>3)opt("fbo-format",argv[3]);
     if(argc>4)opt("vd-lavc-dr",argv[4]);
+    if(argc>6)opt("gpu-dumb-mode",argv[6]);
     check(mpv_initialize(mpv));
     mpv_opengl_init_params init={proc,nullptr};mpv_render_context *render=nullptr;
     mpv_opengl_drm_params_v2 drm={};drm.fd=-1;drm.render_fd=open("/dev/dri/renderD128",O_RDWR);
     mpv_render_param p[]={{MPV_RENDER_PARAM_API_TYPE,(void*)MPV_RENDER_API_TYPE_OPENGL},{MPV_RENDER_PARAM_OPENGL_INIT_PARAMS,&init},{MPV_RENDER_PARAM_DRM_DISPLAY_V2,&drm},{MPV_RENDER_PARAM_INVALID,nullptr}};
     check(mpv_render_context_create(&render,mpv,p));
     const char *load[]={"loadfile",argv[1],nullptr};check(mpv_command(mpv,load));
-    mpv_opengl_fbo fbo={(int)target,640,360,GL_RGBA8};int flip=0;
+    mpv_opengl_fbo fbo={(int)target,640,360,GL_RGBA8};int flip=1;
     mpv_render_param rp[]={{MPV_RENDER_PARAM_OPENGL_FBO,&fbo},{MPV_RENDER_PARAM_FLIP_Y,&flip},{MPV_RENDER_PARAM_INVALID,nullptr}};
     auto begin=std::chrono::steady_clock::now();unsigned long calls=0;
     while(std::chrono::steady_clock::now()-begin<std::chrono::seconds(4)){
