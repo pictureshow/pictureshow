@@ -25,6 +25,12 @@ internal class SyncTransportPlayer(private val output: Player, private val reque
     override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
         if (!request("seek", positionMs)) output.seekTo(mediaItemIndex, positionMs)
     }
+    override fun seekToDefaultPosition() {
+        if (!request("seek", 0L)) output.seekToDefaultPosition()
+    }
+    override fun seekToDefaultPosition(mediaItemIndex: Int) {
+        if (!request("seek", 0L)) output.seekToDefaultPosition(mediaItemIndex)
+    }
     override fun seekBack() {
         if (!request("seek", (currentPosition - seekBackIncrement).coerceAtLeast(0))) output.seekBack()
     }

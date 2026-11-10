@@ -27,6 +27,7 @@ class SyncTransportPlayerTest {
         var position = 30_000L
         var duration = 120_000L
         val mutations = mutableListOf<String>()
+        val defaultPositionIndices = mutableListOf<Int?>()
         val player = Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { proxy, method, args ->
             when (method.name) {
                 "getCurrentPosition" -> position
@@ -38,6 +39,12 @@ class SyncTransportPlayerTest {
                 "getApplicationLooper" -> android.os.Looper.getMainLooper()
 
                 "getPlaybackParameters" -> PlaybackParameters.DEFAULT
+
+                "seekToDefaultPosition" -> {
+                    mutations += method.name
+                    defaultPositionIndices += args?.firstOrNull() as? Int
+                    null
+                }
 
                 "equals" -> proxy === args?.firstOrNull()
 
@@ -166,5 +173,28 @@ class SyncTransportPlayerTest {
         player.seekBack()
         assertEquals(listOf<Long?>(0L), requests)
         assertFalse(output.mutations.isNotEmpty())
+    }
+
+    @Test fun bothDefaultPositionOverloadsRequestTheSharedEntryStartWithoutLocalMutation() {
+        val output = Output()
+        val requests = mutableListOf<Pair<String, Long?>>()
+        val player = SyncTransportPlayer(output.player) { command, position ->
+            requests += command to position
+            true
+        }
+        player.seekToDefaultPosition()
+        player.seekToDefaultPosition(2)
+        assertEquals(listOf("seek" to 0L, "seek" to 0L), requests)
+        assertTrue(output.mutations.isEmpty())
+        assertTrue(output.defaultPositionIndices.isEmpty())
+    }
+
+    @Test fun ungroupedDefaultPositionCallsDelegateTheirOriginalOverloads() {
+        val output = Output()
+        val player = SyncTransportPlayer(output.player) { _, _ -> false }
+        player.seekToDefaultPosition()
+        player.seekToDefaultPosition(2)
+        assertEquals(listOf("seekToDefaultPosition", "seekToDefaultPosition"), output.mutations)
+        assertEquals(listOf<Int?>(null, 2), output.defaultPositionIndices)
     }
 }
