@@ -730,6 +730,60 @@
         "firstRuleId": null,
         "secondRuleId": null
       }
+    },
+    {
+      "id": "live-dvr.linked-rule-does-not-fallback-to-an-unrelated-airing",
+      "operation": "create-trace",
+      "input": {
+        "draft": {
+          "ProgramId": "p",
+          "ChannelId": "c",
+          "Name": "Program",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted"
+        },
+        "policy": {
+          "EnableLiveTvAccess": true,
+          "EnableLiveTvManagement": true,
+          "EnableContentDeletion": true,
+          "EnableUserPreferenceAccess": true
+        },
+        "applied": true,
+        "disconnect": false,
+        "series": true,
+        "program": {
+          "SeriesTimerId": "saved"
+        },
+        "reportSchedule": true,
+        "stored": {
+          "ProgramId": "p",
+          "ChannelId": "c",
+          "Name": "Program",
+          "StartDate": "2030-11-03T05:00:00Z",
+          "EndDate": "2030-11-03T07:00:00Z",
+          "ServiceName": "Emby",
+          "ExternalProgramId": "provider-id",
+          "PrePaddingSeconds": 20,
+          "PostPaddingSeconds": 30,
+          "Priority": 2,
+          "KeepUntil": "UntilDeleted",
+          "Id": "unrelated"
+        }
+      },
+      "expected": {
+        "first": "failed",
+        "second": "failed",
+        "postCount": 0,
+        "posts": [],
+        "firstRuleId": null,
+        "secondRuleId": null
+      }
     }
   ]
 }
