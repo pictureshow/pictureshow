@@ -608,6 +608,7 @@ internal class SyncPlayHost(
     }
 
     private fun resetClock() {
+        waitRequest = null
         ticker?.cancel()
         ticker = null
         clockJob?.cancel()
