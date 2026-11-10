@@ -15,6 +15,8 @@ export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PA
 export MPV_LIBRARY="$prefix/lib/x86_64-linux-gnu/libmpv.so"
 [[ -f "$MPV_LIBRARY" ]] || export MPV_LIBRARY="$prefix/lib/libmpv.so"
 export SPIKE_WAYLAND_BRIDGE="$build/native/libpictureshow_wayland.so" SPIKE_NULL_AUDIO=1 SKIKO_RENDER_API=SOFTWARE SPIKE_SOFTWARE_GPU=1 LIBGL_ALWAYS_SOFTWARE=1
+# Independent Mesa software implementation for color-transform/JIT isolation.
+export GALLIUM_DRIVER=softpipe
 export XDG_RUNTIME_DIR
 XDG_RUNTIME_DIR=$(mktemp -d)
 export WAYLAND_DISPLAY=hdr-numeric
