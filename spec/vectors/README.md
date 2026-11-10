@@ -428,3 +428,5 @@ answer until the list has been read back, and pins the create body: `IsPublic` i
 otherwise, since the server's own default is public.
 
 SyncPlay SYN-06 evidence records buffer waits and drift-correction seeks separately from scheduled timeline commands. Passing the portable vectors does not qualify rendered-output timing; record the source frame cadence, capture coverage, drift distribution and full measurement uncertainty for each native renderer pair.
+
+For `sync-drift`, optional `input.appliedSeek` is the monotonic millisecond instant at which a scheduled server transport position was actually applied. Set that `lastSeek` deadline and normal rate before evaluating the row only if `input.appliedPositionChanged` is true (the default). If false, preserve the input state's previous `lastSeek` deadline while restoring normal rate; this models an aligned command for which the adapter issued no seek. This prevents Ready-triggered Unpause from erasing the two-second autonomous seek cooldown; explicit server transport remains independent.

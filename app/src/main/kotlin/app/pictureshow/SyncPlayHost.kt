@@ -39,6 +39,7 @@ import app.pictureshow.core.sync.syncSelect
 import app.pictureshow.core.sync.syncShuffle
 import app.pictureshow.core.sync.syncTarget
 import app.pictureshow.core.sync.syncTransport
+import app.pictureshow.core.sync.syncTransportApplied
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -73,8 +74,8 @@ internal data class SyncRendererState(
 internal interface SyncRenderer {
     fun snapshot(): SyncRendererState
 
-    /** Bypasses outgoing transport interception: applying a server command never echoes it. */
-    fun apply(positionTicks: Long? = null, playing: Boolean? = null, rate: Double = 1.0)
+    /** Bypasses outgoing transport interception; returns whether a position seek was actually issued. */
+    fun apply(positionTicks: Long? = null, playing: Boolean? = null, rate: Double = 1.0): Boolean
 }
 
 internal data class SyncLocalSelection(val itemId: String, val startTicks: Long)
@@ -701,8 +702,9 @@ internal class SyncPlayHost(
             val execution =
                 syncTarget(command.positionTicks ?: r.positionTicks, command.whenMs, at, playing, r.durationTicks) ?: return@launch
             diagnostic("scheduled-apply", "command=${command.command} playing=$playing targetTicks=${execution.positionTicks}")
-            renderer?.apply(execution.positionTicks, playing)
-            drift = stopSyncDrift()
+            val positionChanged = renderer?.apply(execution.positionTicks, playing) == true
+            // Ready/Unpause after a correction-induced buffer must not re-arm an immediate seek.
+            drift = syncTransportApplied(drift, monotonic(), positionChanged)
         }
     }
 

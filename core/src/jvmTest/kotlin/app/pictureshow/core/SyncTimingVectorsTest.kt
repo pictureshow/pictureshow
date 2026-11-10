@@ -10,6 +10,7 @@ import app.pictureshow.core.sync.millisecondsToSyncTicks
 import app.pictureshow.core.sync.stopSyncDrift
 import app.pictureshow.core.sync.syncDrift
 import app.pictureshow.core.sync.syncTarget
+import app.pictureshow.core.sync.syncTransportApplied
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -69,11 +70,14 @@ class SyncTimingVectorsTest {
         cases("sync-drift").forEach { row ->
             val i = row.getValue("input").jsonObject
             val e = row.getValue("expected").jsonObject
-            val state = SyncDriftState(
+            val initialState = SyncDriftState(
                 i["lastSeek"]?.jsonPrimitive?.long,
                 i["rateStarted"]?.jsonPrimitive?.long,
                 i["oldRate"]?.jsonPrimitive?.double ?: 1.0
             )
+            val state = i["appliedSeek"]?.jsonPrimitive?.long?.let {
+                syncTransportApplied(initialState, it, i["appliedPositionChanged"]?.jsonPrimitive?.boolean ?: true)
+            } ?: initialState
             val result = syncDrift(
                 state,
                 50_000_000L + i.long("driftMs") * 10_000,

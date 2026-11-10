@@ -139,6 +139,18 @@ fun syncDrift(
     return SyncDriftDecision(reset.copy(lastSeekMonotonicMillis = nowMonotonicMillis), SyncDriftAction.SEEK, target)
 }
 
+/**
+ * A scheduled transport action also seeks the renderer. Start a fresh correction cooldown
+ * after that seek, including a Ready-triggered Unpause for the same entry. An aligned command
+ * which does not actually seek preserves the previous deadline. Explicit future
+ * group commands remain schedulable; only autonomous drift correction waits. Restore 1x.
+ */
+fun syncTransportApplied(state: SyncDriftState, nowMonotonicMillis: Long, positionChanged: Boolean): SyncDriftState = state.copy(
+    lastSeekMonotonicMillis = if (positionChanged) nowMonotonicMillis else state.lastSeekMonotonicMillis,
+    rateStartedMonotonicMillis = null,
+    rate = 1.0
+)
+
 /** Stop/Leave discards the old viewing's correction deadlines and restores normal speed. */
 fun stopSyncDrift(): SyncDriftState = SyncDriftState()
 

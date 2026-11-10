@@ -52,9 +52,16 @@ class SyncPlayHostTest {
         var value = SyncRendererState("local-item", 123_456_789L, 9_000_000_000L, true, false, true, true)
         val applied = mutableListOf<Applied>()
         override fun snapshot() = value
-        override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double) {
-            applied += Applied(positionTicks, playing, rate)
-            value = value.copy(positionTicks = positionTicks ?: value.positionTicks, playing = playing ?: value.playing)
+        override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
+            val positionChanged = positionTicks != null && kotlin.math.abs(value.positionTicks / 10_000 - positionTicks / 10_000) > 1
+            applied += Applied(positionTicks.takeIf { positionChanged }, playing, rate)
+            value =
+                value.copy(
+                    positionTicks = positionTicks.takeIf { positionChanged } ?: value.positionTicks,
+                    playing =
+                    playing ?: value.playing
+                )
+            return positionChanged
         }
     }
 
@@ -240,6 +247,75 @@ class SyncPlayHostTest {
         assertEquals(90_000_000L, rig.renderer.value.positionTicks)
         assertFalse(rig.operations().contains("Unpause"))
         assertFalse(rig.operations().contains("Seek"))
+    }
+
+    @Test fun scheduledPositionChangesKeepTheCorrectionCooldownAcrossBufferReadyUnpause() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.host.receive(rig.command("Unpause", ticks = 50_000_000L))
+        runCurrent()
+        rig.renderer.applied.clear()
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 40_000_000L, rateSupported = false)
+        rig.host.tick()
+        advanceTimeBy(1_999)
+        runCurrent()
+        assertFalse(rig.renderer.applied.any { it.position != null }, "A scheduled seek must retain the two-second correction cooldown")
+        advanceTimeBy(1)
+        rig.host.tick()
+        assertTrue(rig.renderer.applied.any { it.position != null }, "Correction resumes at the exact cooldown boundary")
+
+        // A real buffering/Ready cycle may schedule another Unpause for the same entry.
+        advanceTimeBy(100)
+        rig.renderer.value = rig.renderer.value.copy(buffering = true, ready = false)
+        rig.host.tick()
+        rig.renderer.value = rig.renderer.value.copy(buffering = false, ready = true)
+        rig.host.tick()
+        rig.host.receive(rig.command("Unpause", ticks = 80_000_000L))
+        runCurrent()
+        rig.renderer.applied.clear()
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 70_000_000L)
+        rig.host.tick()
+        advanceTimeBy(1_999)
+        runCurrent()
+        assertFalse(
+            rig.renderer.applied.any {
+                it.position != null
+            },
+            "A Ready-triggered Unpause must not re-arm immediate correction seeks"
+        )
+        advanceTimeBy(1)
+        rig.host.tick()
+        assertTrue(rig.renderer.applied.any { it.position != null })
+        assertFalse(rig.operations().contains("Seek"), "Applied corrections never echo group transport requests")
+    }
+
+    @Test fun anAlignedFutureUnpausePreservesTheActualSeekDeadlineInsteadOfExtendingOrErasingIt() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.joined("Playing")
+        rig.queue()
+        runCurrent()
+        rig.preparedEntry()
+        rig.host.receive(rig.command("Unpause", ticks = 50_000_000L))
+        runCurrent()
+        advanceTimeBy(1_000)
+        rig.host.receive(rig.command("Unpause", delayMs = 500, ticks = 65_000_000L))
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 65_000_000L, rateSupported = false)
+        advanceTimeBy(500)
+        runCurrent()
+        rig.renderer.applied.clear()
+        rig.renderer.value = rig.renderer.value.copy(positionTicks = 55_000_000L)
+        rig.host.tick()
+        advanceTimeBy(499)
+        runCurrent()
+        assertFalse(rig.renderer.applied.any { it.position != null }, "No-op Unpause preserves the existing cooldown")
+        advanceTimeBy(1)
+        rig.host.tick()
+        assertTrue(rig.renderer.applied.any { it.position != null }, "No-op Unpause must not extend the actual seek deadline")
     }
 
     @Test fun outgoingPauseSeekAndNextDoNotMoveLocalOutputBeforeTheServerCommand() = runTest {

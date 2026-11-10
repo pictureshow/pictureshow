@@ -314,6 +314,136 @@
         "action": "NONE",
         "rate": 1
       }
+    },
+    {
+      "id": "scheduled-seek-cooldown-before-boundary",
+      "input": {
+        "driftMs": -1000,
+        "playing": true,
+        "now": 2999,
+        "appliedSeek": 1000,
+        "allowsRate": false,
+        "rates": []
+      },
+      "expected": {
+        "action": "WAIT",
+        "rate": 1
+      }
+    },
+    {
+      "id": "scheduled-seek-cooldown-equality",
+      "input": {
+        "driftMs": -1000,
+        "playing": true,
+        "now": 3000,
+        "appliedSeek": 1000,
+        "allowsRate": false,
+        "rates": []
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "paused-scheduled-seek-retains-cooldown",
+      "input": {
+        "driftMs": 1000,
+        "playing": false,
+        "now": 2999,
+        "appliedSeek": 1000,
+        "allowsRate": false,
+        "rates": []
+      },
+      "expected": {
+        "action": "WAIT",
+        "rate": 1
+      }
+    },
+    {
+      "id": "scheduled-seek-already-aligned",
+      "input": {
+        "driftMs": 0,
+        "playing": true,
+        "now": 1000,
+        "appliedSeek": 1000,
+        "allowsRate": false,
+        "rates": []
+      },
+      "expected": {
+        "action": "NONE",
+        "rate": 1
+      }
+    },
+    {
+      "id": "aligned-unpause-keeps-expired-seek-deadline",
+      "input": {
+        "driftMs": -1000,
+        "playing": true,
+        "now": 2000,
+        "lastSeek": 0,
+        "appliedSeek": 1000,
+        "appliedPositionChanged": false,
+        "allowsRate": false,
+        "rates": []
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "aligned-unpause-keeps-active-seek-deadline",
+      "input": {
+        "driftMs": 1000,
+        "playing": true,
+        "now": 2499,
+        "lastSeek": 500,
+        "appliedSeek": 1000,
+        "appliedPositionChanged": false,
+        "allowsRate": false,
+        "rates": []
+      },
+      "expected": {
+        "action": "WAIT",
+        "rate": 1
+      }
+    },
+    {
+      "id": "aligned-unpause-keeps-exact-seek-deadline",
+      "input": {
+        "driftMs": -1000,
+        "playing": true,
+        "now": 2500,
+        "lastSeek": 500,
+        "appliedSeek": 1000,
+        "appliedPositionChanged": false,
+        "allowsRate": false,
+        "rates": []
+      },
+      "expected": {
+        "action": "SEEK",
+        "rate": 1
+      }
+    },
+    {
+      "id": "aligned-unpause-restores-normal-rate",
+      "input": {
+        "driftMs": 0,
+        "playing": true,
+        "now": 1000,
+        "lastSeek": 0,
+        "appliedSeek": 1000,
+        "appliedPositionChanged": false,
+        "allowsRate": false,
+        "rates": [],
+        "oldRate": 1.03,
+        "rateStarted": 0
+      },
+      "expected": {
+        "action": "NONE",
+        "rate": 1
+      }
     }
   ]
 }

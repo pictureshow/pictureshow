@@ -1113,8 +1113,8 @@ internal class MusicHost(
             )
         }
 
-        override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double) {
-            val running = player ?: return
+        override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
+            val running = player ?: return false
             if (group() != null) {
                 // A preloaded local album must not advance or repeat while membership is being acquired.
                 running.repeatMode = Player.REPEAT_MODE_OFF
@@ -1123,7 +1123,7 @@ internal class MusicHost(
             }
             if (running.currentMediaItem?.mediaId != queue.committed.current) {
                 running.playWhenReady = false
-                return
+                return false
             }
             val positionChanged = positionTicks != null &&
                 kotlin.math.abs(running.currentPosition - positionTicks / Ticks.PER_MILLISECOND) > 1
@@ -1139,7 +1139,7 @@ internal class MusicHost(
             if (positionChanged || localPause) {
                 val entry = queue.committed.current
                 val generation = queue.committed.generation
-                val at = running.currentPosition.coerceAtLeast(0).let(::millisecondsToSyncTicks) ?: return
+                val at = running.currentPosition.coerceAtLeast(0).let(::millisecondsToSyncTicks) ?: return positionChanged
                 enqueue {
                     if (
                         player !== running ||
@@ -1158,6 +1158,7 @@ internal class MusicHost(
                     }
                 }
             }
+            return positionChanged
         }
     }
 

@@ -152,16 +152,19 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
                     rateSupported = false
                 )
             }
-            override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double) {
+            override fun apply(positionTicks: Long?, playing: Boolean?, rate: Double): Boolean {
+                var positionChanged = false
                 host.output.applySync {
                     if (positionTicks != null && kotlin.math.abs(host.output.position().milliseconds - positionTicks / 10_000) > 1) {
                         host.seekToLocal(positionTicks / 10_000, revealControls = false)
+                        positionChanged = true
                     }
                     host.player?.let {
                         if (it.playbackParameters.speed != rate.toFloat()) it.setPlaybackSpeed(rate.toFloat())
                         if (playing != null && it.playWhenReady != playing) it.playWhenReady = playing
                     }
                 }
+                return positionChanged
             }
         }
     }
