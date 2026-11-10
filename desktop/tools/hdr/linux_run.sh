@@ -58,7 +58,13 @@ CONFIG
  fi
  for media in pq sdr; do
   mkdir -p "$out/$media"
-  export SPIKE_HDR_APP_SAMPLES="$out/$media/app-backbuffer.json"
+  # The required gate observes compositor output while the app keeps its ordinary
+  # zero-video-readback path. Opt-in trace files are auxiliary diagnostics only.
+  if [[ "${SPIKE_HDR_TRACE_APP:-0}" == 1 ]]; then
+   export SPIKE_HDR_APP_SAMPLES="$out/$media/app-backbuffer.json"
+  else
+   unset SPIKE_HDR_APP_SAMPLES
+  fi
   java -Djava.awt.headless=true --enable-native-access=ALL-UNNAMED -cp 'desktop/build/spike-runtime/lib/*' app.pictureshow.desktop.MainKt wayland "desktop-fixtures/hdr/$media.mkv" "$out/$media" --hdr-numeric
  done
  kill "$compositor_pid"; wait "$compositor_pid" || true; compositor_pid=''

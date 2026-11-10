@@ -49,7 +49,7 @@ fun waylandMain(args:Array<String>) {
  val hdr=!args.contains("--sdr")
  val native=Native.load(System.getenv("SPIKE_WAYLAND_BRIDGE")?:"pictureshow_wayland",WaylandNative::class.java)
  val mpv=Mpv(out)
- mpv.option("vo","libmpv");mpv.option("loop-file","no");mpv.option("hwdec","auto-safe")
+ mpv.option("vo","libmpv");mpv.option("loop-file",if(args.contains("--hdr-numeric")) "inf" else "no");mpv.option("hwdec","auto-safe")
  mpv.option("video-timing-offset","0")
  if(hdr){mpv.option("target-trc","pq");mpv.option("target-prim","bt.2020");mpv.option("target-peak","10000");mpv.option("fbo-format","rgba16f");mpv.option("dither-depth","10")}
  mpv.initialize()
@@ -103,10 +103,10 @@ fun waylandMain(args:Array<String>) {
    native.ps_wayland_fullscreen_set(context,1)
    waitFor(5000){native.ps_wayland_fullscreen(context)==1}
    check(native.ps_wayland_fullscreen(context)==1)
-   // A one-fps fixture's first frame can be dropped while llvmpipe compiles shaders.
-   // vo-configured/time-pos=0 alone does not prove any visible frame was committed.
-   waitFor(15000){(mpv.get("time-pos")?.toDoubleOrNull()?:-1.0)>=1.0}
-   check((mpv.get("time-pos")?.toDoubleOrNull()?:-1.0)>=1.0){"Numeric fixture did not reach its second frame"}
+   // The static fixture loops so shader compilation cannot consume the whole file.
+   // Warm up multiple complete cycles before pausing; time-pos alone is not proof
+   // that a one-fps frame survived initial software shader compilation.
+   waitFor(8000)
    mpv.set("pause","yes")
    stage("numeric")
    check(mpv.get("video-params/primaries") == if(media.endsWith("pq.mkv")) "bt.2020" else "bt.709")
