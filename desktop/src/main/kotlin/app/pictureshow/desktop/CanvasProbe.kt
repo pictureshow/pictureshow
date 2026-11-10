@@ -65,9 +65,11 @@ fun canvasMain(args: Array<String>) {
             fun toggleFullscreen() {
                 if (!fullscreen) {
                     floating=Rectangle(window.bounds)
+                    state.placement=WindowPlacement.Fullscreen
                     window.graphicsConfiguration.device.fullScreenWindow=window
                     window.bounds=window.graphicsConfiguration.bounds
                 } else {
+                    state.placement=WindowPlacement.Floating
                     window.graphicsConfiguration.device.fullScreenWindow=null
                     floating?.let {window.bounds=it}
                 }
