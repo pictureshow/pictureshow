@@ -150,6 +150,7 @@ internal fun PlaybackSettingsScreen(
     var restoreEntry by rememberSaveable { mutableStateOf("") }
     val local = state.local
     val configuration = state.configuration
+    var advanced by rememberSaveable { mutableStateOf<String?>(null) }
     val scroll = rememberScrollState()
     Column(
         Modifier.revealFocusAfterFontChange(scroll).fillMaxSize().background(Color(0xFF10131C)).verticalScroll(scroll).padding(48.dp),
@@ -245,8 +246,11 @@ internal fun PlaybackSettingsScreen(
             Text("Subtitle background: ${settingLabel(local.subtitleBackground.name)}")
         }
         Text(
-            "System follows Android caption settings. Bitmap subtitles keep their authored appearance. These settings apply the next time you open the player."
+            "System follows Android captions. Open Subtitle appearance for a live preview and image opacity. Changes apply next player open."
         )
+        playbackGroups.forEach { group ->
+            Button(onClick = { advanced = group }, modifier = Modifier.testTag("settings:advanced:$group")) { Text(group) }
+        }
         Text("Skip segments", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
             val mode = local.segmentModes[type] ?: SegmentMode.Ask
@@ -299,6 +303,7 @@ internal fun PlaybackSettingsScreen(
         ) { Text("This TV") }
         Button(onClick = onBack, modifier = Modifier.testTag("settings:back")) { Text("Back") }
     }
+    advanced?.let { group -> AdvancedPlaybackSettings(group, local, false, onLocal, onClose = { advanced = null }) }
     LaunchedEffect(Unit) {
         when (restoreEntry) {
             "this-tv" -> thisTvFocus.requestFocus()

@@ -99,7 +99,6 @@ import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
 import app.pictureshow.core.displayRuntimeMillis
 import app.pictureshow.core.nextEpisodeCardSeconds
-import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.ConversionNotice
 import app.pictureshow.core.trickplayTile
 import kotlinx.coroutines.delay
@@ -323,7 +322,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
         val noticeRoom = maxWidth - safeSides - TOUCH_PLAYER_EDGE * 2 - TOUCH_ACTIONS_WIDTH - 12.dp
         val noticeCap = noticeRoom.takeIf { it >= TOUCH_NOTICE_MIN_BESIDE }
         val conversionNotice = host.state.decision?.takeIf { host.localPreferences.conversionNotice }?.let {
-            ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice)
+            ConversionNotice.of(it, host.state.subtitleIndex, noticeDevice, host.localPreferences.tuning)
         }
         // A short window at a large font has no room for the notice above the controls, so it waits for them to hide
         // rather than covering them. Measured as the card lays out: its width, the title and the line at this font.
@@ -456,6 +455,18 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     }
                 }
                 val options = buildList<@Composable (Modifier) -> Unit> {
+                    add { placement ->
+                        TouchBarButton(
+                            {
+                                host.overrideQuality()
+                                ui.interact()
+                            },
+                            placement.testTag("touch:quality"),
+                            enabled = !host.state.preparing && host.state.decision != null
+                        ) {
+                            Text("Quality · ${host.qualityLabel}", maxLines = 1)
+                        }
+                    }
                     TouchPlayerSheet.entries.forEach { sheet ->
                         if (sheet != TouchPlayerSheet.Chapters || host.metadata.chapters.isNotEmpty()) {
                             add { placement ->
@@ -565,7 +576,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val next = (host.deferredNext ?: host.nextEpisode)?.takeUnless { host.nextCancelled }
-                val trigger = nextEpisodeTriggerMs(host.duration, host.segments)
+                val trigger = host.nextTriggerMs()
                 val eligible = host.deferredNext != null || (trigger != null && host.position >= trigger)
                 // With the card up its Play now is the one primary, and Skip travels inside it, quietly.
                 val cardUp = next != null && actionsVisible && (eligible || host.ended)
@@ -578,7 +589,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                     key(host.deferredNext, host.output.stopGeneration) {
                         val suspended =
                             paused || playback.buffering || host.state.preparing || !actionsVisible || ui.scrubMs != null || choosing
-                        val creditsCountdown = creditsStartMs(host.duration, host.segments) != null
+                        val creditsCountdown = host.creditsCountdown && creditsStartMs(host.duration, host.segments) != null
                         val autoPlay = !accessible && foreground && !pauseIntent && host.deferredNext == null
                         val skip = activeSegment(host.segments, host.position, host.localPreferences.segmentModes)
                             ?.takeIf { (host.localPreferences.segmentModes[it.type] ?: SegmentMode.Ask) == SegmentMode.Ask }

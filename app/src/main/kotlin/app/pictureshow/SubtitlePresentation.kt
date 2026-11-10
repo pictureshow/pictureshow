@@ -6,18 +6,27 @@
 package app.pictureshow
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.StyleSpan
 import android.view.accessibility.CaptioningManager
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
+import app.pictureshow.core.playback.SubtitleStyle
 
 typealias SubtitleSize = app.pictureshow.core.playback.SubtitleSize
 typealias SubtitleBackground = app.pictureshow.core.playback.SubtitleBackground
 
 data class SubtitleAppearance(
     val size: SubtitleSize = SubtitleSize.System,
-    val background: SubtitleBackground = SubtitleBackground.System
+    val background: SubtitleBackground = SubtitleBackground.System,
+    val styling: SubtitleStyle = SubtitleStyle()
 ) {
     fun applyTo(view: SubtitleView, context: Context, heightScale: Float = 1f) {
         val manager = context.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
@@ -29,8 +38,8 @@ data class SubtitleAppearance(
         view.setFractionalTextSize(presentation.textFraction * heightScale)
         // Explicit overrides should also override sizes/backgrounds embedded by the subtitle file.
         // SubtitleView preserves bitmap coordinates and dimensions when stripping text styling.
-        view.setApplyEmbeddedStyles(background == SubtitleBackground.System)
-        view.setApplyEmbeddedFontSizes(size == SubtitleSize.System)
+        view.setApplyEmbeddedStyles(background == SubtitleBackground.System && !styling.overrideEmbedded)
+        view.setApplyEmbeddedFontSizes(size == SubtitleSize.System && !styling.overrideEmbedded)
     }
 
     internal fun resolve(systemScale: Float, systemStyle: CaptionStyleCompat): ResolvedSubtitleAppearance {
@@ -41,14 +50,110 @@ data class SubtitleAppearance(
             SubtitleSize.Large -> 1.25f
             SubtitleSize.ExtraLarge -> 1.5f
         }
-        val style = when (background) {
+        val base = when (background) {
             SubtitleBackground.System -> systemStyle
             SubtitleBackground.None -> overrideStyle(systemStyle, Color.TRANSPARENT, CaptionStyleCompat.EDGE_TYPE_NONE)
             SubtitleBackground.Shadow -> overrideStyle(systemStyle, Color.TRANSPARENT, CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW)
             SubtitleBackground.Box -> overrideStyle(systemStyle, Color.argb(204, 0, 0, 0), CaptionStyleCompat.EDGE_TYPE_NONE)
         }
+        val custom = styling.normalized()
+        val style = if (custom == SubtitleStyle()) {
+            base
+        } else {
+            CaptionStyleCompat(
+                withOpacity(color(custom.foreground, base.foregroundColor), custom.textOpacity),
+                if (background == SubtitleBackground.None || background == SubtitleBackground.Shadow) {
+                    Color.TRANSPARENT
+                } else if (background == SubtitleBackground.System &&
+                    custom.backgroundColor == "Black" &&
+                    custom.backgroundOpacity == 80
+                ) {
+                    base.backgroundColor
+                } else {
+                    withOpacity(color(custom.backgroundColor, Color.BLACK), custom.backgroundOpacity)
+                },
+                base.windowColor,
+                when (custom.edge) {
+                    "None" -> CaptionStyleCompat.EDGE_TYPE_NONE
+                    "Outline" -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
+                    "Shadow" -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+                    else -> base.edgeType
+                },
+                color(custom.edgeColor, base.edgeColor),
+                if (custom.bold || custom.italic) {
+                    Typeface.create(
+                        base.typeface,
+                        (if (custom.bold) Typeface.BOLD else 0) or
+                            (if (custom.italic) Typeface.ITALIC else 0)
+                    )
+                } else {
+                    base.typeface
+                }
+            )
+        }
         return ResolvedSubtitleAppearance(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * scale, style)
     }
+
+    /** Called once per cue group/style, before safe-frame layout; image alpha never fades text. */
+    internal fun cues(cues: List<Cue>): List<Cue> {
+        val style = styling.normalized()
+        if (style == SubtitleStyle()) return cues
+        return cues.map { cue ->
+            val builder = cue.buildUpon()
+            cue.bitmap?.let { original ->
+                if (style.imageOpacity < 100) {
+                    val copy = Bitmap.createBitmap(original.width, original.height, Bitmap.Config.ARGB_8888)
+                    Canvas(copy).drawBitmap(original, 0f, 0f, Paint().apply { alpha = style.imageOpacity * 255 / 100 })
+                    builder.setBitmap(copy)
+                }
+            }
+            if (cue.text != null) {
+                if (style.bold || style.italic) {
+                    val text = SpannableString(if (style.overrideEmbedded) cue.text.toString() else cue.text)
+                    text.setSpan(
+                        StyleSpan(
+                            (if (style.bold) Typeface.BOLD else 0) or
+                                (if (style.italic) Typeface.ITALIC else 0)
+                        ),
+                        0,
+                        text.length,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    builder.setText(text)
+                }
+                if (style.position != "Authored") {
+                    builder.setLine(
+                        when (style.position) {
+                            "Top" -> 0.08f
+                            "Middle" -> 0.5f
+                            else -> 0.92f
+                        },
+                        Cue.LINE_TYPE_FRACTION
+                    )
+                        .setLineAnchor(
+                            when (style.position) {
+                                "Top" -> Cue.ANCHOR_TYPE_START
+                                "Middle" -> Cue.ANCHOR_TYPE_MIDDLE
+                                else -> Cue.ANCHOR_TYPE_END
+                            }
+                        )
+                }
+            }
+            builder.build()
+        }
+    }
+
+    private fun color(name: String, fallback: Int): Int = when (name) {
+        "White" -> Color.WHITE
+        "Yellow" -> Color.YELLOW
+        "Black" -> Color.BLACK
+        "Green" -> Color.GREEN
+        "Cyan" -> Color.CYAN
+        else -> fallback
+    }
+
+    private fun withOpacity(value: Int, opacity: Int) =
+        Color.argb(opacity * 255 / 100, Color.red(value), Color.green(value), Color.blue(value))
 
     private fun overrideStyle(base: CaptionStyleCompat, backgroundColor: Int, edge: Int) = CaptionStyleCompat(
         base.foregroundColor,

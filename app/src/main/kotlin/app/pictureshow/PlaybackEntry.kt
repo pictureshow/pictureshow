@@ -82,7 +82,8 @@ private fun validatedEntry(id: String, positionMs: Long?): ParsedPlaybackEntry =
 internal sealed interface ResolvedPlaybackEntry {
     data object NormalStartup : ResolvedPlaybackEntry
     data object Unavailable : ResolvedPlaybackEntry
-    data class Open(val item: MediaItem, val positionMs: Long) : ResolvedPlaybackEntry
+    data class Open(val item: MediaItem, val positionMs: Long, val startOrigin: PlaybackStartOrigin = PlaybackStartOrigin.SavedResume) :
+        ResolvedPlaybackEntry
 }
 
 /** Resolve with the selected account's authenticated catalog before constructing any player destination. */
@@ -101,6 +102,7 @@ internal suspend fun resolvePlaybackEntry(entry: PlaybackEntry, account: Account
     }
     return ResolvedPlaybackEntry.Open(
         item,
-        app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, explicitPositionMs = entry.positionMs)
+        app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, explicitPositionMs = entry.positionMs),
+        if (entry.positionMs == null) PlaybackStartOrigin.SavedResume else PlaybackStartOrigin.ExplicitPosition
     )
 }

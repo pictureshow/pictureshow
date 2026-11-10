@@ -29,6 +29,7 @@ open class PictureshowRenderersFactory internal constructor(
     private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
     private val passthroughEnabled: Boolean = true,
     private val subtitleDiagnostics: SubtitleCueDiagnostics? = null,
+    private val disabledPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet(),
     private val onEncodedAudio: (Boolean) -> Unit = {}
 ) : DefaultRenderersFactory(context) {
     init {
@@ -84,7 +85,11 @@ open class PictureshowRenderersFactory internal constructor(
                 AudioTrackAudioOutputProvider.Builder(context).setAudioTrackBufferSizeProvider(EncodedAudioBuffers).build(),
                 AudioOutputFailures(context)
             )
-        val provider = if (passthroughEnabled) routeProvider else PcmAudioOutputProvider(routeProvider)
+        val provider = if (passthroughEnabled) {
+            FormatAudioOutputProvider(routeProvider, disabledPassthrough.mapNotNull { AudioOutputFailures.ENCODINGS[it] }.toSet())
+        } else {
+            PcmAudioOutputProvider(routeProvider)
+        }
         return DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
             .setEnableAudioOutputPlaybackParameters(false)

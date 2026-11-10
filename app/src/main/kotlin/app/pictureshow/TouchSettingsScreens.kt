@@ -61,6 +61,7 @@ internal fun TouchSettings(
     onUpdateServices: (() -> Unit)? = null
 ) {
     val local = state.local
+    var advanced by rememberSaveable { mutableStateOf<String?>(null) }
     val device = touchDeviceName(LocalConfiguration.current.smallestScreenWidthDp)
     val configuration = state.configuration
     val ready = !state.loading && !state.saving && configuration != null
@@ -120,6 +121,9 @@ internal fun TouchSettings(
             }
             TouchHelper("System follows Android caption settings. Bitmap subtitles keep their authored appearance.")
         }
+        TouchSection("More playback settings") {
+            playbackGroups.forEach { group -> TouchNavRow(group) { advanced = group } }
+        }
         TouchSection("Skip segments") {
             SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
                 TouchChoice(
@@ -160,6 +164,7 @@ internal fun TouchSettings(
             TouchNavRow("About Pictureshow", onClick = onAbout)
         }
     }
+    advanced?.let { group -> AdvancedPlaybackSettings(group, local, true, onLocal, onClose = { advanced = null }) }
 }
 
 /** A heading owns the gap above it and the rows under it, so a row's spacing never comes from the page's column. */
@@ -241,7 +246,7 @@ private fun settingLabel(value: String): String = when (value) {
 }
 
 @Composable
-private fun <T> TouchChoice(
+internal fun <T> TouchChoice(
     title: String,
     value: T,
     values: List<T>,

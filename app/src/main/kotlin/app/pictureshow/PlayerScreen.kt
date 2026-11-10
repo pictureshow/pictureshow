@@ -87,7 +87,6 @@ import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.activeSegment
 import app.pictureshow.core.chooseTrickplay
 import app.pictureshow.core.creditsStartMs
-import app.pictureshow.core.nextEpisodeTriggerMs
 import app.pictureshow.core.playback.MediaStreamType
 import app.pictureshow.core.trickplayTile
 import kotlinx.serialization.json.Json
@@ -131,13 +130,18 @@ internal fun PlayerViewing(
     onCurrentItem: (MediaItem) -> Unit,
     content: @Composable (MediaItem, Long, (MediaItem) -> Unit) -> Unit
 ) {
+    val entryOrigin = LocalPlaybackStartOrigin.current
     var current by remember(account.key, item.id) { mutableStateOf(item) }
     var start by remember(account.key, item.id) { mutableLongStateOf(startMs) }
     LaunchedEffect(current) { onCurrentItem(current) }
     key(current.id) {
-        content(current, start) { next ->
-            start = app.pictureshow.core.resumeStartPositionMs(next.userData.playbackPositionTicks)
-            current = next
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalPlaybackStartOrigin provides if (current.id == item.id) entryOrigin else PlaybackStartOrigin.SavedResume
+        ) {
+            content(current, start) { next ->
+                start = app.pictureshow.core.resumeStartPositionMs(next.userData.playbackPositionTicks)
+                current = next
+            }
         }
     }
 }
@@ -745,6 +749,15 @@ internal fun PlayerItemScreen(
                         }
                         Button(
                             scale = playerButtonScale(),
+                            onClick = {
+                                host.overrideQuality()
+                                interaction++
+                            },
+                            modifier = Modifier.testTag("player:quality").then(readerOpenerOnly("player:quality")),
+                            enabled = !state.preparing && state.decision != null
+                        ) { Text("Quality · ${host.qualityLabel}") }
+                        Button(
+                            scale = playerButtonScale(),
                             onClick = { finish(reason = "stop-button") },
                             modifier = readerOpenerOnly("player:stop")
                         ) {
@@ -768,15 +781,13 @@ internal fun PlayerItemScreen(
                     }, onFocusRemoved = restoreActionFocus, showButton = actionsVisible && openerReturnTag == null)
                     (deferredNext ?: nextEpisode)?.takeUnless { nextCancelled }?.let { next ->
                         key(deferredNext, output.stopGeneration) {
-                            val trigger = nextEpisodeTriggerMs(duration, segments)
+                            val trigger = host.nextTriggerMs()
                             NextEpisodeControl(
                                 account, next, deferredNext != null || (trigger != null && position >= trigger), ended,
                                 paused || playback.buffering || state.preparing || !actionsVisible,
                                 onFocusRemoved = restoreActionFocus, onPlay = { finish(next) },
                                 onCancel = host::cancelNext, visible = actionsVisible, compact = controls,
-                                remainingMs = if (creditsStartMs(duration, segments) ==
-                                    null
-                                ) {
+                                remainingMs = if (!host.creditsCountdown || creditsStartMs(duration, segments) == null) {
                                     (duration - position).coerceAtLeast(0)
                                 } else {
                                     null
@@ -887,8 +898,10 @@ internal fun PlayerItemScreen(
                         state.decision,
                         state.audioIndex,
                         state.subtitleIndex,
-                        localPreferences.bitrateMbps,
-                        player
+                        host.effectiveSettings.maxStreamingBitrate / 1_000_000,
+                        player,
+                        localPreferences.tuning,
+                        host.effectiveSettings.maxStreamingBitrate
                     ) {
                         close(dismiss)
                     }
@@ -936,11 +949,14 @@ internal fun PlayerSubtitles(
     var videoSize by remember { mutableStateOf(player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN) }
     val density = LocalDensity.current
     var cues by remember { mutableStateOf(player?.currentCues ?: CueGroup.EMPTY_TIME_ZERO) }
+    val currentOnTopCues by rememberUpdatedState(onTopCues)
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val bounds = with(density) { subtitleVideoFrame(maxWidth.roundToPx(), maxHeight.roundToPx(), videoSize) }
         val safe = subtitleSafeFrame(bounds, overlayTop, with(density) { 12.dp.roundToPx() })
         val width = with(density) { safe.width().toDp() }
         val height = with(density) { safe.height().toDp() }
+        val styledCues = remember(cues, appearance) { appearance.cues(cues.cues) }
+        LaunchedEffect(styledCues) { currentOnTopCues(cuesNearTop(styledCues)) }
         AndroidView(
             factory = { subtitles },
             modifier = Modifier.offset { IntOffset(safe.left, safe.top) }.size(width, height),
@@ -949,7 +965,7 @@ internal fun PlayerSubtitles(
                 showSubtitleCues(
                     it,
                     cues,
-                    subtitleCuesInFrame(cues.cues, bounds.width(), bounds.height(), safe.height()),
+                    subtitleCuesInFrame(styledCues, bounds.width(), bounds.height(), safe.height()),
                     player?.currentPosition ?: 0,
                     diagnostics
                 )
@@ -975,18 +991,15 @@ internal fun PlayerSubtitles(
             onDispose { manager?.removeCaptioningChangeListener(listener) }
         }
     }
-    val currentOnTopCues by rememberUpdatedState(onTopCues)
     DisposableEffect(player) {
         videoSize = player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
         cues = player?.currentCues ?: CueGroup.EMPTY_TIME_ZERO
-        currentOnTopCues(cuesNearTop(cues.cues))
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
                 videoSize = size
             }
             override fun onCues(cueGroup: CueGroup) {
                 cues = cueGroup
-                currentOnTopCues(cuesNearTop(cueGroup.cues))
             }
         }
         player?.addListener(listener)
