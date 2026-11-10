@@ -25,3 +25,5 @@ The external libmpv used for development is not automatically a redistributable 
 Windows CI builds `windows_d3d.cpp` against the headers in the pinned LGPL libmpv archive and sets `SPIKE_D3D_BRIDGE` to that DLL. D3D11 WARP is an explicit software device on hosted runners. `SKIKO_RENDER_API=SOFTWARE` avoids claiming a GPU-backed UI there. A failed or absent decoder/renderer fails the probe, while screenshots still require visual review.
 
 macOS runs in a GUI login session. Fullscreen uses Apple's JDK desktop extension (`FullScreenUtilities` / `Application.requestToggleFullScreen`) so JDK marshals AppKit operations itself. Retina click coordinates are converted from Compose pixels to AWT points. Where global Robot input is unavailable, the probe records a separately named application-local AWT click; that does not claim macOS global-input permission.
+
+Leg 128 adds production-shaped native surface candidates and separate geometry probes; see [NATIVE-SURFACES.md](NATIVE-SURFACES.md). The older readback and JDK fullscreen descriptions above document the original spike, whose surface gate failed.
