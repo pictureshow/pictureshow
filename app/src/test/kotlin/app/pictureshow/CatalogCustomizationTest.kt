@@ -176,7 +176,7 @@ class CatalogCustomizationTest {
         compose.onNodeWithText("Back").assertDoesNotExist()
         compose.onNodeWithTag("filters:unwatched").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag("filters:favorites").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
-        compose.onNodeWithText("Apply").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Apply").assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(LibraryFilters(unwatched = true, favorite = true), applied) }
         compose.onNodeWithText("Clear all").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Apply").performSemanticsAction(SemanticsActions.OnClick)
@@ -280,11 +280,11 @@ class CatalogCustomizationTest {
         compose.runOnIdle { parent = library.copy(id = "new") }
         // The replacement result is below the lazy viewport: find it through the list, then
         // release the old noncancellable failure only after the new choices are displayed.
-        compose.onNodeWithTag("filters:genre").performScrollTo().performClick()
-        compose.onNodeWithText("New library genre").assertIsDisplayed()
+        compose.onNodeWithTag("filters:genre").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("tv-settings:option:1").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { old.complete(ClientResult.Failure(ClientError(ErrorKind.SERVER, "Old facets failed"))) }
-        compose.onNodeWithText("New library genre").assertIsDisplayed()
-        compose.onNodeWithText("New library genre").performClick()
+        compose.onNodeWithTag("tv-settings:option:1").assertIsDisplayed()
+        compose.onNodeWithTag("tv-settings:option:1").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag("filters:unwatched").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Old facets failed").assertDoesNotExist()
     }
