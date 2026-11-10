@@ -84,9 +84,13 @@ import app.pictureshow.core.MediaItem
 import app.pictureshow.core.VideoResolution
 import app.pictureshow.core.editableHomeKeys
 import app.pictureshow.core.homeEditorPinLabel
+import app.pictureshow.core.homePinPickerSupport
 import app.pictureshow.core.imageUrl
 import app.pictureshow.core.moveHomeRow
 import app.pictureshow.core.namedPickerChoices
+import app.pictureshow.core.nextUpSeriesHint
+import app.pictureshow.core.offerRestoreAllSeries
+import app.pictureshow.core.resetHomeLayout
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -182,13 +186,15 @@ private fun CatalogToggleRow(
     checked: Boolean,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    supportingText: String? = null,
     change: (Boolean) -> Unit
 ) {
     if (usesTvInterface(LocalContext.current)) {
-        TvSettingsToggleRow(title, checked, modifier, enabled = enabled, onToggle = change)
+        TvSettingsToggleRow(title, checked, modifier, supportingText = supportingText, enabled = enabled, onToggle = change)
     } else {
         ListItem(
             headlineContent = { Text(title) },
+            supportingContent = supportingText?.let { { Text(it) } },
             trailingContent = { Switch(checked, onCheckedChange = null, enabled = enabled) },
             modifier = modifier.clickable(enabled = enabled, role = Role.Switch) { change(!checked) }.semantics {
                 toggleableState =
@@ -299,6 +305,7 @@ internal fun HomeCustomization(
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var picker by remember { mutableStateOf<HomePinKind?>(null) }
+    var confirmingReset by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf<String?>(null) }
     var draftOrder by remember { mutableStateOf<List<String>?>(null) }
     val preferences = state.preferences
@@ -441,17 +448,28 @@ internal fun HomeCustomization(
                 episode.seriesName ?: episode.name,
                 id !in preferences.hiddenSeries,
                 Modifier.testTag("home:nextup:$id"),
-                enabled = !state.saving
+                enabled = !state.saving,
+                supportingText = nextUpSeriesHint(id !in preferences.hiddenSeries)
             ) { show ->
                 change { it.copy(hiddenSeries = if (show) it.hiddenSeries - id else it.hiddenSeries + id) }
             }
         }
-        if (preferences.hiddenSeries.isNotEmpty()) {
+        if (offerRestoreAllSeries(preferences.hiddenSeries, episodes.mapNotNull { it.seriesId }.toSet())) {
             item {
-                CatalogCommand("Restore removed series", { change { it.copy(hiddenSeries = emptySet()) } }, enabled = !state.saving)
+                CatalogCommand("Restore all removed series", { change { it.copy(hiddenSeries = emptySet()) } }, enabled = !state.saving)
             }
         }
-        item { CatalogCommand("Restore default layout", { change { HomePreferences(libraries = it.libraries) } }, enabled = !state.saving) }
+        item("reset-heading") { CatalogSection("Layout") }
+        item { CatalogActionRow("Restore default layout", { confirmingReset = true }, enabled = !state.saving && moving == null) }
+    }
+    if (confirmingReset) {
+        HomeLayoutResetConfirmation(
+            confirm = {
+                confirmingReset = false
+                change { resetHomeLayout(it, confirmed = true) }
+            },
+            close = { confirmingReset = false }
+        )
     }
     picker?.let { kind ->
         NamedCatalogPicker(
@@ -465,6 +483,7 @@ internal fun HomeCustomization(
                 HomePinKind.FAVORITES -> error("Favorites needs no picker")
             },
             selectedKeys = preferences.pins.filter { it.kind == kind }.map { it.value }.toSet(),
+            pickingHomeRows = true,
             select = { item ->
                 val pin = HomePin(kind, if (kind in listOf(HomePinKind.GENRE, HomePinKind.STUDIO)) item.name else item.id)
                 change { it.copy(pins = (it.pins + pin).distinctBy(HomePin::key)) }
@@ -476,6 +495,16 @@ internal fun HomeCustomization(
 }
 
 @Composable
+internal fun HomeLayoutResetConfirmation(confirm: () -> Unit, close: () -> Unit) {
+    val first = remember { FocusRequester() }
+    CatalogEditor("Restore default layout?", close, first) {
+        item { Text("Restore your home rows and landing view. Library display choices stay as they are.") }
+        item { CatalogActionRow("Cancel", close, Modifier.focusRequester(first).testTag("home:reset-cancel")) }
+        item { CatalogCommand("Restore", confirm, Modifier.testTag("home:reset-confirm"), primary = true) }
+    }
+}
+
+@Composable
 internal fun NamedCatalogPicker(
     account: Account,
     service: CatalogService,
@@ -483,7 +512,8 @@ internal fun NamedCatalogPicker(
     parentId: String = "",
     select: (MediaItem) -> Unit,
     close: () -> Unit,
-    selectedKeys: Set<String> = emptySet()
+    selectedKeys: Set<String> = emptySet(),
+    pickingHomeRows: Boolean = false
 ) {
     val tv = usesTvInterface(LocalContext.current)
     val first = remember { FocusRequester() }
@@ -588,12 +618,17 @@ internal fun NamedCatalogPicker(
         }
         items(choices, key = MediaItem::id) { item ->
             val checked = selected(item)
-            val support = (item.recursiveItemCount ?: item.childCount)?.let { "$it titles" }
+            val count = item.recursiveItemCount ?: item.childCount
+            val support = if (pickingHomeRows) homePinPickerSupport(checked, count) else count?.let { "$it titles" }
             val modifier = (if (choices.indexOf(item) == initial) Modifier.focusRequester(choiceFocus) else Modifier)
                 .testTag("catalog:choice:${item.id}").semantics {
                     this.selected = checked
                     stateDescription =
-                        if (checked) "Selected" else ""
+                        if (checked) {
+                            if (pickingHomeRows) "On your home" else "Selected"
+                        } else {
+                            ""
+                        }
                 }
             val avatar: (@Composable () -> Unit)? = if (kind == "Persons") ({ CatalogPersonAvatar(item, account) }) else null
             if (tv) {
@@ -604,14 +639,26 @@ internal fun NamedCatalogPicker(
                     selected = checked,
                     onClick = { select(item) },
                     leading = avatar,
-                    trailing = { androidx.tv.material3.RadioButton(checked, onClick = null, modifier = Modifier.clearAndSetSemantics {}) }
+                    trailing = {
+                        if (pickingHomeRows) {
+                            if (checked) androidx.tv.material3.Icon(touchActionIcon("check"), "On your home")
+                        } else {
+                            androidx.tv.material3.RadioButton(checked, onClick = null, modifier = Modifier.clearAndSetSemantics {})
+                        }
+                    }
                 )
             } else {
                 ListItem(
                     headlineContent = { Text(item.name) },
                     supportingContent = support?.let { { Text(it) } },
                     leadingContent = avatar,
-                    trailingContent = { RadioButton(checked, onClick = null) },
+                    trailingContent = {
+                        if (pickingHomeRows) {
+                            if (checked) Icon(touchActionIcon("check"), "On your home")
+                        } else {
+                            RadioButton(checked, onClick = null)
+                        }
+                    },
                     modifier = modifier.clickable { select(item) }
                 )
             }

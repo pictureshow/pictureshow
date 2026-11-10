@@ -63,3 +63,15 @@ fun filteredEmptyLabel(collectionType: String?): String = "No ${when (collection
 /** Already authorized current choices are visible on the first unsearched page only. */
 fun namedPickerChoices(current: List<MediaItem>, page: List<MediaItem>, term: String, offset: Int): List<MediaItem> =
     (if (term.isBlank() && offset == 0) current + page else page).distinctBy(MediaItem::id)
+
+/** One returned removed series can be restored by its switch; bulk restore also reaches absent series. */
+fun offerRestoreAllSeries(hidden: Set<String>, available: Set<String>): Boolean = hidden.size > 1 || hidden.any { it !in available }
+
+fun nextUpSeriesHint(shown: Boolean): String = if (shown) "Shown in Next up" else "Removed from Next up"
+
+fun homePinPickerSupport(pinned: Boolean, count: Int?): String? =
+    listOfNotNull(if (pinned) "On your home" else null, count?.let { "$it titles" }).joinToString(" · ").ifBlank { null }
+
+/** A confirmed home reset keeps independent library display choices. */
+fun resetHomeLayout(preferences: HomePreferences, confirmed: Boolean): HomePreferences =
+    if (confirmed) HomePreferences(libraries = preferences.libraries) else preferences

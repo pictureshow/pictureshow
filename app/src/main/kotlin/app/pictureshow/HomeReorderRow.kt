@@ -27,6 +27,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -208,14 +210,19 @@ internal fun HomeReorderRow(
         }
         // Only pinned rows have this overflow. It never expands the normal row into a stack of bars.
         if (tv && overflow) {
-            TvSettingsChoicePicker(
-                "Row options",
-                "Unpin",
-                listOf("Unpin"),
-                { it },
-                { unpin?.invoke() },
-                { overflow = false }
-            )
+            val first = remember { FocusRequester() }
+            TvSettingsPanel(title, { overflow = false }, first) {
+                TvSettingsRow(
+                    "Unpin",
+                    null,
+                    Modifier.focusRequester(first).testTag("home:unpin"),
+                    onClick = {
+                        overflow = false
+                        unpin?.invoke()
+                    },
+                    leading = { androidx.tv.material3.Icon(touchActionIcon("close"), null) }
+                )
+            }
         }
         DropdownMenu(expanded = !tv && overflow, onDismissRequest = { overflow = false }) {
             DropdownMenuItem(text = { Text("Unpin") }, onClick = {

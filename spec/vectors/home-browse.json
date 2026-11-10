@@ -1580,6 +1580,220 @@
         "tv": false
       },
       "expected": "Hidden · Moving · Release to drop"
+    },
+    {
+      "id": "restore-all-none",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [],
+        "available": []
+      },
+      "expected": false
+    },
+    {
+      "id": "restore-all-one-visible",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "s"
+        ],
+        "available": [
+          "s"
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "restore-all-one-absent",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "s"
+        ],
+        "available": []
+      },
+      "expected": true
+    },
+    {
+      "id": "restore-all-two-visible",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "a",
+          "b"
+        ],
+        "available": [
+          "a",
+          "b"
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "restore-all-one-absent-among-visible",
+      "operation": "restore-all-series",
+      "input": {
+        "hidden": [
+          "s"
+        ],
+        "available": [
+          "a"
+        ]
+      },
+      "expected": true
+    },
+    {
+      "id": "nextup-hint-false",
+      "operation": "next-up-series-hint",
+      "input": {
+        "shown": false
+      },
+      "expected": "Removed from Next up"
+    },
+    {
+      "id": "nextup-hint-true",
+      "operation": "next-up-series-hint",
+      "input": {
+        "shown": true
+      },
+      "expected": "Shown in Next up"
+    },
+    {
+      "id": "home-pin-support-False-None",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": false,
+        "count": null
+      },
+      "expected": null
+    },
+    {
+      "id": "home-pin-support-True-None",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": true,
+        "count": null
+      },
+      "expected": "On your home"
+    },
+    {
+      "id": "home-pin-support-False-2",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": false,
+        "count": 2
+      },
+      "expected": "2 titles"
+    },
+    {
+      "id": "home-pin-support-True-2",
+      "operation": "home-pin-picker-support",
+      "input": {
+        "pinned": true,
+        "count": 2
+      },
+      "expected": "On your home · 2 titles"
+    },
+    {
+      "id": "reset-home-false",
+      "operation": "reset-home-layout",
+      "input": {
+        "preferences": {
+          "order": [
+            "resume"
+          ],
+          "hidden": [
+            "resume"
+          ],
+          "pins": [
+            {
+              "kind": "GENRE",
+              "value": "Animation"
+            }
+          ],
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "s"
+          ],
+          "landing": "libraries",
+          "libraries": {
+            "l": {
+              "sortBy": "DateCreated",
+              "descending": true,
+              "list": true
+            }
+          }
+        },
+        "confirmed": false
+      },
+      "expected": {
+        "order": [
+          "resume"
+        ],
+        "hidden": [
+          "resume"
+        ],
+        "pins": [
+          {
+            "kind": "GENRE",
+            "value": "Animation"
+          }
+        ],
+        "mergeWatching": true,
+        "hiddenSeries": [
+          "s"
+        ],
+        "landing": "libraries",
+        "libraries": {
+          "l": {
+            "sortBy": "DateCreated",
+            "descending": true,
+            "list": true
+          }
+        }
+      }
+    },
+    {
+      "id": "reset-home-true",
+      "operation": "reset-home-layout",
+      "input": {
+        "preferences": {
+          "order": [
+            "resume"
+          ],
+          "hidden": [
+            "resume"
+          ],
+          "pins": [
+            {
+              "kind": "GENRE",
+              "value": "Animation"
+            }
+          ],
+          "mergeWatching": true,
+          "hiddenSeries": [
+            "s"
+          ],
+          "landing": "libraries",
+          "libraries": {
+            "l": {
+              "sortBy": "DateCreated",
+              "descending": true,
+              "list": true
+            }
+          }
+        },
+        "confirmed": true
+      },
+      "expected": {
+        "libraries": {
+          "l": {
+            "sortBy": "DateCreated",
+            "descending": true,
+            "list": true
+          }
+        }
+      }
     }
   ]
 }

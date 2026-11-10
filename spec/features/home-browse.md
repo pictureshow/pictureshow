@@ -1,6 +1,6 @@
 # Viewer home and library browsing
 
-Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 74 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
+Android reference addition, 2026-11-10. This extends CAT-01/CAT-04 and the settings honor matrix. Kotlin core: `HomePreferences.kt`, `HomePreferencesStore.kt`; UI: `CatalogCustomization.kt`. Language-neutral cases: `spec/vectors/home-browse.json` (suite `home-browse`, 87 cases including editor projection/reorder, filter presentation and HTTP authority guards). Android executes the cases through HomeBrowseVectorsTest; native interaction assertions qualify controls separately. A logic-vector pass does not qualify the UI, account persistence or server access controls.
 
 | ID | Viewer behavior | Acceptance |
 |---|---|---|
@@ -26,3 +26,5 @@ Each editable home row has a leading visibility control and a visible Hidden lab
 API reference checked against the demo Jellyfin 12 OpenAPI on 2026-11-10 and [official Jellyfin SDK GetItems docs](https://kotlin-sdk.jellyfin.org/dokka/jellyfin-model/org.jellyfin.sdk.model.api.request/-get-items-request/index.html). Minimum-version qualification remains Jellyfin 10.10+.
 
 Apple and desktop owe the complete implementation and these vectors. Web owes UI/storage/HTTP/device qualification even where its pure rules pass the vectors. Do not mark any platform accepted from this specification alone.
+
+Home-row pin pickers use a check and “On your home” for an already pinned choice; this is distinct from a single-value filter radio picker. Unpin opens a command sheet titled with the fresh authorized row label (or its generic unavailable label), without a radio control. Next up switches explicitly say “Shown in Next up” or “Removed from Next up”. Offer bulk Restore all removed series only for multiple removed series or a removed series absent from the current list; one visible removed series is restored by its own switch. Restore default layout has a separate Layout section and confirmation panel, initially focusing Cancel on TV. Cancel and Back never alter preferences; confirmed restore preserves per-library display preferences.

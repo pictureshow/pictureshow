@@ -35,6 +35,25 @@ class HomeBrowseVectorsTest {
         for (case in cases.map { it.jsonObject }) {
             val input = case.getValue("input").jsonObject
             val actual = when (case.getValue("operation").jsonPrimitive.content) {
+                "reset-home-layout" -> Json.encodeToJsonElement(
+                    resetHomeLayout(
+                        Json.decodeFromJsonElement<HomePreferences>(input.getValue("preferences")),
+                        input.getValue("confirmed").jsonPrimitive.content == "true"
+                    )
+                )
+                "restore-all-series" -> Json.encodeToJsonElement(
+                    offerRestoreAllSeries(
+                        Json.decodeFromJsonElement<Set<String>>(input.getValue("hidden")),
+                        Json.decodeFromJsonElement<Set<String>>(input.getValue("available"))
+                    )
+                )
+                "next-up-series-hint" -> Json.encodeToJsonElement(nextUpSeriesHint(input.getValue("shown").jsonPrimitive.content == "true"))
+                "home-pin-picker-support" -> Json.encodeToJsonElement(
+                    homePinPickerSupport(
+                        input.getValue("pinned").jsonPrimitive.content == "true",
+                        input.getValue("count").jsonPrimitive.content.toIntOrNull()
+                    )
+                )
                 "editor-row-hint" -> Json.encodeToJsonElement(
                     homeRowEditHint(
                         input.getValue("shown").jsonPrimitive.content == "true",

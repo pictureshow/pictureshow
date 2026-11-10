@@ -11,8 +11,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -197,8 +199,78 @@ class CatalogCustomizationTest {
             }
         }
         compose.onNodeWithTag("home:overflow:${pin.key}").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
-        compose.onNodeWithText("Unpin").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Row options").assertDoesNotExist()
+        compose.onNodeWithTag("home:unpin").assertIsFocused().assert(
+            SemanticsMatcher("Unpin is a command rather than a radio choice") {
+                it.config.getOrNull(SemanticsProperties.Role) != Role.RadioButton
+            }
+        ).performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue(preferences.pins.isEmpty()) }
+    }
+
+    @Test fun resetRequiresConfirmationAndCancelPreservesLayout() {
+        val before = HomePreferences(
+            hidden = setOf("resume"),
+            landing = "libraries",
+            libraries = mapOf("lib" to app.pictureshow.core.LibraryDisplay("DateCreated", descending = true, list = true))
+        )
+        var preferences by mutableStateOf(before)
+        compose.setContent {
+            MaterialTheme {
+                HomeCustomization(CatalogHomeState(loading = false, preferences = preferences), account, service, {
+                    preferences = it(preferences)
+                }, {})
+            }
+        }
+        compose.onNodeWithText("Restore default layout").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle { assertEquals(before, preferences) }
+        compose.onNodeWithTag("home:reset-cancel").assertIsFocused().performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle { assertEquals(before, preferences) }
+        compose.onNodeWithText("Restore default layout").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("home:reset-confirm").performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle { assertEquals(HomePreferences(libraries = before.libraries), preferences) }
+    }
+
+    @Test fun nextUpExplainsRemovedStateAndAvoidsRedundantBulkRestore() {
+        var preferences by mutableStateOf(HomePreferences(hiddenSeries = setOf("series")))
+        val episode = MediaItem("episode", "Episode", "Episode", seriesId = "series", seriesName = "The series")
+        compose.setContent {
+            MaterialTheme {
+                HomeCustomization(
+                    CatalogHomeState(
+                        loading = false,
+                        preferences = preferences,
+                        availableRows = listOf(app.pictureshow.core.HomeRow("nextup", "Next up", listOf(episode)))
+                    ),
+                    account,
+                    service,
+                    { preferences = it(preferences) },
+                    {}
+                )
+            }
+        }
+        compose.onNodeWithTag("home:nextup:series").performScrollTo()
+        compose.onNodeWithText("Removed from Next up").assertIsDisplayed()
+        compose.onNodeWithText("Restore all removed series").assertDoesNotExist()
+        compose.onNodeWithTag("home:nextup:series").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Shown in Next up").assertIsDisplayed()
+        compose.runOnIdle { assertTrue(preferences.hiddenSeries.isEmpty()) }
+    }
+
+    @Test fun homePinPickerUsesPinnedStatusInsteadOfRadioChoice() {
+        service.named = { ClientResult.Success(ItemPage(listOf(MediaItem("c", "My collection", childCount = 2)), 1)) }
+        service.detail = { ClientResult.Success(MediaItem("c", "My collection", childCount = 2)) }
+        compose.setContent {
+            MaterialTheme {
+                NamedCatalogPicker(account, service, "BoxSet", select = {}, close = {}, selectedKeys = setOf("c"), pickingHomeRows = true)
+            }
+        }
+        compose.onNodeWithText("On your home · 2 titles").assertIsDisplayed()
+        compose.onNodeWithTag("catalog:choice:c").assert(
+            SemanticsMatcher("Pinned item has a check/status rather than a radio role") {
+                it.config.getOrNull(SemanticsProperties.Role) != Role.RadioButton
+            }
+        )
     }
 
     @Test fun filtersApplyDesiredCombinationAndClearRestoresUnfilteredQuery() {
