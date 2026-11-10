@@ -26,6 +26,7 @@ Only the methods needed by these subsystems are listed; HEAD variants and unrela
 | `GET /UserViews` | `GetUserViews` | — | 10.10+ |
 | `GET /Items` | `GetItems` | — | 10.10+ |
 | `GET /Items/{itemId}` | `GetItem` | — | 10.10+ |
+| `DELETE /Items/{itemId}` | `DeleteItem` | — | 10.10+; content deletion policy; recorded-file deletion (physical proof on demo12) |
 | `GET /UserItems/{itemId}/UserData` | `GetItemUserData` | — | 10.10+ |
 | `POST /UserItems/{itemId}/UserData` | `UpdateItemUserData` | JSON `UpdateUserItemDataDto` | 10.10+ |
 | `GET /Items/{itemId}/Download` | `GetDownload` | — | 10.10+ |
@@ -90,7 +91,7 @@ Only the methods needed by these subsystems are listed; HEAD variants and unrela
 | `GET /LiveTv/Programs/{programId}` | `GetProgram` | — | 10.10+ |
 | `GET /LiveTv/Recordings` | `GetRecordings` | — | 10.10+ |
 | `GET /LiveTv/Recordings/{recordingId}` | `GetRecording` | — | 10.10+ |
-| `DELETE /LiveTv/Recordings/{recordingId}` | `DeleteRecording` | — | 10.10+ |
+| `DELETE /LiveTv/Recordings/{recordingId}` | `DeleteRecording` | — | 10.10+; can unlist metadata while retaining the file; use normal item deletion for recorded content |
 | `GET /LiveTv/Timers/Defaults` | `GetDefaultTimer` | — | 10.10+ |
 | `GET /LiveTv/Timers` | `GetTimers` | — | 10.10+ |
 | `POST /LiveTv/Timers` | `CreateTimer` | JSON `TimerInfoDto` | 10.10+ |
