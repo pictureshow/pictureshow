@@ -19,6 +19,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <cstdlib>
+#include <fstream>
 
 @interface PSMainCall : NSObject
 @property(copy) void (^block)(void);
@@ -50,6 +51,7 @@ struct Surface {
     int w=0,h=0;
     std::atomic<unsigned long> frames{0};
     std::string receipt;
+    bool diagnosticCaptured=false;
     Timing renderTime, glWait, drawableWait, metalWait, frameTime, pollGap;
     Clock::time_point previousPollEnd=Clock::now();
     std::atomic<unsigned long> polls{0};
@@ -155,7 +157,28 @@ extern "C" int ps_frame(void *ptr, int w, int h) {
     id<MTLCommandBuffer> cmd=[s->queue commandBuffer];
     id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
     [blit copyFromTexture:s->shared sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
+    // Opt-in verification only: copy the actual presented drawable once, retaining
+    // its float values. Normal playback never allocates this buffer/readback.
+    const char *diagnosticDir=std::getenv("SPIKE_HDR_READBACK_DIR");
+    id<MTLBuffer> diagnostic=nil;
+    NSUInteger diagnosticStride=((w*8+255)/256)*256;
+    if(diagnosticDir && !s->diagnosticCaptured && s->frames.load()>=10) {
+        diagnostic=[s->device newBufferWithLength:diagnosticStride*h options:MTLResourceStorageModeShared];
+        if(!diagnostic) return -7;
+        [blit copyFromTexture:drawable.texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toBuffer:diagnostic destinationOffset:0 destinationBytesPerRow:diagnosticStride destinationBytesPerImage:diagnosticStride*h];
+    }
     [blit endEncoding]; [cmd presentDrawable:drawable]; [cmd commit]; s->inflight=cmd;
+    if(diagnostic) {
+        [cmd waitUntilCompleted]; if(cmd.status==MTLCommandBufferStatusError) return -8;
+        std::string prefix=std::string(diagnosticDir)+"/drawable";
+        std::ofstream raw(prefix+".rgba16f",std::ios::binary);
+        for(int row=0;row<h;row++) raw.write((const char*)diagnostic.contents+row*diagnosticStride,w*8);
+        raw.close(); if(!raw) return -9;
+        std::ofstream meta(prefix+".json");
+        meta<<"{\"width\":"<<w<<",\"height\":"<<h<<",\"format\":\"RGBA16Float\",\"boundary\":\"actual CAMetalLayer drawable before WindowServer\",\"encoding\":\"linear\",\"primaries\":\"bt2020\",\"referenceWhiteNits\":203}\n";
+        meta.close();if(!meta) return -9;
+        s->diagnosticCaptured=true;
+    }
     mpv_render_context_report_swap(s->render); s->frames++; s->frameTime.add(ms(frameStarted)); return 0;
     }
 }

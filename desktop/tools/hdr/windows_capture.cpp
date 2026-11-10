@@ -20,8 +20,8 @@
 #include <thread>
 #include <chrono>
 using namespace winrt;
-using namespace Windows::Graphics::Capture;
-using namespace Windows::Graphics::DirectX;
+using namespace winrt::Windows::Graphics::Capture;
+using namespace winrt::Windows::Graphics::DirectX;
 static void displays(bool enable) {
  UINT np=0,nm=0;LONG rc=GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS,&np,&nm);
  if(rc!=ERROR_SUCCESS) {std::cout<<"{\"displayConfigError\":"<<rc<<"}\n";return;}
@@ -49,7 +49,7 @@ int wmain(int argc,wchar_t **argv) {
   // WARP supports the hosted software-rendered test; real devices can use hardware.
   HRESULT hr=D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,device.put(),nullptr,context.put());
   if(FAILED(hr))check_hresult(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,device.put(),nullptr,context.put()));
-  auto dxgi=device.as<IDXGIDevice>();com_ptr<IInspectable> inspect;check_hresult(CreateDirect3D11DeviceFromDXGIDevice(dxgi.get(),inspect.put()));auto wd=inspect.as<Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice>();
+  auto dxgi=device.as<IDXGIDevice>();com_ptr<IInspectable> inspect;check_hresult(CreateDirect3D11DeviceFromDXGIDevice(dxgi.get(),inspect.put()));auto wd=inspect.as<winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice>();
   auto pool=Direct3D11CaptureFramePool::CreateFreeThreaded(wd,DirectXPixelFormat::R16G16B16A16Float,2,item.Size());auto session=pool.CreateCaptureSession(item);session.IsCursorCaptureEnabled(false);session.StartCapture();
   Direct3D11CaptureFrame frame{nullptr};
   for(int i=0;i<200&&!frame;++i){frame=pool.TryGetNextFrame();if(!frame)std::this_thread::sleep_for(std::chrono::milliseconds(50));}
