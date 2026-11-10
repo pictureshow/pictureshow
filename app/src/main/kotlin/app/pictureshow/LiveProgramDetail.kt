@@ -127,20 +127,27 @@ internal fun LiveProgramDetail(
 @Composable
 internal fun LiveProgramRow(program: LiveProgram, tv: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val time = liveTime()
+    val supporting: @Composable () -> Unit = {
+        Column {
+            LiveText(time.range(program.startDate, program.endDate), tv, small = true)
+            if (program.hasRecordingTimer()) LiveText("Recording scheduled", tv, small = true)
+        }
+    }
     if (tv) {
         androidx.tv.material3.ListItem(
             false,
             onClick,
             { LiveText(program.name, tv) },
             modifier.fillMaxWidth(),
-            supportingContent = { LiveText(time.range(program.startDate, program.endDate), tv, small = true) },
-            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot(tv) }
+            supportingContent = supporting,
+            trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot(tv) },
+            scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
         )
     } else {
         androidx.compose.material3.ListItem(
             headlineContent = { LiveText(program.name, tv) },
             modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
-            supportingContent = { LiveText(time.range(program.startDate, program.endDate), tv, small = true) },
+            supportingContent = supporting,
             trailingContent = { if (program.hasRecordingTimer()) LiveRecordingDot(tv) }
         )
     }

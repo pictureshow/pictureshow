@@ -80,8 +80,13 @@ internal fun LiveChannelRow(
                 val duration = liveInstant(it.endDate) - liveInstant(it.startDate)
                 if (duration > 0) {
                     val fraction = ((now - liveInstant(it.startDate)).toFloat() / duration).coerceIn(0f, 1f)
-                    Box(Modifier.fillMaxWidth().height(2.dp).background(LiveMuted.copy(alpha = .2f))) {
-                        Box(Modifier.fillMaxWidth(fraction).height(2.dp).background(LiveAccent))
+                    val progressColor = if (tv) {
+                        androidx.tv.material3.LocalContentColor.current
+                    } else {
+                        androidx.compose.material3.LocalContentColor.current
+                    }
+                    Box(Modifier.fillMaxWidth().height(2.dp).background(progressColor.copy(alpha = .24f))) {
+                        Box(Modifier.fillMaxWidth(fraction).height(2.dp).background(progressColor))
                     }
                 }
             }
@@ -100,7 +105,8 @@ internal fun LiveChannelRow(
             } else {
                 null
             },
-            colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+            colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+            scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
         )
     } else {
         androidx.compose.material3.ListItem(
@@ -152,7 +158,8 @@ internal fun LiveScheduleRow(schedule: LiveSchedule, tv: Boolean, modifier: Modi
             modifier = modifier.fillMaxWidth(),
             supportingContent = supporting,
             trailingContent = badge,
-            colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+            colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+            scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f)
         )
     } else {
         androidx.compose.material3.ListItem(
