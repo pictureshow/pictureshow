@@ -837,6 +837,580 @@
         "rows": []
       },
       "expected": "Pinned studio"
+    },
+    {
+      "id": "editor-combined-only",
+      "operation": "editor-visible-rows",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "pin:GENRE:Drama"
+        ],
+        "preferences": {
+          "mergeWatching": true
+        }
+      },
+      "expected": [
+        "watching",
+        "libraries",
+        "pin:GENRE:Drama"
+      ]
+    },
+    {
+      "id": "editor-separate-only-retains-hidden",
+      "operation": "editor-visible-rows",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "pin:GENRE:Drama"
+        ],
+        "preferences": {
+          "hidden": [
+            "resume"
+          ]
+        }
+      },
+      "expected": [
+        "resume",
+        "nextup",
+        "libraries",
+        "pin:GENRE:Drama"
+      ]
+    },
+    {
+      "id": "editor-sort-dedupe",
+      "operation": "editor-visible-rows",
+      "input": {
+        "keys": [
+          "resume",
+          "nextup",
+          "watching",
+          "libraries",
+          "pin:GENRE:Drama",
+          "libraries"
+        ],
+        "preferences": {
+          "order": [
+            "libraries",
+            "nextup",
+            "nextup"
+          ]
+        }
+      },
+      "expected": [
+        "libraries",
+        "nextup",
+        "resume",
+        "pin:GENRE:Drama"
+      ]
+    },
+    {
+      "id": "move-retains-dormant",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume",
+          "watching",
+          "nextup",
+          "libraries"
+        ],
+        "visible": [
+          "resume",
+          "nextup",
+          "libraries"
+        ],
+        "key": "libraries",
+        "delta": -1
+      },
+      "expected": [
+        "resume",
+        "watching",
+        "libraries",
+        "nextup"
+      ]
+    },
+    {
+      "id": "move-up-boundary",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume",
+          "libraries"
+        ],
+        "visible": [
+          "resume",
+          "libraries"
+        ],
+        "key": "resume",
+        "delta": -1
+      },
+      "expected": [
+        "resume",
+        "libraries"
+      ]
+    },
+    {
+      "id": "move-down-boundary",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume",
+          "libraries"
+        ],
+        "visible": [
+          "resume",
+          "libraries"
+        ],
+        "key": "libraries",
+        "delta": 1
+      },
+      "expected": [
+        "resume",
+        "libraries"
+      ]
+    },
+    {
+      "id": "move-unknown",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [
+          "resume"
+        ],
+        "visible": [
+          "resume"
+        ],
+        "key": "gone",
+        "delta": 1
+      },
+      "expected": [
+        "resume"
+      ]
+    },
+    {
+      "id": "move-new-keys",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [],
+        "visible": [
+          "resume",
+          "libraries"
+        ],
+        "key": "libraries",
+        "delta": -1
+      },
+      "expected": [
+        "libraries",
+        "resume"
+      ]
+    },
+    {
+      "id": "move-bottom-clamped",
+      "operation": "editor-move-row",
+      "input": {
+        "order": [],
+        "visible": [
+          "resume",
+          "nextup",
+          "libraries"
+        ],
+        "key": "resume",
+        "delta": 99
+      },
+      "expected": [
+        "nextup",
+        "libraries",
+        "resume"
+      ]
+    },
+    {
+      "id": "filter-chip-remove-genre",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "genre"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-year",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "year"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-rating",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "rating"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-unwatched",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "unwatched"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-favorite",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "favorite"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-resolution",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "resolution"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "person",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-person",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "person"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "studio"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-chip-remove-studio",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": "Drama",
+          "year": 2026,
+          "officialRating": "PG",
+          "unwatched": true,
+          "favorite": true,
+          "resolution": "HD",
+          "personId": "p",
+          "studio": "Studio"
+        },
+        "collectionType": "movies",
+        "remove": "studio"
+      },
+      "expected": {
+        "keys": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person",
+          "studio"
+        ],
+        "empty": "No movies match these filters",
+        "remaining": [
+          "genre",
+          "year",
+          "rating",
+          "unwatched",
+          "favorite",
+          "resolution",
+          "person"
+        ],
+        "active": true
+      }
+    },
+    {
+      "id": "filter-empty-tvshows",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {},
+        "collectionType": "tvshows"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No shows match these filters",
+        "active": false
+      }
+    },
+    {
+      "id": "filter-empty-music",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {},
+        "collectionType": "music"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No music match these filters",
+        "active": false
+      }
+    },
+    {
+      "id": "filter-empty-other",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {},
+        "collectionType": "other"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No titles match these filters",
+        "active": false
+      }
+    },
+    {
+      "id": "filter-count-ignores-blank",
+      "operation": "filter-presentation",
+      "input": {
+        "filters": {
+          "genre": " ",
+          "personId": "",
+          "studio": " "
+        },
+        "collectionType": "movies"
+      },
+      "expected": {
+        "keys": [],
+        "empty": "No movies match these filters",
+        "active": false
+      }
     }
   ]
 }

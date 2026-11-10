@@ -10,14 +10,18 @@ import kotlinx.coroutines.sync.withLock
 /** One serialized read/modify/write stream for this catalog session; tokens never enter the saved document. */
 class HomePreferencesStore(private val service: CatalogService, private val accounts: AccountStore) {
     private val mutex = Mutex()
-    data class Read(val preferences: HomePreferences, val status: String? = null)
+    data class Read(val preferences: HomePreferences, val status: String? = null, val retrySave: Boolean = false)
 
     suspend fun read(account: Account): Read = mutex.withLock { readLocked(account) }
 
     private suspend fun readLocked(account: Account): Read {
         val snapshot = accounts.load()
         val local = snapshot.homePreferences[account.key] ?: HomePreferences()
-        if (account.key in snapshot.pendingHomePreferences) return Read(local, "Saved on this device. Retry server save in Customize home.")
+        if (account.key in
+            snapshot.pendingHomePreferences
+        ) {
+            return Read(local, "Couldn’t save to your server. Saved on this device.", retrySave = true)
+        }
         return when (val result = service.displayPreferences(account)) {
             is ClientResult.Failure -> {
                 expire(account, result)
@@ -59,15 +63,19 @@ class HomePreferencesStore(private val service: CatalogService, private val acco
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    return@withLock Read(next, "Saved on the server and this device. Could not confirm sync locally; retry server save.")
+                    return@withLock Read(
+                        next,
+                        "Saved on the server and this device. Couldn’t confirm the save on this device.",
+                        retrySave = true
+                    )
                 }
-                return@withLock Read(next, "Saved for this viewer on the server.")
+                return@withLock Read(next)
             }
             if (saved is ClientResult.Failure) expire(account, saved)
         } else if (document is ClientResult.Failure) {
             expire(account, document)
         }
-        Read(next, "Saved on this device. Server save failed; choose Retry server save.")
+        Read(next, "Couldn’t save to your server. Saved on this device.", retrySave = true)
     }
 
     private suspend fun expire(account: Account, failure: ClientResult.Failure) {

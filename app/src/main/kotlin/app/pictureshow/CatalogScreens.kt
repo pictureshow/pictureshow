@@ -663,12 +663,15 @@ fun CatalogGrid(
     revealKey: Any? = null,
     grid: LazyGridState = rememberLazyGridState(),
     onFilters: (() -> Unit)? = null,
-    onDisplayList: ((Boolean) -> Unit)? = null
+    onDisplayList: ((Boolean) -> Unit)? = null,
+    onClearFilters: (() -> Unit)? = null
 ) {
     var selectedId by rememberSaveable { mutableStateOf("") }
     var restored by remember { mutableStateOf(false) }
     var retryFocusRequest by remember { mutableIntStateOf(0) }
     val firstSort = remember { FocusRequester() }
+    val clearFiltersFocus = remember { FocusRequester() }
+    var sorting by remember { mutableStateOf(false) }
     val retry = remember { FocusRequester() }
     val requests = remember { mutableMapOf<String, FocusRequester>() }
     val scope = rememberCoroutineScope()
@@ -901,42 +904,21 @@ fun CatalogGrid(
                             ) {
                                 fun sortControl(index: Int) = Modifier.onFocusChanged { if (it.isFocused) focusedSort = index }
                                     .onGloballyPositioned { sortBottoms[index] = it.positionInParent().y + it.size.height }
-                                GridSorts.forEachIndexed { index, (sort, title) ->
-                                    val requester = remember(sort) { if (index == 0) firstSort else FocusRequester() }
-                                    DisposableEffect(sort) {
-                                        sortRequests[sort] = requester
-                                        onDispose { sortRequests.remove(sort) }
-                                    }
-                                    Button(
-                                        onClick = { onSort(sort, state.descending) },
-                                        modifier = Modifier.focusRequester(requester).then(sortControl(index))
-                                            .testTag("grid:sort:$sort").semantics { selected = state.sortBy == sort }
-                                    ) { SortChipContent(title, "check".takeIf { state.sortBy == sort }) }
+                                DisposableEffect(state.sortBy) {
+                                    sortRequests[state.sortBy] = firstSort
+                                    onDispose { sortRequests.remove(state.sortBy) }
+                                }
+                                Button(onClick = { sorting = true },
+                                    modifier = Modifier.focusRequester(firstSort).then(sortControl(0)).testTag("grid:sort:${state.sortBy}")) {
+                                    SortChipContent("${GridSorts.firstOrNull { it.first == state.sortBy }?.second ?: "Name"} ${if (state.descending) "↓" else "↑"}", "chevron-down")
                                 }
                                 if (onFilters != null) {
-                                    Button(
-                                        onClick = onFilters,
-                                        modifier = sortControl(GridSorts.size + 1).testTag("grid:filters")
-                                    ) { Text(if (state.filters.active) "Filters · active" else "Filters") }
+                                    androidx.tv.material3.FilterChip(selected = state.filters.active, onClick = onFilters,
+                                        modifier = sortControl(1).testTag("grid:filters")) { Text(filterChipLabel(state.filters)) }
                                 }
                                 if (onDisplayList != null) {
-                                    Button(
-                                        onClick = { onDisplayList(!state.list) },
-                                        modifier = sortControl(GridSorts.size + 2).testTag("grid:display")
-                                    ) { Text(if (state.list) "View: List" else "View: Grid") }
-                                }
-                                Button(
-                                    onClick = { onSort(state.sortBy, !state.descending) },
-                                    modifier = sortControl(GridSorts.size).testTag("grid:sort-order").semantics {
-                                        stateDescription = if (state.descending) "Descending" else "Ascending"
-                                    }
-                                ) {
-                                    Box(Modifier.clearAndSetSemantics {}) {
-                                        if (state.descending) {
-                                            SortChipContent("Descending", "arrow-down")
-                                        } else {
-                                            SortChipContent("Ascending", "arrow-up")
-                                        }
+                                    Button(onClick = { onDisplayList(!state.list) }, modifier = sortControl(2).testTag("grid:display")) {
+                                        Text(if (state.list) "List" else "Grid")
                                     }
                                 }
                             }
@@ -947,7 +929,11 @@ fun CatalogGrid(
                             onRetry()
                         }, Modifier.focusRequester(retry).testTag("grid:retry"))
                         if (state.loading && state.items.isEmpty()) Text("Loading…")
-                        if (!state.loading && state.items.isEmpty() && state.error == null) Text(emptyGridLabel(state.parent))
+                        if (!state.loading && state.items.isEmpty() && state.error == null) {
+                            Text(emptyGridLabel(state.parent, state.filters))
+                            if (state.filters.active && onClearFilters != null) Button(onClick = onClearFilters,
+                                modifier = Modifier.focusRequester(clearFiltersFocus).testTag("grid:clear-filters")) { Text("Clear filters") }
+                        }
                     }
                 }
                 gridItemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
@@ -1025,6 +1011,7 @@ fun CatalogGrid(
             ContextStrip(stripTitle, gridStripDetail(state.sortBy, state.descending).takeIf { showSort }, Modifier.testTag("grid:strip"))
         }
     }
+    if (sorting) CatalogSortPicker(state, onSort) { sorting = false }
     // Keyed on the state rather than the chips' clicks, so a reader's click and anything else that changes the sort count.
     LaunchedEffect(state.sortBy, state.descending, state.filters, state.list) {
         dropWaitingMoves()
@@ -1047,6 +1034,14 @@ fun CatalogGrid(
             releaseHold()
         }
     }
+    LaunchedEffect(state.filters, state.items.isEmpty(), state.loading, state.error) {
+        if (!state.loading && state.items.isEmpty() && state.error == null && state.filters.active && onClearFilters != null) {
+            grid.requestScrollToItem(0)
+            withFrameNanos { }
+            clearFiltersFocus.requestFocus()
+            restored = true
+        }
+    }
     LaunchedEffect(state.items.map(MediaItem::id), state.loading, retryFocusRequest) {
         if (!state.loading && !restored) {
             withFrameNanos { }
@@ -1058,6 +1053,8 @@ fun CatalogGrid(
                 requestAttached(requests, state.items[index].id)
             } else if (state.error != null) {
                 retry.requestFocus()
+            } else if (state.filters.active && onClearFilters != null) {
+                clearFiltersFocus.requestFocus()
             } else {
                 if (showSort) firstSort.requestFocus() else true
             }

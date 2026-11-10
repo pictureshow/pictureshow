@@ -115,7 +115,7 @@ data class LibraryFilters(
     val personId: String? = null,
     val studio: String? = null
 ) {
-    val active: Boolean get() = this != LibraryFilters()
+    val active: Boolean get() = constraintKeys().isNotEmpty()
     fun parameters(): Map<String, String?> = mapOf(
         "genres" to genre?.takeIf { it.isNotBlank() },
         "years" to year?.toString(),

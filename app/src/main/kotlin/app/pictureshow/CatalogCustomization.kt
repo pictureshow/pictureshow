@@ -1,42 +1,79 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) Legitimate LLC.
  */
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package app.pictureshow
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.pictureshow.core.Account
 import app.pictureshow.core.CatalogService
 import app.pictureshow.core.ClientResult
+import app.pictureshow.core.GridSorts
 import app.pictureshow.core.HomePin
 import app.pictureshow.core.HomePinKind
 import app.pictureshow.core.HomePreferences
@@ -44,58 +81,205 @@ import app.pictureshow.core.LibraryFacets
 import app.pictureshow.core.LibraryFilters
 import app.pictureshow.core.MediaItem
 import app.pictureshow.core.VideoResolution
+import app.pictureshow.core.editableHomeKeys
+import app.pictureshow.core.homeEditorPinLabel
+import app.pictureshow.core.imageUrl
+import app.pictureshow.core.moveHomeRow
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 
-/** A full-screen scrollable editor gives TV overscan and large text the same space as phone touch. */
+/** Shared TV settings shell; touch uses a native app bar and a centred, bounded editor. */
 @Composable
-private fun CatalogEditor(title: String, close: () -> Unit, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+private fun CatalogEditor(
+    title: String,
+    close: () -> Unit,
+    first: FocusRequester,
+    list: LazyListState = rememberLazyListState(),
+    footer: (@Composable () -> Unit)? = null,
+    content: LazyListScope.() -> Unit
+) {
     val tv = usesTvInterface(LocalContext.current)
-    val first = remember { FocusRequester() }
     MaterialTheme(
-        colorScheme = if (tv) {
-            androidx.compose.material3.darkColorScheme(
-                background = androidx.compose.ui.graphics.Color(0xFF10131C),
-                surface = androidx.compose.ui.graphics.Color(0xFF10131C)
-            )
-        } else {
-            MaterialTheme.colorScheme
-        }
+        colorScheme = if (tv) darkColorScheme(background = CatalogBackground, surface = CatalogBackground) else MaterialTheme.colorScheme
     ) {
-        Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        if (tv) {
+            TvSettingsPanel(title, close, first, scrollContent = false, footer = footer) {
                 LazyColumn(
+                    state = list,
                     modifier = Modifier.fillMaxSize().testTag("catalog:editor"),
-                    contentPadding = PaddingValues(horizontal = if (tv) 48.dp else 24.dp, vertical = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item {
-                        EditorAction("Back", close, Modifier.focusRequester(first))
-                        Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    content = content
+                )
+            }
+        } else {
+            Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        TopAppBar(title = { Text(title) }, navigationIcon = {
+                            IconButton(onClick = close, modifier = Modifier.testTag("catalog:back")) {
+                                Icon(touchActionIcon("back"), "Back")
+                            }
+                        })
+                        LazyColumn(
+                            state = list,
+                            modifier = Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().testTag("catalog:editor"),
+                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            content = content
+                        )
+                        footer?.let {
+                            Box(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) { it() }
+                        }
                     }
-                    content()
                 }
             }
-            LaunchedEffect(Unit) { if (tv) first.requestFocus() }
         }
     }
 }
 
 @Composable
-internal fun EditorAction(label: String, action: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+private fun CatalogSection(title: String) {
+    Text(title, Modifier.padding(top = 24.dp, bottom = 8.dp).semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+}
+
+/** These adapt touch roles to the same TV components used by the main settings page. */
+@Composable
+private fun <T> CatalogChoiceRow(
+    title: String,
+    value: T,
+    values: List<T>,
+    label: (T) -> String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    change: (T) -> Unit
+) {
     val tv = usesTvInterface(LocalContext.current)
     if (tv) {
-        androidx.tv.material3.Button(
-            onClick = action,
-            enabled = enabled,
-            scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1f),
-            modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)
-        ) {
-            androidx.tv.material3.Text(label)
-        }
+        TvSettingsChoiceRow(title, value, values, label, modifier, enabled = enabled, onSelect = change)
     } else {
-        OutlinedButton(onClick = action, enabled = enabled, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
+        var choosing by remember { mutableStateOf(false) }
+        ListItem(
+            headlineContent = { Text(title) },
+            supportingContent = { Text(label(value)) },
+            trailingContent = { Icon(touchActionIcon("chevron-right"), null) },
+            modifier = modifier.clickable(enabled = enabled) { choosing = true }.semantics { stateDescription = label(value) }
+        )
+        if (choosing) CatalogChoicePicker(title, value, values, label, change) { choosing = false }
     }
+}
+
+@Composable
+private fun CatalogToggleRow(
+    title: String,
+    checked: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    change: (Boolean) -> Unit
+) {
+    if (usesTvInterface(LocalContext.current)) {
+        TvSettingsToggleRow(title, checked, modifier, enabled = enabled, onToggle = change)
+    } else {
+        ListItem(
+            headlineContent = { Text(title) },
+            trailingContent = { Switch(checked, onCheckedChange = null, enabled = enabled) },
+            modifier = modifier.clickable(enabled = enabled, role = Role.Switch) { change(!checked) }.semantics {
+                toggleableState =
+                    if (checked) androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off
+                stateDescription = if (checked) "On" else "Off"
+            }
+        )
+    }
+}
+
+@Composable
+private fun CatalogActionRow(title: String, action: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    if (usesTvInterface(LocalContext.current)) {
+        TvSettingsActionRow(title, modifier, enabled = enabled, onClick = action)
+    } else {
+        ListItem(
+            headlineContent = { Text(title) },
+            trailingContent = { Icon(touchActionIcon("chevron-right"), null) },
+            modifier = modifier.clickable(enabled = enabled, onClick = action)
+        )
+    }
+}
+
+@Composable
+private fun CatalogCommand(
+    title: String,
+    action: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+    enabled: Boolean = true
+) {
+    if (usesTvInterface(LocalContext.current)) {
+        if (primary) {
+            androidx.tv.material3.Button(onClick = action, modifier = modifier.heightIn(min = 48.dp), enabled = enabled) {
+                androidx.tv.material3.Text(title)
+            }
+        } else {
+            androidx.tv.material3.OutlinedButton(onClick = action, modifier = modifier.heightIn(min = 48.dp), enabled = enabled) {
+                androidx.tv.material3.Text(title)
+            }
+        }
+    } else if (primary) {
+        Button(onClick = action, modifier = modifier.heightIn(min = 48.dp), enabled = enabled) { Text(title) }
+    } else {
+        TextButton(onClick = action, modifier = modifier.heightIn(min = 48.dp), enabled = enabled) { Text(title) }
+    }
+}
+
+@Composable
+private fun <T> CatalogChoicePicker(
+    title: String,
+    value: T,
+    values: List<T>,
+    label: (T) -> String,
+    select: (T) -> Unit,
+    close: () -> Unit
+) {
+    if (usesTvInterface(LocalContext.current)) {
+        TvSettingsChoicePicker(title, value, values, label, select, close)
+    } else {
+        val first = remember { FocusRequester() }
+        val index = values.indexOf(value).coerceAtLeast(0)
+        val list = rememberLazyListState(initialFirstVisibleItemIndex = index)
+        CatalogEditor(title, close, first, list) {
+            items(values.indices.toList()) { i ->
+                val selected = values[i] == value
+                ListItem(
+                    headlineContent = { Text(label(values[i])) },
+                    trailingContent = { RadioButton(selected, onClick = null) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("catalog:option:$i")
+                        .semantics {
+                            this.selected = selected
+                            role = Role.RadioButton
+                            stateDescription = if (selected) "Selected" else ""
+                        }
+                        .clickable {
+                            select(values[i])
+                            close()
+                        }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CatalogSortPicker(state: CatalogGridState, sort: (String, Boolean) -> Unit, close: () -> Unit) {
+    val options = GridSorts.flatMap { (key, label) ->
+        listOf(
+            Triple(key, false, "$label · Ascending"),
+            Triple(key, true, "$label · Descending")
+        )
+    }
+    val current = options.firstOrNull { it.first == state.sortBy && it.second == state.descending } ?: options.first()
+    CatalogChoicePicker("Sort", current, options, { it.third }, { sort(it.first, it.second) }, close)
 }
 
 @Composable
@@ -106,117 +290,157 @@ internal fun HomeCustomization(
     change: ((HomePreferences) -> HomePreferences) -> Unit,
     close: () -> Unit
 ) {
+    val tv = usesTvInterface(LocalContext.current)
+    val first = remember { FocusRequester() }
+    val list = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     var picker by remember { mutableStateOf<HomePinKind?>(null) }
+    var moving by remember { mutableStateOf<String?>(null) }
+    var draftOrder by remember { mutableStateOf<List<String>?>(null) }
     val preferences = state.preferences
-    val defaults = listOf(
-        "resume" to "Continue watching",
-        "nextup" to "Next up",
-        "watching" to "Continue watching and next up",
-        "libraries" to "Libraries"
-    ) +
-        state.libraries.filter { it.collectionType in listOf("movies", "tvshows") }.map { "latest:${it.id}" to "Latest in ${it.name}" }
+    val defaults =
+        listOf(
+            "resume" to "Continue watching",
+            "nextup" to "Next up",
+            "watching" to "Continue watching and next up",
+            "libraries" to "Libraries"
+        ) +
+            state.libraries.filter { it.collectionType in listOf("movies", "tvshows") }.map { "latest:${it.id}" to "Latest in ${it.name}" }
     val known = (
         defaults + state.availableRows.filterNot { it.key.startsWith("pin:") }.map { it.key to it.title } +
-            preferences.pins.map { it.key to app.pictureshow.core.homeEditorPinLabel(it, state.availableRows) }
-        )
-        .distinctBy { it.first }
-    val rows = known.sortedBy { (key, _) -> preferences.order.indexOf(key).takeIf { it >= 0 } ?: Int.MAX_VALUE }
-    CatalogEditor("Customize home", close) {
-        item {
-            Text("Changes belong to ${account.user.name}. Hidden rows remain available here.")
-            state.preferenceStatus?.let { Text(it) }
-            if (state.saving) Text("Saving layout…")
-            EditorAction("Retry server save", { change { it } }, enabled = !state.saving)
-            val watchingLabel = if (preferences.mergeWatching) {
-                "Watching rows: Combined · choose Separate"
-            } else {
-                "Watching rows: Separate · choose Combined"
-            }
-            EditorAction(watchingLabel, {
-                change { it.copy(mergeWatching = !it.mergeWatching) }
-            }, enabled = !state.saving)
-        }
-        item { Text("Landing view", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
-        items(
-            listOf("home" to "Home", "libraries" to "Libraries") + state.libraries.map {
-                "library:${it.id}" to it.name
-            },
-            key = { "landing:${it.first}" }
-        ) { (key, label) ->
-            EditorAction("${if (preferences.landing == key) "Selected: " else ""}$label", {
-                change { it.copy(landing = key) }
-            }, enabled = !state.saving)
-        }
-        item {
-            Text("Rows · show, hide and reorder", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-        }
-        items(rows, key = { it.first }) { (key, title) ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                EditorAction(if (key in preferences.hidden) "Show $title" else "Hide $title", {
-                    change { it.copy(hidden = if (key in it.hidden) it.hidden - key else it.hidden + key) }
-                }, enabled = !state.saving)
-                val index = rows.indexOfFirst { it.first == key }
-                fun move(delta: Int) {
-                    val order = rows.map { it.first }.toMutableList()
-                    val target = (index + delta).coerceIn(order.indices)
-                    order.removeAt(index)
-                    order.add(target, key)
-                    change { it.copy(order = order) }
+            preferences.pins.map { it.key to homeEditorPinLabel(it, state.availableRows) }
+        ).distinctBy { it.first }.toMap()
+    val rows = editableHomeKeys(known.keys.toList(), preferences.copy(order = draftOrder ?: preferences.order))
+    fun finish() {
+        draftOrder?.let { order -> if (order != preferences.order) change { it.copy(order = order) } }
+        moving = null
+        draftOrder = null
+    }
+    BackHandler(enabled = moving != null) {
+        moving = null
+        draftOrder = null
+    }
+    CatalogEditor("Customize home", close, first, list) {
+        if (state.saving) item("saving") { Text("Saving layout…", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+        state.preferenceStatus?.let { status ->
+            item("save-status") {
+                Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(status, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    if (state.preferenceRetryable) {
+                        CatalogCommand("Retry", {
+                            change { it }
+                        }, Modifier.testTag("home:retry-save"), enabled = !state.saving)
+                    }
                 }
-                EditorAction("Move $title up", { move(-1) }, enabled = !state.saving && index > 0)
-                EditorAction("Move $title down", { move(1) }, enabled = !state.saving && index < rows.lastIndex)
-                if (key.startsWith("pin:")) {
-                    EditorAction("Unpin $title", {
-                        change {
-                            it.copy(
-                                pins = it.pins.filterNot { pin -> pin.key == key },
-                                order = it.order - key,
-                                hidden =
-                                it.hidden - key
-                            )
+            }
+        }
+        item("rows-heading") { CatalogSection("Rows") }
+        items(rows, key = { it }) { key ->
+            val index = rows.indexOf(key)
+            HomeReorderRow(
+                key, known.getValue(key), key !in preferences.hidden, tv, moving == key,
+                !state.saving && (moving == null || moving == key),
+                index > 0, index < rows.lastIndex,
+                toggle = { if (moving == null) change { it.copy(hidden = if (key in it.hidden) it.hidden - key else it.hidden + key) } },
+                pickOrDrop = {
+                    if (moving == key) {
+                        finish()
+                    } else {
+                        moving = key
+                        draftOrder = preferences.order
+                    }
+                },
+                move = { delta ->
+                    draftOrder = moveHomeRow(draftOrder ?: preferences.order, rows, key, delta)
+                    scope.launch {
+                        list.animateScrollToItem(
+                            (if (state.saving) 1 else 0) + (if (state.preferenceStatus != null) 1 else 0) + 1 +
+                                (index + delta).coerceIn(rows.indices)
+                        )
+                    }
+                }, endDrag = ::finish,
+                unpin = if (key.startsWith("pin:")) {
+                    (
+                        {
+                            change {
+                                it.copy(
+                                    pins = it.pins.filterNot { pin -> pin.key == key },
+                                    order =
+                                    it.order - key,
+                                    hidden = it.hidden - key
+                                )
+                            }
                         }
-                    }, enabled = !state.saving)
-                }
+                        )
+                } else {
+                    null
+                },
+                modifier = Modifier.animateItem().then(if (index == 0) Modifier.focusRequester(first) else Modifier)
+            )
+        }
+        item("combine") {
+            CatalogToggleRow(
+                "Combine Continue watching and Next up",
+                preferences.mergeWatching,
+                Modifier.testTag("home:combine"),
+                enabled = !state.saving && moving == null
+            ) { value ->
+                change { it.copy(mergeWatching = value) }
             }
         }
-        item { Text("Add a row", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
+        item("landing") {
+            val values = listOf("home" to "Home", "libraries" to "Libraries") + state.libraries.map { "library:${it.id}" to it.name }
+            CatalogChoiceRow(
+                "Landing view",
+                preferences.landing,
+                values.map { it.first },
+                { key ->
+                    values.firstOrNull { it.first == key }?.second
+                        ?: "Home"
+                },
+                Modifier.testTag("home:landing"),
+                enabled = !state.saving
+            ) { value -> change { it.copy(landing = value) } }
+        }
+        item("add-heading") { CatalogSection("Add a row") }
         items(HomePinKind.entries) { kind ->
-            EditorAction("Pin ${kind.name.lowercase()}", {
+            val label = when (kind) {
+                HomePinKind.COLLECTION -> "Add a collection"
+                HomePinKind.PLAYLIST -> "Add a playlist"
+                HomePinKind.FAVORITES -> "Add favorites"
+                HomePinKind.GENRE -> "Add a genre"
+                HomePinKind.STUDIO -> "Add a studio"
+            }
+            CatalogActionRow(label, {
                 if (kind == HomePinKind.FAVORITES) {
-                    change { it.copy(pins = (it.pins + HomePin(kind)).distinctBy { pin -> pin.key }) }
+                    change { it.copy(pins = (it.pins + HomePin(kind)).distinctBy(HomePin::key)) }
                 } else {
                     picker = kind
                 }
             }, enabled = !state.saving)
         }
-        item { Text("Next up", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
-        items(
-            state.availableRows.firstOrNull {
-                it.key == "nextup"
-            }?.items.orEmpty().filter { it.seriesId != null }.distinctBy { it.seriesId },
-            key = { "hide:${it.seriesId}" }
-        ) { episode ->
+        item("next-heading") { CatalogSection("Next up") }
+        val episodes = state.availableRows.firstOrNull {
+            it.key == "nextup"
+        }?.items.orEmpty().filter { it.seriesId != null }.distinctBy { it.seriesId }
+        if (episodes.isEmpty() && preferences.hiddenSeries.isEmpty()) item { Text("No series in Next up.") }
+        items(episodes, key = { "hide:${it.seriesId}" }) { episode ->
             val id = requireNotNull(episode.seriesId)
-            val label = if (id in preferences.hiddenSeries) {
-                "Restore ${episode.seriesName ?: episode.name} to Next up"
-            } else {
-                "Remove ${episode.seriesName ?: episode.name} from Next up"
+            CatalogToggleRow(
+                episode.seriesName ?: episode.name,
+                id !in preferences.hiddenSeries,
+                Modifier.testTag("home:nextup:$id"),
+                enabled = !state.saving
+            ) { show ->
+                change { it.copy(hiddenSeries = if (show) it.hiddenSeries - id else it.hiddenSeries + id) }
             }
-            EditorAction(label, {
-                change { it.copy(hiddenSeries = if (id in it.hiddenSeries) it.hiddenSeries - id else it.hiddenSeries + id) }
-            }, enabled = !state.saving)
         }
         if (preferences.hiddenSeries.isNotEmpty()) {
             item {
-                EditorAction("Restore all removed series to Next up", {
-                    change { it.copy(hiddenSeries = emptySet()) }
-                }, enabled = !state.saving)
+                CatalogCommand("Restore removed series", { change { it.copy(hiddenSeries = emptySet()) } }, enabled = !state.saving)
             }
         }
-        item {
-            EditorAction("Restore default home layout", { change { HomePreferences(libraries = it.libraries) } }, enabled = !state.saving)
-        }
+        item { CatalogCommand("Restore default layout", { change { HomePreferences(libraries = it.libraries) } }, enabled = !state.saving) }
     }
     picker?.let { kind ->
         NamedCatalogPicker(
@@ -229,9 +453,10 @@ internal fun HomeCustomization(
                 HomePinKind.STUDIO -> "Studios"
                 HomePinKind.FAVORITES -> error("Favorites needs no picker")
             },
+            selectedKeys = preferences.pins.filter { it.kind == kind }.map { it.value }.toSet(),
             select = { item ->
                 val pin = HomePin(kind, if (kind in listOf(HomePinKind.GENRE, HomePinKind.STUDIO)) item.name else item.id)
-                change { it.copy(pins = (it.pins + pin).distinctBy { it.key }) }
+                change { it.copy(pins = (it.pins + pin).distinctBy(HomePin::key)) }
                 picker = null
             },
             close = { picker = null }
@@ -246,77 +471,177 @@ internal fun NamedCatalogPicker(
     kind: String,
     parentId: String = "",
     select: (MediaItem) -> Unit,
-    close: () -> Unit
+    close: () -> Unit,
+    selectedKeys: Set<String> = emptySet()
 ) {
+    val tv = usesTvInterface(LocalContext.current)
+    val first = remember { FocusRequester() }
+    val choiceFocus = remember { FocusRequester() }
+    val list = rememberLazyListState()
+    val keyboard = LocalSoftwareKeyboardController.current
     var query by remember { mutableStateOf("") }
     var requested by remember { mutableStateOf("") }
     var page by remember { mutableIntStateOf(0) }
     var retry by remember { mutableIntStateOf(0) }
-    var items by remember { mutableStateOf(emptyList<MediaItem>()) }
+    var choices by remember { mutableStateOf(emptyList<MediaItem>()) }
     var total by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(kind, requested, page, retry) {
+    LaunchedEffect(query) {
+        delay(300)
+        page = 0
+        requested = query.trim()
+    }
+    LaunchedEffect(kind, parentId, requested, page, retry) {
         loading = true
         error = null
         val result = service.namedItems(account, kind, parentId, requested, page)
         currentCoroutineContext().ensureActive()
         when (result) {
             is ClientResult.Success -> {
-                currentCoroutineContext().ensureActive()
-                items = result.value.items.distinctBy { it.id }
+                choices = result.value.items.distinctBy(MediaItem::id)
                 total = result.value.totalRecordCount
             }
             is ClientResult.Failure -> {
-                items = emptyList()
+                choices = emptyList()
                 error = result.error.message
             }
         }
         loading = false
     }
-    CatalogEditor("Choose ${kind.lowercase()}", close) {
-        item {
-            OutlinedTextField(query, {
-                query = it.take(200)
-            }, label = { Text("Find by name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            EditorAction("Find", {
-                page = 0
-                items = emptyList()
-                requested = query.trim()
-                retry++
-            })
-            if (loading) Text("Loading…")
-            error?.let {
-                Text(it)
-                EditorAction("Retry", { retry++ })
-            }
-            if (!loading && error == null && items.isEmpty()) Text("No choices are available for this viewer.")
+    fun selected(item: MediaItem) = item.id in selectedKeys || item.name in selectedKeys
+    val initial = choices.indexOfFirst(::selected).coerceAtLeast(0)
+    val title = when (kind) {
+        "BoxSet" -> "Choose a collection"
+        "Playlist" -> "Choose a playlist"
+        "Genres" -> "Choose a genre"
+        "Studios" -> "Choose a studio"
+        "Persons" -> "Choose a person"
+        else -> "Choose a row"
+    }
+    CatalogEditor(title, close, first, list) {
+        item("search") {
+            OutlinedTextField(
+                query,
+                { query = it.take(200) },
+                label = { Text("Find by name") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).focusRequester(first),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    requested = query.trim()
+                    page = 0
+                    keyboard?.hide()
+                })
+            )
         }
-        items(items, key = { it.id }) { item -> EditorAction(item.name, { select(item) }, enabled = !loading) }
-        if (page >
-            0
+        if (loading) item("loading") { Text("Loading…") }
+        error?.let {
+            item("error") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(it)
+                    CatalogCommand("Retry", { retry++ })
+                }
+            }
+        }
+        if (!loading &&
+            error == null &&
+            choices.isEmpty()
         ) {
-            item {
-                EditorAction("Previous choices", {
-                    page = (page - 60).coerceAtLeast(0)
-                    items = emptyList()
-                }, enabled = !loading)
+            item("empty") { Text(if (requested.isBlank()) "No choices available" else "No matches for “$requested”") }
+        }
+        items(choices, key = MediaItem::id) { item ->
+            val checked = selected(item)
+            val support = (item.recursiveItemCount ?: item.childCount)?.let { "$it titles" }
+            val modifier = (if (choices.indexOf(item) == initial) Modifier.focusRequester(choiceFocus) else Modifier)
+                .testTag("catalog:choice:${item.id}").semantics {
+                    this.selected = checked
+                    stateDescription =
+                        if (checked) "Selected" else ""
+                }
+            val avatar: (@Composable () -> Unit)? = if (kind == "Persons") ({ CatalogPersonAvatar(item, account) }) else null
+            if (tv) {
+                TvSettingsRow(
+                    item.name,
+                    support,
+                    modifier,
+                    selected = checked,
+                    onClick = { select(item) },
+                    leading = avatar,
+                    trailing = { androidx.tv.material3.RadioButton(checked, onClick = null, modifier = Modifier.clearAndSetSemantics {}) }
+                )
+            } else {
+                ListItem(
+                    headlineContent = { Text(item.name) },
+                    supportingContent = support?.let { { Text(it) } },
+                    leadingContent = avatar,
+                    trailingContent = { RadioButton(checked, onClick = null) },
+                    modifier = modifier.clickable { select(item) }
+                )
             }
         }
-        if (page + items.size < total && items.isNotEmpty()) {
-            item {
-                EditorAction("More choices", {
-                    page += 60
-                    items = emptyList()
-                }, enabled = !loading)
-            }
+        if (page > 0) item { CatalogCommand("Previous choices", { page = (page - 60).coerceAtLeast(0) }, enabled = !loading) }
+        if (page + choices.size < total && choices.isNotEmpty()) item { CatalogCommand("More choices", { page += 60 }, enabled = !loading) }
+    }
+    LaunchedEffect(loading, requested, page) {
+        if (tv && !loading && choices.isNotEmpty() && query.isBlank()) {
+            list.scrollToItem(initial + 1)
+            withFrameNanos { }
+            choiceFocus.requestFocus()
         }
     }
 }
 
 @Composable
+private fun CatalogPersonAvatar(item: MediaItem, account: Account) {
+    Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+        Text(item.name.split(' ').mapNotNull { it.firstOrNull() }.take(2).joinToString(""), style = MaterialTheme.typography.titleSmall)
+        imageUrl(account.server, item, 80)?.let {
+            AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+        }
+    }
+}
+
+@Composable
+private fun CatalogYearPicker(year: Int?, years: List<Int>, select: (Int?) -> Unit, close: () -> Unit) {
+    var decade by remember { mutableStateOf<Int?>(null) }
+    val decades = years.map { it / 10 * 10 }.distinct().sortedDescending()
+    if (decade == null) {
+        CatalogChoicePicker(
+            "Choose a decade",
+            year?.let { it / 10 * 10 },
+            listOf(null) + decades,
+            { it?.let { start -> "$start–${start + 9}" } ?: "Any year" },
+            { value ->
+                if (value == null) {
+                    select(null)
+                    close()
+                } else {
+                    decade = value
+                }
+            },
+            { if (decade == null) close() }
+        )
+        BackHandler { close() }
+    } else {
+        CatalogChoicePicker(
+            "Choose a year",
+            year,
+            years.filter { it / 10 * 10 == decade }.sortedDescending().map { it as Int? },
+            { it.toString() },
+            {
+                select(it)
+                close()
+            },
+            { decade = null }
+        )
+    }
+}
+
+@Composable
 internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogService, apply: (LibraryFilters) -> Unit, close: () -> Unit) {
-    var draft by remember { mutableStateOf(state.filters) }
+    val first = remember { FocusRequester() }
+    var draft by remember(state.parent.id) { mutableStateOf(state.filters) }
     var facets by remember { mutableStateOf(LibraryFacets()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -325,69 +650,101 @@ internal fun LibraryFilterEditor(state: CatalogGridState, service: CatalogServic
     var personLabel by remember { mutableStateOf("Selected person") }
     LaunchedEffect(state.parent.id, retry) {
         loading = true
+        facets = LibraryFacets()
+        error = null
         val result = service.facets(state.account, state.parent.id)
         currentCoroutineContext().ensureActive()
         when (result) {
-            is ClientResult.Success -> {
-                facets = result.value
-                error = null
-            }
+            is ClientResult.Success -> facets = result.value
             is ClientResult.Failure -> error = result.error.message
         }
         loading = false
     }
-    CatalogEditor("Filter ${state.parent.name}", close) {
-        item {
-            Text("Filters combine with your sort. The server decides which titles this viewer can access.")
-            EditorAction("Apply filters", {
+    CatalogEditor("Filters", close, first, footer = {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            CatalogCommand("Apply", {
                 apply(draft)
                 close()
-            }, Modifier.testTag("filters:apply"))
-            EditorAction("Clear all filters", { draft = LibraryFilters() }, Modifier.testTag("filters:clear"))
-            EditorAction("Unwatched: ${if (draft.unwatched) "On" else "Off"}", {
-                draft = draft.copy(unwatched = !draft.unwatched)
-            }, Modifier.testTag("filters:unwatched"))
-            EditorAction("Favorites: ${if (draft.favorite) "On" else "Off"}", {
-                draft = draft.copy(favorite = !draft.favorite)
-            }, Modifier.testTag("filters:favorites"))
-            EditorAction("Resolution: ${draft.resolution.label}", {
-                draft = draft.copy(resolution = VideoResolution.entries[(draft.resolution.ordinal + 1) % VideoResolution.entries.size])
-            }, Modifier.testTag("filters:resolution"))
-            EditorAction("Person: ${if (draft.personId == null) "Any" else personLabel}", { personPicker = true })
-            if (draft.personId != null) EditorAction("Clear person", { draft = draft.copy(personId = null) })
-            if (loading) Text("Loading filter choices…")
-            error?.let {
-                Text(it)
-                EditorAction("Retry filter choices", { retry++ })
+            }, Modifier.testTag("filters:apply"), primary = true)
+            CatalogCommand("Clear all", { draft = LibraryFilters() }, Modifier.testTag("filters:clear"))
+        }
+    }) {
+        item {
+            CatalogToggleRow("Unwatched", draft.unwatched, Modifier.focusRequester(first).testTag("filters:unwatched")) {
+                draft =
+                    draft.copy(unwatched = it)
             }
         }
-        item { Text("Genre: ${draft.genre ?: "Any"}", modifier = Modifier.semantics { heading() }) }
-        item { EditorAction("Any genre", { draft = draft.copy(genre = null) }) }
-        items(facets.genres.distinct()) { genre ->
-            // A semantics callback may outlive its lazy item. Read snapshot state during
-            // composition so a later draft edit cannot invalidate a detached Material node.
-            val selected = draft.genre == genre
-            EditorAction(
-                genre,
-                { draft = draft.copy(genre = genre) },
-                Modifier.semantics {
-                    stateDescription =
-                        if (selected) "Selected" else ""
-                }
-            )
+        item { CatalogToggleRow("Favorites", draft.favorite, Modifier.testTag("filters:favorites")) { draft = draft.copy(favorite = it) } }
+        item {
+            CatalogChoiceRow(
+                "Genre",
+                draft.genre,
+                listOf(null) + facets.genres.distinct(),
+                { it ?: "Any" },
+                Modifier.testTag("filters:genre"),
+                enabled = !loading && error == null
+            ) { draft = draft.copy(genre = it) }
         }
-        item { Text("Year: ${draft.year ?: "Any"}", modifier = Modifier.semantics { heading() }) }
-        item { EditorAction("Any year", { draft = draft.copy(year = null) }) }
-        items(facets.years.distinct().sortedDescending()) { year -> EditorAction(year.toString(), { draft = draft.copy(year = year) }) }
-        item { Text("Official rating: ${draft.officialRating ?: "Any"}", modifier = Modifier.semantics { heading() }) }
-        item { EditorAction("Any rating", { draft = draft.copy(officialRating = null) }) }
-        items(facets.ratings.distinct()) { rating -> EditorAction(rating, { draft = draft.copy(officialRating = rating) }) }
+        item {
+            var choosingYear by remember { mutableStateOf(false) }
+            CatalogActionRow(
+                "Year · ${draft.year ?: "Any"}",
+                { choosingYear = true },
+                Modifier.testTag("filters:year"),
+                enabled =
+                !loading && error == null
+            )
+            if (choosingYear) CatalogYearPicker(draft.year, facets.years, { draft = draft.copy(year = it) }) { choosingYear = false }
+        }
+        item {
+            CatalogChoiceRow(
+                "Rating",
+                draft.officialRating,
+                listOf(null) + facets.ratings.distinct(),
+                { it ?: "Any" },
+                Modifier.testTag("filters:rating"),
+                enabled = !loading && error == null
+            ) { draft = draft.copy(officialRating = it) }
+        }
+        item {
+            CatalogChoiceRow(
+                "Resolution",
+                draft.resolution,
+                VideoResolution.entries,
+                {
+                    if (it ==
+                        VideoResolution.ANY
+                    ) {
+                        "Any"
+                    } else {
+                        it.label
+                    }
+                },
+                Modifier.testTag("filters:resolution")
+            ) { draft = draft.copy(resolution = it) }
+        }
+        item {
+            CatalogActionRow("Person · ${if (draft.personId == null) "Any" else personLabel}", {
+                personPicker = true
+            }, Modifier.testTag("filters:person"))
+        }
+        if (draft.personId != null) item { CatalogCommand("Clear person", { draft = draft.copy(personId = null) }) }
+        if (loading) item { Text("Loading choices…") }
+        error?.let {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(it)
+                    CatalogCommand("Retry", { retry++ })
+                }
+            }
+        }
     }
     if (personPicker) {
         NamedCatalogPicker(state.account, service, "Persons", state.parent.id, {
             draft = draft.copy(personId = it.id)
             personLabel = it.name
             personPicker = false
-        }, { personPicker = false })
+        }, { personPicker = false }, selectedKeys = setOfNotNull(draft.personId))
     }
 }

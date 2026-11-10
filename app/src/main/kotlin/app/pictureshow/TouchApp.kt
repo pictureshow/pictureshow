@@ -5,6 +5,7 @@ package app.pictureshow
 
 import android.net.Uri
 import android.widget.Toast
+import app.pictureshow.core.withoutConstraint
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.Text
@@ -475,7 +476,9 @@ internal fun TouchPictureshow(
                             vm::sort,
                             vm::retry,
                             onFilters = { filtering = true },
-                            onDisplayList = vm::displayList
+                            onDisplayList = vm::displayList,
+                            onClearFilters = { vm.filter(app.pictureshow.core.LibraryFilters()) },
+                            onRemoveFilter = { vm.filter(screen.filters.withoutConstraint(it)) }
                         ) { nav.popBackStack() }
                     } else {
                         val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })

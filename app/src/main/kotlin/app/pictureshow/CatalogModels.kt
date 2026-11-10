@@ -284,6 +284,7 @@ data class CatalogHomeState(
     val availableRows: List<HomeRow> = emptyList(),
     val libraries: List<MediaItem> = emptyList(),
     val preferenceStatus: String? = null,
+    val preferenceRetryable: Boolean = false,
     val saving: Boolean = false,
     val preferencesReady: Boolean = false,
     /** The load failed because the server couldn't be reached, as opposed to the server saying no. */
@@ -319,7 +320,7 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
         mutableState.update { it.copy(saving = true) }
         viewModelScope.launch {
             val saved = session.homePreferences.change(account, transform)
-            mutableState.update { it.copy(preferences = saved.preferences, preferenceStatus = saved.status, saving = false) }
+            mutableState.update { it.copy(preferences = saved.preferences, preferenceStatus = saved.status, preferenceRetryable = saved.retrySave, saving = false) }
             reload()
         }
     }
@@ -385,7 +386,8 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                         libraries = libraries,
                         preferences = preferences.preferences,
                         preferencesReady = true,
-                        preferenceStatus = preferences.status ?: it.preferenceStatus,
+                        preferenceStatus = preferences.status,
+                        preferenceRetryable = preferences.retrySave,
                         error = failures.filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message,
                         unreachable = catalogUnreachable(failures)
                     )

@@ -1163,7 +1163,10 @@ class CatalogGridLargeFontTest {
         holdDown()
         assertFocus("grid:film-0")
         // A reader's click: it reaches the chip with no key and no focus move.
-        compose.onNodeWithTag(chip).performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("grid:sort:${gridState.sortBy}").performSemanticsAction(SemanticsActions.OnClick)
+        runFrames(100)
+        compose.onNodeWithText(if (chip == "grid:sort-order") "Name · Descending" else "Date added · Ascending")
+            .performSemanticsAction(SemanticsActions.OnClick)
         runFrames(200)
         gridState = gridState.copy(items = films.take(20), total = 20, loading = false)
         settle()

@@ -1041,7 +1041,8 @@ internal fun Pictureshow(
                         vm::sort,
                         vm::retry,
                         onFilters = { filtering = true },
-                        onDisplayList = vm::displayList
+                        onDisplayList = vm::displayList,
+                        onClearFilters = { vm.filter(app.pictureshow.core.LibraryFilters()) }
                     )
                 } else {
                     val vm: CatalogDetailViewModel = koinViewModel(parameters = { parametersOf(account, item, catalog) })

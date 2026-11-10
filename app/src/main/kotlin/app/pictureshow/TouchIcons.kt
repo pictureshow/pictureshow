@@ -112,6 +112,91 @@ internal fun touchActionIcon(kind: String): ImageVector = ImageVector.Builder(
 ).apply {
     path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
         when (kind) {
+            "drag" -> {
+                for (y in listOf(8f, 14f)) {
+                    moveTo(4f, y)
+                    lineTo(20f, y)
+                    lineTo(20f, y + 2f)
+                    lineTo(4f, y + 2f)
+                    close()
+                }
+            }
+            "eye", "eye-off" -> {
+                moveTo(2f, 12f)
+                curveTo(7f, 3f, 17f, 3f, 22f, 12f)
+                curveTo(17f, 21f, 7f, 21f, 2f, 12f)
+                close()
+                moveTo(7f, 12f)
+                arcTo(5f, 5f, 0f, true, true, 17f, 12f)
+                arcTo(5f, 5f, 0f, true, true, 7f, 12f)
+                close()
+                if (kind == "eye-off") {
+                    moveTo(2f, 3f)
+                    lineTo(21f, 22f)
+                    lineTo(23f, 20f)
+                    lineTo(4f, 1f)
+                    close()
+                }
+            }
+            "more" -> {
+                for (y in listOf(4f, 11f, 18f)) {
+                    moveTo(10.5f, y)
+                    lineTo(13.5f, y)
+                    lineTo(13.5f, y + 3f)
+                    lineTo(10.5f, y + 3f)
+                    close()
+                }
+            }
+            "list" -> {
+                for (y in listOf(4f, 10f, 16f)) {
+                    moveTo(3f, y)
+                    lineTo(21f, y)
+                    lineTo(21f, y + 3f)
+                    lineTo(3f, y + 3f)
+                    close()
+                }
+            }
+            "grid" -> {
+                for (x in listOf(3f, 13f)) {
+                    for (y in listOf(3f, 13f)) {
+                        moveTo(x, y)
+                        lineTo(x + 8f, y)
+                        lineTo(x + 8f, y + 8f)
+                        lineTo(
+                            x,
+                            y + 8f
+                        )
+                        close()
+                    }
+                }
+            }
+            "close" -> {
+                moveTo(5f, 3f)
+                lineTo(12f, 10f)
+                lineTo(19f, 3f)
+                lineTo(21f, 5f)
+                lineTo(14f, 12f)
+                lineTo(21f, 19f)
+                lineTo(19f, 21f)
+                lineTo(12f, 14f)
+                lineTo(5f, 21f)
+                lineTo(3f, 19f)
+                lineTo(10f, 12f)
+                lineTo(3f, 5f)
+                close()
+            }
+            "back" -> {
+                moveTo(20f, 11f)
+                lineTo(7f, 11f)
+                lineTo(13f, 5f)
+                lineTo(11f, 3f)
+                lineTo(2f, 12f)
+                lineTo(11f, 21f)
+                lineTo(13f, 19f)
+                lineTo(7f, 13f)
+                lineTo(20f, 13f)
+                close()
+            }
             "check" -> {
                 moveTo(4f, 12.5f)
                 lineTo(6f, 10.5f)

@@ -226,12 +226,16 @@ class HomePreferencesTest {
             val store = HomePreferencesStore(CatalogClient(it, identity), accounts)
             val saved = store.change(viewer) { it.copy(landing = "libraries", mergeWatching = true) }
             assertEquals("libraries", saved.preferences.landing)
+            assertTrue(saved.retrySave, "A failed server save must offer Retry")
             assertTrue(viewer.key in accounts.load().pendingHomePreferences)
             assertEquals(HomePreferences(), store.read(other).preferences)
             fail = false
+            assertTrue(store.read(viewer).retrySave)
             assertTrue(store.read(viewer).preferences.mergeWatching) // older remote data cannot clobber pending local
             val synced = store.change(viewer) { it }
             assertEquals(1, writes)
+            assertFalse(synced.retrySave, "Successful save must remove Retry")
+            assertNull(synced.status)
             assertEquals(synced.preferences, readHomePreferences(remote))
             assertEquals("retain", remote["CustomPrefs"]!!.jsonObject["unrelated"]!!.toString().trim('"'))
             assertFalse(viewer.key in accounts.load().pendingHomePreferences)

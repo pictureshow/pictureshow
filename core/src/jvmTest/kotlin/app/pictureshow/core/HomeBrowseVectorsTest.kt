@@ -182,6 +182,31 @@ class HomeBrowseVectorsTest {
                         }
                     }
                 }
+                "editor-visible-rows" -> Json.encodeToJsonElement(
+                    editableHomeKeys(
+                        Json.decodeFromJsonElement(input.getValue("keys")),
+                        Json.decodeFromJsonElement(input.getValue("preferences"))
+                    )
+                )
+                "editor-move-row" -> Json.encodeToJsonElement(
+                    moveHomeRow(
+                        Json.decodeFromJsonElement(input.getValue("order")),
+                        Json.decodeFromJsonElement(input.getValue("visible")),
+                        input.getValue("key").jsonPrimitive.content,
+                        input.getValue("delta").jsonPrimitive.content.toInt()
+                    )
+                )
+                "filter-presentation" -> {
+                    val filters = Json.decodeFromJsonElement<LibraryFilters>(input.getValue("filters"))
+                    buildJsonObject {
+                        put("keys", Json.encodeToJsonElement(filters.constraintKeys()))
+                        put("active", filters.active)
+                        put("empty", filteredEmptyLabel(input["collectionType"]?.jsonPrimitive?.content))
+                        input["remove"]?.jsonPrimitive?.content?.let { key ->
+                            put("remaining", Json.encodeToJsonElement(filters.withoutConstraint(key).constraintKeys()))
+                        }
+                    }
+                }
                 else -> error("Unknown operation")
             }
             assertEquals(case.getValue("expected"), actual, case.getValue("id").jsonPrimitive.content)
