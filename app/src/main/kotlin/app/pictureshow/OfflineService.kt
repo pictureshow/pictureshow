@@ -17,6 +17,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import android.os.Handler
@@ -184,7 +185,13 @@ internal fun offlineScheduleJob(context: Context, delayMs: Long): Boolean {
             scheduler.schedule(
                 JobInfo.Builder(OFFLINE_JOB, component)
                     .setUserInitiated(true)
-                    .setRequiredNetwork(NetworkRequest.Builder().build())
+                    // Builder defaults exclude VPNs. A private server may only be reachable through
+                    // the viewer's VPN, so allow that route just as JobInfo's standard requests do.
+                    .setRequiredNetwork(
+                        NetworkRequest.Builder()
+                            .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                            .build()
+                    )
                     .setPersisted(true)
                     .setBackoffCriteria(30_000, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
                     .build()

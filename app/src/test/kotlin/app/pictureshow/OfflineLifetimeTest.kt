@@ -53,6 +53,7 @@ class OfflineLifetimeTest {
         assertTrue(job.isPersisted)
         assertEquals(0L, job.minLatencyMillis)
         assertFalse(job.requiredNetwork!!.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+        assertFalse(job.requiredNetwork!!.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN))
         assertTrue(offlineScheduleJob(app, OFFLINE_JOB_WAITING_MS))
         assertSame(job, scheduler.allPendingJobs.single())
     }
