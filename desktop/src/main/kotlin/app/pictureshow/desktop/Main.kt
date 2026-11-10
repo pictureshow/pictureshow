@@ -36,6 +36,7 @@ import javax.swing.SwingUtilities
 
 fun main(args: Array<String>) {
     if (args.firstOrNull() == "window") { windowMain(args.drop(1).toTypedArray()); return }
+    if (args.firstOrNull() == "canvas") { canvasMain(args.drop(1).toTypedArray()); return }
     if (args.firstOrNull() == "layer") { layerMain(args.drop(1).toTypedArray()); return }
     require(args.size >= 2) { "Usage: <render|wid> <media-file> [evidence-dir] [--auto]" }
     val shape = args[0]
