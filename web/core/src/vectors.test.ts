@@ -54,6 +54,11 @@ const spec =
 // Frozen by the Android reference and owed by this runner: visible as todos, never as passes.
 const pendingPortSuites = new Set([
     "home-browse",
+    "frame-rate-match",
+    "playback-start",
+    "playback-settings",
+    "player-quality",
+    "settings-presentation",
     "music-catalog",
     "music-queue",
     "music-session",

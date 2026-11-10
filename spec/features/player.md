@@ -57,3 +57,22 @@ Report ordering (PLAY-20): build each body when its serialized command executes,
 Android release lifecycle evidence logs `lifecycle foreground=<bool> paused=<bool> positionMs=<n>`, READY includes paused/foreground, and actual playing transitions log `play-state playing=<bool> paused=<bool> foreground=<bool> positionMs=<n>`. Report outcomes append the immutable body field `paused=<bool|omitted>` (omitted for Stop); a response to a body sent before stopping can complete later, identified by its sequence and elapsed time.
 
 Caption default retention (PLAY-10): before applying the system caption language or ranking, retain `DefaultSubtitleStreamIndex=-1` as Off or a nonnegative default that identifies an actual subtitle stream in the selected source. A default pointing to an absent stream or to audio/video is unusable and permits caption fallback, as does null/omitted. Jellyfin does not identify whether a valid default was remembered or chosen by its own language/default rules, so retain both, even in a different/unknown language or for image/forced subtitles. This can retain a server-selected image track that requires burn-in; honoring the per-item selection takes precedence over the text-first fallback. System captions fill a missing selection, rather than replacing the server selection. On Jellyfin 12, remembered Off is -1 and a computed no-default is null/omitted; do not collapse those values before this decision. Do not add a competing per-device remembered-choice store: the server is the cross-client authority. Reopening without a new panel choice still has automatic report provenance under PLAY-20, and omits the subtitle index in reports; accepting the server default is not a fresh explicit viewer choice. `caption-index` vectors define retention and fallback for all platforms.
+
+## Playback settings integration (leg 131)
+
+PLAY-01/09 use SET-13/14/16/19/21 in each PlaybackInfo request and local output selection. A player Quality action
+renegotiates within the same viewing, preserving full-media position, paused state, tracks, and one Start/Stop pair.
+SET-18 applies only to the initial stored resume. PLAY-10/12 consume SET-15's renderer style and transformed cue group;
+image opacity is independent from text and original decoder bitmaps stay immutable. PLAY-17's early credits countdown
+is opt-in through SET-17; Keep scenes waits for genuine physical end, including scenes after an Outro marker.
+PLAY-27 keeps its trigger rules, but Always-burn subtitles offer Automatic/off as the fix, and a viewer-disabled
+HDR/Dolby Vision capability names that setting rather than blaming a missing device feature. Quality caps continue to
+explain conversion in Playback info (PLAY-26), without the device-limit notice. SET-20 rate matching is a platform
+request, never evidence of a display switch or successful HDR output.
+
+Playback settings presentation: Quality opens a choice menu; Auto applies the current network limit and shows that
+limit inside the menu. A manual bitrate is scoped to this viewing. Returning to Auto discards the prior estimate;
+fresh bandwidth samples can then reduce quality. A reduction is identified in the player controls with its effective
+bitrate and buffering reason. Downloads show fixed quality. Both native surfaces use these states (SET-14), preserving
+clock, pause and track intent across request changes. SET-16/21 choices keep PLAY-27 conversion causes and remedies
+accurate; changing presentation labels never changes compatibility facts.

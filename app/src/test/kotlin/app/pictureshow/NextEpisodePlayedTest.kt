@@ -94,7 +94,27 @@ class NextEpisodePlayedTest {
     }
 
     @Test fun countdownMarksLeftEpisodeOnceAfterStopAndRefreshesCatalog() {
+        launchCard(earlyNext = true)
+        enableDecoderCountdown()
+        compose.mainClock.advanceTimeBy(11_000)
+        waitUntil { next.isNotEmpty() }
+        assertCompletion()
+    }
+
+    @Test fun defaultKeepScenesCardWaitsForManualPlayInsteadOfCompletingAtCredits() {
         launchCard()
+        enableDecoderCountdown()
+        // This exceeds the 18 s remaining in the held source: only a real EOS may auto-advance.
+        compose.mainClock.advanceTimeBy(25_000)
+        compose.waitForIdle()
+        assertTrue(next.isEmpty())
+        assertTrue(service.actions.isEmpty())
+        click("next:play")
+        waitUntil { next.isNotEmpty() }
+        assertCompletion()
+    }
+
+    private fun enableDecoderCountdown() {
         compose.runOnIdle {
             // The held source has no decoder clock. Supply native READY/play intent at the output
             // boundary so this test exercises the screen's real countdown and completion wiring.
@@ -110,9 +130,6 @@ class NextEpisodePlayedTest {
             flow.value = readyPlayer
         }
         compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(11_000)
-        waitUntil { next.isNotEmpty() }
-        assertCompletion()
     }
 
     @Test fun cancelThenBackDoesNotMarkPlayed() {
@@ -145,12 +162,12 @@ class NextEpisodePlayedTest {
     private lateinit var catalog: CatalogSession
     private var stopGate: CompletableDeferred<Unit>? = null
     private fun click(tag: String) = compose.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
-    private fun launchCard() {
+    private fun launchCard(earlyNext: Boolean = false) {
         releaseLookup.complete(Unit)
         metadataGate.complete(Unit)
         service.detail = app.pictureshow.core.ClientResult.Success(episode)
         service.actionResult = app.pictureshow.core.ClientResult.Success(app.pictureshow.core.ItemUserData(played = true))
-        launch()
+        launch(earlyNext = earlyNext)
         waitUntil { compose.onAllNodes(androidx.compose.ui.test.hasTestTag("next:play")).fetchSemanticsNodes().isNotEmpty() }
     }
     private fun assertCompletion() {
@@ -165,11 +182,24 @@ class NextEpisodePlayedTest {
         }
     }
 
-    private fun launch(failFirst: Boolean = false, accessible: Boolean = false, noNext: Boolean = false, failAlways: Boolean = false) {
+    private fun launch(
+        failFirst: Boolean = false,
+        accessible: Boolean = false,
+        noNext: Boolean = false,
+        failAlways: Boolean = false,
+        earlyNext: Boolean = false
+    ) {
         val store = object : DataStore<Preferences> {
             override val data = MutableStateFlow(emptyPreferences())
             override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
                 transform(data.value).also { data.value = it }
+        }
+        if (earlyNext) {
+            kotlinx.coroutines.runBlocking {
+                PlaybackPreferencesStore(store).update {
+                    it.copy(tuning = it.tuning.copy(postCredits = app.pictureshow.core.playback.PostCredits.NextEpisode))
+                }
+            }
         }
         http = HttpClient(MockEngine) {
             engine {

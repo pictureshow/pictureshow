@@ -395,12 +395,16 @@ internal fun TouchPictureshow(
                 }
             }
             composable(
-                "player?item={item}&start={start}",
+                "player?item={item}&start={start}&savedResume={savedResume}",
                 arguments = listOf(
                     navArgument("item") { type = NavType.StringType },
                     navArgument("start") {
                         type = NavType.LongType
                         defaultValue = 0L
+                    },
+                    navArgument("savedResume") {
+                        type = NavType.BoolType
+                        defaultValue = false
                     }
                 )
             ) { entry ->
@@ -411,7 +415,10 @@ internal fun TouchPictureshow(
                     PlayerRestoration(item, onRestore = {
                         if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                     }) { onCurrentItem ->
-                        CompositionLocalProvider(LocalTouchPlayerCast provides TouchPlayerCast(cast, remote)) {
+                        CompositionLocalProvider(
+                            LocalTouchPlayerCast provides TouchPlayerCast(cast, remote),
+                            LocalPlaybackStartOrigin provides playbackStartOrigin(entry.arguments?.getBoolean("savedResume") == true)
+                        ) {
                             TouchPlayerScreen(
                                 account,
                                 item,
@@ -505,7 +512,7 @@ internal fun TouchPictureshow(
                                     CastPlayRequest(
                                         listOf(castPlayItem(account.server, playable)),
                                         startMs = startMs,
-                                        onThisDevice = { nav.navigate(playerRoute(playable, startMs)) }
+                                        onThisDevice = { nav.navigate(playerRoute(playable, !fromStart)) }
                                     )
                                 ) { remote.playNow(listOf(playable.id), 0L.takeIf { fromStart }) }
                             },

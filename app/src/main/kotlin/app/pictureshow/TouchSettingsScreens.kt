@@ -62,6 +62,7 @@ internal fun TouchSettings(
     onUpdateServices: (() -> Unit)? = null
 ) {
     val local = state.local
+    var advanced by rememberSaveable { mutableStateOf<String?>(null) }
     val device = touchDeviceName(LocalConfiguration.current.smallestScreenWidthDp)
     val configuration = state.configuration
     val ready = !state.loading && !state.saving && configuration != null
@@ -120,7 +121,10 @@ internal fun TouchSettings(
             TouchChoice("Subtitle background", local.subtitleBackground, SubtitleBackground.entries, { settingLabel(it.name) }) { value ->
                 onLocal { it.copy(subtitleBackground = value) }
             }
-            TouchHelper("System follows Android caption settings. Bitmap subtitles keep their authored appearance.")
+            TouchHelper("Default follows Android caption settings. Image subtitles keep their appearance from the file.")
+        }
+        TouchSection("More playback settings") {
+            playbackGroups.forEach { group -> TouchNavRow(group) { advanced = group } }
         }
         TouchSection("Skip segments") {
             SegmentType.entries.filter { it != SegmentType.Unknown }.forEach { type ->
@@ -151,7 +155,11 @@ internal fun TouchSettings(
                 ready
             ) { onServer("SubtitleLanguagePreference", it) }
             TouchChoice("Subtitle mode", configuration?.subtitleMode ?: "Default", subtitleModes, {
-                it
+                when (it) {
+                    "OnlyForced" -> "Only forced"
+                    "None" -> "Off"
+                    else -> it
+                }
             }, ready) { onServer("SubtitleMode", it) }
             TouchMessage(state.error)
             if (state.error != null) TouchAction("Retry", enabled = !state.saving, onClick = onRetry)
@@ -162,6 +170,7 @@ internal fun TouchSettings(
             TouchNavRow("About Pictureshow", onClick = onAbout)
         }
     }
+    advanced?.let { group -> AdvancedPlaybackSettings(group, local, true, onLocal, onClose = { advanced = null }) }
 }
 
 /** A heading owns the gap above it and the rows under it, so a row's spacing never comes from the page's column. */
@@ -237,22 +246,28 @@ internal fun TouchThisDevice(
 }
 
 private fun settingLabel(value: String): String = when (value) {
-    "System" -> "System (default)"
+    "System" -> "Default"
     "ExtraLarge" -> "Extra large"
     else -> value
 }
 
 @Composable
-private fun <T> TouchChoice(
+internal fun <T> TouchChoice(
     title: String,
     value: T,
     values: List<T>,
     label: (T) -> String,
     enabled: Boolean = true,
+    supporting: String? = null,
     onSelect: (T) -> Unit
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
-    TouchValueRow(title, label(value), enabled) { open = true }
+    Column {
+        TouchValueRow(title, label(value), enabled) { open = true }
+        supporting?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
     if (open) {
         val shortWindow = isShortTouchWindow()
         AlertDialog(

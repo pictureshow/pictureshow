@@ -234,10 +234,14 @@ class MainActivity : ComponentActivity() {
 
 internal fun itemRoute(item: MediaItem) = if (item.isMusic()) musicRoute(item) else "item?item=${Uri.encode(Json.encodeToString(item))}"
 
-internal fun playerRoute(item: MediaItem, resume: Boolean) =
-    playerRoute(item, app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume))
+internal fun playerRoute(item: MediaItem, resume: Boolean) = playerRoute(
+    item,
+    app.pictureshow.core.resumeStartPositionMs(item.userData.playbackPositionTicks, resume),
+    if (resume) PlaybackStartOrigin.SavedResume else PlaybackStartOrigin.ExplicitPosition
+)
 
-internal fun playerRoute(item: MediaItem, positionMs: Long) = "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs"
+internal fun playerRoute(item: MediaItem, positionMs: Long, startOrigin: PlaybackStartOrigin = PlaybackStartOrigin.ExplicitPosition) =
+    "player?item=${Uri.encode(Json.encodeToString(item))}&start=$positionMs&savedResume=${startOrigin == PlaybackStartOrigin.SavedResume}"
 
 /** Pictureshow's own navigation only: these keys go to this activity, never to the system. */
 internal fun remoteKeyCode(name: String): Int? = when (name) {
@@ -272,7 +276,7 @@ internal fun navigatePlaybackEntry(nav: NavHostController, entry: ResolvedPlayba
         launchSingleTop = true
     }
     nav.navigate(itemRoute(entry.item))
-    nav.navigate(playerRoute(entry.item, entry.positionMs))
+    nav.navigate(playerRoute(entry.item, entry.positionMs, entry.startOrigin))
 }
 
 /** Remove the player during recovery; reuse a matching detail or open the current auto-next item. */
@@ -970,12 +974,16 @@ internal fun Pictureshow(
             }
         }
         composable(
-            "player?item={item}&start={start}",
+            "player?item={item}&start={start}&savedResume={savedResume}",
             arguments = listOf(
                 navArgument("item") { type = NavType.StringType },
                 navArgument("start") {
                     type = NavType.LongType
                     defaultValue = 0L
+                },
+                navArgument("savedResume") {
+                    type = NavType.BoolType
+                    defaultValue = false
                 }
             )
         ) { entry ->
@@ -987,7 +995,11 @@ internal fun Pictureshow(
                 PlayerRestoration(item, onRestore = {
                     if (nav.currentBackStackEntry?.id == entry.id) recoverPlaybackEntry(nav, it)
                 }) { onCurrentItem ->
-                    PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        LocalPlaybackStartOrigin provides playbackStartOrigin(entry.arguments?.getBoolean("savedResume") == true)
+                    ) {
+                        PlayerScreen(account, item, entry.arguments?.getLong("start") ?: 0, catalog, onCurrentItem, onExit = exitPlayback)
+                    }
                 }
             }
         }

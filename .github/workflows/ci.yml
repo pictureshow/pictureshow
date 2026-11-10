@@ -28,3 +28,4 @@ jobs:
             **/build/test-results/**
             **/build/reports/tests/**
             app/build/outputs/apk/debug/*.apk
+            **/build/reports/lint-results*

@@ -39,6 +39,11 @@ one tick = 100 ns. Division truncates toward zero; do not round saved positions 
 | `catalog.json` | Home rows' endpoints, browse sort/filter/pagination/bounds, IDs freshness query, detail's batch user-data projection, watched/favorite mutations, five search categories, person items, encoding cleanup and report endpoints. |
 | `recovery.json` | Reduced-rate server-seek eligibility/clamping/URL rewrite, copied versus encoded audio, forced video-copy recovery and burn-in subtitle refusal; [RECOVERY.md](RECOVERY.md). |
 | `application.json` | Local settings decoding/validation/effective values, server configuration preservation, server-priority track selection, caption accessibility overrides and aliases, resume/final positions, segment safety/boundaries and next-episode adjacency/timing. |
+| `player-quality.json` | Explicit viewing quality choices, Auto/manual labels, Home/Remote/Metered automatic ceilings and truthful adaptive quality notices. |
+| `settings-presentation.json` | Viewer-facing playback settings labels and capability consequences. |
+| `playback-settings.json` | SET-13..21: network caps and IPv6 unique-local classification, adaptation guards and progressive active-read windows (excluding inter-read idle), subtitle style normalization and burn policy, audio/HDR profiles and request channels, credits/resume preferences, tolerant persistence and truthful conversion information. |
+| `frame-rate-match.json` | Same-resolution integer cadence selection, fractional timing tolerance, preserving known HDR support and refusing unknown frame rates. A selected mode is a request, not proof the display switched. |
+| `playback-start.json` | Rewind only initial saved resume, preserving exact explicit handoff positions and clamping at zero. |
 
 `ProfileEvaluator` is the existing Kotlin test model of the relevant Jellyfin direct-play conditions; it is not a
 production negotiation engine. `compatibility` runs the real `DeviceProfileBuilder`, then that reduced independent

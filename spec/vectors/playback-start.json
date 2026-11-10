@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "suite": "playback-start",
+  "cases": [
+    {
+      "id": "playback-start.saved",
+      "operation": "start-position",
+      "input": {
+        "positionMs": 90000,
+        "origin": "SavedResume",
+        "rewindSeconds": 30
+      },
+      "expected": 60000
+    },
+    {
+      "id": "playback-start.cast-clock",
+      "operation": "start-position",
+      "input": {
+        "positionMs": 90000,
+        "origin": "ExplicitPosition",
+        "rewindSeconds": 30
+      },
+      "expected": 90000
+    },
+    {
+      "id": "playback-start.remote-clock",
+      "operation": "start-position",
+      "input": {
+        "positionMs": 90000,
+        "origin": "ExplicitPosition",
+        "rewindSeconds": 30
+      },
+      "expected": 90000
+    },
+    {
+      "id": "playback-start.from-start",
+      "operation": "start-position",
+      "input": {
+        "positionMs": 0,
+        "origin": "ExplicitPosition",
+        "rewindSeconds": 30
+      },
+      "expected": 0
+    }
+  ]
+}
