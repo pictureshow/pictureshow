@@ -31,6 +31,7 @@ interface NativeLayer : Library {
     fun ps_receipt(surface: Pointer): String
     fun ps_sync(surface: Pointer)
     fun ps_fullscreen(surface: Pointer, enabled: Int)
+    fun ps_click(surface: Pointer, x: Int, y: Int)
     fun ps_destroy(surface: Pointer)
 }
 
@@ -49,7 +50,9 @@ fun layerMain(args: Array<String>) {
     val stopping=AtomicBoolean(false)
     var surface:Pointer?=null
     var tick:java.util.concurrent.ScheduledFuture<*>?=null
-    var pixelWidth=960; var pixelHeight=640
+    val pixels=AtomicReference(java.awt.Dimension(960,640))
+    val worker=AtomicReference<Thread?>(null)
+    var geometryListener:java.awt.event.ComponentListener?=null
     var overlayBounds:androidx.compose.ui.geometry.Rect?=null
     Thread { Thread.sleep((sustain+120L)*1000); Runtime.getRuntime().halt(3) }.apply {isDaemon=true}.start()
     application {
@@ -60,6 +63,7 @@ fun layerMain(args: Array<String>) {
             Thread {
                 var rc=code
                 try {
+                    worker.get()?.let { it.interrupt(); it.join(35000); check(!it.isAlive) { "Probe worker failed to stop" } }
                     tick?.cancel(false)
                     executor.submit { surface?.let(bridge::ps_destroy); surface=null }.get(30,TimeUnit.SECONDS)
                     executor.shutdown(); mpv.close()
@@ -71,6 +75,11 @@ fun layerMain(args: Array<String>) {
             }.start()
         }
         Window(onCloseRequest={stop()},state=state,title="Pictureshow native HDR surface",undecorated=true,transparent=true) {
+            fun toggleFullscreen() {
+                val enabled=state.placement!=WindowPlacement.Fullscreen
+                state.placement=if(enabled) WindowPlacement.Fullscreen else WindowPlacement.Floating
+                surface?.let { bridge.ps_fullscreen(it,if(enabled) 1 else 0) }
+            }
             MaterialTheme(colors=darkColors()) {
                 Box(Modifier.fillMaxSize()) {
                     Row(Modifier.align(Alignment.TopEnd).padding(18.dp).background(Color(0xE0174E72)).padding(8.dp)) {
@@ -79,7 +88,7 @@ fun layerMain(args: Array<String>) {
                     Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xDD141820)).padding(8.dp)) {
                         Button(onClick={mpv.command("cycle","pause")}) {Text("Pause / play")}
                         Spacer(Modifier.width(8.dp))
-                        Button(onClick={state.placement=if(state.placement==WindowPlacement.Fullscreen) WindowPlacement.Floating else WindowPlacement.Fullscreen}) {Text("Fullscreen")}
+                        Button(onClick={toggleFullscreen()}) {Text("Fullscreen")}
                         Spacer(Modifier.width(8.dp))
                         Button(onClick={stop()}) {Text("Close")}
                     }
@@ -93,17 +102,33 @@ fun layerMain(args: Array<String>) {
                         mpv.option("vo","libmpv")
                         // Render linear BT.2020 into a float target. 1.0 is the SDR reference white.
                         mpv.option("target-prim",if(Platform.isMac()) "bt.2020" else "bt.709"); mpv.option("target-trc","linear"); mpv.option("target-peak","1000")
+                        if(Platform.isWindows()) {
+                            val shader=File(out,"scrgb-reference.glsl")
+                            shader.writeText("//!HOOK OUTPUT\n//!BIND HOOKED\nvec4 hook() { vec4 c = HOOKED_tex(HOOKED_pos); return vec4(c.rgb * (203.0 / 80.0), c.a); }\n")
+                            mpv.option("fbo-format","rgba16f"); mpv.option("glsl-shaders",shader.absolutePath)
+                        }
                         mpv.initialize()
                         val view=Native.getWindowPointer(window)
                         executor.submit { surface=requireNotNull(bridge.ps_create(view,mpv.handle)) {"Native layer creation failed"} }.get(40,TimeUnit.SECONDS)
-                        fun sync() { SwingUtilities.invokeAndWait {
+                        fun sync() {
+                            val update=Runnable {
+                            if(stopping.get()) return@Runnable
                             val transform=window.graphicsConfiguration.defaultTransform
-                            pixelWidth=(window.width*transform.scaleX).toInt(); pixelHeight=(window.height*transform.scaleY).toInt()
+                            pixels.set(java.awt.Dimension((window.width*transform.scaleX).toInt(),(window.height*transform.scaleY).toInt()))
                             bridge.ps_sync(surface!!)
-                        } }
+                            }
+                            if(SwingUtilities.isEventDispatchThread()) update.run() else SwingUtilities.invokeAndWait(update)
+                        }
+                        SwingUtilities.invokeAndWait {
+                            geometryListener=object:java.awt.event.ComponentAdapter() {
+                                override fun componentMoved(e:java.awt.event.ComponentEvent) {sync()}
+                                override fun componentResized(e:java.awt.event.ComponentEvent) {sync()}
+                            }
+                            window.addComponentListener(geometryListener)
+                        }
                         sync()
                         tick=executor.scheduleWithFixedDelay({try {
-                            check(bridge.ps_frame(surface!!,pixelWidth,pixelHeight)>=0) {"Native frame failed"}
+                            val size=pixels.get(); check(bridge.ps_frame(surface!!,size.width,size.height)>=0) {"Native frame failed"}
                         }catch(e:Throwable){failure.compareAndSet(null,e); tick?.cancel(false)}},0,1,TimeUnit.MILLISECONDS)
                         mpv.command("loadfile",media)
                         Thread.sleep(4500)
@@ -122,6 +147,11 @@ fun layerMain(args: Array<String>) {
                             Robot().apply { mouseMove(origin.x+(b.center.x/d.scaleX).toInt(),origin.y+(b.center.y/d.scaleY).toInt()); mousePress(InputEvent.BUTTON1_DOWN_MASK); mouseRelease(InputEvent.BUTTON1_DOWN_MASK) }
                         }}
                         stage("02-global-click")
+                        if(clicks==0 && Platform.isMac()) {
+                            overlayBounds?.let {b -> val d=window.graphicsConfiguration.defaultTransform
+                                bridge.ps_click(surface!!,(b.center.x/d.scaleX).toInt(),(b.center.y/d.scaleY).toInt()) }
+                            stage("02-appkit-click")
+                        }
                         if(clicks==0) {
                             SwingUtilities.invokeAndWait {overlayBounds?.let { b ->
                                 val d=window.graphicsConfiguration.defaultTransform; val x=(b.center.x/d.scaleX).toInt(); val y=(b.center.y/d.scaleY).toInt()
@@ -135,27 +165,37 @@ fun layerMain(args: Array<String>) {
                         mpv.set("pause","no")
                         SwingUtilities.invokeAndWait {state.size=androidx.compose.ui.unit.DpSize(740.dp,500.dp)}
                         stage("03-resize")
-                        SwingUtilities.invokeAndWait {state.placement=WindowPlacement.Fullscreen; bridge.ps_fullscreen(surface!!,1)}
+                        SwingUtilities.invokeAndWait {toggleFullscreen()}
                         Thread.sleep(2500); stage("04-fullscreen")
-                        SwingUtilities.invokeAndWait {state.placement=WindowPlacement.Floating; bridge.ps_fullscreen(surface!!,0)}
+                        SwingUtilities.invokeAndWait {toggleFullscreen()}
                         Thread.sleep(2000); stage("05-restored")
                         val tracks=mpv.get("track-list/count")!!.toInt()
                         val subtitles=(0 until tracks).filter {mpv.get("track-list/$it/type")=="sub"}
+                        if(sustain==0) check(subtitles.size==3) {"Expected SRT, ASS and PGS tracks"}
                         for((n,track) in subtitles.withIndex()) {
                             mpv.command("loadfile",media); Thread.sleep(500)
                             mpv.set("sid",mpv.get("track-list/$track/id")!!); mpv.set("pause","no")
                             stage("06-sub-${n+1}")
+                            check(mpv.get("track-list/$track/selected")=="yes") {"Subtitle did not select"}
                         }
                         if(sustain>0) {
-                            mpv.set("pause","no"); stage("07-sustain-start")
+                            mpv.set("loop-file","no"); mpv.command("loadfile",media); Thread.sleep(1000)
+                            mpv.command("seek","0","absolute+exact"); mpv.set("pause","no"); stage("07-sustain-start")
+                            val startPos=mpv.get("time-pos")!!.toDouble()
+                            val progress=File(out,"sustain-progress.tsv").apply {writeText("elapsed\ttime-pos\tframe-drops\tdecoder-drops\n")}
                             val started=System.nanoTime()
-                            repeat(sustain) {Thread.sleep(1000); failure.get()?.let{throw it}}
+                            repeat(sustain) {n -> Thread.sleep(1000); failure.get()?.let{throw it}
+                                progress.appendText("${n+1}\t${mpv.get("time-pos")}\t${mpv.get("frame-drop-count")}\t${mpv.get("decoder-frame-drop-count")}\n")
+                            }
+                            check(mpv.get("time-pos")!!.toDouble()-startPos>sustain-4) {"Playback did not advance in real time"}
+                            check(mpv.get("eof-reached")!="yes") {"Fixture ended during sustained playback"}
                             File(out,"sustained-seconds.txt").writeText(((System.nanoTime()-started)/1e9).toString())
                             stage("08-sustain-end")
                         }
                         stop()
-                    } catch(e:Throwable) {failure.compareAndSet(null,e); e.printStackTrace(); stop(2)}
-                }.start()
+                    } catch(e:Throwable) {if(!stopping.get()) {failure.compareAndSet(null,e); e.printStackTrace(); stop(2)}}
+                    finally { SwingUtilities.invokeAndWait {geometryListener?.let(window::removeComponentListener)} }
+                }.also {worker.set(it);it.start()}
             }
         }
     }

@@ -11,6 +11,7 @@
 #include <string>
 #include <sstream>
 #include <cstdlib>
+#include <atomic>
 struct Layer {
     HWND overlay=nullptr, video=nullptr;
     HMODULE lib=nullptr;
@@ -22,7 +23,7 @@ struct Layer {
     decltype(&mpv_render_context_render) draw;
     decltype(&mpv_render_context_free) destroy;
     decltype(&mpv_render_context_report_swap) report;
-    int w=0,h=0; unsigned long frames=0;
+    int w=0,h=0; std::atomic<unsigned long> frames{0};
     UINT support=0; HRESULT color=E_FAIL,metadata=E_FAIL;
     bool warp=false;
     std::string receipt;
@@ -92,7 +93,7 @@ API const char *ps_receipt(Layer *s) {
     IDXGIOutput *output=nullptr;DXGI_OUTPUT_DESC1 od={};
     if(SUCCEEDED(s->swap->GetContainingOutput(&output))){IDXGIOutput6 *o6=nullptr;if(SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6),(void**)&o6))){o6->GetDesc1(&od);o6->Release();}output->Release();}
     auto rect=[](RECT a){std::ostringstream t;t<<"["<<a.left<<","<<a.top<<","<<a.right<<","<<a.bottom<<"]";return t.str();};
-    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames<<",\"perFrameCPUReadbacks\":0}";
+    std::ostringstream o;o<<"{\"format\":\"R16G16B16A16_FLOAT\",\"colorSpace\":\"RGB_FULL_G10_NONE_P709\",\"SetColorSpace1HRESULT\":"<<s->color<<",\"CheckColorSpaceSupport\":"<<s->support<<",\"metadataType\":\"NONE (scRGB)\",\"SetHDRMetaDataHRESULT\":"<<s->metadata<<",\"warp\":"<<(s->warp?"true":"false")<<",\"outputColorSpace\":"<<od.ColorSpace<<",\"outputMaxLuminance\":"<<od.MaxLuminance<<",\"windowBounds\":"<<rect(r)<<",\"videoBounds\":"<<rect(vr)<<",\"monitorBounds\":"<<rect(mi.rcMonitor)<<",\"borderless\":"<<((GetWindowLongPtr(s->overlay,GWL_STYLE)&WS_CAPTION)?"false":"true")<<",\"submittedFrames\":"<<s->frames.load()<<",\"perFrameCPUReadbacks\":0}";
     s->receipt=o.str();return s->receipt.c_str();
 }
 API void ps_fullscreen(Layer *,int) {}

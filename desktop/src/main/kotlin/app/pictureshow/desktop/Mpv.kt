@@ -85,8 +85,8 @@ class Mpv(val out: File) : AutoCloseable {
             "video-params/gamma", "video-out-params/primaries", "video-out-params/gamma",
             "video-params/w", "video-params/h", "audio-codec-name", "audio-params/channels",
             "audio-params/channel-count", "audio-out-params/channels", "audio-out-params/channel-count",
-            "audio-device", "sid", "sub-codec", "sub-text", "time-pos", "vo-configured",
-            "estimated-vf-fps", "container-fps", "vo-passes", "video-sync", "mistimed-frame-count", "vo-delayed-frame-count", "frame-drop-count", "decoder-frame-drop-count", "display-hidpi-scale")
+            "audio-device", "sid", "sub-codec", "sub-text", "time-pos", "vo-configured", "eof-reached",
+            "estimated-vf-fps", "container-fps", "video-sync", "mistimed-frame-count", "vo-delayed-frame-count", "frame-drop-count", "decoder-frame-drop-count", "display-hidpi-scale")
         fun quote(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\""
         val data = keys.associateWith(::get).toMutableMap()
         val count = get("track-list/count")?.toIntOrNull() ?: 0
