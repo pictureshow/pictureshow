@@ -116,16 +116,21 @@ class CastStartupTest {
         val info = context.packageManager.getPackageInfo(context.packageName, flags)
         assertEquals(emptyList(), info.services.orEmpty().map { it.name }.filter { "gms.cast" in it })
         assertEquals(emptyList(), info.receivers.orEmpty().map { it.name }.filter { "gms.cast" in it })
-        // Foreground service rights exist for music alone; Cast still gets no service to use them with.
+        // Foreground service rights exist for downloads and music alone; Cast still gets no service to use them with.
         assertEquals(
-            listOf(MusicPlaybackService::class.java.name to android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK),
-            info.services.orEmpty().filter { it.foregroundServiceType != 0 }.map { it.name to it.foregroundServiceType }
+            setOf(
+                OfflineTransferService::class.java.name to android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                MusicPlaybackService::class.java.name to android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            ),
+            info.services.orEmpty().filter { it.foregroundServiceType != 0 }.map { it.name to it.foregroundServiceType }.toSet()
         )
         assertEquals(false, info.services.orEmpty().single { it.name == MusicPlaybackService::class.java.name }.exported)
+        assertEquals(false, info.services.orEmpty().single { it.name == OfflineTransferService::class.java.name }.exported)
         assertEquals(
-            listOf("android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"),
-            info.requestedPermissions.orEmpty().filter { it.startsWith("android.permission.FOREGROUND_SERVICE_") }
+            setOf("android.permission.FOREGROUND_SERVICE_DATA_SYNC", "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"),
+            info.requestedPermissions.orEmpty().filter { it.startsWith("android.permission.FOREGROUND_SERVICE_") }.toSet()
         )
+        assertEquals(1, info.requestedPermissions.orEmpty().count { it == "android.permission.FOREGROUND_SERVICE" })
     }
 
     @Test

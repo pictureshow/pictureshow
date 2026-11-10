@@ -1,0 +1,960 @@
+{
+  "schemaVersion": 1,
+  "suite": "offline-next",
+  "cases": [
+    {
+      "id": "offline-next.server-names-a-download",
+      "note": "The server's next is downloaded: it plays.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:original",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": true,
+            "serverNext": "e2"
+          },
+          "expected": {
+            "entry": "e2:original"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.server-names-the-next-season",
+      "note": "A season's end follows with a server's answer.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "s2e1:original",
+                "itemId": "s2e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "s2e1",
+                  "seriesId": "show",
+                  "seasonNumber": 2,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": true,
+            "serverNext": "s2e1"
+          },
+          "expected": {
+            "entry": "s2e1:original"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.server-names-what-isnt-downloaded",
+      "note": "Never skip ahead past an episode that isn't here.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e3:original",
+                "itemId": "e3",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e3",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 3
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": true,
+            "serverNext": "e2"
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.server-says-nothing-follows",
+      "note": "The server's no holds over a higher number here.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:original",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": true
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.server-names-one-still-downloading",
+      "note": "Only a ready download plays.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:original",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "transferring"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": true,
+            "serverNext": "e2"
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.no-answer-next-number",
+      "note": "No server: the next number in the season.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:original",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": "e2:original"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.no-answer-a-gap-stops",
+      "note": "No server: a gap stops rather than skips.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e3:original",
+                "itemId": "e3",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e3",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 3
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.no-answer-season-end-stops",
+      "note": "No server: the manifest doesn't know a season's length.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "s2e1:original",
+                "itemId": "s2e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "s2e1",
+                  "seriesId": "show",
+                  "seasonNumber": 2,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.no-answer-other-series",
+      "note": "Same number, different series.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "x2:original",
+                "itemId": "x2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "x2",
+                  "seriesId": "other",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.no-answer-other-season",
+      "note": "Same number, later season.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "s2e2:original",
+                "itemId": "s2e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "s2e2",
+                  "seriesId": "show",
+                  "seasonNumber": 2,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.no-answer-not-ready",
+      "note": "Only a ready download plays.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:original",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "failed"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.a-film-has-no-next",
+      "note": "A film stops, whatever the server says.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "f:original",
+                "itemId": "f",
+                "kind": "movie",
+                "preset": "original",
+                "labels": {
+                  "title": "Film"
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "f:original",
+              "itemId": "f",
+              "kind": "movie",
+              "preset": "original",
+              "labels": {
+                "title": "Film"
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": true,
+            "serverNext": "e1"
+          },
+          "expected": {
+            "entry": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.same-preset-first",
+      "note": "Two downloads of the next episode: the viewer's preset first.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:video720",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "video720",
+                "createdSequence": 1,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:original",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 2,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": false
+          },
+          "expected": {
+            "entry": "e2:original"
+          }
+        }
+      ]
+    },
+    {
+      "id": "offline-next.oldest-without-the-preset",
+      "note": "Neither matches: the older download.",
+      "operation": "next-episode",
+      "state": {},
+      "steps": [
+        {
+          "event": {
+            "entries": [
+              {
+                "id": "e1:original",
+                "itemId": "e1",
+                "kind": "episode",
+                "preset": "original",
+                "createdSequence": 0,
+                "labels": {
+                  "title": "e1",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 1
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:video720",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "video720",
+                "createdSequence": 2,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              },
+              {
+                "id": "e2:video1080",
+                "itemId": "e2",
+                "kind": "episode",
+                "preset": "video1080",
+                "createdSequence": 1,
+                "labels": {
+                  "title": "e2",
+                  "seriesId": "show",
+                  "seasonNumber": 1,
+                  "episodeNumber": 2
+                },
+                "job": {
+                  "phase": "ready"
+                }
+              }
+            ],
+            "current": {
+              "id": "e1:original",
+              "itemId": "e1",
+              "kind": "episode",
+              "preset": "original",
+              "createdSequence": 0,
+              "labels": {
+                "title": "e1",
+                "seriesId": "show",
+                "seasonNumber": 1,
+                "episodeNumber": 1
+              },
+              "job": {
+                "phase": "ready"
+              }
+            },
+            "serverAnswered": true,
+            "serverNext": "e2"
+          },
+          "expected": {
+            "entry": "e2:video1080"
+          }
+        }
+      ]
+    }
+  ]
+}

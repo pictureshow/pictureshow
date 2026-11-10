@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import app.pictureshow.core.Account
 import app.pictureshow.core.MediaItem
+import java.util.WeakHashMap
 
 /** Touch owns presentation only; the same host as TV owns every playback transition. */
 @Composable
@@ -47,6 +48,40 @@ internal fun Context.playerActivity(): Activity? = when (this) {
     else -> null
 }
 
+/**
+ * What players on screen hold of the window. Two overlap while one route replaces another (the next downloaded episode,
+ * a download moving to a stream): the first takes what to give back, and only the last gives it. Each keeping its own
+ * copy made the second one's "what to give back" the first one's lock, so the screen stayed landscape after playback.
+ */
+internal class TouchPlayerWindowHold<T : Any> {
+    private var holders = 0
+    private var saved: T? = null
+
+    fun acquire(read: () -> T, take: () -> Unit) {
+        if (holders++ == 0) {
+            saved = read()
+            take()
+        }
+    }
+
+    fun release(restore: (T) -> Unit) {
+        if (--holders == 0) {
+            saved?.let(restore)
+            saved = null
+        }
+    }
+}
+
+private class TouchPlayerBars(val behavior: Int?, val status: Boolean, val navigation: Boolean)
+
+private class TouchPlayerWindowHolds {
+    val orientation = TouchPlayerWindowHold<Int>()
+    val bars = TouchPlayerWindowHold<TouchPlayerBars>()
+}
+
+/** One per activity, touched only from composition's main thread. */
+private val touchPlayerWindowHolds = WeakHashMap<Activity, TouchPlayerWindowHolds>()
+
 @Composable
 internal fun TouchPlayerWindow() {
     val activity = LocalContext.current.playerActivity()
@@ -56,23 +91,32 @@ internal fun TouchPlayerWindow() {
     val locksOrientation = touchPlayerLocksOrientation(configuration.smallestScreenWidthDp)
     // What the player last asked for, the viewer's toggle included, so folding again takes up that rather than landscape.
     val request = remember { intArrayOf(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE) }
+    val holds = activity?.let { touchPlayerWindowHolds.getOrPut(it) { TouchPlayerWindowHolds() } }
     DisposableEffect(activity, locksOrientation) {
-        val orientation = activity?.requestedOrientation.takeIf { locksOrientation }
-        if (locksOrientation) activity?.requestedOrientation = request[0]
+        val hold = holds?.orientation?.takeIf { locksOrientation }
+        // Always back to no request, never what's there now. Nothing else in the app asks for a rotation, and what's there can be this
+        // player's own lock: Android keeps it across a process death, and the restored player would hand it back as if it came first.
+        if (activity != null) hold?.acquire({ ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }) { activity.requestedOrientation = request[0] }
         onDispose {
-            if (orientation != null) {
-                activity?.let { request[0] = it.requestedOrientation }
-                activity?.requestedOrientation = orientation
+            if (activity != null) {
+                hold?.release { before ->
+                    request[0] = activity.requestedOrientation
+                    activity.requestedOrientation = before
+                }
             }
         }
     }
     DisposableEffect(activity) {
         val window = activity?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
-        val behavior = controller?.systemBarsBehavior
-        val bars = window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
-        val statusVisible = bars?.isVisible(WindowInsetsCompat.Type.statusBars()) ?: true
-        val navigationVisible = bars?.isVisible(WindowInsetsCompat.Type.navigationBars()) ?: true
+        holds?.bars?.acquire({
+            val bars = window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
+            TouchPlayerBars(
+                controller?.systemBarsBehavior,
+                bars?.isVisible(WindowInsetsCompat.Type.statusBars()) ?: true,
+                bars?.isVisible(WindowInsetsCompat.Type.navigationBars()) ?: true
+            )
+        }) {}
         controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller?.hide(WindowInsetsCompat.Type.systemBars())
         // Dialogs and background/foreground transitions can reveal bars on the same activity.
@@ -82,20 +126,22 @@ internal fun TouchPlayerWindow() {
         window?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener(focusListener)
         onDispose {
             window?.decorView?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focusListener)
-            if (behavior != null) controller?.systemBarsBehavior = behavior
-            if (statusVisible) {
-                controller?.show(
-                    WindowInsetsCompat.Type.statusBars()
-                )
-            } else {
-                controller?.hide(WindowInsetsCompat.Type.statusBars())
-            }
-            if (navigationVisible) {
-                controller?.show(
-                    WindowInsetsCompat.Type.navigationBars()
-                )
-            } else {
-                controller?.hide(WindowInsetsCompat.Type.navigationBars())
+            holds?.bars?.release { before ->
+                before.behavior?.let { controller?.systemBarsBehavior = it }
+                if (before.status) {
+                    controller?.show(
+                        WindowInsetsCompat.Type.statusBars()
+                    )
+                } else {
+                    controller?.hide(WindowInsetsCompat.Type.statusBars())
+                }
+                if (before.navigation) {
+                    controller?.show(
+                        WindowInsetsCompat.Type.navigationBars()
+                    )
+                } else {
+                    controller?.hide(WindowInsetsCompat.Type.navigationBars())
+                }
             }
         }
     }

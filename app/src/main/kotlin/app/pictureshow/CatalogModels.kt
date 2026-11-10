@@ -285,8 +285,13 @@ data class CatalogHomeState(
     val libraries: List<MediaItem> = emptyList(),
     val preferenceStatus: String? = null,
     val saving: Boolean = false,
-    val preferencesReady: Boolean = false
+    val preferencesReady: Boolean = false,
+    /** The load failed because the server couldn't be reached, as opposed to the server saying no. */
+    val unreachable: Boolean = false
 )
+
+internal fun catalogUnreachable(results: List<ClientResult<*>>): Boolean =
+    results.any { it is ClientResult.Failure && it.error.kind == app.pictureshow.core.ErrorKind.NETWORK }
 
 class CatalogHomeViewModel(private val account: Account, private val session: CatalogSession) : ViewModel() {
     private val mutableState = MutableStateFlow(CatalogHomeState())
@@ -322,7 +327,7 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
     fun reload() {
         job?.cancel()
         job = viewModelScope.launch {
-            mutableState.update { it.copy(loading = it.rows.isEmpty(), error = null) }
+            mutableState.update { it.copy(loading = it.rows.isEmpty(), error = null, unreachable = false) }
             coroutineScope {
                 val preferences = session.homePreferences.read(account)
                 val configuration = (session.service as? app.pictureshow.core.UserConfigurationService)?.configuration(account)
@@ -381,7 +386,8 @@ class CatalogHomeViewModel(private val account: Account, private val session: Ca
                         preferences = preferences.preferences,
                         preferencesReady = true,
                         preferenceStatus = preferences.status ?: it.preferenceStatus,
-                        error = failures.filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message
+                        error = failures.filterIsInstance<ClientResult.Failure>().firstOrNull()?.error?.message,
+                        unreachable = catalogUnreachable(failures)
                     )
                 }
             }
