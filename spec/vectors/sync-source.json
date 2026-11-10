@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "suite": "sync-source",
+  "cases": [
+    {
+      "id": "positive-duration-one-tick",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "1",
+        "seekable": true,
+        "live": false,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": true
+    },
+    {
+      "id": "positive-duration-long-max",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "9223372036854775807",
+        "seekable": true,
+        "live": false,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": true
+    },
+    {
+      "id": "unknown-zero-duration",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "0",
+        "seekable": true,
+        "live": false,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "negative-duration",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "-1",
+        "seekable": true,
+        "live": false,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "negative-duration-long-min",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "-9223372036854775808",
+        "seekable": true,
+        "live": false,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "finite-seekable-server-vod-or-audio",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": false,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": true
+    },
+    {
+      "id": "finite-looking-live",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": true,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "finite-looking-infinite",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": false,
+        "infinite": true,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "finite-looking-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": false,
+        "infinite": false,
+        "offline": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-and-infinite",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": true,
+        "infinite": true,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "live-and-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": true,
+        "infinite": false,
+        "offline": true
+      },
+      "expected": false
+    },
+    {
+      "id": "infinite-and-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": false,
+        "infinite": true,
+        "offline": true
+      },
+      "expected": false
+    },
+    {
+      "id": "live-infinite-and-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": true,
+        "live": true,
+        "infinite": true,
+        "offline": true
+      },
+      "expected": false
+    },
+    {
+      "id": "finite-nonseekable",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": false,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "nonseekable-live",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": true,
+        "infinite": false,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "nonseekable-infinite",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": false,
+        "infinite": true,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "nonseekable-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": false,
+        "infinite": false,
+        "offline": true
+      },
+      "expected": false
+    },
+    {
+      "id": "nonseekable-live-infinite",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": true,
+        "infinite": true,
+        "offline": false
+      },
+      "expected": false
+    },
+    {
+      "id": "nonseekable-live-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": true,
+        "infinite": false,
+        "offline": true
+      },
+      "expected": false
+    },
+    {
+      "id": "nonseekable-infinite-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": false,
+        "infinite": true,
+        "offline": true
+      },
+      "expected": false
+    },
+    {
+      "id": "nonseekable-live-infinite-offline",
+      "op": "sourceEligible",
+      "input": {
+        "durationTicks": "100000000",
+        "seekable": false,
+        "live": true,
+        "infinite": true,
+        "offline": true
+      },
+      "expected": false
+    }
+  ]
+}

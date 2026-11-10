@@ -79,6 +79,7 @@ import app.pictureshow.core.sync.syncRemove
 import app.pictureshow.core.sync.syncRepeat
 import app.pictureshow.core.sync.syncSelect
 import app.pictureshow.core.sync.syncShuffle
+import app.pictureshow.core.sync.syncSourceEligible
 import com.google.common.util.concurrent.ListenableFuture
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
@@ -1099,10 +1100,13 @@ internal class MusicHost(
                 ready = available && position != null,
                 buffering = !matches || running?.playbackState == Player.STATE_BUFFERING || !unsuppressed,
                 playing = matches && running?.isPlaying == true,
-                seekable = matches &&
-                    running?.isCurrentMediaItemSeekable == true &&
-                    duration > 0 &&
-                    preparedTrack?.decision?.mediaSource?.liveStreamId == null,
+                seekable = syncSourceEligible(
+                    duration,
+                    matches && running?.isCurrentMediaItemSeekable == true,
+                    preparedTrack?.decision?.mediaSource?.liveStreamId != null,
+                    preparedTrack?.decision?.mediaSource?.isInfiniteStream == true,
+                    offline = false
+                ),
                 // Exact encoded-output rates have not been qualified. Use the required bounded seek fallback.
                 rateSupported = false
             )

@@ -20,6 +20,7 @@ import androidx.media3.common.Player
 import app.pictureshow.core.Account
 import app.pictureshow.core.SegmentMode
 import app.pictureshow.core.SegmentType
+import app.pictureshow.core.sync.syncSourceEligible
 import org.koin.compose.koinInject
 
 /** Scope and navigation are shared by the phone and TV shells; item lookup always uses the participant's viewer. */
@@ -135,7 +136,13 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
                     p?.playbackState == Player.STATE_READY && host.error == null && !host.state.preparing,
                     p?.playbackState == Player.STATE_BUFFERING,
                     p?.isPlaying == true,
-                    duration > 0 && host.item.type != "TvChannel" && d?.mediaSource?.liveStreamId == null,
+                    syncSourceEligible(
+                        duration * 10_000,
+                        p?.isCurrentMediaItemSeekable == true,
+                        host.item.type == "TvChannel" || d?.mediaSource?.liveStreamId != null,
+                        d?.mediaSource?.isInfiniteStream == true,
+                        offline = false
+                    ),
                     // Media3's generic speed command does not advertise these exact rates for encoded output.
                     // Until separately qualified, use the required bounded seek fallback.
                     rateSupported = false
@@ -159,7 +166,9 @@ internal fun SyncPlaybackBinding(host: PlaybackHostState) {
         host.output.syncParticipating = { sync.participating }
         sync.bindRenderer(token, bridge)
         val expected = sync.membership.queue?.current
-        if (sync.participating && sync.membership.group != null && expected?.itemId != host.item.id) {
+        val source = host.state.decision?.mediaSource
+        val knownUnsupported = host.item.type == "TvChannel" || source?.liveStreamId != null || source?.isInfiniteStream == true
+        if (sync.participating && sync.membership.group != null && expected?.itemId != host.item.id && !knownUnsupported) {
             sync.queueRequest(app.pictureshow.core.sync.syncNewQueue(listOf(host.item.id), startPositionTicks = host.startMs * 10_000))
         }
         onDispose {

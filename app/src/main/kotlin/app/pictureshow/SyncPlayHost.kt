@@ -532,6 +532,10 @@ internal class SyncPlayHost(
     internal fun tick() {
         val output = renderer ?: return
         val r = output.snapshot()
+        if (participating && r.ready && !r.seekable) {
+            output.apply(playing = false)
+            note("Watch together is unavailable for this source. Leave the group to play it separately.")
+        }
         val current = membership.queue?.current ?: return
         if (membership.phase == "Idle") return
         if (!membership.hasSnapshot || r.itemId != current.itemId) return

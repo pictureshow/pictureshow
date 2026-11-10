@@ -72,6 +72,7 @@ const pendingPortSuites = new Set([
     "sync-drift",
     "sync-state",
     "sync-queue",
+    "sync-source",
 ]);
 const files = readdirSync(spec + "/vectors", { recursive: true })
     .filter((p) => String(p).endsWith(".json"))

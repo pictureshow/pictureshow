@@ -148,3 +148,7 @@ private fun subtract(a: Long, b: Long): Long? = if ((b > 0 && a < Long.MIN_VALUE
 
 private fun multiply(value: Long, positiveFactor: Long): Long? =
     if (value > Long.MAX_VALUE / positiveFactor || value < Long.MIN_VALUE / positiveFactor) null else value * positiveFactor
+
+/** A common group timeline requires finite, seekable server VOD; local copies have no shared server session. */
+fun syncSourceEligible(durationTicks: Long, seekable: Boolean, live: Boolean, infinite: Boolean, offline: Boolean): Boolean =
+    durationTicks > 0 && seekable && !live && !infinite && !offline

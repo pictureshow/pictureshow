@@ -745,4 +745,51 @@ class SyncPlayHostTest {
         assertEquals(rejoined, rig.host.membership)
         assertFalse(rig.host.state.value.ignoreWait)
     }
+
+    @Test fun aReadyNonseekableSourceStaysPausedAndBuffersOnceEvenAfterGroupUnpause() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.renderer.value = rig.renderer.value.copy(ready = true, buffering = false, seekable = false, playing = true)
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.renderer.value.playing)
+        rig.renderer.applied.clear()
+        rig.host.receive(rig.command("Unpause"))
+        runCurrent()
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.renderer.value.playing)
+        assertFalse(rig.renderer.applied.any { it.playing == true })
+        val buffering = rig.sent.filter { it.second.operation == "Buffering" }
+        assertEquals(1, buffering.size)
+        assertEquals(JsonPrimitive("entry-a"), buffering.single().second.body!!["PlaylistItemId"])
+        assertFalse(rig.operations().contains("Ready"))
+        assertTrue(rig.host.state.value.status.contains("unavailable", ignoreCase = true))
+        assertTrue(rig.host.state.value.status.contains("Leave", ignoreCase = true))
+        assertTrue(rig.host.state.value.status.contains("separately", ignoreCase = true))
+    }
+
+    @Test fun aReadyNonseekableMismatchedSourceIsPausedWithAnUnavailableExplanation() = runTest {
+        val rig = Rig(this)
+        rig.join()
+        rig.snapshot()
+        rig.sent.clear()
+        rig.renderer.value = rig.renderer.value.copy(
+            itemId = "different-source",
+            ready = true,
+            buffering = false,
+            seekable = false,
+            playing = true
+        )
+        rig.host.tick()
+        runCurrent()
+        assertFalse(rig.renderer.value.playing)
+        assertTrue(rig.host.participating)
+        assertFalse(rig.operations().contains("Ready"))
+        assertTrue(rig.host.state.value.status.contains("unavailable", ignoreCase = true))
+        assertTrue(rig.host.state.value.status.contains("Leave", ignoreCase = true))
+        assertTrue(rig.host.state.value.status.contains("separately", ignoreCase = true))
+    }
 }
