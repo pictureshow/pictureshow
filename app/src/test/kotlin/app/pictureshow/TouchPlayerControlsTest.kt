@@ -1853,6 +1853,25 @@ class TouchPlayerControlsTest {
         CastSenderHost::class.java.getDeclaredField("mutable").apply { isAccessible = true }.get(sender)
             as kotlinx.coroutines.flow.MutableStateFlow<CastUi>
 
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w780dp-h360dp-land-xxhdpi")
+    @Test
+    fun centeredTransportLeavesNextEpisodeActionsUncoveredOnAShortPhone() {
+        launch(paused = true)
+        creditsCard()
+        val card = bounds("next:card")
+        listOf("touch:back10", "touch:toggle", "touch:forward10").map(::bounds).forEach { button ->
+            assertTrue(
+                button.right <= card.left || button.left >= card.right || button.bottom <= card.top || button.top >= card.bottom,
+                "transport and next-episode targets stay separate: $button $card"
+            )
+            assertInsideTheWindow(button)
+        }
+        compose.onNodeWithTag("next:cancel").performClick()
+        settled()
+        assertIconLayout()
+    }
+
     @Test fun overflowHoldsTheCreditsCountdownAndBackOnlyClosesTheMenu() {
         var advances = 0
         launch(onNext = { advances++ })

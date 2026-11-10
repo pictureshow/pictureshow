@@ -91,7 +91,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -254,6 +253,8 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     var noticeBounds by remember { mutableStateOf<Rect?>(null) }
     var actionsLeft by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     var actionsHeight by remember { mutableIntStateOf(0) }
+    var actionsBounds by remember { mutableStateOf<Rect?>(null) }
+    var playerLeft by remember { mutableIntStateOf(0) }
     // A font change now arrives in place, and a gap held from the old size would be a guess at the new one.
     var heldNoticeGap by remember(density.fontScale) { mutableStateOf(0.dp) }
     var playerTop by remember { mutableStateOf(0) }
@@ -285,6 +286,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
     BoxWithConstraints(
         Modifier.fillMaxSize().background(Color.Black).testTag("touch:player").onGloballyPositioned {
             playerTop = it.positionInRoot().y.toInt()
+            playerLeft = it.positionInRoot().x.toInt()
         }
     ) {
         ContentFrame(host.player, Modifier.fillMaxSize())
@@ -417,12 +419,19 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                 constraints.maxHeight,
                 host.player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN
             )
-            val availableBottom = minOf(frame.bottom, constraints.maxHeight - controlsHeight)
-            val transportCenter = (frame.top + availableBottom.coerceAtLeast(frame.top)) / 2
+            val transportOffset = touchTransportPlacement(
+                constraints.maxWidth,
+                constraints.maxHeight,
+                controlsHeight,
+                Rect(frame.left.toFloat(), frame.top.toFloat(), frame.right.toFloat(), frame.bottom.toFloat()),
+                listOfNotNull(noticeBounds, actionsBounds?.takeIf { actionsHeight > 0 }).map {
+                    it.translate(-playerLeft.toFloat(), -playerTop.toFloat())
+                },
+                with(density) { 208.dp.roundToPx() },
+                with(density) { 64.dp.roundToPx() }
+            )
             Row(
-                Modifier.align(Alignment.TopCenter).offset {
-                    IntOffset(0, (transportCenter - with(density) { 32.dp.roundToPx() }).coerceAtLeast(0))
-                }
+                Modifier.align(Alignment.TopCenter).offset { transportOffset }
                     .testTag("touch:transport"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(24.dp)
@@ -601,6 +610,7 @@ internal fun TouchPlayerContent(account: Account, host: PlaybackHostState) {
                         // Not boundsInRoot: an empty column has no bounds, which would read as a left edge of 0.
                         actionsLeft = it.positionInRoot().x
                         actionsHeight = it.size.height
+                        actionsBounds = it.boundsInRoot()
                     },
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
