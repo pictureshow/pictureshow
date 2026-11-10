@@ -6,8 +6,8 @@ package app.pictureshow
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.assertHeightIsAtMost
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -104,7 +104,10 @@ class CatalogRevisionPresentationTest {
                 )
             }
         }
-        compose.onNodeWithTag("touch:card:film").assertHeightIsAtMost(120.dp).performClick()
+        val row = compose.onNodeWithTag("touch:card:film")
+        val bounds = row.getUnclippedBoundsInRoot()
+        assertTrue(bounds.bottom - bounds.top <= 120.dp, "List rows remain compact")
+        row.performClick()
         compose.runOnIdle { assertEquals("film", opened) }
     }
 }
