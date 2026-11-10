@@ -1,6 +1,6 @@
 # Live TV and DVR (launch draft)
 
-**Status (2026-11-10): Android reference implementation in progress; device and full-gate qualification pending.** Server configured by its administrator; Pictureshow consumes it as a client. Sources: [Jellyfin setup](https://jellyfin.org/docs/general/server/live-tv/setup-guide/) documents M3U/HDHomeRun tuners and XMLTV/Schedules Direct guides; [Plex DVR](https://support.plex.tv/articles/225877347-live-tv-dvr/) documents tuner/antenna recording intent with a Plex Pass requirement. Pictureshow does not require that Plex entitlement, provide their channels or configure a household tuner silently. Exact operations are in [launch API](launch-api.md).
+**Status (2026-11-10): Android reference implementation present; device, integration and platform qualification remain separate gates.** Server configured by its administrator; Pictureshow consumes it as a client. Sources: [Jellyfin setup](https://jellyfin.org/docs/general/server/live-tv/setup-guide/) documents M3U/HDHomeRun tuners and XMLTV/Schedules Direct guides; [Plex DVR](https://support.plex.tv/articles/225877347-live-tv-dvr/) documents tuner/antenna recording intent with a Plex Pass requirement. Pictureshow does not require that Plex entitlement, provide their channels or configure a household tuner silently. Exact operations are in [launch API](launch-api.md).
 
 | ID | Behavior | Acceptance criteria |
 |---|---|---|
@@ -44,6 +44,8 @@ The Android reference uses `core/livetv/LiveTvClient`, `LiveRules` and the exist
 - The live timeline comes from the player's measured live window/default position and window offset. A paused position that falls outside the moving buffer remains paused and shows Buffer expired until explicit Go live/Play. Scheduled broadcast duration never supplies a seek range or completion signal.
 
 ## Vectors and proof
+
+Finished recordings open the normal media-detail route on Android TV and touch. The download control belongs to the downloads implementation; integrating that subsystem must exercise a permitted completed recording through download and local playback. A successful server download or a recording shown in the list does not prove that Android flow. TV activation tests use remote key input and retain the no-tune-on-focus assertion; actual D-pad and screen-reader behavior are separate device checks.
 
 `live-guide.json` (guide overlap, boundaries, denied channels, duplicate pages, DST folds, natural sorting, tune eligibility and cache ownership/freshness), `live-dvr.json` (defaults projection, dirty edits, unsupported fields, statuses and real-client mutation traces) and `live-source.json` (player window/edge/expiry policy) are executable Android reference suites. `LiveRulesTest` and `LiveTvClientTest` additionally exercise wire query bounds, viewer policy changes, mutation/readback and process-independent pending-write journals. Other platform runners have not yet been ported to these suites; adding JSON alone does not establish parity.
 
