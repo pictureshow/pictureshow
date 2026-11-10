@@ -115,7 +115,7 @@ class LiveTvScreensTest {
     }
 
     @Test fun longGuideTitleStaysInBoundedCellWithFullReaderDescription() {
-        val title = "A generated program with a long title that must remain fully available to the screen reader"
+        val title = "A generated program with a long title that must remain fully available to the screen reader. ".repeat(4).trim()
         val now = java.time.Instant.now()
         val fake = LiveFake().apply {
             show = show.copy(name = title, startDate = now.minusSeconds(60).toString(), endDate = now.plusSeconds(1_800).toString())

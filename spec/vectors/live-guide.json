@@ -457,7 +457,7 @@
         "programs": [
           {
             "Id": "long",
-            "Name": "A generated program with a long title that must remain fully available to the screen reader",
+            "Name": "A generated program with a long title that must remain fully available to the screen reader. A generated program with a long title that must remain fully available to the screen reader. A generated program with a long title that must remain fully available to the screen reader. A generated program with a long title that must remain fully available to the screen reader.",
             "ChannelId": "c",
             "StartDate": "2030-11-03T05:00:00Z",
             "EndDate": "2030-11-03T05:30:00Z"
@@ -467,7 +467,7 @@
       "expected": [
         {
           "id": "long",
-          "name": "A generated program with a long title that must remain fully available to the screen reader",
+          "name": "A generated program with a long title that must remain fully available to the screen reader. A generated program with a long title that must remain fully available to the screen reader. A generated program with a long title that must remain fully available to the screen reader. A generated program with a long title that must remain fully available to the screen reader.",
           "start": "2030-11-03T05:00:00Z",
           "end": "2030-11-03T05:30:00Z"
         }
