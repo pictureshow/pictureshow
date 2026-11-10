@@ -1097,6 +1097,36 @@ class OfflineEngineTest {
     }
 
     @Test
+    fun `online viewing ended from the player dispatches before the blocking read`() = runBlocking<Unit> {
+        signIn(viewerA)
+        val engine = started()
+        engine.enqueue(viewerA, item("1"), choice("1"))
+        assertEquals("the player calls from Android Main", android.os.Looper.getMainLooper().thread, Thread.currentThread())
+        val store = engine.progressStore(viewerA)
+        val server = ServerAt(OfflineUserData(positionTicks = 9_000))
+        store.remember("1", OfflineUserData(positionTicks = 100))
+        store.viewing("1", store.newSequence(), 500)
+        var readOnMain: Boolean? = null
+        engine.onlineViewingEnded(viewerA, "1") {
+            // OfflineApi uses this same dispatcher around OkHttp.execute. With an undispatched IO launch, this
+            // context already claims to be IO, so withContext alone doesn't move the call off the player's thread.
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                readOnMain = Thread.currentThread() == android.os.Looper.getMainLooper().thread
+                if (readOnMain == true) throw android.os.NetworkOnMainThreadException()
+                server.data
+            }
+        }.join()
+        assertEquals("a warm engine and an uncontended queue must still dispatch the read", false, readOnMain)
+        assertEquals(9_000, store.resumeTicks("1"))
+        // The online stop also becomes the base of the next local viewing. This device's own newer server position
+        // must not be presented as somebody else's offline change, or let the old handoff position be written back.
+        store.viewing("1", store.newSequence(), 9_500)
+        store.sync(server)
+        assertTrue(store.conflicts.value.isEmpty())
+        assertEquals(listOf<Long?>(9_500L), server.writes)
+    }
+
+    @Test
     fun `reads after stopping and after finishing land in order, however long the first takes`() = runBlocking<Unit> {
         signIn(viewerA)
         val engine = started()

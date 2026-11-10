@@ -79,6 +79,7 @@ class TouchPlaybackHostTest {
     private val next = mutableListOf<String>()
     private lateinit var output: Media3PlaybackOutput
     private lateinit var http: HttpClient
+    private val catalogApi = CatalogModelsTest.FakeCatalog()
 
     @After fun cleanup() {
         releaseLookup.complete(Unit)
@@ -145,6 +146,15 @@ class TouchPlaybackHostTest {
         userData = """{"PlaybackPositionTicks":7000,"Played":false,"PlayCount":0}"""
     ) { store, _ -> assertEquals(7000L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
 
+    @Test fun backFromAnOnlineViewingTeachesTheDownloadWithoutAPlayedReport() = onlineViewing(
+        me = { """{"Id":"${account.user.id}"}""" },
+        userData = """{"PlaybackPositionTicks":30000,"Played":false}""",
+        naturalEnd = false
+    ) { store, _ ->
+        assertEquals(30_000L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") })
+        assertTrue(catalogApi.actions.none { it.first == "played" })
+    }
+
     /** The same URL can answer as someone else: their place says nothing about what this viewer has unsent. */
     @Test fun anOnlineViewingReadAsAnotherViewerLeavesAnUnsentPlaceAlone() = onlineViewing(
         me = { """{"Id":"someone-else"}""" },
@@ -176,7 +186,12 @@ class TouchPlaybackHostTest {
     ) { store, _ -> assertEquals(500L, kotlinx.coroutines.runBlocking { store.resumeTicks("episode") }) }
 
     /** A downloaded title holding an unsent place of 500, base 100, then one online viewing against a server answering these. */
-    private fun onlineViewing(me: () -> String?, userData: String, check: (OfflineProgressStore, List<String>) -> Unit) {
+    private fun onlineViewing(
+        me: () -> String?,
+        userData: String,
+        naturalEnd: Boolean = true,
+        check: (OfflineProgressStore, List<String>) -> Unit
+    ) {
         val paths = java.util.concurrent.CopyOnWriteArrayList<String>()
         val server = okhttp3.mockwebserver.MockWebServer()
         server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
@@ -239,9 +254,17 @@ class TouchPlaybackHostTest {
             }
             launch(noNext = true, offlineEngine = engine)
             releaseLookup.complete(Unit)
-            reopenAndEnd()
+            if (naturalEnd) {
+                reopenAndEnd()
+            } else {
+                compose.runOnIdle {
+                    observedHost.seekTo(30_000)
+                    observedHost.finish(reason = "back")
+                }
+            }
             waitUntil { exits == 1 }
-            compose.waitUntil(10_000) { paths.isNotEmpty() }
+            // Back returns before final reporting finishes. Keep Android Main moving while that finite scope drains.
+            waitUntil { paths.isNotEmpty() }
             // Reads run in call order, so one that fails at once comes after everything the viewing started.
             kotlinx.coroutines.runBlocking {
                 engine.onlineViewingEnded(account, "episode") { throw java.io.IOException("the end of the queue") }.join()
@@ -417,7 +440,7 @@ class TouchPlaybackHostTest {
             override suspend fun read(): String? = null
             override suspend fun write(value: String) = Unit
         })
-        val catalog = CatalogSession(CatalogModelsTest.FakeCatalog(), accounts)
+        val catalog = CatalogSession(catalogApi, accounts)
         output = Media3PlaybackOutput(compose.activity, account.server, upstream = DataSource.Factory { WaitingSource() })
         shadowOf(compose.activity.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager).setScreenReader(accessible)
         compose.setContent {

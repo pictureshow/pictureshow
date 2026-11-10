@@ -47,7 +47,6 @@ import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -123,7 +122,8 @@ internal class OfflineEngine(
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     /** Background work here must never take the app down with it, and a viewer may be in the middle of a film. */
-    private val onlineViewingReads = Mutex()
+    private val onlineViewingReadLock = Any()
+    private var lastOnlineViewingRead: Job? = null
     private val scope = scope + CoroutineExceptionHandler { _, error ->
         if (error is Error) throw error
         android.util.Log.w(OFFLINE_LOG, "Offline work ended: ${error.javaClass.simpleName}")
@@ -1043,21 +1043,27 @@ internal class OfflineEngine(
     }
 
     /** Nothing waits on this: a viewer leaving the player doesn't wait for a read, and a title with no download reads nothing. */
-    fun onlineViewingEnded(account: Account, itemId: String, read: suspend () -> OfflineUserData?): Job = scope.launch(
-        start = CoroutineStart.UNDISPATCHED
-    ) {
-        // In call order: Stopped's read arriving after Played's would put the title back at 99%.
-        onlineViewingReads.withLock {
-            if (ready()[account.key]?.manifest?.entries?.any { it.itemId == itemId } != true) return@withLock
-            try {
-                read()?.let { progressStore(account).onlineViewingEnded(itemId, it) }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (e: Exception) {
-                android.util.Log.w("PictureshowOffline", "Position after online viewing not read: ${e.javaClass.simpleName}")
-            }
+    fun onlineViewingEnded(account: Account, itemId: String, read: suspend () -> OfflineUserData?): Job =
+        synchronized(onlineViewingReadLock) {
+            // Register in call order, then dispatch before touching disk or the network. An UNDISPATCHED IO coroutine
+            // can still be on the player's Main thread; withContext(IO) sees the same context and won't move it.
+            // Joining the previous job also keeps Stopped's read from arriving after Played's and restoring 99%.
+            val previous = lastOnlineViewingRead
+            scope.launch {
+                previous?.join()
+                if (ready()[account.key]?.manifest?.entries?.any { it.itemId == itemId } != true) {
+                    return@launch
+                }
+                try {
+                    val data = read()
+                    data?.let { progressStore(account).onlineViewingEnded(itemId, it) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (e: Exception) {
+                    android.util.Log.w("PictureshowOffline", "Position after online viewing not read: ${e.javaClass.simpleName}")
+                }
+            }.also { lastOnlineViewingRead = it }
         }
-    }
 
     fun userData(account: Account, itemId: String, data: OfflineUserData) {
         scope.launch { progressStore(account).remember(itemId, data) }

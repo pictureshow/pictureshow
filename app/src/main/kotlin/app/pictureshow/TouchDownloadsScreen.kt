@@ -149,24 +149,27 @@ internal fun OfflineRowTouch(account: Account, row: OfflineRow, controller: Offl
             }
             if (confirming) {
                 val bringIn = remember { BringIntoViewRequester() }
-                Text(
-                    if (row.entry.job.phase ==
-                        OfflinePhase.ready
-                    ) {
-                        "Delete this download from this device?"
-                    } else {
-                        "Stop and delete this download?"
+                // Reveal the question with its answers. Revealing only the buttons can scroll the title and question
+                // off the top after rotation, leaving a viewer unable to tell what Delete will remove.
+                Column(Modifier.bringIntoViewRequester(bringIn), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        if (row.entry.job.phase == OfflinePhase.ready) {
+                            "Delete ${row.title} from this device?"
+                        } else {
+                            "Stop and delete ${row.title}?"
+                        },
+                        modifier = Modifier.testTag("downloads:question")
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            controller.confirm = null
+                        }, modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:cancel")) { Text("Cancel") }
+                        OutlinedButton(
+                            onClick = { controller.confirmed(emptyList()) },
+                            colors = offlineDestructiveTouchColors(),
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:confirm")
+                        ) { Text("Delete") }
                     }
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.bringIntoViewRequester(bringIn)) {
-                    OutlinedButton(onClick = {
-                        controller.confirm = null
-                    }, modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:cancel")) { Text("Cancel") }
-                    OutlinedButton(
-                        onClick = { controller.confirmed(emptyList()) },
-                        colors = offlineDestructiveTouchColors(),
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("downloads:confirm")
-                    ) { Text("Delete") }
                 }
                 // Opening below the fold, or a rotation that puts it there, must not leave the answer clipped.
                 val orientation = LocalConfiguration.current.orientation

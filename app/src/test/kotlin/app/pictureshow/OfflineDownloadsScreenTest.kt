@@ -7,11 +7,23 @@ import android.app.Application
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -398,5 +410,65 @@ class OfflineDownloadsScreenTest {
         compose.waitUntil(10_000) {
             engine.libraries.value[account.key]!!.manifest.entries.none { it.id == "failed" }
         }
+    }
+
+    @Test
+    @Config(qualifiers = "w800dp-h300dp-land-xhdpi")
+    fun `touch landscape delete keeps the named question and both answers visible`() {
+        touch()
+        settle()
+        compose.onNodeWithTag("downloads:delete:paused").performScrollTo().performClick()
+        settle()
+        compose.onNodeWithTag("downloads:question").assertIsDisplayed()
+        compose.onNodeWithTag("downloads:question").assertTextContains("Title paused", substring = true)
+        compose.onNodeWithTag("downloads:cancel").assertIsDisplayed()
+        compose.onNodeWithTag("downloads:confirm").assertIsDisplayed()
+    }
+
+    @Test
+    fun `shrinking a touch delete question to landscape reveals its whole question with the answers`() {
+        // Keep rows below the question: at the end of a list, the scroll limit can accidentally keep the question
+        // visible even when only the answer buttons are requested.
+        install(
+            entry("paused", OfflinePhase.paused),
+            entry("below-one", OfflinePhase.paused),
+            entry("below-two", OfflinePhase.paused),
+            entry("below-three", OfflinePhase.paused),
+            entry("below-four", OfflinePhase.paused)
+        )
+        var height by mutableStateOf(500.dp)
+        compose.setContent {
+            val configuration = android.content.res.Configuration(LocalConfiguration.current).apply {
+                orientation = if (height > 150.dp) {
+                    android.content.res.Configuration.ORIENTATION_PORTRAIT
+                } else {
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                }
+            }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                Box(Modifier.requiredSize(700.dp, height).testTag("viewport")) {
+                    OfflineDownloadsTouchScreen(account, true, { played = it.id }, {}, {}, {})
+                }
+            }
+        }
+        settle()
+        compose.onNodeWithTag("downloads:delete:paused").performScrollTo().performClick()
+        settle()
+        // The viewer has scrolled the answers near the top before rotating. The answer buttons remain wholly in
+        // the short window, while the question is partly above it. A buttons-only request would do nothing.
+        val beforeViewport = compose.onNodeWithTag("viewport").getUnclippedBoundsInRoot()
+        val beforeQuestion = compose.onNodeWithText("Stop and delete", substring = true).getUnclippedBoundsInRoot()
+        val scrollPx = (beforeQuestion.bottom - beforeViewport.top - 4.dp).value * context.resources.displayMetrics.density
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, scrollPx) }
+        settle()
+        val scrolledQuestion = compose.onNodeWithText("Stop and delete", substring = true).getUnclippedBoundsInRoot()
+        assertTrue("prep must place the question above the viewport", scrolledQuestion.top < beforeViewport.top)
+        compose.runOnIdle { height = 150.dp }
+        settle()
+        val viewport = compose.onNodeWithTag("viewport").getUnclippedBoundsInRoot()
+        val question = compose.onNodeWithText("Stop and delete", substring = true).getUnclippedBoundsInRoot()
+        val answer = compose.onNodeWithTag("downloads:confirm").getUnclippedBoundsInRoot()
+        assertTrue("question above visible window: $question / $viewport", question.top >= viewport.top)
+        assertTrue("answer below visible window: $answer / $viewport", answer.bottom <= viewport.bottom)
     }
 }
