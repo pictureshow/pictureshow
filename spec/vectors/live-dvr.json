@@ -472,6 +472,47 @@
           "POST /LiveTv/SeriesTimers"
         ]
       }
+    },
+    {
+      "id": "live-dvr.empty-days-rejected",
+      "operation": "edit",
+      "input": {
+        "original": {
+          "Days": [
+            "Monday"
+          ],
+          "ProviderExtension": {
+            "keep": true
+          }
+        },
+        "edits": {
+          "Days": []
+        },
+        "series": true
+      },
+      "expected": {
+        "error": true
+      }
+    },
+    {
+      "id": "live-dvr.unknown-day-rejected",
+      "operation": "edit",
+      "input": {
+        "original": {
+          "Days": [
+            "Monday"
+          ]
+        },
+        "edits": {
+          "Days": [
+            "Tomorrow"
+          ]
+        },
+        "series": true
+      },
+      "expected": {
+        "error": true
+      }
     }
   ]
 }
