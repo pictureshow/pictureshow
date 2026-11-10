@@ -187,6 +187,7 @@ private fun TouchLibrariesGrid(
     }
 }
 
+/** Preserve the existing catalog call surface for screens and regression harnesses. */
 @Composable
 internal fun TouchCatalogGrid(
     state: CatalogGridState,
@@ -194,8 +195,20 @@ internal fun TouchCatalogGrid(
     onNearEnd: (Int) -> Unit,
     onSort: (String, Boolean) -> Unit,
     onRetry: () -> Unit,
-    onFilters: (() -> Unit)? = null,
-    onDisplayList: ((Boolean) -> Unit)? = null,
+    onBack: () -> Unit
+) {
+    TouchMediaGrid(state, onOpen, onNearEnd, onRetry, onBack, onSort = onSort)
+}
+
+@Composable
+internal fun TouchCatalogGrid(
+    state: CatalogGridState,
+    onOpen: (MediaItem) -> Unit,
+    onNearEnd: (Int) -> Unit,
+    onSort: (String, Boolean) -> Unit,
+    onRetry: () -> Unit,
+    onFilters: () -> Unit,
+    onDisplayList: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     TouchMediaGrid(state, onOpen, onNearEnd, onRetry, onBack, onSort = onSort, onFilters = onFilters, onDisplayList = onDisplayList)

@@ -32,11 +32,16 @@ class HomePreferencesTest {
             HomeRow("nextup", "Next", listOf(film("next-s", "s"), film("c", "t"), film("d", "hidden"), film("b"))),
             HomeRow("libraries", "Libraries", listOf(film("root")))
         )
-        val preferences = HomePreferences(mergeWatching = true, hiddenSeries = setOf("hidden", "s"))
+        val preferences = HomePreferences(mergeWatching = true, hiddenSeries = setOf("hidden"))
         val result = customizedHome(rows, preferences)
         assertEquals(listOf("watching", "libraries"), result.map { it.key })
         assertEquals(listOf("a", "b", "c"), result.first().items.map { it.id })
-        assertEquals(listOf("c", "b"), customizedHome(rows, preferences.copy(mergeWatching = false))[1].items.map { it.id })
+        assertEquals(
+            listOf("c", "b"),
+            customizedHome(rows, preferences.copy(mergeWatching = false, hiddenSeries = setOf("hidden", "s")))[1].items.map {
+                it.id
+            }
+        )
     }
 
     @Test fun hiddenAndOrderedRowsKeepUnknownNewRowsInOriginalOrderAndNeverInventContents() {
@@ -183,7 +188,10 @@ class HomePreferencesTest {
 
     @Test fun localFallbackSurvivesRemoteRecoveryAndRemainsIsolatedByServerAndViewer() = runTest {
         var fail = true
-        var remote = Json.parseToJsonElement("""{"CustomPrefs":{"unrelated":"retain"}}""").jsonObject
+        var remote = homePreferencesDocument(
+            Json.parseToJsonElement("""{"CustomPrefs":{"unrelated":"retain"}}""").jsonObject,
+            HomePreferences()
+        )
         var writes = 0
         val http = HttpClient(
             MockEngine(

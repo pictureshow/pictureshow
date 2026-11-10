@@ -120,7 +120,6 @@
         "preferences": {
           "mergeWatching": true,
           "hiddenSeries": [
-            "s",
             "h"
           ]
         }
