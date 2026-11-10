@@ -66,6 +66,18 @@ class LiveRecordingOfflineTest {
         assertTrue(offlinePreviewChoices(policy, listOf(json.decodeFromString<OfflineApiItem>(denied))).none { it.available })
     }
 
+    @Test fun containerFileDenialDoesNotHideSelectedEpisodeDownload() {
+        val series = MediaItem("series", "Series", "Series", canDownload = false)
+        assertTrue(offlineOffersDownload(series))
+        assertNotNull(offlineDownloadRoute(series, "season", "Season 1"))
+        val season = MediaItem("season", "Season 1", "Season", seriesId = "series", canDownload = false)
+        assertTrue(offlineOffersDownload(season))
+        assertNotNull(offlineDownloadRoute(season, "season", "Season 1"))
+        // Each leaf is still judged independently in the preview and at transfer time.
+        val deniedEpisode = json.decodeFromString<OfflineApiItem>(recording.replace("\"CanDownload\":true", "\"CanDownload\":false"))
+        assertTrue(offlinePreviewChoices(policy, listOf(deniedEpisode)).none { it.available })
+    }
+
     @Test fun libraryEpisodesWithoutRecorderFieldsKeepExistingDownloadPath() {
         val item = MediaItem("episode", "Episode", "Episode")
         assertTrue(offlineOffersDownload(item))

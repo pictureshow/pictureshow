@@ -37,7 +37,8 @@ internal fun offlinePlayerRoute(entry: OfflineEntry) = "offline-player?entry=${U
 
 /** Movies and episodes download as themselves; a series offers the season on screen. */
 internal fun offlineOffersDownload(item: MediaItem): Boolean = item.type != "Recording" &&
-    item.canDownload != false &&
+    // A container offers episodes; its own file-download flag says nothing about those children.
+    (item.type in listOf("Series", "Season") || item.canDownload != false) &&
     !app.pictureshow.core.offline.offlineRecordingIncomplete(item.isInProgress, item.recordingStatus)
 
 internal fun offlineDownloadRoute(item: MediaItem, seasonId: String?, seasonName: String?): String? {
