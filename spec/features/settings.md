@@ -130,3 +130,8 @@ On short touch windows (under 480 dp high), the Android reference uses compact v
 preview, preserving a readable text scale. Text and image samples occupy separate horizontal regions, so changing
 subtitle position cannot cover the image sample. At 360 dp landscape height and 1.3x UI text, the complete first
 setting row, its current value and Done remain visible; the remaining settings and their explanations scroll.
+
+
+TV accessibility rows expose one truthful role: ordinary choices/actions are not checkable, toggles expose their actual on/off state, and only radio options expose selected state. Focused and selected radio states remain distinguishable. Short current values stay on one line; ceilings and other qualifiers belong to the picker option's supporting text. Panel titles and section headings share the row-text edge; scrolling has fades and a persistent position cue whenever content extends beyond the viewport.
+
+Audio output includes its own Audio passthrough control. Each format permission is configurable only while passthrough is enabled, stereo downmix is off, and the connected output reports that format. An unavailable control retains its stored permission for a later compatible connection; it never adds unsupported formats to the server profile. This dependency truth table is frozen in `settings-presentation.json`.

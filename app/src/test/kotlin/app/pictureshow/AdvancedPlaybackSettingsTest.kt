@@ -14,14 +14,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.media3.ui.SubtitleView
+import app.pictureshow.core.playback.PassthroughEncoding
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.junit.Rule
@@ -114,6 +120,43 @@ class AdvancedPlaybackSettingsTest {
         compose.runOnIdle { assertEquals(6, prefs.tuning.maxAudioChannels) }
         compose.onNodeWithText("Dolby Digital").performScrollTo().assertExists()
         compose.onNodeWithText("Dolby Atmos (Dolby Digital Plus)").performScrollTo().assertExists()
+    }
+
+    @Test fun passthroughControlsReflectReceiverSupportAndDownmixWithoutLosingAllowedFormats() {
+        var prefs by mutableStateOf(PlaybackPreferences(passthrough = true))
+        var supported by mutableStateOf(setOf(PassthroughEncoding.AC3))
+        compose.setContent {
+            androidx.compose.material3.MaterialTheme {
+                AdvancedPlaybackSettings("Audio output", prefs, true, { prefs = it(prefs) }, {}, supported)
+            }
+        }
+        compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsEnabled().assertIsOn()
+        compose.onNodeWithTag("settings:DTS").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("settings:Downmix to stereo").performScrollTo().performClick()
+        compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsNotEnabled().assertIsOn()
+        compose.onNodeWithTag("settings:Downmix to stereo").performScrollTo().performClick()
+        compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsEnabled().performClick().assertIsOff()
+        compose.runOnIdle { assertEquals(setOf(PassthroughEncoding.AC3), prefs.tuning.disabledPassthrough) }
+        compose.onNodeWithTag("settings:Audio passthrough").performScrollTo().performClick()
+        compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsNotEnabled().assertIsOff()
+        compose.runOnIdle {
+            supported = emptySet()
+            prefs = prefs.copy(passthrough = true)
+        }
+        compose.onNodeWithTag("settings:Dolby Digital").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("No supported surround formats are detected. Connect a compatible receiver to use passthrough.")
+            .performScrollTo().assertExists()
+    }
+
+    @Test fun shortAutoValueKeepsItsCeilingInTheActualNetworkPicker() {
+        compose.setContent {
+            androidx.compose.material3.MaterialTheme {
+                AdvancedPlaybackSettings("Network quality", PlaybackPreferences(), true, {}, {})
+            }
+        }
+        compose.onNode(hasText("Home limit") and hasText("Auto")).assertExists()
+        compose.onNodeWithText("Home limit").performClick()
+        compose.onNodeWithText("Up to 200 Mbps; this is a ceiling, not unlimited.").assertExists()
     }
 
     @Test fun videoOverrideExplainsFailureRiskBesideItsChoice() {

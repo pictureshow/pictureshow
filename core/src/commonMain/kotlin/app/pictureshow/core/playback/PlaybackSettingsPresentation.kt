@@ -5,6 +5,8 @@ package app.pictureshow.core.playback
 
 /** Viewer-facing labels; stored protocol and enum identifiers never become UI choices. */
 object PlaybackSettingsPresentation {
+    fun canConfigurePassthrough(passthrough: Boolean, downmix: Boolean, supported: Boolean) = passthrough && !downmix && supported
+
     fun subtitleSizeLabel(value: SubtitleSize) = subtitleValueLabel(value.name)
     fun subtitleBackgroundLabel(value: SubtitleBackground) = subtitleValueLabel(value.name)
     fun subtitleValueLabel(value: String) = when (value) {

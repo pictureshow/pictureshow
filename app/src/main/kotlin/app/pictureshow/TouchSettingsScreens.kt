@@ -55,6 +55,7 @@ internal fun TouchSettings(
     onRemote: () -> Unit = {},
     onThisDevice: () -> Unit = {},
     onDownloads: () -> Unit = {},
+    supportedPassthrough: Set<app.pictureshow.core.playback.PassthroughEncoding> = emptySet(),
     /** Null where Cast can't be used on this device. */
     castEnabled: Boolean? = null,
     onCastEnabled: (Boolean) -> Unit = {},
@@ -102,7 +103,11 @@ internal fun TouchSettings(
             ) { value -> onLocal { it.copy(bitrateMbps = value) } }
             TouchSwitchRow(
                 "Audio passthrough",
-                "Audio output accepts: $acceptedAudio",
+                if (supportedPassthrough.isEmpty()) {
+                    "No supported surround formats are detected."
+                } else {
+                    "Supported receiver formats: $acceptedAudio"
+                },
                 local.passthrough,
                 "touch:settings:passthrough"
             ) { checked -> onLocal { it.copy(passthrough = checked) } }
@@ -170,7 +175,9 @@ internal fun TouchSettings(
             TouchNavRow("About Pictureshow", onClick = onAbout)
         }
     }
-    advanced?.let { group -> AdvancedPlaybackSettings(group, local, true, onLocal, onClose = { advanced = null }) }
+    advanced?.let { group ->
+        AdvancedPlaybackSettings(group, local, true, onLocal, onClose = { advanced = null }, supportedPassthrough = supportedPassthrough)
+    }
 }
 
 /** A heading owns the gap above it and the rows under it, so a row's spacing never comes from the page's column. */
@@ -259,6 +266,7 @@ internal fun <T> TouchChoice(
     label: (T) -> String,
     enabled: Boolean = true,
     supporting: String? = null,
+    optionSupporting: ((T) -> String?)? = null,
     onSelect: (T) -> Unit
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
@@ -282,7 +290,18 @@ internal fun <T> TouchChoice(
                         TouchRadioRow(option == value, enabled = enabled, onClick = {
                             onSelect(option)
                             open = false
-                        }) { Text(label(option), modifier = Modifier.weight(1f)) }
+                        }) {
+                            Column(Modifier.weight(1f)) {
+                                Text(label(option))
+                                optionSupporting?.invoke(option)?.let {
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             },

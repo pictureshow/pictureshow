@@ -269,6 +269,86 @@
         "hdr": false
       },
       "expected": "Uses another supported format or converts the video. This may require conversion on your server."
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.false.false.false",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": false,
+        "downmix": false,
+        "supported": false
+      },
+      "expected": false
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.false.false.true",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": false,
+        "downmix": false,
+        "supported": true
+      },
+      "expected": false
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.false.true.false",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": false,
+        "downmix": true,
+        "supported": false
+      },
+      "expected": false
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.false.true.true",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": false,
+        "downmix": true,
+        "supported": true
+      },
+      "expected": false
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.true.false.false",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": true,
+        "downmix": false,
+        "supported": false
+      },
+      "expected": false
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.true.false.true",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": true,
+        "downmix": false,
+        "supported": true
+      },
+      "expected": true
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.true.true.false",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": true,
+        "downmix": true,
+        "supported": false
+      },
+      "expected": false
+    },
+    {
+      "id": "settings-presentation.passthrough-configurable.true.true.true",
+      "operation": "passthrough-configurable",
+      "input": {
+        "passthrough": true,
+        "downmix": true,
+        "supported": true
+      },
+      "expected": false
     }
   ]
 }

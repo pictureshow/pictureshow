@@ -203,17 +203,21 @@ internal fun TouchNavRow(title: String, supporting: String? = null, onClick: () 
 
 /** The whole row toggles, and it is the one named switch a reader meets. */
 @Composable
-internal fun TouchSwitchRow(title: String, caption: String?, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+internal fun TouchSwitchRow(title: String, caption: String?, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) =
+    TouchSwitchRow(title, caption, checked, tag, enabled = true, onChange)
+
+@Composable
+internal fun TouchSwitchRow(title: String, caption: String?, checked: Boolean, tag: String, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(tag)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+            .toggleable(value = checked, role = Role.Switch, enabled = enabled, onValueChange = onChange)
             .semantics { stateDescription = if (checked) "On" else "Off" }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TouchRowText(title, caption, true)
-        Switch(checked = checked, onCheckedChange = null)
+        TouchRowText(title, caption, enabled)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

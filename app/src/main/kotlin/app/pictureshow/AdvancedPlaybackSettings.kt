@@ -61,11 +61,12 @@ internal fun AdvancedPlaybackSettings(
     local: PlaybackPreferences,
     touch: Boolean,
     onLocal: ((PlaybackPreferences) -> PlaybackPreferences) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    supportedPassthrough: Set<PassthroughEncoding> = emptySet()
 ) {
     val first = remember { FocusRequester() }
     val content: @Composable () -> Unit = {
-        PlaybackSettingRows(group, local, touch, first, onLocal)
+        PlaybackSettingRows(group, local, touch, first, supportedPassthrough, onLocal)
     }
     if (touch) {
         val scroll = rememberScrollState()
@@ -119,6 +120,7 @@ private fun PlaybackSettingRows(
     local: PlaybackPreferences,
     touch: Boolean,
     first: FocusRequester,
+    supportedPassthrough: Set<PassthroughEncoding>,
     onLocal: ((PlaybackPreferences) -> PlaybackPreferences) -> Unit
 ) {
     val tuning = local.tuning
@@ -133,7 +135,8 @@ private fun PlaybackSettingRows(
                 touch,
                 ::bitrateLabel,
                 firstRow,
-                "On the same network as your server. A lower limit may convert the video."
+                "On the same network as your server. A lower limit may convert the video.",
+                optionSupporting = ::bitrateOptionSupporting
             ) { value ->
                 onLocal { it.copy(bitrateMbps = value) }
             }
@@ -143,7 +146,8 @@ private fun PlaybackSettingRows(
                 PlaybackPreferences.BITRATES,
                 touch,
                 ::bitrateLabel,
-                supporting = "Away from home. A lower limit may convert the video."
+                supporting = "Away from home. A lower limit may convert the video.",
+                optionSupporting = ::bitrateOptionSupporting
             ) { value ->
                 onLocal { it.copy(tuning = it.tuning.copy(remoteBitrateMbps = value)) }
             }
@@ -153,7 +157,8 @@ private fun PlaybackSettingRows(
                 PlaybackPreferences.BITRATES,
                 touch,
                 ::bitrateLabel,
-                supporting = "Mobile data or a metered hotspot. This takes priority over Home and Remote."
+                supporting = "Mobile data or a metered hotspot. This takes priority over Home and Remote.",
+                optionSupporting = ::bitrateOptionSupporting
             ) { value ->
                 onLocal { it.copy(tuning = it.tuning.copy(meteredBitrateMbps = value)) }
             }
@@ -281,13 +286,32 @@ private fun PlaybackSettingRows(
             ) {
                 onLocal { it.copy(tuning = it.tuning.copy(downmix = !it.tuning.downmix)) }
             }
-            SettingSupportingText("Send to receiver (passthrough)", touch)
+            if (touch) {
+                SettingSupportingText("Send to receiver (passthrough)", true)
+            } else {
+                TvSettingsSectionHeader("Send to receiver (passthrough)")
+            }
+            ToggleRow(
+                "Audio passthrough",
+                local.passthrough,
+                touch,
+                supporting = if (supportedPassthrough.isEmpty()) {
+                    "No supported surround formats are detected. Connect a compatible receiver to use passthrough."
+                } else {
+                    "Used only when your receiver supports the format. Downmix turns passthrough off. " +
+                        "Turning a format off may convert the audio."
+                }
+            ) { onLocal { it.copy(passthrough = !it.passthrough) } }
             PassthroughEncoding.entries.forEach { format ->
                 ToggleRow(
                     passthroughLabel(format),
                     format !in tuning.disabledPassthrough,
                     touch,
-                    supporting = "Only used when passthrough is on and your connected audio system supports this format."
+                    enabled = PlaybackSettingsPresentation.canConfigurePassthrough(
+                        local.passthrough,
+                        tuning.downmix,
+                        format in supportedPassthrough
+                    )
                 ) {
                     onLocal {
                         val disabled = it.tuning.disabledPassthrough
@@ -343,7 +367,14 @@ private fun PlaybackSettingRows(
     }
 }
 
-internal fun bitrateLabel(value: Int?) = value?.let { "$it Mbps" } ?: "Auto (up to 200 Mbps)"
+internal fun bitrateLabel(value: Int?) = value?.let { "$it Mbps" } ?: "Auto"
+internal fun bitrateOptionSupporting(value: Int?): String? = if (value ==
+    null
+) {
+    "Up to 200 Mbps; this is a ceiling, not unlimited."
+} else {
+    null
+}
 internal fun subtitleSizeLabel(value: SubtitleSize) = PlaybackSettingsPresentation.subtitleSizeLabel(value)
 internal fun subtitleBackgroundLabel(value: SubtitleBackground) = PlaybackSettingsPresentation.subtitleBackgroundLabel(value)
 internal fun subtitleValueLabel(value: String) = PlaybackSettingsPresentation.subtitleValueLabel(value)
@@ -376,12 +407,22 @@ private fun <T> ChoiceRow(
     label: (T) -> String,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    optionSupporting: ((T) -> String?)? = null,
     change: (T) -> Unit
 ) {
     if (touch) {
-        TouchChoice(title, value, values, label, supporting = supporting, onSelect = change)
+        TouchChoice(title, value, values, label, supporting = supporting, optionSupporting = optionSupporting, onSelect = change)
     } else {
-        TvSettingsChoiceRow(title, value, values, label, modifier, supportingText = supporting, onSelect = change)
+        TvSettingsChoiceRow(
+            title,
+            value,
+            values,
+            label,
+            modifier,
+            supportingText = supporting,
+            optionSupportingText = optionSupporting,
+            onSelect = change
+        )
     }
 }
 
@@ -392,12 +433,15 @@ private fun ToggleRow(
     touch: Boolean,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    enabled: Boolean = true,
     change: () -> Unit
 ) {
     if (touch) {
-        TouchSwitchRow(title, supporting, value, "settings:$title") { change() }
+        TouchSwitchRow(title, supporting, value, "settings:$title", enabled = enabled) { change() }
     } else {
-        TvSettingsToggleRow(title, value, modifier, supportingText = supporting, onToggle = { change() })
+        TvSettingsToggleRow(title, value, modifier.testTag("settings:$title"), supportingText = supporting, enabled = enabled, onToggle = {
+            change()
+        })
     }
 }
 
