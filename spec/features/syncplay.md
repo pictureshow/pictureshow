@@ -49,7 +49,7 @@ Android uses seek correction unless its actual source/output explicitly qualifie
 
 The group chooser is shared by TV and touch. Cast device selection requires a deliberate Leave group and successful server Leave before dispatch; cancellation retains membership and output. Native Jellyfin remote targets remain group participants and convert received transport/queue edits into group requests.
 
-Observed protocol reference: demo Jellyfin 12.0.0, two isolated viewers, 2026-11-10. Group operations, buffering/readiness, timing messages and server queue mutations were exercised through the real API/socket. This does not substitute for the separately required 10.10.7/10.11.11/12.4 compatibility and SYN-06 device matrix. No GPL client code or text was copied.
+Observed protocol reference, 2026-11-10: demo Jellyfin 12.0.0 with two isolated viewers, plus isolated 10.10.7, 10.11.11 and 12.4.0. Group operations, access policies, buffering/readiness, timing messages and server queue mutations were exercised through real HTTP/WebSocket clients: 39 targeted checks on the demo and 44 on each isolated version. These protocol checks do not prove the Kotlin adapter, native UI or SYN-06 rendered-output timing. Native timing qualification remains required. No GPL client code or text was copied.
 
 Source eligibility is a shared rule: positive full-media duration, an actually seekable renderer, and no live, infinite or offline source. A finite-looking duration does not override IsInfiniteStream. Android pauses an unsupported prepared source and visibly offers Leave; it never reports Ready for that source. The executable `sync-source` suite covers the boundaries. Offline adapters must pass their local-copy status explicitly when they are integrated.
 
