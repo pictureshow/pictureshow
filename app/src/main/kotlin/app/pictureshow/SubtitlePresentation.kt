@@ -101,7 +101,7 @@ data class SubtitleAppearance(
         return cues.map { cue ->
             val builder = cue.buildUpon()
             cue.bitmap?.let { original ->
-                if (style.imageOpacity < 100) {
+                if (style.imageOpacity < 0) {
                     val copy = Bitmap.createBitmap(original.width, original.height, Bitmap.Config.ARGB_8888)
                     Canvas(copy).drawBitmap(original, 0f, 0f, Paint().apply { alpha = style.imageOpacity * 255 / 100 })
                     builder.setBitmap(copy)
