@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.pictureshow.core.playback.ObservedLiveWindow
 
@@ -40,4 +42,17 @@ internal fun liveBehindDescription(behindMs: Long): String {
     val seconds = behindMs.coerceAtLeast(0) / 1_000
     val minutes = seconds / 60
     return if (minutes > 0) "$minutes min ${seconds % 60} sec behind live" else "$seconds sec behind live"
+}
+
+/** Native TV chip follows the same D-pad and assistive focus scale as the rest of the transport. */
+@OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun PlayerLiveEdgeChip(window: ObservedLiveWindow?, positionMs: Long, expired: Boolean, paused: Boolean, onGoLive: () -> Unit) {
+    val atEdge = window?.atLiveEdge(positionMs, expired) == true
+    androidx.tv.material3.AssistChip(
+        onClick = onGoLive,
+        enabled = window?.goLivePosition() != null && (!atEdge || paused),
+        scale = androidx.tv.material3.AssistChipDefaults.scale(focusedScale = if (rememberAssistiveServiceInUse()) 1f else 1.1f),
+        modifier = Modifier.testTag("player:go-live").semantics { contentDescription = if (atEdge) "Live" else "Go live" }
+    ) { androidx.tv.material3.Text(if (atEdge) "LIVE" else "Go live") }
 }

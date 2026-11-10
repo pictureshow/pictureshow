@@ -9,10 +9,13 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import app.pictureshow.core.playback.ObservedLiveWindow
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -71,5 +74,28 @@ class LivePlayerPresentationTest {
         assertTrue(marker.red > .95f && marker.green > .95f && marker.blue > .95f, "white live marker at 27/30 of measured range: $marker")
         val beyond = pixels[(pixels.width * .96f).toInt(), pixels.height / 2]
         assertTrue(beyond.red < .9f, "unplayed tail beyond actual default position: $beyond")
+    }
+
+    @Test fun liveChipIsABadgeAtTheEdgeAndAnExplicitResumeWhenPaused() {
+        val position = mutableLongStateOf(27_000)
+        val paused = androidx.compose.runtime.mutableStateOf(false)
+        var requests = 0
+        compose.setContent {
+            PictureshowTheme {
+                PlayerLiveEdgeChip(ObservedLiveWindow(100_000, 30_000, 27_000, true), position.longValue, false, paused.value) {
+                    requests++
+                }
+            }
+        }
+        compose.onNodeWithText("LIVE").assertIsDisplayed()
+        compose.onNodeWithTag("player:go-live").assertIsNotEnabled()
+        compose.runOnIdle { paused.value = true }
+        compose.onNodeWithTag("player:go-live").assertIsEnabled().performClick()
+        compose.runOnIdle {
+            assertEquals(1, requests)
+            position.longValue = 10_000
+        }
+        compose.onNodeWithText("Go live").assertIsDisplayed()
+        compose.onNodeWithTag("player:go-live").assertIsEnabled()
     }
 }

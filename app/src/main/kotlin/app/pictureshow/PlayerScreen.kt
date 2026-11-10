@@ -695,7 +695,8 @@ internal fun PlayerItemScreen(
                         modifier = Modifier.focusRequester(timelineFocus).then(readerOpenerOnly("player:position")),
                         paused = paused,
                         ended = ended,
-                        arrowsSeek = rootFocused && !restoringSeekFocus && (!host.isLive || host.liveCanTimeShift),
+                        arrowsSeek =
+                        rootFocused && !restoringSeekFocus && (!host.isLive || (host.liveCanTimeShift && !host.liveBufferExpired)),
                         live = host.isLive,
                         liveCanTimeShift = host.liveCanTimeShift,
                         liveExpired = host.liveBufferExpired,
@@ -727,15 +728,7 @@ internal fun PlayerItemScreen(
                             interaction++
                         }
                         if (host.isLive) {
-                            val atLive = host.liveWindow?.atLiveEdge(position, host.liveBufferExpired) == true
-                            Button(
-                                onClick = host::goLive,
-                                scale = playerButtonScale(),
-                                enabled = host.liveWindow?.goLivePosition() != null && (!atLive || paused),
-                                modifier = Modifier.testTag("player:go-live").semantics {
-                                    contentDescription = if (atLive) "Live" else "Go live"
-                                }
-                            ) { Text(if (atLive) "LIVE" else "Go live") }
+                            PlayerLiveEdgeChip(host.liveWindow, position, host.liveBufferExpired, paused, host::goLive)
                         }
                         Button(scale = playerButtonScale(), onClick = {
                             chooserRequest = PlayerTrackChooserRequest(
