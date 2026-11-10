@@ -5,6 +5,7 @@ package app.pictureshow
 
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import app.pictureshow.core.homeRowEditHint
 
 /** A row is one reorder target; the visibility and pin commands retain their own roles. */
 @Composable
@@ -64,6 +66,8 @@ internal fun HomeReorderRow(
     var height by remember { mutableIntStateOf(1) }
     var drag by remember { mutableFloatStateOf(0f) }
     var overflow by remember { mutableStateOf(false) }
+    val hint = homeRowEditHint(shown, moving, tv)
+    val secondaryEnabled = enabled && !moving
     val semantics = Modifier.semantics {
         stateDescription = if (moving) {
             "Moving. Up or Down to move; OK to drop"
@@ -73,12 +77,14 @@ internal fun HomeReorderRow(
             "Hidden"
         }
         customActions = buildList {
-            add(
-                CustomAccessibilityAction(if (shown) "Hide row" else "Show row") {
-                    toggle()
-                    true
-                }
-            )
+            if (!moving) {
+                add(
+                    CustomAccessibilityAction(if (shown) "Hide row" else "Show row") {
+                        toggle()
+                        true
+                    }
+                )
+            }
             if (canMoveUp) {
                 add(
                     CustomAccessibilityAction("Move up") {
@@ -97,7 +103,7 @@ internal fun HomeReorderRow(
                     }
                 )
             }
-            if (unpin != null) {
+            if (unpin != null && !moving) {
                 add(
                     CustomAccessibilityAction("Unpin") {
                         unpin()
@@ -123,14 +129,14 @@ internal fun HomeReorderRow(
         if (tv) {
             androidx.tv.material3.IconButton(
                 onClick = toggle,
-                enabled = enabled,
+                enabled = secondaryEnabled,
                 modifier = Modifier.size(48.dp).testTag("home:visibility:$key")
             ) {
                 androidx.tv.material3.Icon(touchActionIcon(if (shown) "eye" else "eye-off"), if (shown) "Hide $title" else "Show $title")
             }
             TvSettingsRow(
                 title,
-                null,
+                hint,
                 modifier = Modifier.weight(1f).then(semantics).testTag("home:reorder:$key"),
                 selected = moving,
                 enabled = enabled,
@@ -140,7 +146,7 @@ internal fun HomeReorderRow(
             if (unpin != null) {
                 androidx.tv.material3.IconButton(
                     onClick = { overflow = !overflow },
-                    enabled = enabled,
+                    enabled = secondaryEnabled,
                     modifier = Modifier.size(48.dp).testTag("home:overflow:$key")
                 ) {
                     androidx.tv.material3.Icon(touchActionIcon("more"), "Options for $title")
@@ -150,12 +156,19 @@ internal fun HomeReorderRow(
             IconToggleButton(
                 checked = shown,
                 onCheckedChange = { toggle() },
-                enabled = enabled,
+                enabled = secondaryEnabled,
                 modifier = Modifier.testTag("home:visibility:$key")
             ) {
                 Icon(touchActionIcon(if (shown) "eye" else "eye-off"), if (shown) "Hide $title" else "Show $title")
             }
-            Text(title, Modifier.weight(1f).then(semantics), style = MaterialTheme.typography.bodyLarge)
+            Column(Modifier.weight(1f).then(semantics)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                if (hint !=
+                    null
+                ) {
+                    Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             IconButton(
                 onClick = pickOrDrop,
                 enabled = enabled,
@@ -184,7 +197,7 @@ internal fun HomeReorderRow(
             if (unpin != null) {
                 IconButton(
                     onClick = { overflow = true },
-                    enabled = enabled,
+                    enabled = secondaryEnabled,
                     modifier = Modifier.testTag("home:overflow:$key")
                 ) { Icon(touchActionIcon("more"), "Options for $title") }
             }

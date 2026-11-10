@@ -3,6 +3,12 @@
  */
 package app.pictureshow.core
 
+/** The visible row state complements the eye icon and reader description on every platform. */
+fun homeRowEditHint(shown: Boolean, moving: Boolean, tv: Boolean): String? = buildList {
+    if (!shown) add("Hidden")
+    if (moving) add(if (tv) "Moving · Up/Down · OK to drop" else "Moving · Release to drop")
+}.joinToString(" · ").ifBlank { null }
+
 /** The editor presents only rows that can actually appear in the current watching mode. */
 fun editableHomeKeys(keys: List<String>, preferences: HomePreferences): List<String> {
     val inactive = if (preferences.mergeWatching) setOf("resume", "nextup") else setOf("watching")

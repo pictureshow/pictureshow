@@ -16,7 +16,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -97,6 +99,7 @@ class CatalogCustomizationTest {
         compose.onNodeWithTag("home:row:nextup").assertDoesNotExist()
         compose.onNodeWithTag("home:visibility:watching").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertTrue("watching" in preferences.hidden) }
+        compose.onNodeWithText("Hidden").assertIsDisplayed()
         compose.onNodeWithTag("home:visibility:watching").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertFalse("watching" in preferences.hidden) }
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
@@ -117,11 +120,33 @@ class CatalogCustomizationTest {
             }
         }
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Moving · Up/Down · OK to drop").assertIsDisplayed()
+        compose.onNodeWithTag("home:visibility:resume").assertIsNotEnabled()
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithTag("home:reorder:resume").performKeyInput { pressKey(Key.DirectionDown) }
         compose.runOnIdle { assertTrue(preferences.order.isEmpty(), "Moving a row must not save until drop") }
         compose.onNodeWithTag("home:reorder:resume").performSemanticsAction(SemanticsActions.OnClick)
         compose.runOnIdle { assertEquals(listOf("nextup", "resume", "libraries"), preferences.order) }
+    }
+
+    @Test fun pickedPinKeepsVisibilityAndUnpinDisabledUntilDrop() {
+        val pin = app.pictureshow.core.HomePin(app.pictureshow.core.HomePinKind.FAVORITES)
+        var preferences by mutableStateOf(HomePreferences(pins = listOf(pin)))
+        compose.setContent {
+            MaterialTheme {
+                HomeCustomization(CatalogHomeState(loading = false, preferences = preferences), account, service, {
+                    preferences =
+                        it(preferences)
+                }, {})
+            }
+        }
+        compose.onNodeWithTag("home:reorder:${pin.key}").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Moving · Up/Down · OK to drop").assertIsDisplayed()
+        compose.onNodeWithTag("home:visibility:${pin.key}").assertIsNotEnabled()
+        compose.onNodeWithTag("home:overflow:${pin.key}").assertIsNotEnabled()
+        compose.onNodeWithTag("home:reorder:${pin.key}").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag("home:visibility:${pin.key}").assertIsEnabled()
+        compose.onNodeWithTag("home:overflow:${pin.key}").assertIsEnabled()
     }
 
     @Test fun retryOnlyAppearsAfterARealSaveFailure() {

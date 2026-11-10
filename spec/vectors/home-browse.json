@@ -1500,6 +1500,86 @@
       "expected": [
         "next"
       ]
+    },
+    {
+      "id": "editor-hint-true-true-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": false,
+        "tv": true
+      },
+      "expected": null
+    },
+    {
+      "id": "editor-hint-true-false-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": false,
+        "tv": true
+      },
+      "expected": "Hidden"
+    },
+    {
+      "id": "editor-hint-true-true-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": true,
+        "tv": true
+      },
+      "expected": "Moving · Up/Down · OK to drop"
+    },
+    {
+      "id": "editor-hint-true-false-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": true,
+        "tv": true
+      },
+      "expected": "Hidden · Moving · Up/Down · OK to drop"
+    },
+    {
+      "id": "editor-hint-false-true-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": false,
+        "tv": false
+      },
+      "expected": null
+    },
+    {
+      "id": "editor-hint-false-false-false",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": false,
+        "tv": false
+      },
+      "expected": "Hidden"
+    },
+    {
+      "id": "editor-hint-false-true-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": true,
+        "moving": true,
+        "tv": false
+      },
+      "expected": "Moving · Release to drop"
+    },
+    {
+      "id": "editor-hint-false-false-true",
+      "operation": "editor-row-hint",
+      "input": {
+        "shown": false,
+        "moving": true,
+        "tv": false
+      },
+      "expected": "Hidden · Moving · Release to drop"
     }
   ]
 }
